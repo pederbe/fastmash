@@ -1,0 +1,52 @@
+[package]
+name = "fastmash"
+version = "0.1.0"
+edition = "2024"
+description = "Fast command-line statistics on text data, compatible with GNU datamash"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/pederbe/fastmash"
+homepage = "https://fastmash.io"
+rust-version = "1.88"
+keywords = ["statistics", "datamash", "tsv", "csv", "cli"]
+categories = ["command-line-utilities", "science", "text-processing"]
+readme = "../../README.md"
+
+# `cargo binstall fastmash` downloads the prebuilt release archive (the
+# benchmarked binaries) instead of compiling.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/fastmash-v{ version }-{ target }.tar.gz"
+bin-dir = "fastmash-v{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[[bin]]
+name = "fastmash"
+path = "src/main.rs"
+
+[[bin]]
+name = "fastmash-sort-supervisor"
+path = "src/bin/fastmash-sort-supervisor.rs"
+
+[dependencies]
+fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.1.0" }
+fastmash-conversion = { path = "../conversion", version = "=0.1.0" }
+fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.1.0" }
+fastmash-sort-process = { path = "../sort-process", version = "=0.1.0" }
+rustc_apfloat = "=0.2.3"
+libc = "=0.2.189"
+memchr = "=2.8.3"
+icu_collator = "=2.3.1"
+icu_locale_core = "=2.3.0"
+astro-float-num = { version = "=0.3.7", default-features = false, features = ["std"] }
+base64 = { version = "=0.22.1", default-features = false }
+md-5 = { version = "=0.11.0", default-features = false }
+sha1 = { version = "=0.11.0", default-features = false }
+sha2 = { version = "=0.11.0", default-features = false }
+
+# Same as the workspace release profile, for crates.io installs (cargo
+# ignores workspace profiles there). Workspace builds warn that this copy is
+# ignored; keep the two in step.
+[profile.release]
+opt-level = 2
+panic = "abort"
+overflow-checks = true
+lto = false

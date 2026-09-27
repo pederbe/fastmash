@@ -1,0 +1,15 @@
+<!-- mdBook pages use inline scripts (theme, sidebar, path_to_root), so the docs
+     policy allows them; the landing page (site/index.html) has none. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="author" content="Peder Bergan">
+<link rel="author" href="https://pederbe.dev">
+<meta property="og:site_name" content="Fastmash">
+<meta property="og:title" content="{{ title }}">
+<meta property="og:description" content="Fast command-line statistics for delimited text, with the GNU datamash command language.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://fastmash.io/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<script>
+  // Start with the chapter list closed; the menu button opens it.
+  try { if (!localStorage.getItem('mdbook-sidebar')) localStorage.setItem('mdbook-sidebar', 'hidden'); } catch (e) {}
+</script>

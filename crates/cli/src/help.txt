@@ -1,0 +1,292 @@
+Usage: fastmash [OPTIONS] OPERATION FIELDS [OPERATION FIELDS ...]
+
+Summarize fields from standard input. Results follow request order.
+Linux x86-64 (including WSL2). Differences from GNU datamash 1.9:
+https://fastmash.io/guide/differences.html
+
+Operations:
+  count     Count values in the selected field, including text and empty fields
+  countunique  Count distinct text values (case-sensitive unless -i)
+  unique, uniq  Sorted distinct text values (case-sensitive unless -i)
+  collapse  All accepted text values in input order, including duplicates
+  first     First accepted value in the selected field
+  last      Last accepted value in the selected field
+  rand      Random accepted value in the selected field
+  min       Minimum numeric value in the selected field
+  max       Maximum numeric value in the selected field
+  absmin    Value with the smallest magnitude, preserving its original sign
+  absmax    Value with the largest magnitude, preserving its original sign
+  range     Maximum minus minimum numeric value in the selected field
+  sum       Sum the selected field
+  mean      Arithmetic mean of the selected field
+  geomean   Geometric mean of the selected field
+  harmmean  Harmonic mean of the selected field
+  ms        Mean of squared values
+  rms       Square root of the mean of squared values
+  median    Middle sorted value, or the average of the two middle values
+  mode      Numeric value in the longest sorted run (first run wins ties)
+  antimode  Numeric value in the shortest sorted run (first run wins ties)
+  q1        First quartile using type-7 interpolation
+  q3        Third quartile using type-7 interpolation
+  iqr       Third quartile minus first quartile
+  perc[:N]  Percentile using type-7 interpolation (default 95; integers 1..100)
+  trimmean[:P]  Mean after trimming floor(P*N) values from each sorted end
+                (default 0; 0 <= P <= 0.5; 0.5 gives the median)
+  pvar      Population variance, using two passes in input order
+  svar      Sample variance (nan for a single accepted value)
+  pstdev    Population standard deviation
+  sstdev    Sample standard deviation (nan for a single accepted value)
+  madraw    Median absolute deviation, without a scaling factor
+  mad       Median absolute deviation scaled by 1.4826
+  pskew     Population skewness (nan for a single accepted value)
+  sskew     Sample skewness (nan for fewer than three accepted values)
+  pkurt     Population excess kurtosis (nan for a single accepted value)
+  skurt     Sample excess kurtosis (nan for fewer than four accepted values)
+  jarque    Jarque-Bera normality p-value using GNU's formula
+  dpo       D'Agostino-Pearson normality p-value using GNU's formula
+  pcov      Population covariance of a LEFT:RIGHT field pair
+  scov      Sample covariance of a LEFT:RIGHT field pair
+  ppearson  Population Pearson correlation of a LEFT:RIGHT field pair
+  spearson  Sample Pearson correlation of a LEFT:RIGHT field pair
+  dotprod   Dot product of a LEFT:RIGHT field pair
+
+Percentile 100 selects the final ordered sample. Non-integer percentile parameters are unsupported.
+
+Fields are positive numbers, comma-separated lists or ascending numeric ranges.
+Paired operations require colon-separated LEFT:RIGHT selectors; pair lists are
+comma-separated and ranges cannot be combined with pairs.
+Grouping also accepts groupby, grouping or gb before its key fields and operations.
+Keys precede results. Use -s to sort stably before grouping nonadjacent equal keys.
+Grouping requires at least one operation. Key ranges
+allow equal endpoints and are limited to 1..2147483646; scalar keys use the
+existing signed integer domain. Keys are case-sensitive unless -i. GNU compares
+equal-length keys up to NUL; displayed keys preserve their complete byte spans.
+With input headers, lists may also use exact, case-sensitive column names.
+The first duplicate name wins. Backslash escapes one byte in a field name.
+Operation names are case-insensitive; repeated fields produce repeated results.
+
+Options:
+  -g, --group=FIELDS     Summarize adjacent groups with these ordered keys
+  -s, --sort             Sort stably by grouping keys before calculation
+  -i, --ignore-case      Ignore ASCII case in grouping, sorting and text summaries
+  --header-in            Use the first input record as column names
+  --header-out           Label results, using input names with --header-in
+  -H, --headers          Same as --header-in --header-out
+  -f, --full             Prefix results with all fields of a representative row
+  --no-strict            Accepted; has no effect on aggregation
+  -F TEXT, --filler=TEXT  Accepted; has no effect on aggregation
+  -z, --zero-terminated End input and output records with NUL instead of LF
+  -W, --whitespace       Split on runs of spaces/tabs; default output is tab
+  -C, --skip-comments    Skip lines starting with # or ; after spaces/tabs
+  --narm                 Skip NA, N/A and NaN values, ignoring case
+  --vnlog                Read annotated whitespace records with named columns
+  --format=FORMAT        One e/f/g/a conversion, flags, width and precision
+  -R, --round=N          Display N fractional places (1..50); no calculation change
+  -S VALUE, --seed VALUE Seed rand reproducibly; the last value wins
+  -t BYTE, --field-separator=BYTE
+                         Use one literal byte between input fields
+  --output-delimiter=BYTE Use one literal byte between results
+  -c BYTE, --collapse-delimiter=BYTE
+                         Use one literal byte between text-list values
+  -h, --help             Show this help without reading input
+  -V, --version          Show the package version without reading input
+  --                     End option processing
+
+By default, fields and results are tab-separated; records end with LF. With -z, LF is data.
+The final input record may omit its terminator. CR bytes are retained.
+The input separator also sets the output separator unless explicitly overridden.
+Unique and collapse list values are comma-separated unless -c specifies another byte.
+All three long delimiter options also accept a separate argument.
+CSV quoting is not supported. Whitespace mode skips leading spaces/tabs and
+collapses runs, but trailing spaces/tabs create one empty final field.
+The last -W or -t controls input splitting; an explicit output delimiter wins.
+With --full, fields are reconstructed using the output delimiter. The row is
+initially the first input row; first/last/rand and extrema selection can replace
+it. With several operations, it need not supply every result. Headers prefix all
+input column names (or generated names), rather than GroupBy labels. GNU's
+aggregate --full deprecation warning is retained for compatibility.
+Aggregation accepts ragged rows if all selected fields exist. --no-strict and
+--filler do not supply absent aggregate fields. Transpose and reverse accept
+ragged rows with --no-strict; transpose uses --filler for missing cells.
+Crosstab/ct KEY1,KEY2 [OP FIELD] creates a pivot table, defaulting to count.
+Exactly one expanded calculation is allowed. Output labels are ordered bytewise;
+--filler supplies missing combinations. Use -s to combine nonadjacent groups:
+without it, repeated cells retain the first completed group's result.
+Completed cells stay in memory, without a fixed matrix cap or table spilling.
+Unlike GNU 1.9, labels are not truncated to 511 bytes. Embedded-NUL grouping
+and label behavior remain GNU-compatible; arbitrary binary keys are not lossless.
+With -C, skipped comments do not count toward error line numbers or input headers.
+Blank lines and inline comment markers remain data.
+With --vnlog, the first single-# line supplies column names; blank, ## and #!
+prologue lines are skipped. Data ignores blank/# lines and everything after #,
+even inside a field. Semicolons remain data. Trailing spaces/tabs are ignored.
+Output uses spaces and a '# ' header. Numeric-looking selectors are column names.
+Use --narm separately to remove NA/N/A/NaN; '-' remains a literal value.
+Vnlog requires LF records, whitespace input, default space output and filler '-';
+conflicting options are rejected. --filler still does not supply missing fields.
+With --narm, each selected field skips missing values independently. Matching is
+exact: spaces are not trimmed. Absent columns still fail; empty fields fail for
+numeric operations.
+Paired sides compact independently, so equal retained lengths can pair values from
+different records. An empty right side yields nan before the length comparison.
+Dotprod multiplies compacted pairs and adds the products in input order.
+If all values are missing, count/sum are 0 and mean/geomean are nan.
+Harmmean divides the accepted count by the sum of reciprocals, accumulated in
+input order. All-missing harmmean is nan.
+Ms sums squared values in input order, then divides by the accepted count.
+Rms takes the square root of ms. All-missing ms/rms are nan.
+Median/q1/q3/iqr share samples and sorting for each selected field per group.
+Pvar/svar/pstdev/sstdev share original-order samples and squared deviations per
+field, separately from quantiles. Their storage grows with the largest group.
+Storage grows with input; allocation refusal is reported instead of a sample cap.
+Paired operations retain two growable sample arrays per request; they do not spill.
+Spearson is sample Pearson correlation, not Spearman rank correlation.
+Moments and normality operations share input-order samples per selected field.
+Jarque/dpo preserve GNU's tail cancellation (tiny p-values can become zero) and
+its formulas; the historical sample and exponential-domain caps are removed.
+Median preserves GNU's numeric ordering, including NaN and signed-zero
+ties. Even medians add the middle pair before halving; overflow is preserved.
+All-missing median is nan. Empty input produces no result row.
+Q1/q3/iqr use the same ordering. Quartiles interpolate as
+lower + fraction * (upper - lower), even when fraction is zero. A single value
+is its own quartile; iqr still subtracts q1 from q3. All-missing results are nan.
+Min/max return -inf/inf when all values are missing. Equal values retain the
+first value, including signed zero. An initial NaN remains the result;
+later NaNs do not replace a value. With --narm, exact NaN tokens are skipped.
+Absmin/absmax use the same rules, comparing magnitudes and retaining the first
+value on ties. All-missing absmin/absmax results are -inf/inf.
+Range retains min/max endpoints with the same strict comparisons, then subtracts
+minimum from maximum. All-missing range is nan; equal infinities also yield nan.
+First/last return N/A when all values are missing. They accept empty fields
+and raw text; an embedded NUL ends the displayed text, as in GNU datamash.
+Rand uses the same text and missing-value rules, consuming one shared draw per
+accepted rand field in request order. Explicit seeds give reproducible draws.
+The long --seed form requires its argument.
+Count accepts text without numeric conversion. It counts existing empty fields;
+a blank record has no fields and still reports a missing-column error.
+
+Examples:
+  printf 'A\t1\nA\t2\nB\t4\n' | LC_ALL=C fastmash -g 1 sum 2
+  printf '1\t2\n3\t4\n' | LC_ALL=C fastmash sum 1 mean 2
+  printf '1,2\n3,4\n' | LC_ALL=C fastmash -t, sum 1-2
+  printf 'price\tunits\n3\t2\n' | LC_ALL=C fastmash --header-in --header-out sum 2 mean 1
+  printf 'Revenue\tCost\n2\t10\n3\t20\n' | LC_ALL=C fastmash -H sum Revenue mean Cost
+  printf 'a\tb\n1\t2\n3\t4\n' | LC_ALL=C fastmash -H sum 2,1-2 count a
+  printf 'a\tb\n1\t2\n3\t4\n' | LC_ALL=C fastmash -H pcov a:b
+
+Runtime and numerical limits:
+  countunique/unique/collapse retain text per operation/group until final output.
+  Storage grows as needed; duplicates consume storage and allocation may fail.
+  Linux x86-64 with glibc; default %.14g formatting. /proc is required.
+  Installation and requirements: https://fastmash.io/install.html
+  Locales: C/POSIX, C.UTF-8 and the glibc locales as NAME.UTF-8 (or .utf8, no
+  @modifier). Each category uses nonempty LC_ALL, its LC_* value, LANG, then C.
+  Any LC_MESSAGES is accepted, and any LC_CTYPE except with -i (see below).
+  Names without a codeset are accepted where glibc's default is UTF-8 (hi_IN).
+  Numbers follow the glibc 2.43 rules
+  of each locale whose decimal separator is one byte (all but ps_AF): its
+  decimal separator, and its thousands separator and grouping for the apostrophe
+  format flag. Input thousands separators are invalid.
+  Locale behavior is built into Rust; host locale installation is unnecessary.
+  The last --format or --round wins.
+  Formats allow literals and %% plus one e/f/g/a (or uppercase) directive;
+  GNU's 99-byte format-text limit applies. Output grows with checked allocation.
+  Record, command and operation storage grows as needed; allocation can fail.
+  GNU identifiers allow 511 decoded bytes.
+  Sorting combinations of count, first, last, unique, countunique, collapse, sum,
+  mean, min, max, absmin, absmax, range, median, q1, q3, iqr, perc, trimmean,
+  mode, antimode, madraw, mad, pvar, svar, pstdev and sstdev uses native Rust sorting.
+  Numerical results follow GNU datamash 1.9 on x86-64 glibc, not every GNU build.
+  NaN payload input is accepted. Invalid arithmetic generates positive canonical
+  NaN; signs and last digits can differ from GNU (see the differences page).
+  Unsupported cases and checked allocation refusals exit with status 77.
+  Numerical jobs retain original records to preserve numeric parsing context.
+  FASTMASH_SORT_MEMORY_BYTES sets its chunk target (default 67108864 bytes), not
+  a hard memory limit. Spill uses anonymous files in TMPDIR (default /tmp).
+  In C/C.UTF-8, other sorted operations require fastmash-sort-supervisor beside it,
+  /usr/bin/sort with stable/NUL sorting, HUP/INT/TERM neither ignored (as by
+  nohup) nor blocked, and waitable children. This route needs pidfds and
+  close_range(CLOEXEC), Linux 5.11+.
+  Native spill uses O_TMPFILE, or unlinked private files where TMPDIR lacks it
+  (NFS, older overlayfs); external sorting creates a private directory in
+  TMPDIR when it starts, so TMPDIR must be writable.
+  C/C.UTF-8 sorting uses byte order. Language sorting uses pinned Rust ICU rules
+  in the locales whose letter order was verified against glibc 2.43, including
+  punctuation-order differences from GNU; all families use the native spill
+  engine. Keys must be valid, NUL-free UTF-8 there. Language sorting covers the
+  glibc locales of aa af agr ak am anp ayc az bem ber bg bhb bi bs byn ce chr crh
+  cy de dv en eo es eu ff fil fr fy ga gbm gd gez gl gv ha he hif hne hr hsb ht hy
+  ia id ig is it ks kv kw lb lg li lij ln lv mag mfe mg mhr miq mjw mk mn mnw ms
+  mt nds nhn niu nl nr nso om os pa pap pl pt quz rif ro ru rw sat scn sd sgs sid
+  sm so sq sr ss ssy st su sw ta tcy the ti tig tk tn to tok tpi ts unm ur uz ve
+  wa wae wal wo xh yo yuw zgh zu, except az_IR, ber_DZ, crh_UA, en_CA, fr_CA,
+  pa_IN, sd_IN and sr_RS.
+  Empty unresolved named sort keys retain the fixed-C external sort diagnostic.
+  With no keys, -s is a no-op. Locale differences are on the differences page.
+  -i preserves original output spelling and stable sort ties. It does not fold
+  column names or rmdup keys; with rmdup, it only changes requested sort order.
+  Case/group identity stays byte-based with ASCII folding. -i is refused under
+  the az_AZ, crh_UA, ku_TR, tr_CY and tr_TR character types, where glibc does
+  not fold i and I.
+  Diagnostics remain English; UTF-8 character categories use curly quotations.
+  Other numeric locales are refused only when numbers are read or printed
+  (count, countunique and strbin results only with --format or --round);
+  other collations only when sorting.
+  --sort-cmd and the explicit line selector are not supported.
+  Invoke linewise operations directly, for example: fastmash base64 1.
+  GNU-private ---print-inf, ---print-nan, ---print-progname and ---rmdup-test
+  hooks are omitted. Migration guidance: https://fastmash.io/guide/migrating.html
+  GNU option abbreviations and short clusters are supported. POSIXLY_CORRECT
+  stops option scanning at the first operand; otherwise options may follow it.
+
+Mode/antimode share sorted samples with quantiles. MAD/raw MAD share a separate
+buffer transformed in place into absolute deviations. Both families grow in
+memory and report allocation failure; sample storage does not spill to disk.
+
+Field modes: cut/echo FIELD selects fields per record; reverse reverses fields
+within each record (use --no-strict for changing widths). nop/noop consumes input;
+--full emits its original records. These modes use growable record storage.
+
+Per-row numeric operations: getnum[:TYPE] FIELD extracts a numeric prefix from
+the first matching character run. Types: n (digits), i (signed integer), h (hex),
+o (octal), p (digits/dot, default), d (signed digits/dot). No match, conversion
+failure or known range error produces zero. Integer conversion uses signed 64-bit
+range. Numeric type parameters are refused; use a character type from this list.
+round, floor, ceil, trunc and frac FIELD transform each selected number per row.
+round uses nearest integer with ties away from zero; frac keeps the signed
+fraction. Actual zero becomes positive zero. Unlike GNU 1.9, negative NaN remains
+NaN for these five operations. --round controls display only. These operations
+use growable record storage and can be combined with cut, not group calculations.
+
+Binning: bin[:WIDTH] FIELD returns the lower numeric bucket boundary (default
+width 100). strbin[:COUNT] FIELD assigns raw field bytes reproducibly to buckets
+0..COUNT-1 (default 10), including NUL bytes. COUNT must be a nonzero integer.
+These are per-row operations with the same selectors and output options as cut.
+Bin preserves signed NaN input. Zero width retains GNU's
+other results: zero input gives zero; nonzero finite/infinite input gives -nan.
+
+Table modes: check [N lines] [N fields] validates widths and optional counts.
+transpose exchanges rows and columns. Widths must match unless --no-strict is
+used; missing cells then use --filler (default N/A). Headers are ordinary rows.
+Transpose retains present fields and compact indexes in memory, without fixed
+row/column limits or disk spill; allocation failure is reported before output.
+rmdup/dedup FIELD retains the first row for each single key. Unique keys grow
+in memory and do not spill; -s uses external sorting in C/C.UTF-8 and native
+sorting in the supported language locales.
+Multiple keys are not supported (status 77).
+
+base64 FIELD encodes complete raw field bytes using padded standard base64.
+debase64 FIELD strictly decodes it; whitespace, bad padding and noncanonical
+trailing bits are errors. Decoded text output stops at the first NUL, as in GNU.
+Both operations are linewise and accept no parameters.
+
+md5, sha1, sha224, sha256, sha384 and sha512 FIELD produce lowercase hexadecimal
+checksums of complete raw field bytes. These linewise operations accept no
+parameters. MD5 and SHA-1 are compatibility checksums, not collision-resistant
+security mechanisms.
+
+dirname, basename, extname and barename FIELD transform byte fields as GNU paths,
+without filesystem access or host-native normalization. Only / separates names;
+input after NUL is ignored. Extensions follow GNU's ASCII and compound-suffix
+rules (.gz/.xz/.lz/.gpg/.bz2/.std), not general file-type detection. These are
+linewise operations with no parameters.

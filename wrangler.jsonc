@@ -1,0 +1,21 @@
+// fastmash.io: a static site served by Cloudflare Workers static assets.
+// There is no Worker script. Cloudflare Workers Builds, connected to this
+// repository, runs scripts/build_site.sh on every push to main, then
+// `npx wrangler deploy` uploads docs/book and attaches the custom domain,
+// creating its DNS record. Headers come from site/_headers.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "fastmash-site",
+  "compatibility_date": "2026-09-26",
+  "assets": {
+    "directory": "./docs/book",
+    "not_found_handling": "404-page"
+  },
+  // Only the custom domain serves the site: no *.workers.dev or preview URLs
+  // that search engines could index.
+  "workers_dev": false,
+  "preview_urls": false
+  // Until launch the site has no route, so deployments serve nothing. The
+  // launch commit adds:
+  // "routes": [{ "pattern": "fastmash.io", "custom_domain": true }]
+}

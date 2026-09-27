@@ -1,0 +1,231 @@
+# Fastmash
+
+Fastmash is a fast Rust command-line tool for Linux that computes statistics and
+table transformations over delimited text. It implements GNU datamash's command
+language so that datamash workflows can move to it with few or no changes.
+
+## Command language
+
+**Command**:
+One complete `fastmash` invocation: its options, an optional mode or grouping,
+and its operations.
+_Avoid_: Using "command" for a single operation
+
+**Operation**:
+One requested calculation or transformation, named with an optional `:parameter`
+and applied to one or more fields, such as `sum 2` or `perc:90 3`.
+_Avoid_: Op, function, command
+
+**Operation parameter**:
+The optional value after an operation's colon that adjusts it, such as the 90
+in `perc:90`.
+
+**Operation family**:
+A set of related operations that are documented, implemented or measured
+together, such as the quantiles or the paired statistics.
+_Avoid_: "Family" on its own (see **Job family**)
+
+**Mode**:
+The overall way a command processes its input: aggregating (optionally in
+groups), crosstab, per-row operations, or one of the field modes and table modes.
+_Avoid_: Using "mode" for the `mode` statistic
+
+**Per-row operation**:
+An operation that produces one output value for each input record rather than
+one summary, such as `round`, `base64` or `getnum`.
+_Avoid_: Linewise operation, line mode, per-line operation
+
+**Field mode**:
+A mode that selects or rearranges fields within each record: `cut`, `reverse`
+and `noop`.
+
+**Table mode**:
+A mode that treats the input as a whole table: `check`, `transpose` and `rmdup`.
+
+**Crosstab**:
+A pivot table of one calculation over every pair of values of two grouping keys.
+_Avoid_: Cross-tabulation
+
+## Input
+
+**Record**:
+One input unit, ended by a newline, or by a NUL byte with `-z`.
+_Avoid_: Row (except for per-row operations), line
+
+**Field**:
+One value within a record, addressed by its 1-based position or, with an input
+header, by its name.
+_Avoid_: Column (except when talking about headers and tables)
+
+**Field separator**:
+The single byte, or run of whitespace with `-W`, that splits an input record
+into fields. Tab by default.
+_Avoid_: Input delimiter
+
+**Output delimiter**:
+The byte written between results in an output record. It follows the field
+separator unless set explicitly.
+
+**Collapse delimiter**:
+The byte written between the values listed by `unique` and `collapse`. Comma by
+default.
+
+**Selector**:
+The field argument of an operation: a single field, a list or range of fields,
+or a `LEFT:RIGHT` field pair for paired operations.
+_Avoid_: Field spec
+
+**Input header**:
+A first record that names the fields instead of carrying data (`--header-in`, `-H`).
+
+**Output header**:
+A first output record that Fastmash generates to label the results, such as
+`sum(reading)` (`--header-out`, `-H`).
+
+**Full row**:
+A complete input record printed before a group's results with `--full`.
+
+**Filler**:
+The text printed for a missing cell in crosstab and ragged `transpose` output
+(`--filler`, `N/A` by default).
+
+**Missing value**:
+A field whose exact text is `NA`, `N/A` or `NaN`, in any letter case, which
+`--narm` skips. An empty field is not a missing value.
+_Avoid_: Null, blank
+
+## Grouping and sorting
+
+**Grouping key**:
+The field or fields whose equal values define a group (`-g`).
+_Avoid_: Group field, sort key
+
+**Group**:
+A run of consecutive records with equal grouping keys. Records with equal keys
+form one group only when they are adjacent, or when `-s` sorts them together first.
+
+**Sort route**:
+The way Fastmash brings equal keys together for `-s`: sorting in memory, spilling
+to temporary disk storage, or delegating to the system `sort` through the sort
+supervisor.
+
+**Spill**:
+Temporarily writing sorted runs to disk so that sorting large input does not
+need to hold all of it in memory. Only sorting spills; retained samples and
+tables stay in memory.
+
+**Sort supervisor**:
+The helper executable, `fastmash-sort-supervisor`, installed beside `fastmash`,
+that runs the system `sort` for the external sort route and cleans up after it.
+_Avoid_: Companion, sorter process
+
+## Results
+
+**Portable results**:
+The product property that one Fastmash version gives identical results
+(standard output and exit status) for the same input and explicit settings on
+every supported platform, independent of the host's CPU arithmetic, math library
+or installed locale data. Diagnostics produced by the host's own `sort` are
+outside it.
+
+**Numerical profile**:
+A named, versioned set of rules for how Fastmash reads, computes and prints
+numbers, such as `portable-binary80-v3`. It implements **Portable results**.
+_Avoid_: "Profile" on its own
+
+**Supported locale**:
+A locale whose number and text-ordering rules are built into Fastmash rather than
+read from the host. Other locales are refused when they would change a result.
+
+**Default output format**:
+How numbers print when neither `--format` nor `--round` is given: up to 14
+significant digits.
+_Avoid_: Default14 (the code identifier) in user-facing text
+
+**Refusal**:
+Fastmash deliberately stopping instead of producing a result it cannot stand
+behind, with a diagnostic and exit status 77: for an unsupported feature, locale
+or condition, or a checked resource limit. Earlier output may already have been
+written.
+_Avoid_: Crash, "unsupported" as the general term
+
+**Capacity refusal**:
+A refusal because a checked resource limit, such as memory or numerical
+precision, would be exceeded.
+
+**Error**:
+A failure caused by the command or its input, such as a malformed selector,
+non-numeric data or a full disk, with exit status 1.
+_Avoid_: Refusal
+
+**Internal failure**:
+A detected violation of Fastmash's own invariants, never expected in normal use.
+Most are reported with exit status 70.
+
+## Compatibility
+
+**GNU compatibility**:
+Accepting GNU datamash 1.9's options, operations and selectors and producing the
+same observable results as its reference profiles, except for **Documented
+differences**. Different GNU builds can disagree with each other; they do not
+override **Portable results**.
+
+**Documented difference**:
+A specific, published behavior where Fastmash intentionally differs from GNU
+datamash, such as a refusal where GNU prints an unreliable value.
+_Avoid_: Deviation, mismatch (for intended differences)
+
+**Improvement**:
+A measured or demonstrated advantage of Fastmash over GNU datamash, such as
+speed, a useful behavior or safety, for a stated workload or input.
+
+**Reference profile**:
+A named GNU datamash build and host environment used to observe GNU's behavior
+for comparison.
+_Avoid_: "Profile" on its own
+
+## Performance evaluation
+
+**Representative job**:
+A concrete dataset and command pair that stands for a real workload and is used
+to compare Fastmash with GNU datamash and with earlier Fastmash builds.
+_Avoid_: Benchmark case, test job
+
+**Job family**:
+A named group of representative jobs that exercise the same kind of work, such as
+startup, decimal accumulation or grouped text.
+_Avoid_: "Family" on its own, workload
+
+**Candidate**:
+A specific Fastmash build, identified by its exact source and binary, that is
+being evaluated.
+
+**Host profile**:
+The exact hardware, operating system and toolchain identity of a machine whose
+measurements count as evidence.
+_Avoid_: "Profile" on its own
+
+**Predecessor guard**:
+A check that a candidate is not materially slower or more resource-hungry than
+the previous accepted Fastmash build on a given representative job.
+_Avoid_: Regression guard
+
+**Qualification**:
+The evidence process that decides whether a candidate meets a stated acceptance
+criterion on a named host profile.
+
+**Admission**:
+The check that a specific binary and host match an expected identity before
+their results count as evidence.
+_Avoid_: Using it for the broader **Qualification**
+
+## Releases
+
+**Preview release**:
+A public, installable Fastmash release before the replacement release, with its
+supported operations, platforms and known differences stated.
+_Avoid_: Installable preview, development candidate
+
+**Replacement release**:
+A release intended to replace GNU datamash in normal workflows, with broad
+compatibility, a performance advantage and a short explicit list of differences.

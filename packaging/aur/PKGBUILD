@@ -1,0 +1,28 @@
+# Maintainer: Peder Bergan <https://github.com/pederbe/fastmash/issues>
+#
+# Installs the prebuilt release binaries (the benchmarked ones). For each
+# release, set pkgver and the checksum from the release's .sha256 file, reset
+# pkgrel to 1, regenerate .SRCINFO (makepkg --printsrcinfo > .SRCINFO) and push
+# to ssh://aur@aur.archlinux.org/fastmash-bin.git.
+pkgname=fastmash-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Fast command-line statistics on text data, compatible with GNU datamash"
+arch=('x86_64')
+url="https://fastmash.io"
+license=('MIT OR Apache-2.0')
+depends=('glibc')
+provides=('fastmash')
+conflicts=('fastmash')
+options=('!strip' '!debug')
+_name="fastmash-v${pkgver}-x86_64-unknown-linux-gnu"
+source=("https://github.com/pederbe/fastmash/releases/download/v${pkgver}/${_name}.tar.gz")
+sha256sums=('RELEASE_SHA256')
+
+package() {
+  cd "${_name}"
+  install -Dm755 fastmash fastmash-sort-supervisor -t "${pkgdir}/usr/bin/"
+  install -Dm644 README.md CHANGELOG.md -t "${pkgdir}/usr/share/doc/fastmash/"
+  install -Dm644 LICENSE-MIT LICENSE-APACHE THIRD-PARTY-LICENSES.md \
+    -t "${pkgdir}/usr/share/licenses/${pkgname}/"
+}

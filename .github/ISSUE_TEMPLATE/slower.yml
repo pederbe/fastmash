@@ -1,0 +1,47 @@
+name: Slower than GNU datamash
+description: A job where Fastmash is slower than GNU datamash, or slower than you expected.
+labels: ["performance", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Slow real-world jobs are what we optimize next, so thank you. The [benchmark kit](https://github.com/pederbe/fastmash/tree/main/bench) can time your command with both programs: `python3 fastmash-bench.py --custom 'ARGS' --input FILE`.
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The exact arguments, run the same way for both programs, and the locale (`LC_ALL`).
+      placeholder: LC_ALL=C fastmash -s -g 1 median 2 < data.tsv
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Data
+      description: Size, number of rows and fields, number of groups, and what the values look like. A link to public data or a small generator script is ideal.
+    validations:
+      required: true
+  - type: textarea
+    id: timings
+    attributes:
+      label: Timings
+      description: Elapsed time for both programs, repeated a few times (or the benchmark kit's table).
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `fastmash --version` and `datamash --version | head -1`
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Machine
+      description: CPU, memory, distribution, native Linux or WSL2, and the file system of the input and of TMPDIR
+      placeholder: 8-core x86-64, 16 GB, Fedora, native Linux, ext4
+    validations:
+      required: true

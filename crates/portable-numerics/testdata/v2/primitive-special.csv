@@ -1,0 +1,20 @@
+case_id,operation,operand_bits,integer_input,expected_outcome,derivation_kind,midpoint_relation,oracle_receipt_id,contract_paragraph,resource_class,generator_version,role
+admit-00000000000000000000,admit,00000000000000000000,,00000000000000000000,contract_table,not_applicable,,Checked values and results,fixed_binary80,1,callable
+admit-80000000000000000000,admit,80000000000000000000,,80000000000000000000,contract_table,not_applicable,,Checked values and results,fixed_binary80,1,callable
+admit-7fff8000000000000000,admit,7fff8000000000000000,,7fff8000000000000000,contract_table,not_applicable,,Checked values and results,fixed_binary80,1,callable
+admit-ffff8000000000000000,admit,ffff8000000000000000,,ffff8000000000000000,contract_table,not_applicable,,Checked values and results,fixed_binary80,1,callable
+admit-7fffc000000000000000,admit,7fffc000000000000000,,7fffc000000000000000,contract_table,not_applicable,,Checked values and results,fixed_binary80,1,callable
+admit-ffffc000000000000007,admit,ffffc000000000000007,,ffffc000000000000007,contract_table,not_applicable,,Checked values and results,fixed_binary80,1,callable
+admit-7fff8000000000000001,admit,7fff8000000000000001,,SignalingNan,contract_table,not_applicable,,Checked values and results,fixed_binary80,1,callable
+raw-pseudo-denormal,admit_raw,00008000000000000000,,PseudoDenormal,contract_table,not_applicable,,Checked values and results,fixed_binary80,1,callable
+raw-missing-integer,admit_raw,00010000000000000000,,MissingIntegerBit,contract_table,not_applicable,,Checked values and results,fixed_binary80,1,callable
+add-negzero-negzero,add,80000000000000000000;80000000000000000000,,80000000000000000000,contract_table,not_applicable,,Arithmetic,fixed_binary80,1,callable
+add-cancel,add,3fff8000000000000000;bfff8000000000000000,,00000000000000000000,contract_table,not_applicable,,Arithmetic,fixed_binary80,1,callable
+add-inf-opposite,add,7fff8000000000000000;ffff8000000000000000,,7fffc000000000000000,contract_table,not_applicable,,Arithmetic,fixed_binary80,1,callable
+divide-zero-zero,divide,00000000000000000000;00000000000000000000,,7fffc000000000000000,contract_table,not_applicable,,Arithmetic,fixed_binary80,1,callable
+divide-neg-one-zero,divide,bfff8000000000000000;00000000000000000000,,ffff8000000000000000,contract_table,not_applicable,,Arithmetic,fixed_binary80,1,callable
+divide-zero-neg-one,divide,00000000000000000000;bfff8000000000000000,,80000000000000000000,contract_table,not_applicable,,Arithmetic,fixed_binary80,1,callable
+log-10840a641be2c28d1b9515c1,log,00000000000000000001,,UnsupportedDomain,closed_profile_rule,not_applicable,,Arithmetic; Transcendentals and geomean; retained unsupported ledger,frozen_precision_ladder,2,callable
+log-7cc8b435ad56e4d62d93887f,log,80000000000000000001,,UnsupportedDomain,closed_profile_rule,not_applicable,,Arithmetic; Transcendentals and geomean; retained unsupported ledger,frozen_precision_ladder,2,callable
+log-13f1b138fa27b2eb1336d19d,log,00007fffffffffffffff,,UnsupportedDomain,closed_profile_rule,not_applicable,,Arithmetic; Transcendentals and geomean; retained unsupported ledger,frozen_precision_ladder,2,callable
+log-e07d64e1dc0d785623a1d7d8,log,80007fffffffffffffff,,UnsupportedDomain,closed_profile_rule,not_applicable,,Arithmetic; Transcendentals and geomean; retained unsupported ledger,frozen_precision_ladder,2,callable

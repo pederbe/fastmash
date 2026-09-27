@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # The tag's CHANGELOG section, dated, becomes the release notes.
+      - name: Release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          grep -q "^## \[$version\] - [0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}$" CHANGELOG.md ||
+            { echo "CHANGELOG.md has no dated entry for $version" >&2; exit 1; }
+          awk -v v="$version" 'index($0, "## [" v "]") == 1 {on = 1; next}
+            on && index($0, "## [") == 1 {exit} on {print}' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          test -s "$RUNNER_TEMP/notes.md"
+      # The release builder (glibc 2.28, pinned Rust) is rebuilt from its
+      # digest-pinned base and checksummed toolchain archives.
+      - name: Build the release builder
+        run: |
+          mkdir builder
+          cp release/Containerfile builder/
+          for component in rustc cargo rust-std; do
+            curl --proto '=https' -fsSLo "builder/$component-1.98.1-x86_64-unknown-linux-gnu.tar.xz" \
+              "https://static.rust-lang.org/dist/2026-09-03/$component-1.98.1-x86_64-unknown-linux-gnu.tar.xz"
+          done
+          docker build -f builder/Containerfile -t fastmash-release-builder builder
+      # The same recipe that built the benchmarked binaries.
+      - name: Build
+        run: |
+          mkdir out
+          docker run --rm -v "$PWD:/source:ro" -v "$PWD/out:/out" \
+            -e CARGO_TARGET_DIR=/out/target fastmash-release-builder bash -c \
+            'bash /source/release/build.sh && CARGO_HOME=/tmp/cargo python3 /source/scripts/third_party_licenses.py > /out/THIRD-PARTY-LICENSES.md'
+      # Refuse to publish bytes that were not the ones measured.
+      - name: Check the qualified checksums
+        run: |
+          cd out/target/release
+          sha256sum -c "$GITHUB_WORKSPACE/release/qualified.sha256"
+      - name: Test
+        run: |
+          python3 scripts/check_regressions.py --binary out/target/release/fastmash
+      - name: Package
+        run: |
+          name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
+          mkdir "$name"
+          cp out/target/release/fastmash out/target/release/fastmash-sort-supervisor \
+             out/THIRD-PARTY-LICENSES.md README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$name/"
+          tar -czf "$name.tar.gz" "$name"
+          sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+      # .deb and .rpm of the same bytes; release/package.sh checks that.
+      - name: Linux packages
+        run: |
+          sudo apt-get install -y --no-install-recommends rpm
+          version="${GITHUB_REF_NAME#v}"
+          name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+            bash release/package.sh "$version" out/target/release "$name" packages
+          for package in packages/*; do
+            cp "$package" .
+            sha256sum "$(basename "$package")" > "$(basename "$package").sha256"
+          done
+      - name: Test the packages
+        run: |
+          printf '1\t2\n3\t4\n' > sample.tsv
+          docker run --rm --network=none -v "$PWD:/w:ro" debian:12-slim bash -c \
+            'dpkg -i /w/fastmash_*_amd64.deb && fastmash sum 1 mean 2 < /w/sample.tsv && dpkg -r fastmash'
+          docker run --rm --network=none -v "$PWD:/w:ro" almalinux:8-minimal bash -c \
+            'rpm -i /w/fastmash-*.x86_64.rpm && fastmash sum 1 mean 2 < /w/sample.tsv && rpm -e fastmash'
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            fastmash-*.tar.gz
+            fastmash_*.deb
+            fastmash-*.rpm
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" fastmash-*.tar.gz fastmash_*.deb fastmash-*.rpm \
+            fastmash-*.sha256 fastmash_*.sha256 \
+            --title "Fastmash ${GITHUB_REF_NAME#v}" --notes-file "$RUNNER_TEMP/notes.md" --draft

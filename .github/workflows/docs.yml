@@ -1,0 +1,32 @@
+name: Documentation
+
+# Checks that the website builds and its links resolve. Deployment is not done
+# here: Cloudflare Workers Builds runs the same scripts/build_site.sh on every
+# push to main and deploys docs/book (wrangler.jsonc).
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", "site/**", "install.sh", "scripts/build_site.py", "scripts/build_site.sh", "wrangler.jsonc", "package.json", "package-lock.json", "crates/cli/Cargo.toml", "ARCHITECTURE.md", "TESTING.md", "CONTEXT.md", ".github/workflows/docs.yml"]
+  pull_request:
+    paths: ["docs/**", "site/**", "install.sh", "scripts/build_site.py", "scripts/build_site.sh", "wrangler.jsonc", "package.json", "package-lock.json", "crates/cli/Cargo.toml", "ARCHITECTURE.md", "TESTING.md", "CONTEXT.md", ".github/workflows/docs.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      # The deploy build: pinned mdBook, committed diagram renders (a missing
+      # or unused render fails), landing page and install.sh at the root.
+      - run: bash scripts/build_site.sh
+      - name: Check links
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+        with:
+          args: --offline --no-progress --root-dir ${{ github.workspace }}/docs/book docs/book

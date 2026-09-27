@@ -1,0 +1,47 @@
+{% set name = "fastmash" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+  url: https://github.com/pederbe/fastmash/archive/refs/tags/v{{ version }}.tar.gz
+  sha256: REPLACE_WITH_SHA256_OF_THE_TAG_TARBALL
+
+build:
+  number: 0
+  # Fastmash supports only Linux x86-64 with glibc (compile_error elsewhere).
+  skip: true  # [not (linux and x86_64)]
+
+requirements:
+  build:
+    - {{ compiler('rust') }}
+    - {{ compiler('c') }}
+    - {{ stdlib('c') }}
+    - cargo-bundle-licenses
+
+# run_test.sh, next to this file, runs as the package test.
+test:
+  commands:
+    - fastmash --version
+
+about:
+  home: https://fastmash.io
+  summary: Fast command-line statistics on text data, compatible with GNU datamash
+  description: |
+    Fastmash runs GNU datamash commands (grouping, sums, means, medians,
+    quantiles, crosstabs and more on tab-separated text) faster, with the same
+    numerical results on every machine: its 80-bit arithmetic is done in
+    software. Sorted jobs in some locales use the system /usr/bin/sort.
+  license: MIT OR Apache-2.0
+  license_file:
+    - LICENSE-MIT
+    - LICENSE-APACHE
+    - THIRDPARTY.yml
+  doc_url: https://fastmash.io
+  dev_url: https://github.com/pederbe/fastmash
+
+extra:
+  recipe-maintainers:
+    - pederbe

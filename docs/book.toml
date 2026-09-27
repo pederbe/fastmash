@@ -1,0 +1,23 @@
+[book]
+title = "Fastmash"
+description = "Fast command-line statistics for delimited text: a Rust implementation of the GNU datamash command language."
+authors = ["Peder Bergan"]
+language = "en"
+src = "src"
+
+[output.html]
+site-url = "/"
+git-repository-url = "https://github.com/pederbe/fastmash"
+edit-url-template = "https://github.com/pederbe/fastmash/edit/main/docs/{path}"
+default-theme = "navy"
+preferred-dark-theme = "navy"
+additional-css = ["theme/fastmash.css"]
+additional-js = ["theme/footer.js"]
+no-section-label = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+limit-results = 20

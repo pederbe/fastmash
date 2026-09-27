@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "crates/cli",
+    "crates/conversion",
+    "crates/numeric-contract",
+    "crates/portable-numerics",
+    "crates/sort-process",
+]
+default-members = ["crates/cli"]
+resolver = "3"
+
+[profile.dev]
+opt-level = 0
+panic = "abort"
+overflow-checks = true
+
+# Keep in step with crates/cli/Cargo.toml, which carries the same profile for
+# crates.io installs.
+[profile.release]
+opt-level = 2
+panic = "abort"
+overflow-checks = true
+lto = false

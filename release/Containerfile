@@ -1,0 +1,30 @@
+# Release builder: glibc 2.28 userspace (manylinux_2_28, AlmaLinux 8) with the
+# pinned Rust toolchain from checksummed upstream archives. No package manager
+# runs, so the same inputs give the same toolchain files anywhere.
+# manylinux_2_28_x86_64 as published in September 2026; keep a mirrored copy of
+# this digest (validation/release-builder) in case it is withdrawn.
+FROM quay.io/pypa/manylinux_2_28_x86_64@sha256:531d7aa844bbb0c131d4ab011d3db741c4abc8d498cd5ccc86121046f62303b4
+WORKDIR /tmp/rust
+COPY rustc-1.98.1-x86_64-unknown-linux-gnu.tar.xz cargo-1.98.1-x86_64-unknown-linux-gnu.tar.xz rust-std-1.98.1-x86_64-unknown-linux-gnu.tar.xz ./
+RUN printf '%s\n' \
+      'e974f036b28565f37c0f3bd92ddefa809bee16c04f9dcf07b9ed96e05aaaf7c4  rustc-1.98.1-x86_64-unknown-linux-gnu.tar.xz' \
+      'ea1de9f9e23107d97ee2b41a72c552f34064a593da503789218387aee59f3ba4  cargo-1.98.1-x86_64-unknown-linux-gnu.tar.xz' \
+      'fa3ff450172a16c026944030230c5069947af93c728d9179971d44e5e0cfb561  rust-std-1.98.1-x86_64-unknown-linux-gnu.tar.xz' \
+      | sha256sum -c - \
+ && for component in rustc cargo rust-std; do \
+      tar -xJf "$component-1.98.1-x86_64-unknown-linux-gnu.tar.xz" \
+      && "./$component-1.98.1-x86_64-unknown-linux-gnu/install.sh" --prefix=/opt/rust --disable-ldconfig \
+      && rm -rf "$component-1.98.1-x86_64-unknown-linux-gnu" "$component-1.98.1-x86_64-unknown-linux-gnu.tar.xz"; \
+    done
+# Rust names -lgcc_s for unwinding; panic=abort needs none of it at run time, so
+# release/build.sh links the static libgcc_eh under that name (one shared
+# library fewer to load at every start). GCC Runtime Library Exception.
+RUN test -f /opt/rh/gcc-toolset-14/root/usr/lib/gcc/x86_64-redhat-linux/14/libgcc_eh.a \
+ && mkdir /opt/fastmash-link \
+ && ln -s /opt/rh/gcc-toolset-14/root/usr/lib/gcc/x86_64-redhat-linux/14/libgcc_eh.a /opt/fastmash-link/libgcc_s.a
+ENTRYPOINT []
+ENV PATH=/opt/rust/bin:/opt/rh/gcc-toolset-14/root/usr/bin:/usr/bin:/bin LC_ALL=C TZ=UTC
+RUN mkdir /builder && rustc -vV > /builder/rustc.txt && cargo -vV > /builder/cargo.txt \
+ && ldd --version | head -n 1 > /builder/glibc.txt && cc --version | head -n 1 > /builder/cc.txt \
+ && ld --version | head -n 1 > /builder/ld.txt
+WORKDIR /source

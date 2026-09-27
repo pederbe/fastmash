@@ -1,0 +1,2424 @@
+{
+ "glibc": "ldd (Ubuntu GLIBC 2.43-2ubuntu2.4) 2.43",
+ "machine": "x86_64",
+ "bare_utf8": [
+  "aa_ER",
+  "aa_ET",
+  "agr_PE",
+  "ak_GH",
+  "am_ET",
+  "anp_IN",
+  "ar_IN",
+  "ar_SS",
+  "as_IN",
+  "ayc_PE",
+  "az_AZ",
+  "az_IR",
+  "bem_ZM",
+  "ber_DZ",
+  "ber_MA",
+  "bho_IN",
+  "bho_NP",
+  "bi_VU",
+  "bn_BD",
+  "bn_IN",
+  "bo_CN",
+  "bo_IN",
+  "brx_IN",
+  "byn_ER",
+  "ce_RU",
+  "chr_US",
+  "ckb_IQ",
+  "cmn_TW",
+  "crh_RU",
+  "crh_UA",
+  "csb_PL",
+  "cv_RU",
+  "doi_IN",
+  "dsb_DE",
+  "dv_MV",
+  "dz_BT",
+  "en_AG",
+  "en_IL",
+  "en_IN",
+  "en_NG",
+  "en_ZM",
+  "eo",
+  "es_CU",
+  "fa_IR",
+  "ff_SN",
+  "fil_PH",
+  "fur_IT",
+  "fy_DE",
+  "fy_NL",
+  "gbm_IN",
+  "gez_ER",
+  "gez_ET",
+  "gu_IN",
+  "ha_NG",
+  "hak_TW",
+  "hi_IN",
+  "hif_FJ",
+  "hne_IN",
+  "ht_HT",
+  "hy_AM",
+  "ia_FR",
+  "ig_NG",
+  "ik_CA",
+  "iu_CA",
+  "kab_DZ",
+  "km_KH",
+  "kn_IN",
+  "kok_IN",
+  "ks_IN",
+  "kv_RU",
+  "ky_KG",
+  "lb_LU",
+  "li_BE",
+  "li_NL",
+  "lij_IT",
+  "ln_CD",
+  "lo_LA",
+  "lzh_TW",
+  "mag_IN",
+  "mai_IN",
+  "mai_NP",
+  "mdf_RU",
+  "mfe_MU",
+  "mhr_RU",
+  "miq_NI",
+  "mjw_IN",
+  "ml_IN",
+  "mn_MN",
+  "mni_IN",
+  "mnw_MM",
+  "mr_IN",
+  "my_MM",
+  "nan_TW",
+  "nds_DE",
+  "nds_NL",
+  "ne_NP",
+  "nhn_MX",
+  "niu_NU",
+  "niu_NZ",
+  "nl_AW",
+  "nr_ZA",
+  "nso_ZA",
+  "om_ET",
+  "or_IN",
+  "os_RU",
+  "pa_IN",
+  "pa_PK",
+  "pap_AW",
+  "pap_CW",
+  "ps_AF",
+  "quz_PE",
+  "raj_IN",
+  "rif_MA",
+  "rw_RW",
+  "sa_IN",
+  "sah_RU",
+  "sat_IN",
+  "sc_IT",
+  "scn_IT",
+  "sd_IN",
+  "sd_PK",
+  "se_NO",
+  "sgs_LT",
+  "shn_MM",
+  "shs_CA",
+  "si_LK",
+  "sid_ET",
+  "sm_WS",
+  "so_ET",
+  "sq_MK",
+  "sr_ME",
+  "sr_RS",
+  "ss_ZA",
+  "ssy_ER",
+  "su_ID",
+  "sw_KE",
+  "sw_TZ",
+  "syr",
+  "szl_PL",
+  "ta_IN",
+  "ta_LK",
+  "te_IN",
+  "the_NP",
+  "ti_ER",
+  "ti_ET",
+  "tig_ER",
+  "tk_TM",
+  "tn_ZA",
+  "to_TO",
+  "tok",
+  "tpi_PG",
+  "ts_ZA",
+  "tt_RU",
+  "ug_CN",
+  "unm_US",
+  "ur_IN",
+  "ur_PK",
+  "ve_ZA",
+  "vi_VN",
+  "wae_CH",
+  "wal_ET",
+  "wo_SN",
+  "yo_NG",
+  "yue_HK",
+  "yuw_PG",
+  "zgh_MA"
+ ],
+ "locales": {
+  "aa_DJ": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "aa_ER": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "aa_ET": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "af_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "agr_PE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ak_GH": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "am_ET": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "an_ES": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "anp_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_AE": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_BH": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_DZ": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_EG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_IQ": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_JO": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_KW": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_LB": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_LY": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_MA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_OM": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_QA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_SA": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "ar_SD": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_SS": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_SY": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_TN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ar_YE": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "as_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "ast_ES": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ayc_PE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "az_AZ": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "az_IR": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "be_BY": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "bem_ZM": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ber_DZ": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ber_MA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "bg_BG": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    3
+   ]
+  },
+  "bhb_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "bho_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "bho_NP": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "bi_VU": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "bn_BD": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "bn_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "bo_CN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "bo_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "br_FR": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "brx_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "bs_BA": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "byn_ER": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "ca_AD": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ca_ES": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ca_FR": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ca_IT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ce_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "chr_US": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ckb_IQ": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "cmn_TW": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    4
+   ]
+  },
+  "crh_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "crh_UA": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "cs_CZ": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "csb_PL": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "cv_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "cy_GB": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "da_DK": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "de_AT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "de_BE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "de_CH": {
+   "decimal_point": ".",
+   "thousands_sep": "’",
+   "grouping": [
+    3
+   ]
+  },
+  "de_DE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "de_IT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "de_LI": {
+   "decimal_point": ".",
+   "thousands_sep": "’",
+   "grouping": [
+    3
+   ]
+  },
+  "de_LU": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "doi_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "dsb_DE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "dv_MV": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "dz_BT": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "el_CY": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    -1
+   ]
+  },
+  "el_GR": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    -1
+   ]
+  },
+  "en_AG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_AU": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_BW": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_CA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_DK": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "en_GB": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_HK": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_IE": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_IL": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "en_NG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_NZ": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_PH": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_SC": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_SE": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "en_SG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_US": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_ZM": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_ZW": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "eo": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "eo_US": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    3
+   ]
+  },
+  "es_AR": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "es_BO": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "es_CL": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "es_CO": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "es_CR": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "es_CU": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    -1
+   ]
+  },
+  "es_DO": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "es_EC": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "es_ES": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "es_GT": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "es_HN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "es_MX": {
+   "decimal_point": ".",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "es_NI": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "es_PA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "es_PE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "es_PR": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "es_PY": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "es_SV": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "es_US": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "es_UY": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "es_VE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "et_EE": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "eu_ES": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "eu_FR": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "fa_IR": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ff_SN": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "fi_FI": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "fil_PH": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "fo_FO": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "fr_BE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "fr_CA": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "fr_CH": {
+   "decimal_point": ".",
+   "thousands_sep": "’",
+   "grouping": [
+    3
+   ]
+  },
+  "fr_FR": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "fr_LU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "fur_IT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "fy_DE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "fy_NL": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ga_IE": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "gbm_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "gd_GB": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "gez_ER": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "gez_ET": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "gl_ES": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "gu_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "gv_GB": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ha_NG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "hak_TW": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    4
+   ]
+  },
+  "he_IL": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "hi_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "hif_FJ": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "hne_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "hr_HR": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "hsb_DE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ht_HT": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "hu_HU": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "hy_AM": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ia_FR": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "id_ID": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ig_NG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ik_CA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "is_IS": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "it_CH": {
+   "decimal_point": ".",
+   "thousands_sep": "’",
+   "grouping": [
+    3
+   ]
+  },
+  "it_IT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "iu_CA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ja_JP": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ka_GE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "kab_DZ": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    3
+   ]
+  },
+  "kk_KZ": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "kl_GL": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "km_KH": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "kn_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ko_KR": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "kok_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ks_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ku_TR": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "kv_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "kw_GB": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ky_KG": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "lb_LU": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "lg_UG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "li_BE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "li_NL": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "lij_IT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ln_CD": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    3
+   ]
+  },
+  "lo_LA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "lt_LT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ltg_LV": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "lv_LV": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "lzh_TW": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    4
+   ]
+  },
+  "mag_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "mai_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "mai_NP": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "mdf_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "mfe_MU": {
+   "decimal_point": ".",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "mg_MG": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "mhr_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "mi_NZ": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "miq_NI": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "mjw_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "mk_MK": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "ml_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "mn_MN": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "mni_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "mnw_MM": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "mr_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ms_MY": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "mt_MT": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "my_MM": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "nan_TW": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    4
+   ]
+  },
+  "nb_NO": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "nds_DE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "nds_NL": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ne_NP": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "nhn_MX": {
+   "decimal_point": ".",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "niu_NU": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "niu_NZ": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "nl_AW": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "nl_BE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "nl_NL": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "nn_NO": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "nr_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "nso_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "oc_FR": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "om_ET": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "om_KE": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "or_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "os_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "pa_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "pa_PK": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "pap_AW": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "pap_CW": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "pl_PL": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "ps_AF": {
+   "decimal_point": "٫",
+   "thousands_sep": "٬",
+   "grouping": [
+    3
+   ]
+  },
+  "pt_BR": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "pt_PT": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "quz_PE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "raj_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "rif_MA": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    3
+   ]
+  },
+  "ro_RO": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ru_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "ru_UA": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "rw_RW": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "sa_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "sah_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "sat_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "sc_IT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "scn_IT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "sd_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "sd_PK": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "se_NO": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "sgs_LT": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "shn_MM": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "shs_CA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "si_LK": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "sid_ET": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "sk_SK": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "sl_SI": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    -1
+   ]
+  },
+  "sm_WS": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "so_DJ": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "so_ET": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "so_KE": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "so_SO": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "sq_AL": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "sq_MK": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "sr_ME": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "sr_RS": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "ss_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ssy_ER": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "st_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "su_ID": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "sv_FI": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "sv_SE": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "sw_KE": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "sw_TZ": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "syr": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "szl_PL": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "ta_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "ta_LK": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "tcy_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "te_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3,
+    2
+   ]
+  },
+  "tg_TJ": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "th_TH": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "the_NP": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ti_ER": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "ti_ET": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "tig_ER": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "tk_TM": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "tl_PH": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "tn_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "to_TO": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "tok": {
+   "decimal_point": ".",
+   "thousands_sep": " ",
+   "grouping": [
+    -1
+   ]
+  },
+  "tpi_PG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "tr_CY": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "tr_TR": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ts_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "tt_RU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "ug_CN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "uk_UA": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "unm_US": {
+   "decimal_point": ".",
+   "thousands_sep": " ",
+   "grouping": [
+    2,
+    2,
+    2,
+    3
+   ]
+  },
+  "ur_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ur_PK": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "uz_UZ": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "ve_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "vi_VN": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "wa_BE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "wae_CH": {
+   "decimal_point": ".",
+   "thousands_sep": "’",
+   "grouping": [
+    3
+   ]
+  },
+  "wal_ET": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "wo_SN": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "xh_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "yi_US": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "yo_NG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "yue_HK": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "yuw_PG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "zgh_MA": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    3
+   ]
+  },
+  "zh_CN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "zh_HK": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "zh_SG": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "zh_TW": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "zu_ZA": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  }
+ }
+}

@@ -1,0 +1,51 @@
+name: Compatibility difference
+description: Fastmash and GNU datamash behave differently for the same command.
+labels: ["compatibility", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check [Differences from GNU datamash](https://fastmash.io/guide/differences.html) first: some differences are intentional.
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and input
+      description: Minimal input and the command, run the same way for both programs.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: datamash
+    attributes:
+      label: GNU datamash result
+      description: Output, error message and exit status.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: fastmash
+    attributes:
+      label: Fastmash result
+      description: Output, error message and exit status.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `fastmash --version` and `datamash --version | head -1`
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Distribution, WSL or native, and locale settings
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Does this break a script or pipeline you use? How?
