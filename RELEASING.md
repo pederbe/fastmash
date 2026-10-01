@@ -56,8 +56,11 @@ listed unless users notice them.
      the benchmarks page;
    - the demo GIF (`scripts/demo/record.mjs`) if the demo job's times moved
      noticeably, and any claims on the landing page and link-preview image.
-7. **Tag** the qualified commit `vX.Y.Z` and push the tag. The release
-   workflow builds, checks the checksums, runs the corpus, packages
+7. **Tag** the qualified commit `vX.Y.Z` and push the tag, then start the
+   release workflow explicitly: `gh workflow run Release --ref vX.Y.Z`.
+   The tagged commit must contain the manual workflow; changing `main` does
+   not update an existing tag. A dispatch on a branch skips the release job.
+   The workflow builds, checks the checksums, runs the corpus, packages
    `.tar.gz`, `.deb` and `.rpm`, tests the packages on Debian 12 and
    AlmaLinux 8, attests provenance and creates a **draft** release with the
    changelog section as its notes.

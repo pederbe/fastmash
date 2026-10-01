@@ -3,12 +3,8 @@ name: Documentation
 # Checks that the website builds and its links resolve. Deployment is not done
 # here: Cloudflare Workers Builds runs the same scripts/build_site.sh on every
 # push to main and deploys docs/book (wrangler.jsonc).
+# This Actions check runs only when started manually.
 on:
-  push:
-    branches: [main]
-    paths: ["docs/**", "site/**", "install.sh", "scripts/build_site.py", "scripts/build_site.sh", "wrangler.jsonc", "package.json", "package-lock.json", "crates/cli/Cargo.toml", "ARCHITECTURE.md", "TESTING.md", "CONTEXT.md", ".github/workflows/docs.yml"]
-  pull_request:
-    paths: ["docs/**", "site/**", "install.sh", "scripts/build_site.py", "scripts/build_site.sh", "wrangler.jsonc", "package.json", "package-lock.json", "crates/cli/Cargo.toml", "ARCHITECTURE.md", "TESTING.md", "CONTEXT.md", ".github/workflows/docs.yml"]
   workflow_dispatch:
 
 permissions:

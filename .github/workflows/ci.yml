@@ -1,9 +1,8 @@
 name: CI
 
+# Actions minutes are limited: start checks explicitly with gh workflow run CI.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read

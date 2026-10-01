@@ -25,8 +25,8 @@ cargo test --workspace                   # unit and integration tests
 python3 scripts/check_regressions.py --binary target/release/fastmash
 ```
 
-CI runs all four on every pull request. A change is ready for review when they
-pass locally.
+CI runs only when started manually, to preserve the limited Actions minutes.
+A change is ready for review when all four checks pass locally.
 
 ## Layers
 
@@ -119,6 +119,6 @@ Windows drive: tests are much faster there.
 
 | Workflow | When | What |
 | --- | --- | --- |
-| `ci.yml` | Every push and pull request | Format, Clippy, tests, regression corpus on Ubuntu |
-| `docs.yml` | Changes to the site or its sources | Builds the website and documentation, checks links, and deploys to fastmash.io from `main` |
-| `release.yml` | Version tags | Builds, tests and publishes release binaries |
+| `ci.yml` | Manual dispatch | Format, Clippy, tests, regression corpus on Ubuntu |
+| `docs.yml` | Manual dispatch | Builds the website and documentation and checks links; Cloudflare deploys separately |
+| `release.yml` | Manual dispatch on a version tag | Builds, tests and publishes release binaries |
