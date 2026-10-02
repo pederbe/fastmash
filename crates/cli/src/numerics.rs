@@ -5,7 +5,7 @@ pub(super) use fastmash_portable_numerics::{
 };
 pub(super) type Value = fastmash_portable_numerics::ArithmeticValue;
 
-/// Approved CLI policy: larger quiet significand, then positive sign on ties.
+/// Documented CLI rule: larger quiet significand, then positive sign on ties.
 /// Keep historical arithmetic kernels and comparison/unary rules separate.
 pub(super) fn binary_nan(left: Value, right: Value) -> Option<Value> {
     use fastmash_numeric_contract::ValueClass;
@@ -25,6 +25,22 @@ pub(super) fn binary_nan(left: Value, right: Value) -> Option<Value> {
         (true, false) => Some(left),
         (false, true) => Some(right),
         (false, false) => None,
+    }
+}
+
+/// The optional numerics a Command's Operations need before input is read.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct Requirements {
+    pub square_root: bool,
+    pub mean_math: bool,
+}
+impl std::ops::BitOr for Requirements {
+    type Output = Self;
+    fn bitor(self, other: Self) -> Self {
+        Self {
+            square_root: self.square_root || other.square_root,
+            mean_math: self.mean_math || other.mean_math,
+        }
     }
 }
 
@@ -56,6 +72,10 @@ impl Numerics {
     #[cfg(test)]
     pub(super) fn new(needs_session: bool) -> Result<Self, NumericFailure> {
         Self::with_requirements(needs_session, false)
+    }
+    /// Numerics providing exactly `needs`, without the wider session.
+    pub(super) fn with(needs: Requirements) -> Result<Self, NumericFailure> {
+        Self::with_requirements(false, needs.square_root)?.with_mean_math(needs.mean_math)
     }
     pub(super) fn with_requirements(
         needs_session: bool,
@@ -200,7 +220,7 @@ mod tests {
     use fastmash_numeric_contract::Raw80;
 
     #[test]
-    fn approved_nan_selection_matches_both_arithmetic_routes() {
+    fn nan_selection_matches_both_arithmetic_routes() {
         let mut session = Numerics::new(true).unwrap();
         for (a, b, expected) in [
             ((false, 1), (true, 2), (true, 2)),
@@ -231,7 +251,7 @@ mod tests {
             }
         }
         // Invalid arithmetic still creates positive canonical NaN; subsequent
-        // selection follows the approved rule without changing unary propagation.
+        // selection follows the documented rule without changing unary propagation.
         let infinity = canonical(Raw80::new(0x7fff, 1 << 63));
         let invalid = session.subtract(infinity, infinity).unwrap();
         let negative = canonical(Raw80::new(0xffff, 0xc000_0000_0000_0000));

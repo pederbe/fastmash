@@ -30,18 +30,30 @@ A change to any numerical output is always listed, with the numerical profile
 version that introduced it. Internal refactoring, tests and CI are not
 listed unless users notice them.
 
+Release dates record when a version becomes available, not a target date.
+Keep upcoming changes under the undated `[Unreleased]` heading until the
+release is being tagged.
+
 ## Checklist
 
-1. **Freeze.** Everything for the release is on `main` and CI is green.
+1. **Freeze.** Everything for the release is on `main` and the checks pass.
+   For the initial release, while the repository is private, run the CI
+   checks locally against the exported checkout: formatting, Clippy,
+   workspace tests, both regression-corpus input modes, the minimum Rust
+   version, dependency licenses and advisories, and the site and link checks.
+   Run hosted CI after the repository becomes public, before tagging. Standard
+   public hosted runners are free; extra private Actions minutes are not a
+   prerequisite. Local checks do not test GitHub's tag dispatch, permissions,
+   attestations or draft-release uploads.
 2. **Version.** Set the version in all five crates' `Cargo.toml` (including
-   the exact `=` pins between them) and update `Cargo.lock`. Move the
-   `[Unreleased]` entries under `## [X.Y.Z] - YYYY-MM-DD`; the release
-   workflow refuses a tag without a dated entry.
+   the exact `=` pins between them) and update `Cargo.lock`. Keep the
+   changelog entries under `[Unreleased]` during qualification.
 3. **Build the candidate** with the release builder (`release/Containerfile`
    and `release/build.sh`), twice from a clean checkout. The two builds must
    be byte-identical.
 4. **Qualify the candidate.** Run the regression corpus
-   (`scripts/check_regressions.py --binary ...`) and the benchmark catalog on
+   (`scripts/check_regressions.py --binary ...`, both with and without
+   `--stdin-file`) and the benchmark catalog on
    both measurement hosts, against GNU datamash 1.9 and the previous release,
    with the [acceptance rules](https://fastmash.io/benchmarks/method.html)
    fixed before measuring. A slowdown beyond the limits needs a published
@@ -56,10 +68,13 @@ listed unless users notice them.
      the benchmarks page;
    - the demo GIF (`scripts/demo/record.mjs`) if the demo job's times moved
      noticeably, and any claims on the landing page and link-preview image.
-7. **Tag** the qualified commit `vX.Y.Z` and push the tag, then start the
-   release workflow explicitly: `gh workflow run Release --ref vX.Y.Z`.
-   The tagged commit must contain the manual workflow; changing `main` does
-   not update an existing tag. A dispatch on a branch skips the release job.
+7. **Tag.** Move the `[Unreleased]` entries under
+   `## [X.Y.Z] - YYYY-MM-DD` using the actual release date; the workflow
+   refuses a tag without a dated entry. Tag the qualified commit `vX.Y.Z`
+   and push the tag, then start the release explicitly:
+   `gh workflow run Release --ref vX.Y.Z`. The tagged commit must contain
+   the manual workflow; changing `main` does not update an existing tag.
+   A dispatch on a branch skips the release job.
    The workflow builds, checks the checksums, runs the corpus, packages
    `.tar.gz`, `.deb` and `.rpm`, tests the packages on Debian 12 and
    AlmaLinux 8, attests provenance and creates a **draft** release with the
@@ -70,8 +85,8 @@ listed unless users notice them.
    `fastmash-portable-numerics`, `fastmash-sort-process`, `fastmash`.
    The website deploys from `main`; check that the install page and landing
    page show the new version.
-9. **Packages.** The conda-forge feedstock's bot opens a version-bump pull
-   request once the release exists; review and merge it. Update any other
-   packaging (such as the AUR `PKGBUILD` checksums) the same day.
+9. **Packages.** Update any existing distribution packages when the release
+   is available. Additional distribution channels, including conda-forge,
+   follow the first release; they are not required to launch it.
 10. **Announce** the headline: a Discussions announcement, and the social
     accounts. A release with a measured improvement links its benchmark.

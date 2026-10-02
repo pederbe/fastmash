@@ -177,12 +177,15 @@ Examples:
 Runtime and numerical limits:
   countunique/unique/collapse retain text per operation/group until final output.
   Storage grows as needed; duplicates consume storage and allocation may fail.
-  Linux x86-64 with glibc; default %.14g formatting. /proc is required.
+  Linux x86-64 with glibc; default %.14g formatting. The system sort route
+  (below) needs /proc; without it, those jobs sort in process.
   Installation and requirements: https://fastmash.io/install.html
-  Locales: C/POSIX, C.UTF-8 and the glibc locales as NAME.UTF-8 (or .utf8, no
-  @modifier). Each category uses nonempty LC_ALL, its LC_* value, LANG, then C.
-  Any LC_MESSAGES is accepted, and any LC_CTYPE except with -i (see below).
-  Names without a codeset are accepted where glibc's default is UTF-8 (hi_IN).
+  Locales: C/POSIX, C.UTF-8 and the glibc locales, @modifier ones included (as
+  glibc, a modifier it has no locale for is dropped). Each category uses
+  nonempty LC_ALL, its LC_* value, LANG, then C. Any LC_MESSAGES is accepted,
+  and any LC_CTYPE except with -i (see below). A name glibc has no locale for
+  behaves as C, as in GNU. Character sets other than UTF-8 keep a locale's
+  numbers where its separators are ASCII; sorting in them is refused.
   Numbers follow the glibc 2.43 rules
   of each locale whose decimal separator is one byte (all but ps_AF): its
   decimal separator, and its thousands separator and grouping for the apostrophe
@@ -200,20 +203,32 @@ Runtime and numerical limits:
   NaN payload input is accepted. Invalid arithmetic generates positive canonical
   NaN; signs and last digits can differ from GNU (see the differences page).
   Unsupported cases and checked allocation refusals exit with status 77.
-  Numerical jobs retain original records to preserve numeric parsing context.
-  FASTMASH_SORT_MEMORY_BYTES sets its chunk target (default 67108864 bytes), not
-  a hard memory limit. Spill uses anonymous files in TMPDIR (default /tmp).
-  In C/C.UTF-8, other sorted operations require fastmash-sort-supervisor beside it,
-  /usr/bin/sort with stable/NUL sorting, HUP/INT/TERM neither ignored (as by
-  nohup) nor blocked, and waitable children. This route needs pidfds and
-  close_range(CLOEXEC), Linux 5.11+.
-  Native spill uses O_TMPFILE, or unlinked private files where TMPDIR lacks it
-  (NFS, older overlayfs); external sorting creates a private directory in
-  TMPDIR when it starts, so TMPDIR must be writable.
+  Native sorting keeps only the fields jobs use (whole records with --full, in
+  language locales, or for numbers when the separator is a letter, digit or the
+  decimal point). It holds the whole input in memory when memory
+  allows; otherwise it sorts 64 MiB chunks and spills them to anonymous
+  files in TMPDIR (default /tmp). FASTMASH_SORT_MEMORY_BYTES fixes the chunk
+  target; FASTMASH_SORT_TRACE reports the choice on standard error.
+  With standard input from a file whose keys repeat, or from a pipe in a
+  language locale, -s groups instead of sorting: each group's records are
+  collected as they arrive, and only the groups are sorted (hash grouping).
+  Where that cannot give the sorted result exactly, the input is read again
+  (piped input is held in memory for that) and sorted. FASTMASH_GROUPING=sort
+  always sorts; FASTMASH_PIPE_GROUPING=sort sorts piped input, and =hash
+  holds it in every locale.
+  In C/C.UTF-8, other sorted operations use /usr/bin/sort (stable, NUL-capable)
+  through fastmash-sort-supervisor beside fastmash, where both can run safely:
+  HUP/INT/TERM neither ignored (as by nohup) nor blocked, waitable children,
+  pidfds and close_range(CLOEXEC) (Linux 5.11+), both executable, sort not
+  BusyBox or Toybox, a -t byte below 0x80 and a writable, searchable TMPDIR.
+  Otherwise they sort in process. Native spill uses O_TMPFILE, or unlinked
+  private files where TMPDIR lacks it (NFS, older overlayfs); external sorting
+  creates a private directory in TMPDIR when it starts.
   C/C.UTF-8 sorting uses byte order. Language sorting uses pinned Rust ICU rules
-  in the locales whose letter order was verified against glibc 2.43, including
-  punctuation-order differences from GNU; all families use the native spill
-  engine. Keys must be valid, NUL-free UTF-8 there. Language sorting covers the
+  for letters and digits and glibc 2.43's table for punctuation, symbols and
+  spaces, in the locales whose order was verified against glibc 2.43 (some
+  keys with punctuation next to digits, and vulgar fractions, differ); all
+  families use the native spill engine. Keys must be valid, NUL-free UTF-8 there. Language sorting covers the
   glibc locales of aa af agr ak am anp ayc az bem ber bg bhb bi bs byn ce chr crh
   cy de dv en eo es eu ff fil fr fy ga gbm gd gez gl gv ha he hif hne hr hsb ht hy
   ia id ig is it ks kv kw lb lg li lij ln lv mag mfe mg mhr miq mjw mk mn mnw ms
@@ -226,8 +241,8 @@ Runtime and numerical limits:
   -i preserves original output spelling and stable sort ties. It does not fold
   column names or rmdup keys; with rmdup, it only changes requested sort order.
   Case/group identity stays byte-based with ASCII folding. -i is refused under
-  the az_AZ, crh_UA, ku_TR, tr_CY and tr_TR character types, where glibc does
-  not fold i and I.
+  the az_AZ, crh_UA, ku_TR, tr_CY, tr_TR and tt_RU@iqtelif character types,
+  where glibc does not fold i and I.
   Diagnostics remain English; UTF-8 character categories use curly quotations.
   Other numeric locales are refused only when numbers are read or printed
   (count, countunique and strbin results only with --format or --round);
@@ -243,15 +258,16 @@ Mode/antimode share sorted samples with quantiles. MAD/raw MAD share a separate
 buffer transformed in place into absolute deviations. Both families grow in
 memory and report allocation failure; sample storage does not spill to disk.
 
-Field modes: cut/echo FIELD selects fields per record; reverse reverses fields
-within each record (use --no-strict for changing widths). nop/noop consumes input;
---full emits its original records. These modes use growable record storage.
+cut/echo FIELD is a per-row operation that prints the selected fields.
+Field modes: reverse reverses the fields of each record (use --no-strict for
+changing widths); nop/noop consumes input, and with --full emits its records.
+cut and these modes use growable record storage.
 
 Per-row numeric operations: getnum[:TYPE] FIELD extracts a numeric prefix from
 the first matching character run. Types: n (digits), i (signed integer), h (hex),
 o (octal), p (digits/dot, default), d (signed digits/dot). No match, conversion
 failure or known range error produces zero. Integer conversion uses signed 64-bit
-range. Numeric type parameters are refused; use a character type from this list.
+range. Numeric type parameters are errors; use a character type from this list.
 round, floor, ceil, trunc and frac FIELD transform each selected number per row.
 round uses nearest integer with ties away from zero; frac keeps the signed
 fraction. Actual zero becomes positive zero. Unlike GNU 1.9, negative NaN remains
@@ -271,8 +287,8 @@ used; missing cells then use --filler (default N/A). Headers are ordinary rows.
 Transpose retains present fields and compact indexes in memory, without fixed
 row/column limits or disk spill; allocation failure is reported before output.
 rmdup/dedup FIELD retains the first row for each single key. Unique keys grow
-in memory and do not spill; -s uses external sorting in C/C.UTF-8 and native
-sorting in the supported language locales.
+in memory and do not spill; -s uses external sorting in C/C.UTF-8 where it can
+run (see above) and native sorting otherwise, as in the language locales.
 Multiple keys are not supported (status 77).
 
 base64 FIELD encodes complete raw field bytes using padded standard base64.

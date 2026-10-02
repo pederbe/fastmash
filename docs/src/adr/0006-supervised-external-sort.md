@@ -8,7 +8,9 @@ datamash does, but never directly: a small supervisor process starts `sort`
 with a fixed argument list in a private temporary directory, watches the main
 process through a Linux pidfd, and cleans up even if the main process is killed.
 
-**Consequences:** the external route needs Linux 5.11 or later and a GNU
-coreutils `sort`, and Fastmash ships two executables that must be installed
-together. The in-process sorter is expected to take over the remaining routes
-over time.
+**Consequences:** Fastmash ships two executables. The external route is used
+only where it works: Linux 5.11 or later, a GNU or uutils coreutils `sort`,
+the supervisor installed beside `fastmash`, and the other conditions in
+[System requirements](../requirements.md). Elsewhere those jobs sort in
+process, with the same output. The in-process sorter is expected to take over
+the remaining routes over time.

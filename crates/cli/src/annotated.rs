@@ -24,16 +24,11 @@ pub(super) fn data(bytes: &[u8]) -> &[u8] {
     trim_end(&bytes[..end])
 }
 
-/// Return false for ignored records. Only headers are shifted; data fields keep
-/// their original offsets, including nonleading NUL bytes.
-pub(super) fn prepare(bytes: &mut Vec<u8>, header: bool) -> Result<bool, Failure> {
-    if !header {
-        if skip_data(bytes) {
-            return Ok(false);
-        }
-        bytes.truncate(data(bytes).len());
-        return Ok(true);
-    }
+/// Reads a Record under the vnlog prologue rules: false for a skipped Record;
+/// for the `# ` header, strips its annotation in place. Data before the header
+/// is an error (text-lines.c line_record_fread). Data Records are never
+/// shifted: see `data`.
+pub(super) fn header(bytes: &mut Vec<u8>) -> Result<bool, Failure> {
     let start = first(bytes);
     match bytes.get(start) {
         None | Some(0) => return Ok(false),

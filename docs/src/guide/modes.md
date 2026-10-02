@@ -3,8 +3,19 @@
 ## Per-row operations
 
 Per-row operations produce one output record for each input record. They can
-be combined with each other and with `cut`, but not with summary operations
-in the same command.
+be combined with each other, but not with summary operations in the same
+command.
+
+### Fields
+
+| Operation | Result |
+| --- | --- |
+| `cut FIELDS`, `echo FIELDS` | Print the selected fields of each record |
+
+```console
+$ printf 'a\tb\tc\n' | fastmash cut 3,1
+c	a
+```
 
 ### Numbers
 
@@ -47,13 +58,10 @@ Path operations work on the text alone; they don't touch the filesystem.
 
 | Mode | Effect |
 | --- | --- |
-| `cut FIELDS`, `echo FIELDS` | Print the selected fields of each record |
 | `reverse` | Reverse the order of fields in each record |
 | `noop`, `nop` | Read the input and print nothing (useful for validation); with `--full`, print each record |
 
 ```console
-$ printf 'a\tb\tc\n' | fastmash cut 3,1
-c	a
 $ printf 'a\tb\tc\n' | fastmash reverse
 c	b	a
 ```

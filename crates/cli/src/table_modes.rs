@@ -1,8 +1,14 @@
 //! Table-mode dispatch and streaming reversal/pass-through.
 use super::{
-    Failure, annotated, command_output, failure, grammar::Mode, headers::output::Buffered,
-    options::Options, os_failure, records, unsupported,
+    Failure,
+    buffered_stdout::BufferedStdout,
+    command_output, failure,
+    grammar::Mode,
+    intake::{self, Intake},
+    options::Options,
+    os_failure, records,
 };
+use fastmash_conversion::field_policy::FieldRange;
 use std::io::BufRead;
 
 pub(super) fn run(
@@ -15,7 +21,7 @@ pub(super) fn run(
 ) -> Result<i32, Failure> {
     let (capacity, line_buffered) = writer.buffering();
     let mut output =
-        Buffered::new(writer, capacity, line_buffered).map_err(|e| os_failure(&e, false))?;
+        BufferedStdout::new(writer, capacity, line_buffered).map_err(|e| os_failure(&e, false))?;
     let result = match mode {
         Mode::Transpose => super::transpose::run(reader, &mut output, options),
         Mode::Check { lines, fields } => {
@@ -34,61 +40,70 @@ pub(super) fn run(
 
 fn process<W: std::io::Write>(
     reader: &mut impl BufRead,
-    output: &mut Buffered<'_, W>,
+    output: &mut BufferedStdout<'_, W>,
     options: &Options,
     mode: Mode,
 ) -> Result<(), Failure> {
     let mut record = Vec::new();
-    let mut spans = Vec::new();
-    let mut line = 0u64;
-    let mut previous_width = 0;
-    loop {
-        match records::read_record_terminated(reader, &mut record, usize::MAX, options.record_end) {
-            Ok(false) => return Ok(()),
-            Ok(true) => (),
-            Err(records::ReadError::Io(e)) => return Err(os_failure(&e, true)),
-            Err(_) => return Err(unsupported("record memory allocation failed")),
-        }
-        if mode == Mode::Noop {
-            if (options.vnlog && annotated::skip_data(&record))
-                || (!options.vnlog && options.skip_comments && records::is_comment(&record))
-            {
-                continue;
-            }
+    if mode == Mode::Noop {
+        // GNU's noop reads no Input header (datamash.c noop_file).
+        let mut intake = Intake::new(options, intake::Header::None);
+        while let Some(row) = intake.next(reader, &mut record)? {
             if options.full {
-                output.raw(&record);
+                output.raw(row.raw());
                 output.raw(&[options.record_end]);
             }
-            continue;
         }
-        if options.vnlog {
-            if !annotated::prepare(&mut record, line == 0)? {
-                continue;
-            }
-        } else if options.skip_comments && records::is_comment(&record) {
-            continue;
-        }
-        line = line
-            .checked_add(1)
-            .ok_or_else(|| unsupported("record count exceeds u64 limit"))?;
+        return intake.finish();
+    }
+    let mut intake = Intake::new(options, intake::Header::of(options));
+    let mut reversal = Reversal {
+        spans: Vec::new(),
+        previous_width: 0,
+    };
+    if intake.header(reader, &mut record, |_| Ok(()))? {
+        reversal.write(&record, 1, output, options)?;
+    }
+    while let Some(row) = intake.next(reader, &mut record)? {
+        reversal.write(row.data(), intake.line(), output, options)?;
+    }
+    intake.finish()
+}
+
+struct Reversal {
+    spans: Vec<FieldRange>,
+    previous_width: usize,
+}
+
+impl Reversal {
+    /// Writes Record `line` with its fields reversed (datamash.c
+    /// reverse_fields_in_file); line 1 may be the Input header.
+    fn write<W: std::io::Write>(
+        &mut self,
+        record: &[u8],
+        line: u64,
+        output: &mut BufferedStdout<'_, W>,
+        options: &Options,
+    ) -> Result<(), Failure> {
+        let spans = &mut self.spans;
         spans.clear();
-        for span in records::fields(&record, options.input) {
-            super::command_memory::reserve(&mut spans, 1)?;
+        for span in records::fields(record, options.input) {
+            super::command_memory::reserve(spans, 1)?;
             spans.push(span);
         }
-        if options.strict && line > 1 && spans.len() != previous_width {
-            return Err(failure(format!("reverse-field input error: line {line} has {} fields (previous lines had {previous_width});\nsee --help to disable strict mode\n", spans.len()).into_bytes()));
+        if options.strict && line > 1 && spans.len() != self.previous_width {
+            return Err(failure(format!("reverse-field input error: line {line} has {} fields (previous lines had {});\nsee --help to disable strict mode\n", spans.len(), self.previous_width).into_bytes()));
         }
-        previous_width = spans.len();
+        self.previous_width = spans.len();
         if line == 1 && options.header_in && !options.header_out {
-            continue;
+            return Ok(());
         }
         if line == 1 && !options.header_in && options.header_out {
             for i in (1..=spans.len()).rev() {
                 if i != spans.len() {
                     output.raw(&[options.output]);
                 }
-                output.formatted(format!("field-{i}").as_bytes());
+                output.formatted(super::headers::generated(i as u64).as_bytes());
             }
             output.raw(&[options.record_end]);
         }
@@ -102,5 +117,6 @@ fn process<W: std::io::Write>(
             output.raw(&record[span.start..span.start + span.length]);
         }
         output.raw(&[options.record_end]);
+        Ok(())
     }
 }

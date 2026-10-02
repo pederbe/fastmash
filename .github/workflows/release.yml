@@ -13,7 +13,7 @@ jobs:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The tag's CHANGELOG section, dated, becomes the release notes.
       - name: Release notes
         run: |
@@ -49,6 +49,7 @@ jobs:
       - name: Test
         run: |
           python3 scripts/check_regressions.py --binary out/target/release/fastmash
+          python3 scripts/check_regressions.py --binary out/target/release/fastmash --stdin-file
       - name: Package
         run: |
           name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
@@ -76,7 +77,7 @@ jobs:
             'dpkg -i /w/fastmash_*_amd64.deb && fastmash sum 1 mean 2 < /w/sample.tsv && dpkg -r fastmash'
           docker run --rm --network=none -v "$PWD:/w:ro" almalinux:8-minimal bash -c \
             'rpm -i /w/fastmash-*.x86_64.rpm && fastmash sum 1 mean 2 < /w/sample.tsv && rpm -e fastmash'
-      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             fastmash-*.tar.gz

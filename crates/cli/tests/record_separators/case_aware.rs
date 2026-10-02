@@ -11,11 +11,18 @@ fn case_locale_selection_is_explicit() {
         (vec![("LC_CTYPE", "bad")], false, 0),
         (vec![("LANG", "en_US.UTF-8")], true, 0),
         (vec![("LC_CTYPE", "C.UTF-8")], false, 0),
-        (vec![("LC_COLLATE", "bad")], true, 77),
-        (vec![("LC_COLLATE", "bad")], false, 0),
+        // A name glibc has no locale for is C; a glibc locale whose order is
+        // not verified refuses sorting.
+        (vec![("LC_COLLATE", "bad")], true, 0),
+        (vec![("LC_COLLATE", "cs_CZ.UTF-8")], true, 77),
+        (vec![("LC_COLLATE", "cs_CZ.UTF-8")], false, 0),
         (vec![("LC_COLLATE", "de_DE.utf8")], true, 0),
         (vec![("LC_NUMERIC", "de_DE.utf8")], true, 0),
-        (vec![("LC_ALL", "bad"), ("LC_COLLATE", "C")], true, 77),
+        (
+            vec![("LC_ALL", "cs_CZ.UTF-8"), ("LC_COLLATE", "C")],
+            true,
+            77,
+        ),
     ] {
         let o = Command::new(candidate())
             .env_clear()

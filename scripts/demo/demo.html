@@ -1,7 +1,7 @@
 <!DOCTYPE html>
-<!-- The animated demo: the same command in GNU datamash and Fastmash, racing
-     at their measured speeds. scripts/demo/record.mjs renders it frame by
-     frame; the timings and output come from a real run (see TIMINGS). -->
+<!-- The animated demo replays the measured RefGene quartile job at a slower
+     playback speed. scripts/demo/record.mjs renders it frame by frame;
+     the displayed timings and output are measured values (see TIMINGS). -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -40,31 +40,34 @@ pre { font: 500 13.5px/1.8 var(--mono); padding: 14px 16px; white-space: pre-wra
 .cta { white-space: nowrap; font: 500 14px/1 var(--mono); color: var(--fg); border: 1px solid var(--amber); border-radius: 10px; padding: 12px 16px; }
 .cta .prompt { margin-right: 8px; }
 .hidden { visibility: hidden; }
+.caption { margin-top: 12px; font: 13px/1.4 var(--sans); color: var(--muted); }
 </style>
 </head>
 <body>
 <div class="title">
   <h1>Same command. Same answer. <span>4× faster.</span></h1>
-  <div class="data">2.4 million gene records</div>
+  <div class="data">81,407 gene records</div>
 </div>
 <div class="panes">
   <div class="pane datamash">
-    <div class="bar"><span class="name">GNU datamash 1.9</span><span class="clock" id="clock-d">0.00 s</span></div>
+    <div class="bar"><span class="name">GNU datamash 1.9</span><span class="clock" id="clock-d">0.0 ms</span></div>
     <pre id="term-d"></pre>
   </div>
   <div class="pane fastmash">
-    <div class="bar"><span class="name">fastmash</span><span class="clock" id="clock-f">0.00 s</span></div>
+    <div class="bar"><span class="name">fastmash</span><span class="clock" id="clock-f">0.0 ms</span></div>
     <pre id="term-f"></pre>
   </div>
 </div>
 <div class="footer">
-  <div class="verdict hidden" id="verdict">Identical output, <span class="x">4.1× faster</span></div>
+  <div class="verdict hidden" id="verdict">Identical output, <span class="x">4.2× faster</span></div>
   <div class="cta hidden" id="cta"><span class="prompt">$</span>curl -fsSL https://fastmash.io/install.sh | sh</div>
 </div>
+<div class="caption">Measured on the Intel laptop, native Linux. Playback slowed 20×; clocks show measured time.</div>
 <script>
-// Measured on the AMD desktop (WSL2), LC_ALL=C, 2,442,210 RefGene records
-// (the benchmark file repeated 30 times); median of three runs each.
-const TIMINGS = { datamash: 1.905, fastmash: 0.460 };
+// RefGene quartiles in core-jobs.tsv: release binary 6717db00, 2026-10-01,
+// native Linux, LC_ALL=C; mean of the two sessions' median elapsed times.
+const TIMINGS = { datamash: 0.110950510, fastmash: 0.0261656895 };
+const PLAYBACK_SCALE = 20;
 const OUTPUT = '4\t8\t14\t10';
 const ARGS = ' q1 9 median 9 q3 9 iqr 9 < genes.tsv';
 const TYPE_START = 1.2, TYPE_SPEED = 26;       // seconds, characters per second
@@ -79,15 +82,15 @@ function pane(program, t) {
   const name = shown.slice(0, Math.min(shown.length, program.length));
   let text = '<span class="prompt">$</span> <span class="prog">' + escape(name) + '</span>' + escape(shown.slice(name.length));
   const running = t >= RUN_START;
-  const finished = running && t >= RUN_START + TIMINGS[program];
+  const finished = running && t >= RUN_START + TIMINGS[program] * PLAYBACK_SCALE;
   if (!running) text += '<span class="cursor"></span>';
   if (finished) {
     text += '\n<span class="out">' + escape(OUTPUT) + '</span>';
-    text += '\n<span class="dim">real ' + TIMINGS[program].toFixed(2) + ' s</span>';
+    text += '\n<span class="dim">real ' + (TIMINGS[program] * 1000).toFixed(1) + ' ms</span>';
     text += '\n<span class="prompt">$</span> <span class="cursor"></span>';
   }
-  const elapsed = running ? Math.min(t - RUN_START, TIMINGS[program]) : 0;
-  return { text, clock: elapsed.toFixed(2) + ' s', done: finished };
+  const elapsed = running ? Math.min((t - RUN_START) / PLAYBACK_SCALE, TIMINGS[program]) : 0;
+  return { text, clock: (elapsed * 1000).toFixed(1) + ' ms', done: finished };
 }
 
 window.render = function (t) {
@@ -98,11 +101,11 @@ window.render = function (t) {
     clock.textContent = state.clock;
     clock.classList.toggle('done', state.done);
   }
-  const end = RUN_START + TIMINGS.datamash;
+  const end = RUN_START + TIMINGS.datamash * PLAYBACK_SCALE;
   document.getElementById('verdict').classList.toggle('hidden', t < end + 0.5);
   document.getElementById('cta').classList.toggle('hidden', t < end + 1.6);
 };
-window.DURATION = RUN_START + TIMINGS.datamash + 14;
+window.DURATION = RUN_START + TIMINGS.datamash * PLAYBACK_SCALE + 14;
 window.render(0);
 </script>
 </body>

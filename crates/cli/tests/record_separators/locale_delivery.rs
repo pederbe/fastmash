@@ -1,4 +1,4 @@
-//! Approved locale policy and profile-bound GNU comparisons.
+//! The documented locale policy and profile-bound GNU comparisons.
 use super::*;
 
 pub(super) fn run(
@@ -20,7 +20,7 @@ pub(super) fn run(
         .env_clear()
         .env("LANG", "C")
         .env("PATH", "/usr/bin:/bin")
-        // The approved policy keeps English messages even where GNU catalogs
+        // The documented policy keeps English messages even where GNU catalogs
         // supply localized quotation marks. Compare that named profile here.
         .env("LANGUAGE", "C")
         .envs(env.iter().copied())
@@ -39,21 +39,86 @@ pub(super) fn run(
 #[test]
 fn portable_language_order_identity_and_spill() {
     let cases = [
+        // Punctuation decides after the letters, in glibc's order: hyphen
+        // before low line, as GNU sort gives.
         (
             vec!["-sg1", "collapse", "2"],
             "a_1\t1\na-1\t2\nA1\t3\na1\t4\nZ\t5\nz\t6\n",
-            "a_1\t1\na-1\t2\na1\t4\nA1\t3\nz\t6\nZ\t5\n",
+            "a-1\t2\na_1\t1\na1\t4\nA1\t3\nz\t6\nZ\t5\n",
         ),
         (
             vec!["-sg1", "collapse", "2"],
             "é\t1\ne\u{301}\t2\né\t3\ne\u{301}\t4\n",
             "e\u{301}\t2,4\né\t1,3\n",
         ),
-        // All primary keys precede every identity tie, including later fields.
+        // Each key's identity tie is broken before the next key, as glibc's
+        // strcoll orders the two spellings: GNU sort gives this order.
         (
             vec!["-sg1,2", "collapse", "3"],
             "é\ta\t1\ne\u{301}\tz\t2\ne\u{301}\ta\t3\né\tz\t4\n",
-            "e\u{301}\ta\t3\né\ta\t1\ne\u{301}\tz\t2\né\tz\t4\n",
+            "e\u{301}\ta\t3\ne\u{301}\tz\t2\né\ta\t1\né\tz\t4\n",
+        ),
+        // glibc ties a letter spelled in parts with the letter at every
+        // level, so the next key decides, as GNU sort gives.
+        (
+            vec!["-sg1,2", "collapse", "3"],
+            "и\u{306}\tb\t1\nй\ta\t2\n",
+            "й\ta\t2\nи\u{306}\tb\t1\n",
+        ),
+        // Tied keys stay in input order, a Group per run of one spelling, as
+        // in GNU; hash grouping gives up for them.
+        (
+            vec!["-sg1", "collapse", "2"],
+            "и\u{306}\t1\nй\t2\nи\u{306}\t3\n",
+            "и\u{306}\t1\nй\t2\nи\u{306}\t3\n",
+        ),
+        (
+            vec!["-sg1", "collapse", "2"],
+            "й\t1\nи\u{306}\t2\nй\t3\n",
+            "й\t1\nи\u{306}\t2\nй\t3\n",
+        ),
+        (
+            vec!["-sg1", "collapse", "2"],
+            "L\u{b7}\t1\nL\u{387}\t2\nL\u{b7}\t3\n",
+            "L\u{b7}\t1\nL\u{387}\t2\nL\u{b7}\t3\n",
+        ),
+        (
+            vec!["-isg1", "collapse", "2"],
+            "Ŀ\t1\nl\u{b7}\t2\nL\u{b7}\t3\nĿ\t4\n",
+            "Ŀ\t1\nl\u{b7}\t2,3\nĿ\t4\n",
+        ),
+        (
+            vec!["-sg1,2", "collapse", "3"],
+            "й\tи\u{306}\t1\nи\u{306}\tй\t2\nй\tи\u{306}\t3\n",
+            "й\tи\u{306}\t1\nи\u{306}\tй\t2\nй\tи\u{306}\t3\n",
+        ),
+        (
+            vec!["-s", "rmdup", "1"],
+            "и\u{306}\t1\nй\t2\nи\u{306}\t3\nй\t4\n",
+            "и\u{306}\t1\nй\t2\n",
+        ),
+        (
+            vec!["-sg1,2", "collapse", "3"],
+            "Ŀ\tb\t1\nL\u{b7}\ta\t2\n",
+            "L\u{b7}\ta\t2\nĿ\tb\t1\n",
+        ),
+        // glibc places a letter after its decomposed spelling, here before
+        // a space, and so for letters coded below their base.
+        (
+            vec!["-sg1,2", "collapse", "3"],
+            "Phổ Yên\tb\t1\nPho\u{302}\u{309} Yên\ta\t2\n",
+            "Pho\u{302}\u{309} Yên\ta\t2\nPhổ Yên\tb\t1\n",
+        ),
+        (
+            vec!["-sg1,2", "collapse", "3"],
+            "Ё\tb\t1\nЕ\u{308}\ta\t2\n",
+            "Е\u{308}\ta\t2\nЁ\tb\t1\n",
+        ),
+        // With -i the key is composed as `sort -f` reads it, uppercased.
+        (
+            vec!["-isg1,2", "collapse", "3"],
+            "l\u{b7}\tb\t1\nĿ\ta\t2\n",
+            "Ŀ\ta\t2\nl\u{b7}\tb\t1\n",
         ),
         (
             vec!["-isg1", "collapse", "2"],
@@ -200,12 +265,12 @@ fn locale_refusals_do_not_remove_raw_byte_jobs() {
             &candidate(),
             &args(&["sum", "1"]),
             b"1\n",
-            &[(category, "unknown")],
+            &[(category, "ps_AF.UTF-8")],
             false,
         );
         assert_eq!(out.status.code(), Some(status), "{category}: {out:?}");
     }
-    let env = [("LC_COLLATE", "unknown")];
+    let env = [("LC_COLLATE", "cs_CZ.UTF-8")];
     assert!(
         run(&candidate(), &args(&["count", "1"]), b"1\n", &env, false)
             .status

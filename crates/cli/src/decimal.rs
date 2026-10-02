@@ -1,5 +1,7 @@
 //! Borrowed conversion and basic arithmetic, independent of wider-math state.
-use super::{Failure, conversion_failure, failure, numeric_failure, numerics, unsupported};
+use super::{
+    Failure, conversion_failure, decimal_powers, failure, numeric_failure, numerics, unsupported,
+};
 use fastmash_conversion::{
     bytes::{self, Lexeme},
     convert, field_policy,
@@ -19,15 +21,30 @@ impl Semantics for Ordinary64 {
     const EXP_BITS: usize = 16;
 }
 
-fn finite(text: &str) -> Result<(Value80, bool), Failure> {
+/// The value of `text` and whether it is a range error. A range error of a
+/// zero, subnormal or smallest normal result needs the conversion to be
+/// inexact, which `exact` decides, given the value and whether the converter
+/// found it exact: the converter's own finding can be wrong for decimals.
+fn finite(
+    text: &str,
+    exact: impl FnOnce(Value80, bool) -> Result<bool, Failure>,
+) -> Result<(Value80, bool), Failure> {
     let invalid = || unsupported("internal decimal conversion failure");
     let parsed = Extended::from_str_r(text, Round::NearestTiesToEven).map_err(|_| invalid())?;
     if parsed.status.contains(Status::INVALID_OP) {
         return Err(invalid());
     }
+    let tiny = parsed.value.is_zero()
+        || parsed.value.is_denormal()
+        || parsed.value.is_smallest_normalized();
     let range = if parsed.status.contains(Status::OVERFLOW) {
         true
-    } else if !parsed.status.contains(Status::INEXACT) {
+    } else if !tiny
+        || exact(
+            value(parsed.value)?,
+            !parsed.status.contains(Status::INEXACT),
+        )?
+    {
         false
     } else if parsed.value.is_smallest_normalized() {
         let ordinary = IeeeFloat::<Ordinary64>::from_str_r(text, Round::NearestTiesToEven)
@@ -47,9 +64,122 @@ fn finite(text: &str) -> Result<(Value80, bool), Failure> {
     Ok((value(parsed.value)?, range))
 }
 
+/// Significant digits a long decimal keeps; the rest fold into one sticky
+/// digit. Conversion to binary80 changes its value only at a representable
+/// value or a midpoint between two, and its range error only there and at
+/// the range boundaries; the tininess check at 64-bit precision runs only
+/// near the smallest normal, where its points are of the same kind. Each is
+/// an odd multiple below 2^66 of a power of two from 2^-16448 to 2^16384,
+/// whose decimal expansion has at most log10(2^66 * 5^16448) + 1 < 11,518
+/// significant digits. The first 11,600 digits, followed by a 1 where any
+/// later digit is not zero, therefore lie strictly between the same two such
+/// points as the whole decimal, or are it exactly, and round the same way;
+/// and where a later digit is not zero, the value is inexact, whatever the
+/// converter reports. The converter's digit loop, whose time grows with the
+/// square of the digits, stays short.
+const SIGNIFICANT: usize = 11_600;
+
+/// A decimal `token` of more significant digits than [`SIGNIFICANT`], as the
+/// shorter decimal that converts the same way; `None` for any other token.
+fn shortened(token: &bytes::FiniteToken<'_>) -> Result<Option<Shortened>, Failure> {
+    if token.radix() != 10 || token.digit_count() <= SIGNIFICANT {
+        return Ok(None);
+    }
+    // Beyond the lexer's exponent bound, the digits can still bring the
+    // value back into range.
+    let exponent = token.exponent_saturating();
+    let mut digits = token.digits().skip_while(|&digit| digit == 0);
+    let mut text = Vec::new();
+    // A sign, the kept digits, a sticky digit and an exponent of at most 21
+    // characters.
+    super::command_memory::reserve(&mut text, SIGNIFICANT + 24)?;
+    if token.negative() {
+        text.push(b'-');
+    }
+    let start = text.len();
+    text.extend(digits.by_ref().take(SIGNIFICANT).map(|digit| b'0' + digit));
+    if text.len() - start < SIGNIFICANT {
+        return Ok(None);
+    }
+    let (mut dropped, mut sticky) = (0i64, false);
+    for digit in digits {
+        dropped += 1;
+        sticky |= digit != 0;
+    }
+    let kept = start..text.len();
+    if sticky {
+        text.push(b'1');
+    }
+    let fraction = i64::try_from(token.fraction_digits())
+        .map_err(|_| unsupported("numeric token exceeds converter index range"))?;
+    let scale = exponent - fraction + dropped - i64::from(sticky);
+    text.extend_from_slice(format!("e{scale}").as_bytes());
+    Ok(Some(Shortened {
+        text,
+        kept,
+        scale: scale + i64::from(sticky),
+        sticky,
+    }))
+}
+
+/// A long decimal as the shorter one that converts the same way ([`shortened`]).
+struct Shortened {
+    /// The decimal: a sign, the kept digits, any sticky digit and an exponent.
+    text: Vec<u8>,
+    /// Where the kept digits are in `text`.
+    kept: std::ops::Range<usize>,
+    /// The power of ten of the kept digits' last.
+    scale: i64,
+    /// Whether a digit dropped was not zero: then the value is inexact.
+    sticky: bool,
+}
+
+/// Whether `token` is exactly `value`, which the converter found exact or not
+/// (`converter`). Hexadecimal conversion finds it exactly. A decimal with a
+/// sticky digit ([`shortened`]) is inexact; otherwise its digits (the kept
+/// ones, or its own, at most [`SIGNIFICANT`] significant digits) are
+/// compared with the value exactly.
+fn exact(
+    token: &bytes::FiniteToken<'_>,
+    shortened: Option<&Shortened>,
+    value: Value80,
+    converter: bool,
+) -> Result<bool, Failure> {
+    if token.radix() != 10 {
+        return Ok(converter);
+    }
+    let (digits, scale) = match shortened {
+        Some(shortened) if shortened.sticky => return Ok(false),
+        Some(shortened) => {
+            let mut digits = Vec::new();
+            super::command_memory::reserve(&mut digits, shortened.kept.len())?;
+            digits.extend(
+                shortened.text[shortened.kept.clone()]
+                    .iter()
+                    .map(|b| b - b'0'),
+            );
+            (digits, shortened.scale)
+        }
+        None => {
+            let mut digits = Vec::new();
+            super::command_memory::reserve(&mut digits, token.digit_count().min(SIGNIFICANT))?;
+            digits.extend(token.digits().skip_while(|&digit| digit == 0));
+            let fraction = i64::try_from(token.fraction_digits())
+                .map_err(|_| unsupported("numeric token exceeds converter index range"))?;
+            (digits, token.exponent_saturating() - fraction)
+        }
+    };
+    let biased = i64::from(value.sign_exponent() & 0x7fff);
+    // The value is its significand times 2^(exponent - 16383 - 63), and a
+    // subnormal's exponent reads as 1.
+    let exponent = biased.max(1) - 16383 - 63;
+    convert::decimal_equals(&digits, scale, value.significand(), exponent)
+        .map_err(|_| unsupported("internal decimal conversion failure"))
+}
+
 fn admit(value: Value80) -> Result<numerics::Value, Failure> {
     #[cfg(test)]
-    let value = super::routing_tests::parsed_value(value);
+    let value = super::operation_set::tests::parsed_value(value);
     numerics::Numerics::admit(value).map_err(numeric_failure)
 }
 
@@ -60,24 +190,22 @@ fn value(x: Extended) -> Result<Value80, Failure> {
         .ok_or_else(|| unsupported("internal decimal encoding failure"))
 }
 
+/// One parse of a numeric prefix, as `strtold` reports it.
 struct Parsed {
+    /// `None` only when no number begins the input, so nothing was consumed.
     value: Option<Value80>,
     consumed: usize,
-    errno: Option<i32>,
+    /// Whether the value is a range error (`ERANGE`).
+    range_error: bool,
 }
 
 /// GNU extraction permits a numeric prefix and maps known range errors to zero.
 pub(super) fn extracted_prefix(input: &[u8], profile: Profile) -> Result<numerics::Value, Failure> {
     let parsed = parse(input, profile)?;
-    if parsed.errno.is_none() {
-        return Err(unsupported(
-            "extracted number is outside the supported conversion range",
-        ));
+    match parsed.value {
+        Some(value) if !parsed.range_error => admit(value),
+        _ => Ok(super::integer(0)),
     }
-    if parsed.errno == Some(profile.erange()) || parsed.consumed == 0 {
-        return Ok(super::integer(0));
-    }
-    admit(parsed.value.unwrap_or_else(|| Value80::signed_zero(false)))
 }
 
 /// Convert a small decimal rational with one rounding, reusing the validated lexer.
@@ -152,8 +280,187 @@ fn compact_hex(token: &bytes::FiniteToken<'_>) -> Option<Value80> {
     ))
 }
 
+/// A decimal of at most 19 digits whose power of ten lies outside
+/// [`compact_decimal`]'s window, such as the `1.234568e-25` of `%e` output or
+/// an e-value like `4e-115`. The coefficient c and 10^scale = 5^scale * 2^scale
+/// meet in an interval of width c * 5^r (from the table's 5^(28 j), truncated
+/// to 128 bits, and the exact 5^r, 0 <= r < 28) that holds the exact product.
+/// Rounding is monotone, so when both ends round to the same normal value
+/// below the overflow boundary ([`normal_result`]), that is the correctly
+/// rounded value and no range error.
+/// Otherwise the general converter decides; that includes an exact tie
+/// unless the interval's ends both round to its even neighbour.
+fn scaled_decimal(token: &bytes::FiniteToken<'_>) -> Option<Value80> {
+    if token.radix() != 10 || token.digit_count() > 19 {
+        return None;
+    }
+    let bytes::Exponent::Finite(exponent) = token.exponent() else {
+        return None;
+    };
+    let scale = exponent.checked_sub(i32::try_from(token.fraction_digits()).ok()?)?;
+    let coefficient = token
+        .digits()
+        .fold(0u64, |n, digit| n * 10 + u64::from(digit));
+    scaled_value(token.negative(), coefficient, scale)
+}
+
+/// [`scaled_decimal`]'s value of a coefficient below 10^19 times 10^scale.
+#[inline(always)]
+fn scaled_value(negative: bool, coefficient: u64, scale: i32) -> Option<Value80> {
+    if coefficient == 0 {
+        return None;
+    }
+    let block = scale.div_euclid(decimal_powers::STEP);
+    let index = usize::try_from(block.checked_sub(decimal_powers::FIRST)?).ok()?;
+    let &(power, binary) = decimal_powers::FIVE.get(index)?;
+    // c * 5^r < 10^19 * 5^27 < 2^127: exact.
+    let exact = u128::from(coefficient)
+        * u128::from(5u64.pow(scale.rem_euclid(decimal_powers::STEP).unsigned_abs()));
+    let (high, low) = widening_mul(exact, power);
+    let (upper, carry) = low.overflowing_add(exact);
+    let rounded = round_nearest(high, low);
+    if round_nearest(high + u128::from(carry), upper) != rounded {
+        return None;
+    }
+    normal_result(negative, rounded, i64::from(binary) + i64::from(scale))
+}
+
+/// The value `rounded` (a significand and the bit position of its leading
+/// one) times 2^`exponent`, where both ends of an interval holding the exact
+/// value round to it at 64 bits with an unbounded exponent; `None` beyond
+/// both range boundaries. At biased exponent 1 that value is also binary80's
+/// (the smallest normal's neighbourhood: the denormal grid's midpoint below
+/// 2^-16382 lies further down than the 64-bit one) and, being normal after
+/// that rounding, not tiny, so no range error.
+#[inline(always)]
+fn normal_result(negative: bool, (significand, top): (u64, u32), exponent: i64) -> Option<Value80> {
+    let biased = i64::from(top) + exponent + 16383;
+    (1..=0x7ffe)
+        .contains(&biased)
+        .then(|| Value80::canonical_normal(negative, biased as u16, significand))
+}
+
+/// A decimal of more than 19 digits, which [`scaled_decimal`] leaves, such as
+/// the `0.1234567890123456789` of `%.19f` or other high-precision output. Its
+/// first 38 significant digits c (below 10^38), the later ones folded into
+/// whether any is not zero, and its power of ten 10^s = 5^r * 5^(STEP*j) *
+/// 2^s bound the exact value: c * 5^r (or (c + 1) * 5^r when a later digit
+/// is not zero), cut to at most 127 bits, times [m, m + 1) from the table.
+/// As in [`scaled_decimal`], when both ends round to the same normal value
+/// ([`normal_result`]), that is the correctly rounded value and no range
+/// error; otherwise the general converter decides. A zero is zero.
+#[inline(never)]
+fn long_decimal(token: &bytes::FiniteToken<'_>) -> Option<Value80> {
+    if token.radix() != 10 || token.digit_count() <= 19 {
+        return None;
+    }
+    let bytes::Exponent::Finite(exponent) = token.exponent() else {
+        return None;
+    };
+    let (mut coefficient, mut kept, mut dropped, mut sticky) = (0u128, 0u32, 0i64, false);
+    for digit in token.digits().skip_while(|&digit| digit == 0) {
+        if kept < 38 {
+            coefficient = coefficient * 10 + u128::from(digit);
+            kept += 1;
+        } else {
+            dropped += 1;
+            sticky |= digit != 0;
+        }
+    }
+    if kept == 0 {
+        // Zero, as `%.20f` writes it: never a range error.
+        return Some(Value80::signed_zero(token.negative()));
+    }
+    let scale = i64::from(exponent) - i64::try_from(token.fraction_digits()).ok()? + dropped;
+    let scale = i32::try_from(scale).ok()?;
+    let block = scale.div_euclid(decimal_powers::STEP);
+    let index = usize::try_from(block.checked_sub(decimal_powers::FIRST)?).ok()?;
+    let &(power, binary) = decimal_powers::FIVE.get(index)?;
+    // 5^r < 2^63 and c + 1 <= 10^38 < 2^127: both products fit in 190 bits.
+    let five = u128::from(5u64.pow(scale.rem_euclid(decimal_powers::STEP).unsigned_abs()));
+    let (low_high, low_low) = widening_mul(coefficient, five);
+    let (high_high, high_low) = widening_mul(coefficient + u128::from(sticky), five);
+    // Cut both ends to below 2^127, rounding the lower down and the upper up.
+    let bits = 256
+        - if high_high == 0 {
+            128 + high_low.leading_zeros()
+        } else {
+            high_high.leading_zeros()
+        };
+    let cut = bits.saturating_sub(127);
+    // At most 190 bits: the cut is below 64.
+    let shifted = |high: u128, low: u128| match cut {
+        0 => (low, false),
+        _ => (
+            (high << (128 - cut)) | (low >> cut),
+            low << (128 - cut) != 0,
+        ),
+    };
+    let (lower, _) = shifted(low_high, low_low);
+    let (upper, rest) = shifted(high_high, high_low);
+    let upper = upper + u128::from(rest);
+    let rounded = round_nearest_product(lower, power, false);
+    if round_nearest_product(upper, power, true) != rounded {
+        return None;
+    }
+    normal_result(
+        token.negative(),
+        rounded,
+        i64::from(binary) + i64::from(scale) + i64::from(cut),
+    )
+}
+
+/// `coefficient` times `power`, or times `power + 1` when `above`, rounded
+/// as [`round_nearest`] rounds it; `coefficient` is at most 2^127.
+fn round_nearest_product(coefficient: u128, power: u128, above: bool) -> (u64, u32) {
+    let (high, low) = widening_mul(coefficient, power);
+    if !above {
+        return round_nearest(high, low);
+    }
+    let (low, carry) = low.overflowing_add(coefficient);
+    round_nearest(high + u128::from(carry), low)
+}
+
+/// The 256-bit product of `a` and `b`, as its high and low halves.
+fn widening_mul(a: u128, b: u128) -> (u128, u128) {
+    let (a1, a0) = (a >> 64, a & u128::from(u64::MAX));
+    let (b1, b0) = (b >> 64, b & u128::from(u64::MAX));
+    let (high, middle_a, middle_b, low) = (a1 * b1, a1 * b0, a0 * b1, a0 * b0);
+    // Each partial product is below 2^128; the sum of the middle terms and the
+    // carries fits in the high half.
+    let (middle, carry) = middle_a.overflowing_add(middle_b);
+    let (low, low_carry) = low.overflowing_add(middle << 64);
+    let high = high + (middle >> 64) + (u128::from(carry) << 64) + u128::from(low_carry);
+    (high, low)
+}
+
+/// The nonzero 256-bit integer `high`:`low` rounded to 64 significant bits,
+/// nearest even: the significand and the bit position of its leading one.
+fn round_nearest(high: u128, low: u128) -> (u64, u32) {
+    let zeros = if high == 0 {
+        128 + low.leading_zeros()
+    } else {
+        high.leading_zeros()
+    };
+    debug_assert!(zeros < 256, "round_nearest of zero");
+    let (high, low) = match zeros {
+        0 => (high, low),
+        1..=127 => ((high << zeros) | (low >> (128 - zeros)), low << zeros),
+        _ => (low << (zeros - 128), 0),
+    };
+    let significand = (high >> 64) as u64;
+    let rest = high as u64;
+    let half = 1u64 << 63;
+    let up = rest > half || (rest == half && (low != 0 || significand & 1 != 0));
+    let top = 255 - zeros;
+    match significand.checked_add(u64::from(up)) {
+        Some(significand) => (significand, top),
+        None => (half, top + 1),
+    }
+}
+
 /// The value of a signed coefficient times 10^scale, |scale| <= 19, with at
-/// most one rounding. Shared by the lexer path and `plain_number`.
+/// most one rounding. Shared by the lexer path and `scientific_number`.
 fn compact_scaled(negative: bool, coefficient: u64, scale: i32) -> Option<Extended> {
     debug_assert!((-19..=19).contains(&scale), "compact scale {scale}");
     let power = 10u64.pow(scale.unsigned_abs());
@@ -179,8 +486,7 @@ fn compact_scaled(negative: bool, coefficient: u64, scale: i32) -> Option<Extend
 /// every letter and digit and the radix point. With `-t e`, for example, the
 /// field `1` of `1e9999` is a range error, not 1.
 fn plain_number(part: &[u8], next: Option<u8>, point: u8) -> Option<Value80> {
-    #[cfg(test)]
-    if !PLAIN_NUMBERS.with(|enabled| enabled.get()) {
+    if !shortcuts() {
         return None;
     }
     if next.is_some_and(|b| b.is_ascii_alphanumeric() || b == point) {
@@ -225,6 +531,68 @@ fn plain_number(part: &[u8], next: Option<u8>, point: u8) -> Option<Value80> {
         (exponent + 16383) as u16,
         significand,
     ))
+}
+
+/// A decimal field in scientific notation, `-`? digits (point digits)? then
+/// `e` or `E`, a sign or none and at most five digits, with at most 19
+/// coefficient digits: the `1.234568e-25` of `%e` output, BLAST e-values and
+/// GWAS p-values. Like [`plain_number`] it reads the field without the lexer,
+/// where the byte after it (`next`) cannot continue a number (no letter,
+/// digit or radix point), and converts through the lexer path's own
+/// [`compact_scaled`] or [`scaled_value`], so the bits are identical; `None`
+/// leaves every other field, and every value those leave, to the general
+/// parser. `marker` is the field's last `e` or `E` ([`exponent_marker`]).
+#[inline(never)]
+fn scientific_number(part: &[u8], marker: usize, next: Option<u8>, point: u8) -> Option<Value80> {
+    if !shortcuts() {
+        return None;
+    }
+    if next.is_some_and(|b| b.is_ascii_alphanumeric() || b == point) {
+        return None;
+    }
+    let negative = part[0] == b'-';
+    let (mantissa, exponent) = (&part[usize::from(negative)..marker], &part[marker + 1..]);
+    let (whole, fraction) = match mantissa.iter().position(|&b| b == point) {
+        Some(at) => (&mantissa[..at], &mantissa[at + 1..]),
+        None => (mantissa, &[][..]),
+    };
+    if whole.is_empty()
+        || (fraction.is_empty() && whole.len() < mantissa.len())
+        || whole.len() + fraction.len() > 19
+    {
+        return None;
+    }
+    // A plain loop, not `plain_number`'s `try_fold`: a second user of that
+    // iterator instance would move it out of line in `plain_number` too.
+    let digits = |bytes: &[u8], start: u64| {
+        let mut n = start;
+        for &byte in bytes {
+            let digit = byte.wrapping_sub(b'0');
+            if digit > 9 {
+                return None;
+            }
+            n = n * 10 + u64::from(digit);
+        }
+        Some(n)
+    };
+    let coefficient = digits(fraction, digits(whole, 0)?)?;
+    let (below, magnitude) = match exponent {
+        [b'-', rest @ ..] => (true, rest),
+        [b'+', rest @ ..] => (false, rest),
+        _ => (false, exponent),
+    };
+    if magnitude.is_empty() || magnitude.len() > 5 {
+        return None;
+    }
+    let magnitude = digits(magnitude, 0)? as i32;
+    let scale = if below { -magnitude } else { magnitude } - fraction.len() as i32;
+    if (-19..=19).contains(&scale) {
+        // As `compact_decimal`: nonzero values here are normal and far from
+        // either range boundary, and zero is zero.
+        value(compact_scaled(negative, coefficient, scale)?).ok()
+    } else {
+        scaled_value(negative, coefficient, scale)
+    }
 }
 
 /// An integer below 2^64 is exact in binary80's 64-bit significand: normalize
@@ -302,15 +670,25 @@ fn divide_narrow(numerator: u128, divisor: u64) -> (u64, u64) {
 #[cfg(test)]
 thread_local! {
     static GENERAL_PARSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-    static PLAIN_NUMBERS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
-    static COMPACT_HEX: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    static SHORTCUTS: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+/// Whether the conversion shortcuts run: always, except where a test turns
+/// them all off for the general converter's reference results. Every
+/// shortcut gives the general converter's bits, so its results are the same.
+#[inline(always)]
+fn shortcuts() -> bool {
+    #[cfg(test)]
+    return SHORTCUTS.with(|on| on.get());
+    #[cfg(not(test))]
+    true
 }
 
 fn parse(input: &[u8], profile: Profile) -> Result<Parsed, Failure> {
     #[cfg(test)]
     GENERAL_PARSES.with(|count| count.set(count.get() + 1));
     let lex = bytes::lex_slice(input, profile).map_err(conversion_failure)?;
-    let mut errno = Some(0);
+    let mut range_error = false;
     let value = match lex.lexeme {
         Lexeme::NoConversion => None,
         Lexeme::Infinity { negative } => {
@@ -338,65 +716,75 @@ fn parse(input: &[u8], profile: Profile) -> Result<Parsed, Failure> {
             let token_bytes = &input[lex.leading_space.end..lex.consumed];
             i32::try_from(token_bytes.len())
                 .map_err(|_| unsupported("numeric token exceeds converter index range"))?;
-            if let Some(compact) = compact_decimal(&token) {
+            if shortcuts()
+                && let Some(compact) = compact_decimal(&token)
+            {
                 // Nonzero compact values are normal and far from either range boundary.
                 return Ok(Parsed {
                     value: Some(value(compact)?),
                     consumed: lex.consumed,
-                    errno,
+                    range_error: false,
                 });
             }
-            #[cfg(test)]
-            let hex = COMPACT_HEX
-                .with(|enabled| enabled.get())
-                .then(|| compact_hex(&token))
-                .flatten();
-            #[cfg(not(test))]
-            let hex = compact_hex(&token);
-            if let Some(value) = hex {
+            if shortcuts()
+                && let Some(value) = scaled_decimal(&token).or_else(|| long_decimal(&token))
+            {
                 return Ok(Parsed {
                     value: Some(value),
                     consumed: lex.consumed,
-                    errno,
+                    range_error: false,
+                });
+            }
+            if shortcuts()
+                && let Some(value) = compact_hex(&token)
+            {
+                return Ok(Parsed {
+                    value: Some(value),
+                    consumed: lex.consumed,
+                    range_error: false,
                 });
             }
             let mut normalized = Vec::new();
             let needs_exponent =
                 token.radix() == 16 && !token_bytes.iter().any(|b| matches!(b, b'p' | b'P'));
-            let token_bytes =
-                if needs_exponent || (profile.radix() == b',' && token_bytes.contains(&b',')) {
-                    super::command_memory::reserve(
-                        &mut normalized,
-                        token_bytes
-                            .len()
-                            .checked_add(2)
-                            .ok_or_else(|| unsupported("numeric token size overflow"))?,
-                    )?;
-                    normalized.extend(
-                        token_bytes
-                            .iter()
-                            .map(|b| if *b == b',' { b'.' } else { *b }),
-                    );
-                    if needs_exponent {
-                        normalized.extend_from_slice(b"p0");
-                    }
-                    &normalized
-                } else {
+            let shortened = shortened(&token)?;
+            let token_bytes = if let Some(shortened) = &shortened {
+                shortened.text.as_slice()
+            } else if needs_exponent || (profile.radix() == b',' && token_bytes.contains(&b',')) {
+                super::command_memory::reserve(
+                    &mut normalized,
                     token_bytes
-                };
+                        .len()
+                        .checked_add(2)
+                        .ok_or_else(|| unsupported("numeric token size overflow"))?,
+                )?;
+                normalized.extend(
+                    token_bytes
+                        .iter()
+                        .map(|b| if *b == b',' { b'.' } else { *b }),
+                );
+                if needs_exponent {
+                    normalized.extend_from_slice(b"p0");
+                }
+                &normalized
+            } else {
+                token_bytes
+            };
             let text = std::str::from_utf8(token_bytes)
                 .map_err(|_| unsupported("internal decimal grammar failure"))?;
             i32::try_from(text.len())
                 .map_err(|_| unsupported("numeric token exceeds converter index range"))?;
-            let (value, range) = finite(text)?;
-            errno = Some(if range { profile.erange() } else { 0 });
+            let (value, out_of_range) = finite(text, |value, converter| {
+                exact(&token, shortened.as_ref(), value, converter)
+            })?;
+            range_error = out_of_range;
             Some(value)
         }
     };
     Ok(Parsed {
         value,
         consumed: lex.consumed,
-        errno,
+        range_error,
     })
 }
 
@@ -423,6 +811,9 @@ fn nan_payload(mut bytes: &[u8]) -> u64 {
     value
 }
 
+/// The number in `record` at `span`, field `field` on line `line`, with GNU
+/// datamash's diagnostic when it has none: [`number`] with an inline shortcut
+/// for plain numbers, the common case.
 pub(super) fn field(
     record: &[u8],
     span: field_policy::FieldRange,
@@ -435,53 +826,150 @@ pub(super) fn field(
     if narm && field_policy::is_na(part) {
         return Ok(None);
     }
-    let invalid = || {
-        let mut message =
-            format!("invalid numeric value in line {line} field {field}: '").into_bytes();
-        message.extend_from_slice(&part[..part.iter().position(|&b| b == 0).unwrap_or(part.len())]);
-        message.extend_from_slice(b"'\n");
-        failure(message)
-    };
-    let incomplete = || {
-        unsupported(&format!(
-            "numeric field is outside the supported range in line {line} field {field}"
-        ))
-    };
-    if part.is_empty() {
-        return Err(invalid());
-    }
-    if let Some(value) = plain_number(
-        part,
-        record.get(span.start + span.length).copied(),
-        profile.radix(),
-    ) {
+    if !part.is_empty()
+        && let Some(value) = plain_number(
+            part,
+            record.get(span.start + span.length).copied(),
+            profile.radix(),
+        )
+    {
         return admit(value).map(Some);
     }
-    let mut parsed = parse(&record[span.start..], profile)?;
-    if parsed.errno.is_none() {
-        return Err(incomplete());
+    other_field(record, span, field, line, profile)
+}
+
+/// [`field`] for a field that is not a plain number: out of line, so the
+/// plain path stays small.
+#[inline(never)]
+fn other_field(
+    record: &[u8],
+    span: field_policy::FieldRange,
+    field: u64,
+    line: u64,
+    profile: Profile,
+) -> Result<Option<numerics::Value>, Failure> {
+    read_number(record, span, profile, |error| {
+        error.report(&record[span.start..span.start + span.length], field, line)
+    })
+}
+
+/// The number in `record` at `span`, with its failure unreported
+/// ([`NumberError::report`] gives [`field`]'s message): GNU runs `strtold`
+/// from the field's start through the rest of the record, and repeats the
+/// parse on the field alone only when it ran on past the field.
+pub(super) fn number(
+    record: &[u8],
+    span: field_policy::FieldRange,
+    narm: bool,
+    profile: Profile,
+) -> Result<Option<numerics::Value>, NumberError> {
+    if narm && field_policy::is_na(&record[span.start..span.start + span.length]) {
+        return Ok(None);
     }
-    if parsed.errno == Some(profile.erange())
-        || parsed.consumed == 0
-        || parsed.consumed < span.length
+    read_number(record, span, profile, |error| error)
+}
+
+/// [`number`] for a field that is not NA: the steps [`field`] also takes for
+/// a field that is not a plain number. `fail` gives each caller its own
+/// failure, so that [`field`]'s values return as they are, unconverted.
+#[inline(always)]
+fn read_number<E>(
+    record: &[u8],
+    span: field_policy::FieldRange,
+    profile: Profile,
+    fail: impl Fn(NumberError) -> E,
+) -> Result<Option<numerics::Value>, E> {
+    let refused = |failure| fail(NumberError::Refused(failure));
+    let part = &record[span.start..span.start + span.length];
+    if part.is_empty() {
+        return Err(fail(NumberError::Invalid));
+    }
+    if let Some(marker) = exponent_marker(part)
+        && let Some(value) = scientific_number(
+            part,
+            marker,
+            record.get(span.start + span.length).copied(),
+            profile.radix(),
+        )
     {
-        return Err(invalid());
+        return admit(value).map(Some).map_err(refused);
+    }
+    let mut parsed = parse(&record[span.start..], profile).map_err(refused)?;
+    if parsed.range_error || parsed.consumed < span.length {
+        return Err(fail(NumberError::Invalid));
     }
     if parsed.consumed > span.length {
         if span.length >= 512 {
-            return Err(failure(
-                format!("internal error: input field too long ({})\n", span.length).into_bytes(),
-            ));
+            return Err(fail(NumberError::TooLong));
         }
-        parsed = parse(part, profile)?;
-        if parsed.errno.is_none() {
-            return Err(incomplete());
-        }
-        if parsed.errno == Some(profile.erange()) || parsed.consumed != span.length {
-            return Err(invalid());
+        parsed = parse(part, profile).map_err(refused)?;
+        if parsed.range_error || parsed.consumed != span.length {
+            return Err(fail(NumberError::Invalid));
         }
     }
-    admit(parsed.value.ok_or_else(incomplete)?).map(Some)
+    // A parse that consumed the nonempty field has a value.
+    let value = parsed.value.ok_or_else(|| fail(NumberError::Invalid))?;
+    admit(value).map(Some).map_err(refused)
+}
+
+/// The position of the last `e` or `E` among the last seven bytes of `part`,
+/// where a sign and at most five exponent digits leave room for it: one word
+/// test for a field of eight bytes or more, so other fields that reach the
+/// general parser pay little for [`scientific_number`].
+#[inline(always)]
+fn exponent_marker(part: &[u8]) -> Option<usize> {
+    match part.len().checked_sub(8) {
+        Some(start) => {
+            let word = u64::from_le_bytes(part[start..].try_into().unwrap());
+            let y = (word | 0x2020_2020_2020_2020) ^ 0x6565_6565_6565_6565;
+            let low = 0x7f7f_7f7f_7f7f_7f7f_u64;
+            let zero = !(((y & low) + low) | y | low) & !0x80;
+            (zero != 0).then(|| start + 7 - (zero.leading_zeros() / 8) as usize)
+        }
+        None => part.iter().rposition(|&b| b | 0x20 == b'e'),
+    }
+}
+
+/// Why a numeric field has no value: [`number`]'s failures before they name
+/// their line and field ([`NumberError::report`]).
+#[derive(Clone)]
+pub(super) enum NumberError {
+    Invalid,
+    /// GNU's parse ran on past a field of 512 bytes or more.
+    TooLong,
+    Refused(Failure),
+}
+
+impl NumberError {
+    /// The failure for field `field` (`part`) on line `line`.
+    #[cold]
+    #[inline(never)]
+    pub(super) fn report(self, part: &[u8], field: u64, line: u64) -> Failure {
+        match self {
+            Self::Invalid => {
+                let mut message =
+                    format!("invalid numeric value in line {line} field {field}: '").into_bytes();
+                message.extend_from_slice(
+                    &part[..part.iter().position(|&b| b == 0).unwrap_or(part.len())],
+                );
+                message.extend_from_slice(b"'\n");
+                failure(message)
+            }
+            Self::TooLong => failure(
+                format!("internal error: input field too long ({})\n", part.len()).into_bytes(),
+            ),
+            Self::Refused(failure) => failure,
+        }
+    }
+
+    /// Whether `self` reports as `other` does.
+    pub(super) fn same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Invalid, Self::Invalid) | (Self::TooLong, Self::TooLong) => true,
+            (Self::Refused(a), Self::Refused(b)) => a.status == b.status && a.message == b.message,
+            _ => false,
+        }
+    }
 }
 
 pub(super) fn add(
@@ -1361,7 +1849,7 @@ mod tests {
                     parsed.value.expect("NaN").raw(),
                     Raw80::new(exponent, 0xc000_0000_0000_0000 | bits)
                 );
-                assert_eq!(parsed.errno, Some(0));
+                assert!(!parsed.range_error);
                 assert_eq!(parsed.consumed, text.len() - 4);
             }
         }
@@ -1398,7 +1886,6 @@ mod tests {
                 let result =
                     parse(input.as_bytes(), profile).unwrap_or_else(|e| panic!("{:?}", e.message));
                 assert_eq!(result.value.unwrap().raw(), expected.raw(), "{text}");
-                assert!(result.errno.is_some());
                 assert_eq!(result.consumed, input.len());
             }
         }
@@ -1422,13 +1909,138 @@ mod tests {
                 let parsed = parse(text.as_bytes(), Profile::C)
                     .unwrap_or_else(|e| panic!("certificate: {:?}", e.message));
                 assert_eq!(parsed.consumed, text.len());
-                assert_eq!(parsed.errno, Some(if range { 34 } else { 0 }));
+                assert_eq!(parsed.range_error, range);
                 assert_eq!(
                     parsed.value.unwrap().raw(),
                     Raw80::new(exponent | sign_bit, significand)
                 );
             }
         }
+    }
+
+    /// `exact` padded past the kept digits with zeros, then nudged by a
+    /// last 1 just above it and, as its last nonzero digit less one and
+    /// nines, just below it.
+    fn padded(exact: &str) -> [String; 3] {
+        let exact = format!("{exact}{}", "0".repeat(SIGNIFICANT));
+        let at = exact.rfind(|c: char| c != '0' && c != '.').unwrap();
+        let nines: String = exact[at + 1..]
+            .chars()
+            .map(|c| if c == '.' { '.' } else { '9' })
+            .collect();
+        let below = format!(
+            "{}{}{nines}9",
+            &exact[..at],
+            char::from(exact.as_bytes()[at] - 1)
+        );
+        [format!("{exact}1"), below, exact]
+    }
+
+    fn parsed(text: &str, profile: Profile) -> (Raw80, bool) {
+        let parsed = parse(text.as_bytes(), profile).unwrap_or_else(|e| panic!("{:?}", e.message));
+        assert_eq!(parsed.consumed, text.len());
+        (parsed.value.unwrap().raw(), parsed.range_error)
+    }
+
+    /// Decimals of more significant digits than `SIGNIFICANT` convert as
+    /// their exact values round: subnormal values, exact (no range error) or
+    /// nudged (inexact, so a range error), midpoints near one and the
+    /// smallest normal; values across the range as the whole digits give
+    /// them; exponents beyond the lexer's bound; the comma radix.
+    #[test]
+    fn long_decimals_convert_as_their_exact_values_round() {
+        for significand in [1u64, 5, 7, 41, (1 << 63) - 1] {
+            let [above, below, exact] = padded(&fixtures::dyadic(significand.into(), 16445));
+            let value = Raw80::new(0, significand);
+            assert_eq!(parsed(&exact, Profile::C), (value, false), "{significand}");
+            assert_eq!(parsed(&above, Profile::C), (value, true), "{significand}");
+            assert_eq!(parsed(&below, Profile::C), (value, true), "{significand}");
+        }
+        let one = 1u64 << 63;
+        for (numerator, power, [above, below, exact]) in [
+            ((1u128 << 64) + 1, 64, [one | 1, one, one]),
+            ((1u128 << 64) + 3, 64, [one | 2, one | 1, one | 2]),
+        ] {
+            let [up, down, tie] = padded(&fixtures::dyadic(numerator, power));
+            assert_eq!(parsed(&up, Profile::C), (Raw80::new(0x3fff, above), false));
+            assert_eq!(
+                parsed(&down, Profile::C),
+                (Raw80::new(0x3fff, below), false)
+            );
+            assert_eq!(parsed(&tie, Profile::C), (Raw80::new(0x3fff, exact), false));
+        }
+        // The smallest normal, exact and nudged: tininess after rounding at
+        // 64-bit precision, so no range error.
+        for text in padded(&fixtures::dyadic(1 << 66, 16448)) {
+            assert_eq!(parsed(&text, Profile::C), (Raw80::new(1, one), false));
+        }
+        let mut state = 0x2545_f491_4f6c_dd1du64;
+        for exponent in ["e-4950", "e-4931", "e0", "e4931", "e4933"] {
+            let digits: String = (0..SIGNIFICANT + 200)
+                .map(|_| {
+                    state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    char::from(b'0' + (state >> 60) as u8 % 10)
+                })
+                .collect();
+            for text in [
+                format!("0.{digits}{exponent}"),
+                format!("-{digits}{exponent}"),
+            ] {
+                let (whole, _) = finite(&text, |_, converter| Ok(converter))
+                    .unwrap_or_else(|e| panic!("{:?}", e.message));
+                assert_eq!(parsed(&text, Profile::C).0, whole.raw(), "{exponent}");
+            }
+        }
+        // Beyond the lexer's exponent bound, in range and out of it.
+        let long = format!("{}e-1000010", "7".repeat(1_000_100));
+        let short = format!("{}e-{}", "7".repeat(SIGNIFICANT + 100), SIGNIFICANT + 10);
+        assert_eq!(parsed(&long, Profile::C), parsed(&short, Profile::C));
+        let digits = "7".repeat(SIGNIFICANT + 100);
+        assert!(parsed(&format!("{digits}e-1000001"), Profile::C).1);
+        assert!(parsed(&format!("-0.{digits}e+99999999999999999999"), Profile::C).1);
+        assert_eq!(
+            parsed(&format!("0,{digits}"), Profile::DE_NUMERIC),
+            parsed(&format!("0.{digits}"), Profile::C)
+        );
+    }
+
+    /// Whether a zero, subnormal or smallest normal result is a range error
+    /// follows from the decimal's exact value, as with `strtold`: decimals of
+    /// a few digits never equal a subnormal, so they are range errors, and
+    /// a subnormal's whole expansion is not. The converter misjudges some of
+    /// both (such as 2^-16445's 40-digit prefix, which it calls exact).
+    #[test]
+    fn tiny_decimals_are_range_errors_unless_exact() {
+        let prefix = "3.645199531882474602528405933619419816399e-4951";
+        assert!(parsed(prefix, Profile::C).1);
+        assert!(parsed("1e-4945", Profile::C).1);
+        assert!(parsed("-1e-99999", Profile::C).1);
+        assert!(!parsed("0e-99999", Profile::C).1);
+        assert!(!parsed("0.000", Profile::C).1);
+        for significand in [1u64, 5, 7] {
+            let exact = fixtures::dyadic(significand.into(), 16445);
+            assert_eq!(
+                parsed(&exact, Profile::C),
+                (Raw80::new(0, significand), false)
+            );
+            assert!(!parsed(&format!("-{exact}"), Profile::C).1);
+            let de = exact.replace('.', ",");
+            assert!(!parsed(&de, Profile::DE_NUMERIC).1);
+        }
+        // 2^-16445 as 5^16445 times 10^-16445, and past the lexer's exponent
+        // bound after a million leading zeros; and just above it there.
+        let digits = fixtures::dyadic(1, 16445)
+            .trim_start_matches("0.")
+            .trim_start_matches('0')
+            .to_string();
+        let smallest = (Raw80::new(0, 1), false);
+        assert_eq!(parsed(&format!("{digits}e-16445"), Profile::C), smallest);
+        let zeros = "0".repeat(1_000_000);
+        let exponent = 1_000_000 + digits.len() - 16445;
+        let far = format!("0.{zeros}{digits}e+{exponent}");
+        assert_eq!(parsed(&far, Profile::C), smallest);
+        let above = format!("0.{zeros}{digits}1e+{exponent}");
+        assert_eq!(parsed(&above, Profile::C), (Raw80::new(0, 1), true));
     }
 
     #[test]
@@ -1579,7 +2191,6 @@ mod tests {
             b" 7",
             b"7.",
             b".5",
-            b"1e3",
             b"0x10",
             b"--7",
             b"-",
@@ -1599,20 +2210,158 @@ mod tests {
         }
     }
 
-    /// `field`'s whole result, with the plain shortcut on or off.
+    /// Turns every conversion shortcut on, or off for the reference results.
+    fn set_shortcuts(on: bool) {
+        SHORTCUTS.with(|enabled| enabled.set(on));
+    }
+
+    /// A field's value bits, or its failure's status and message.
+    type Outcome = Result<Option<u128>, (i32, Vec<u8>)>;
+
+    /// `field`'s and `number`'s results for the field at `span`, both reported
+    /// as `field` reports them, with every shortcut on or off.
+    fn reader_outcomes(
+        record: &[u8],
+        span: field_policy::FieldRange,
+        narm: bool,
+        profile: Profile,
+        shortcuts: bool,
+    ) -> [Outcome; 2] {
+        let bits = |value: Option<numerics::Value>| {
+            value.map(|value| numerics::Numerics::value80(value).raw().to_bits())
+        };
+        let part = &record[span.start..span.start + span.length];
+        set_shortcuts(shortcuts);
+        let outcomes = [
+            field(record, span, 3, 7, narm, profile)
+                .map(bits)
+                .map_err(|failure| (failure.status, failure.message)),
+            number(record, span, narm, profile)
+                .map(bits)
+                .map_err(|error| {
+                    let failure = error.report(part, 3, 7);
+                    (failure.status, failure.message)
+                }),
+        ];
+        set_shortcuts(true);
+        outcomes
+    }
+
+    #[test]
+    fn field_and_number_read_alike_with_or_without_shortcuts() {
+        let long_run_on = format!("{}#5", "1".repeat(600));
+        let long_decimal = format!("0#{}1", "0".repeat(40));
+        let fields: Vec<&[u8]> = vec![
+            b"",
+            b"0",
+            b"-0",
+            b"7",
+            b"-12",
+            b"9999999999999999999",
+            b"12345678901234567890",
+            b"1#25",
+            b"1#",
+            b"#5",
+            b"+7",
+            b" 7",
+            b"1#2#3",
+            b"1a2",
+            b"1e5",
+            b"-1#5e-16",
+            b"9#999999999999999999e4931",
+            b"1e4933",
+            b"1e-4951",
+            b"1e-99999",
+            b"1e99999",
+            b"1e",
+            b"1e+",
+            b"1#234567890123456789012345",
+            b"0x1#8p1",
+            b"0x",
+            b"0x1p99999",
+            b"inf",
+            b"-Infinity",
+            b"nan",
+            b"nan(12)",
+            b"nan(",
+            b"NA",
+            b"N/A",
+            b"x",
+            b"-",
+            long_run_on.as_bytes(),
+            long_decimal.as_bytes(),
+        ];
+        let mut compared = 0;
+        for profile in [Profile::C, Profile::EN_NUMERIC, Profile::DE_NUMERIC] {
+            let point = profile.radix();
+            let other_point = if point == b'.' { b',' } else { b'.' };
+            let nexts = [
+                None,
+                Some(b'\t'),
+                Some(b' '),
+                Some(b'5'),
+                Some(b'e'),
+                Some(b'E'),
+                Some(b'p'),
+                Some(b'x'),
+                Some(b'('),
+                Some(b')'),
+                Some(b'_'),
+                Some(b'-'),
+                Some(b'+'),
+                Some(point),
+                Some(other_point),
+                Some(b'a'),
+                Some(0),
+                Some(0x80),
+            ];
+            for text in &fields {
+                let text: Vec<u8> = text
+                    .iter()
+                    .map(|&b| if b == b'#' { point } else { b })
+                    .collect();
+                for next in nexts {
+                    for tail in [&b""[..], b"9", b"e-5", b"5 x", b"ab)"] {
+                        let mut record = b"k\t".to_vec();
+                        record.extend_from_slice(&text);
+                        if let Some(next) = next {
+                            record.push(next);
+                            record.extend_from_slice(tail);
+                        } else if !tail.is_empty() {
+                            continue;
+                        }
+                        let span = field_policy::FieldRange {
+                            start: 2,
+                            length: text.len(),
+                        };
+                        for narm in [false, true] {
+                            let reference = reader_outcomes(&record, span, narm, profile, false);
+                            assert_eq!(reference[0], reference[1], "{profile:?} {record:?}");
+                            assert_eq!(
+                                reader_outcomes(&record, span, narm, profile, true),
+                                reference,
+                                "{profile:?} {record:?}"
+                            );
+                            compared += 1;
+                        }
+                    }
+                }
+            }
+        }
+        // 3 profiles x 38 fields x 86 continuations x NA on and off.
+        assert_eq!(compared, 19_608);
+    }
+
+    /// `field`'s whole result, with every shortcut on or off.
     fn field_outcome(
         record: &[u8],
         span: field_policy::FieldRange,
         narm: bool,
         profile: Profile,
-        plain: bool,
-    ) -> Result<Option<u128>, Vec<u8>> {
-        PLAIN_NUMBERS.with(|enabled| enabled.set(plain));
-        let outcome = field(record, span, 3, 7, narm, profile)
-            .map(|value| value.map(|value| numerics::Numerics::value80(value).raw().to_bits()))
-            .map_err(|failure| failure.message);
-        PLAIN_NUMBERS.with(|enabled| enabled.set(true));
-        outcome
+        shortcuts: bool,
+    ) -> Outcome {
+        let [field, _] = reader_outcomes(record, span, narm, profile, shortcuts);
+        field
     }
 
     #[test]
@@ -1683,15 +2432,537 @@ mod tests {
         assert_eq!(compared, 141_450);
     }
 
+    /// The field shortcuts' outcomes against the general parser's for each
+    /// field of `fields` (`#` standing for the radix point) followed by any
+    /// byte and then by some tails; returns how many were compared.
+    fn compare_following_bytes(fields: &[&[u8]]) -> usize {
+        let mut compared = 0;
+        for profile in [Profile::C, Profile::EN_NUMERIC, Profile::DE_NUMERIC] {
+            let point = profile.radix();
+            for text in fields {
+                let text: Vec<u8> = text
+                    .iter()
+                    .map(|&b| if b == b'#' { point } else { b })
+                    .collect();
+                for next in (0..=255u8).map(Some).chain([None]) {
+                    for tail in [&b""[..], b"9", b"e9999", b"5 x"] {
+                        let mut record = b"k\t".to_vec();
+                        record.extend_from_slice(&text);
+                        if let Some(next) = next {
+                            record.push(next);
+                            record.extend_from_slice(tail);
+                        } else if !tail.is_empty() {
+                            continue;
+                        }
+                        let span = field_policy::FieldRange {
+                            start: 2,
+                            length: text.len(),
+                        };
+                        assert_eq!(
+                            field_outcome(&record, span, false, profile, true),
+                            field_outcome(&record, span, false, profile, false),
+                            "{profile:?} {record:?}"
+                        );
+                        compared += 1;
+                    }
+                }
+            }
+        }
+        compared
+    }
+
+    #[test]
+    fn scientific_number_shortcut_matches_general_results_for_every_following_byte() {
+        let fields: &[&[u8]] = &[
+            b"1e5",
+            b"1E5",
+            b"-1#5e-16",
+            b"3#334833e-16",
+            b"5#74e-159",
+            b"1#234568e+25",
+            b"0e0",
+            b"-0#0e-400",
+            b"9#999999999999999999e4931",
+            b"1#18973149535723176502e4932",
+            b"1e4933",
+            b"3#362103143112093506e-4932",
+            b"1e-4951",
+            b"1e-99999",
+            b"1e123456",
+            b"1e",
+            b"1e+",
+            b"1e-",
+            b"e5",
+            b"#5e3",
+            b"1#e3",
+            b"1#5e3#5",
+            b"1e3e3",
+            b"--1e3",
+            b"+1e3",
+            b"1 e3",
+            b"12345678901234567890e3",
+            b"0#000000000000000001e-300",
+        ];
+        // 3 profiles x 28 fields x 1,025 continuations.
+        assert_eq!(compare_following_bytes(fields), 86_100);
+    }
+
+    #[test]
+    fn exponent_markers_are_the_last_e_in_the_last_seven_bytes() {
+        let mut random = XorShift(0x1f83_d9ab_fb41_bd6b);
+        let alphabet = b"eE5-+.x\x00\x80\xe5\xc5Ff";
+        for _ in 0..200_000 {
+            let length = (random.next() % 14) as usize;
+            let part: Vec<u8> = (0..length)
+                .map(|_| alphabet[(random.next() % alphabet.len() as u64) as usize])
+                .collect();
+            let tail = if length >= 8 { length - 7 } else { 0 };
+            let expected = part[tail..]
+                .iter()
+                .rposition(|&b| b | 0x20 == b'e')
+                .map(|at| tail + at);
+            assert_eq!(exponent_marker(&part), expected, "{part:?}");
+        }
+    }
+
+    #[test]
+    fn scientific_fields_match_the_general_parser() {
+        let mut random = XorShift(0x5d58_8b65_6c07_8965);
+        let mut taken = 0;
+        for round in 0..100_000 {
+            let digits = 1 + random.next() % 19;
+            let coefficient = random_digits(&mut random, digits);
+            let exponent = match round % 4 {
+                0 => -4951 + (random.next() % 40) as i64,
+                1 => 4932 - (random.next() % 40) as i64,
+                _ => (random.next() % 700) as i64 - 350,
+            };
+            let sign = ["", "-"][(random.next() % 2) as usize];
+            let marker = ["e", "E", "e+", "e0"][(random.next() % 4) as usize];
+            let (whole, fraction) = coefficient.split_at(1);
+            for profile in [Profile::C, Profile::DE_NUMERIC] {
+                let point = char::from(profile.radix());
+                let text = if fraction.is_empty() {
+                    format!("{sign}{whole}{marker}{exponent}")
+                } else {
+                    format!("{sign}{whole}{point}{fraction}{marker}{exponent}")
+                };
+                let record = format!("k\t{text}\tz");
+                let span = field_policy::FieldRange {
+                    start: 2,
+                    length: text.len(),
+                };
+                let fast = field_outcome(record.as_bytes(), span, false, profile, true);
+                assert_eq!(
+                    fast,
+                    field_outcome(record.as_bytes(), span, false, profile, false),
+                    "{profile:?} {text}"
+                );
+                taken += usize::from(
+                    exponent_marker(text.as_bytes())
+                        .and_then(|marker| {
+                            scientific_number(text.as_bytes(), marker, Some(b'\t'), profile.radix())
+                        })
+                        .is_some(),
+                );
+            }
+        }
+        // Texts such as `1e0-4951` are malformed, and a few values lie at the
+        // range ends: those go to the general parser.
+        assert!(taken > 130_000, "shortcut taken {taken} times");
+    }
+
+    /// The source of `decimal_powers.rs`, from exact integer arithmetic: for each
+    /// block j, 5^(28 j) truncated to 128 significant bits and its power of two.
+    fn five_powers_source() -> String {
+        use num_bigint::BigUint;
+        const STEP: i32 = 28;
+        // A normal c * 10^scale with 1 <= c < 10^19 has scale in -4951..=4932.
+        let (first, last) = ((-4951i32).div_euclid(STEP), 4932i32.div_euclid(STEP));
+        let mut source = format!(
+            "//! @generated by `decimal::tests::five_powers_are_current`; do not edit.\n\
+             //! Regenerate with FASTMASH_REGENERATE=1 set for that test.\n\n\
+             /// The blocks are powers of 5^STEP.\n\
+             pub(super) const STEP: i32 = {STEP};\n\
+             /// The block of the first entry.\n\
+             pub(super) const FIRST: i32 = {first};\n\
+             /// For block j from FIRST, (m, e) with m in [2^127, 2^128) and\n\
+             /// 5^(STEP * j) in [m, m + 1) * 2^e: m is truncated, never rounded up.\n\
+             pub(super) const FIVE: &[(u128, i32)] = &[\n"
+        );
+        for block in first..=last {
+            let power = BigUint::from(5u32).pow(STEP.unsigned_abs() * block.unsigned_abs());
+            let bits = i64::try_from(power.bits()).unwrap();
+            let (mantissa, exponent) = if block >= 0 {
+                let shift = bits - 128;
+                let mantissa = if shift >= 0 {
+                    power >> shift.unsigned_abs()
+                } else {
+                    power << shift.unsigned_abs()
+                };
+                (mantissa, shift)
+            } else {
+                // 2^(127 + bits) / 5^k lies in (2^127, 2^128): 5^k is not a
+                // power of two.
+                (
+                    (BigUint::from(1u32) << (127 + bits).unsigned_abs()) / power,
+                    -(127 + bits),
+                )
+            };
+            let digits = mantissa.to_u64_digits();
+            assert_eq!(digits.len(), 2);
+            assert!(digits[1] >> 63 == 1);
+            source.push_str(&format!(
+                "    (0x{:016x}_{:016x}, {exponent}),\n",
+                digits[1], digits[0]
+            ));
+        }
+        source.push_str("];\n");
+        source
+    }
+
+    #[test]
+    fn five_powers_are_current() {
+        let expected = five_powers_source();
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/src/decimal_powers.rs");
+        if std::env::var_os("FASTMASH_REGENERATE").is_some() {
+            std::fs::write(path, &expected).unwrap();
+        }
+        assert!(
+            std::fs::read_to_string(path).unwrap() == expected,
+            "decimal_powers.rs is stale: set FASTMASH_REGENERATE=1 for this test"
+        );
+        // Independently of the generator: every entry is truncated, so the
+        // exact power lies in [m, m + 1) * 2^e, which `scaled_decimal` needs.
+        use num_bigint::BigUint;
+        for (index, &(m, e)) in decimal_powers::FIVE.iter().enumerate() {
+            let block = decimal_powers::FIRST + index as i32;
+            let k = decimal_powers::STEP.unsigned_abs() * block.unsigned_abs();
+            let five = BigUint::from(5u32).pow(k);
+            let (low, high) = (BigUint::from(m), BigUint::from(m) + 1u32);
+            assert!(m >> 127 == 1, "block {block}");
+            let within = if block < 0 {
+                // 5^-k = 2^e * [m, m + 1) with e < 0: m 5^k <= 2^-e < (m + 1) 5^k.
+                let two = BigUint::from(1u32) << e.unsigned_abs();
+                &low * &five <= two && two < &high * &five
+            } else if e >= 0 {
+                (&low << e.unsigned_abs()) <= five && five < (&high << e.unsigned_abs())
+            } else {
+                let scaled = &five << e.unsigned_abs();
+                low <= scaled && scaled < high
+            };
+            assert!(within, "block {block}");
+        }
+    }
+
+    #[test]
+    fn wide_products_and_rounding_are_exact() {
+        use num_bigint::BigUint;
+        let mut random = XorShift(0x2545_f491_4f6c_dd1d);
+        let wide = |a: u128| BigUint::from(a);
+        for _ in 0..20_000 {
+            let a = u128::from(random.next()) << 64 | u128::from(random.next());
+            let b = u128::from(random.next()) << 64 | u128::from(random.next());
+            let (a, b) = (a >> (random.next() % 128), b >> (random.next() % 128));
+            let (high, low) = widening_mul(a, b);
+            assert_eq!((wide(high) << 128u32) | wide(low), wide(a) * wide(b));
+            if high == 0 && low == 0 {
+                continue;
+            }
+            // Independent rounding: the significand from the exact quotient.
+            let value = (wide(high) << 128u32) | wide(low);
+            let top = u32::try_from(value.bits()).unwrap() - 1;
+            let (significand, top) = if top < 64 {
+                (u64::try_from(value << (63 - top)).unwrap(), top)
+            } else {
+                let shift = top - 63;
+                let floor = &value >> shift;
+                let rest = &value - (&floor << shift);
+                let half = BigUint::from(1u32) << (shift - 1);
+                let odd = floor.bit(0);
+                let floor = if rest > half || (rest == half && odd) {
+                    floor + 1u32
+                } else {
+                    floor
+                };
+                match u64::try_from(&floor) {
+                    Ok(significand) => (significand, top),
+                    Err(_) => (1 << 63, top + 1),
+                }
+            };
+            assert_eq!(round_nearest(high, low), (significand, top), "{a} * {b}");
+        }
+        // Ties to even, and a carry out of the significand.
+        assert_eq!(round_nearest(0, (1 << 65) | 1), (1 << 63, 65));
+        assert_eq!(round_nearest(0, (1 << 65) | 2), (1 << 63, 65));
+        assert_eq!(round_nearest(0, (1 << 65) | 3), ((1 << 63) + 1, 65));
+        assert_eq!(round_nearest(0, (1 << 65) | 6), ((1 << 63) + 2, 65));
+        assert_eq!(round_nearest(0, u128::MAX >> 63), (1 << 63, 65));
+        assert_eq!(round_nearest(1, 0), (1 << 63, 128));
+    }
+
+    /// `text`'s parse with every shortcut on or off, and whether it took the scaled path.
+    fn scaled_parse(
+        text: &str,
+        profile: Profile,
+        shortcuts: bool,
+    ) -> (Option<(u128, usize, bool)>, bool) {
+        set_shortcuts(shortcuts);
+        let parsed = parse(text.as_bytes(), profile);
+        set_shortcuts(true);
+        let lex = bytes::lex_slice(text.as_bytes(), profile).unwrap();
+        let taken = match lex.lexeme {
+            Lexeme::Finite(token) => {
+                compact_decimal(&token).is_none() && scaled_decimal(&token).is_some()
+            }
+            _ => false,
+        };
+        (
+            parsed.ok().map(|p| {
+                (
+                    p.value.map_or(0, |v| v.raw().to_bits()),
+                    p.consumed,
+                    p.range_error,
+                )
+            }),
+            taken,
+        )
+    }
+
+    /// The scaled path agrees with the general converter, and where it gives
+    /// a value, with the exact rational converter.
+    fn check_scaled(text: &str, profile: Profile) -> bool {
+        let (fast, taken) = scaled_parse(text, profile, true);
+        let (general, _) = scaled_parse(text, profile, false);
+        assert_eq!(fast, general, "{profile:?} {text}");
+        if taken {
+            let lex = bytes::lex_slice(text.as_bytes(), profile).unwrap();
+            let Lexeme::Finite(token) = lex.lexeme else {
+                unreachable!()
+            };
+            let exact = convert::finite(&token).unwrap();
+            assert!(!exact.overflow && !exact.ordinary_p64_tiny, "{text}");
+            assert_eq!(
+                scaled_decimal(&token).unwrap().raw().to_bits(),
+                exact.value.raw().to_bits(),
+                "exact rational: {text}"
+            );
+        }
+        taken
+    }
+
+    #[test]
+    fn scaled_decimals_match_both_converters() {
+        let mut random = XorShift(0x9e6c_63d0_676a_9a99);
+        let (mut typical, mut typical_taken) = (0, 0);
+        for round in 0..60_000 {
+            let digits = 1 + random.next() % 19;
+            let coefficient: String = (0..digits)
+                .map(|i| {
+                    let digit = random.next() % 10;
+                    char::from_digit(if i == 0 { digit.max(1) } else { digit } as u32, 10).unwrap()
+                })
+                .collect();
+            let exponent = match round % 4 {
+                // Near the smallest normal and the largest finite value.
+                0 => -4951 + (random.next() % 40) as i64,
+                1 => 4932 - (random.next() % 40) as i64,
+                // Scientific notation as programs write it.
+                _ => (random.next() % 700) as i64 - 350,
+            };
+            let sign = if random.next().is_multiple_of(2) {
+                ""
+            } else {
+                "-"
+            };
+            let (whole, fraction) = coefficient.split_at(1);
+            let text = format!("{sign}{whole}.{fraction}e{exponent}");
+            let taken = check_scaled(&text, Profile::C);
+            check_scaled(&text.replace('.', ","), Profile::DE_NUMERIC);
+            check_scaled(&format!("{coefficient}E{exponent}"), Profile::C);
+            if round % 4 >= 2 && !(-19..=19).contains(&(exponent - digits as i64 + 1)) {
+                typical += 1;
+                typical_taken += usize::from(taken);
+            }
+        }
+        // The general converter is left only for the rare ambiguous product.
+        assert!(
+            typical_taken * 1000 > typical * 999,
+            "{typical_taken} of {typical}"
+        );
+        // Exact ties (an odd 65-bit c * 5^20 times 2^20) and exact values go
+        // to nearest even either way; the boundaries and zero stay general.
+        for text in [
+            "193429e20",
+            "193431e20",
+            "386855e20",
+            "1024e20",
+            "4096e-20",
+            "9999999999999999999e-4951",
+            "1e-4931",
+            // 19-digit neighbours of the smallest normal, 2^-16381, the
+            // largest finite value, and powers of two.
+            "3.362103143112093505e-4932",
+            "3.362103143112093506e-4932",
+            "3.362103143112093507e-4932",
+            "6.724206286224187012e-4932",
+            "6.724206286224187013e-4932",
+            "1.189731495357231764e4932",
+            "1.189731495357231765e4932",
+            "1.189731495357231766e4932",
+            "7.888609052210118054e-31",
+            "1.267650600228229401e30",
+            "3.3621031431120935063e-4932",
+            "1.18973149535723176502e4932",
+            "1.1897314953572317649e4932",
+            "0e-400",
+            "-0e400",
+            "4e-115",
+            "1.234568e-25",
+            "6.02214076e23",
+        ] {
+            check_scaled(text, Profile::C);
+        }
+    }
+
+    /// Like [`check_scaled`], for the path of more than 19 digits: whether
+    /// [`long_decimal`] gave the value.
+    fn check_long(text: &str, profile: Profile) -> bool {
+        check_scaled(text, profile);
+        let lex = bytes::lex_slice(text.as_bytes(), profile).unwrap();
+        let Lexeme::Finite(token) = lex.lexeme else {
+            return false;
+        };
+        let Some(fast) = long_decimal(&token) else {
+            return false;
+        };
+        if fast.raw().to_bits() & !(1 << 79) == 0 {
+            return true;
+        }
+        let exact = convert::finite(&token).unwrap();
+        assert!(!exact.overflow && !exact.ordinary_p64_tiny, "{text}");
+        assert_eq!(
+            fast.raw().to_bits(),
+            exact.value.raw().to_bits(),
+            "exact rational: {text}"
+        );
+        true
+    }
+
+    /// Random decimal digits, the first not zero.
+    fn random_digits(random: &mut XorShift, count: u64) -> String {
+        (0..count)
+            .map(|i| {
+                let digit = random.next() % 10;
+                char::from_digit(if i == 0 { digit.max(1) } else { digit } as u32, 10).unwrap()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn long_decimals_match_both_converters() {
+        let mut random = XorShift(0x2545_f491_4f6c_dd1d);
+        let (mut typical, mut typical_taken) = (0, 0);
+        for round in 0..40_000 {
+            let digits = 20 + random.next() % 41;
+            let coefficient = random_digits(&mut random, digits);
+            let exponent = match round % 5 {
+                0 => -4951 + (random.next() % 40) as i64,
+                1 => 4932 - (random.next() % 40) as i64,
+                _ => (random.next() % 700) as i64 - 350,
+            };
+            let sign = if random.next().is_multiple_of(2) {
+                ""
+            } else {
+                "-"
+            };
+            let (whole, fraction) = coefficient.split_at(1);
+            let text = format!("{sign}{whole}.{fraction}e{exponent}");
+            let taken = check_long(&text, Profile::C);
+            check_long(&text.replace('.', ","), Profile::DE_NUMERIC);
+            check_long(&format!("{coefficient}E{exponent}"), Profile::C);
+            // Fixed-point text with leading zeros, as `%.25f` writes it.
+            let zeros = "0".repeat((random.next() % 12) as usize);
+            check_long(&format!("{sign}0.{zeros}{coefficient}"), Profile::C);
+            // Trailing zeros: the value is the kept digits exactly.
+            check_long(
+                &format!("{sign}{}{}e-30", &coefficient[..19], "0".repeat(25)),
+                Profile::C,
+            );
+            if round % 5 >= 2 {
+                typical += 1;
+                typical_taken += usize::from(taken);
+            }
+        }
+        assert!(
+            typical_taken * 1000 > typical * 999,
+            "{typical_taken} of {typical}"
+        );
+        // Midpoints between neighbouring binary80 values, (2s + 1) * 2^q, as
+        // exact decimals and nudged by one unit in a far digit either way.
+        for round in 0..4_000u64 {
+            let significand = (1u64 << 63) | random.next();
+            let q = (random.next() % 600) as i64 - 400;
+            let odd = num_bigint::BigUint::from(significand) * 2u32 + 1u32;
+            let (digits, scale) = if q < 0 {
+                (
+                    odd * num_bigint::BigUint::from(5u32).pow(q.unsigned_abs() as u32),
+                    q,
+                )
+            } else {
+                (odd << q as usize, 0)
+            };
+            let exact = digits.to_string();
+            let pad = "0".repeat((round % 7) as usize);
+            let below = format!("{}{}", (&digits - 1u32), "9".repeat(pad.len() + 1));
+            for text in [
+                format!("{exact}e{scale}"),
+                format!("{exact}{pad}1e{}", scale - pad.len() as i64 - 1),
+                format!("{below}e{}", scale - pad.len() as i64 - 1),
+                format!(
+                    "0.{pad}{exact}e{}",
+                    scale + exact.len() as i64 + pad.len() as i64
+                ),
+            ] {
+                check_long(&text, Profile::C);
+            }
+        }
+        for text in [
+            "0.1234567890123456789",
+            "0.12345678901234567891",
+            "0.0000000000000000000000000001",
+            "00000000000000000000000000000000000000001.5",
+            "1.00000000000000000000000000000000000000000000000000001",
+            "0.99999999999999999999999999999999999999999999999",
+            "99999999999999999999999999999999999999999999999999",
+            "3.3621031431120935062626778173217526e-4932",
+            "3.3621031431120935062626778173217527e-4932",
+            "6.72420628622418701252535563464350521e-4932",
+            "1.18973149535723176502126385303097021e4932",
+            "1.18973149535723176508575932662800702e4932",
+            "1.18973149535723176508575932662800701e4932",
+            "0.00000000000000000000000000000000000000000",
+            "-0.0000000000000000000000",
+            "1.2345678901234567890123456789e400000000000",
+            "1.2345678901234567890123456789e-400000000000",
+        ] {
+            check_long(text, Profile::C);
+        }
+    }
+
     #[test]
     fn compact_hex_matches_the_general_converter() {
         let convert = |text: &str, fast: bool| {
-            COMPACT_HEX.with(|enabled| enabled.set(fast));
+            set_shortcuts(fast);
             let parsed = parse(text.as_bytes(), Profile::C);
-            COMPACT_HEX.with(|enabled| enabled.set(true));
-            parsed
-                .ok()
-                .map(|p| (p.value.map(|v| v.raw().to_bits()), p.consumed, p.errno))
+            set_shortcuts(true);
+            parsed.ok().map(|p| {
+                (
+                    p.value.map(|v| v.raw().to_bits()),
+                    p.consumed,
+                    p.range_error,
+                )
+            })
         };
         let mut texts: Vec<String> = [
             "0x1p0",
@@ -1999,8 +3270,8 @@ mod tests {
                         numerics::Numerics::value80(right).classify(),
                         fastmash_numeric_contract::ValueClass::Nan { .. }
                     ) {
-                        // The owner-approved CLI selector differs from the retained
-                        // core here; independent policy cases cover both routes.
+                        // The CLI's NaN selection differs from the retained core
+                        // here; independent policy cases cover both routes.
                         continue;
                     }
                     assert!(

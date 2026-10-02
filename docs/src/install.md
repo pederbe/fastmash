@@ -1,8 +1,8 @@
 # Install
 
-Fastmash runs on **Linux x86-64** and on **Windows through WSL2**. macOS and
-native Windows are [planned](roadmap.md). It installs next to GNU datamash
-without changing it.
+Fastmash runs on **Linux x86-64** and on **Windows through WSL2**. macOS on
+Apple Silicon is a [later target](roadmap.md). It installs next to GNU datamash
+without changing it. Native Windows is outside the current product scope.
 
 ## Quick install
 
@@ -41,7 +41,9 @@ cp $name/fastmash $name/fastmash-sort-supervisor ~/.local/bin/
 ```
 
 Replace `0.1.0` with the release you want, and keep `fastmash` and
-`fastmash-sort-supervisor` in the same directory.
+`fastmash-sort-supervisor` from the same release in the same directory. If the
+supervisor is missing, some large sorted jobs are slower; if it comes from
+another release, the sorted jobs that use it stop with a message saying so.
 
 ## With Cargo
 
@@ -65,8 +67,7 @@ curl -LO https://github.com/pederbe/fastmash/releases/download/v0.1.0/fastmash_0
 sudo apt install ./fastmash_0.1.0_amd64.deb
 ```
 
-For Debian 10, Ubuntu 20.04 and newer (a few sorted jobs need Linux 5.11; see
-[System requirements](requirements.md)). Remove it with `sudo apt remove fastmash`.
+For Debian 10, Ubuntu 20.04 and newer. Remove it with `sudo apt remove fastmash`.
 
 ## Fedora, RHEL and similar
 
@@ -74,8 +75,7 @@ For Debian 10, Ubuntu 20.04 and newer (a few sorted jobs need Linux 5.11; see
 sudo dnf install https://github.com/pederbe/fastmash/releases/download/v0.1.0/fastmash-0.1.0-1.x86_64.rpm
 ```
 
-For Fedora, RHEL 8 and newer (a few sorted jobs need Linux 5.11, which RHEL 8's
-kernel predates; see [System requirements](requirements.md)). Remove it with `sudo dnf remove fastmash`.
+For Fedora, RHEL 8 and newer. Remove it with `sudo dnf remove fastmash`.
 
 ## Check that it works
 

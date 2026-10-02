@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn line_numeric_approved_nan_and_ties() {
+fn line_numeric_documented_nan_and_ties() {
     let a = args(&[
         "round", "1", "floor", "1", "ceil", "1", "trunc", "1", "frac", "1",
     ]);

@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn approved_parser_errors_preserve_scope_and_precedence() {
+fn parser_errors_preserve_scope_and_precedence() {
     let cases: &[(&[&str], i32, &str)] = &[
         (&[""], 1, "missing operation specifiers"),
         (

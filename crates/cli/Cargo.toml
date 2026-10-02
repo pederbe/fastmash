@@ -34,13 +34,19 @@ fastmash-sort-process = { path = "../sort-process", version = "=0.1.0" }
 rustc_apfloat = "=0.2.3"
 libc = "=0.2.189"
 memchr = "=2.8.3"
-icu_collator = "=2.3.1"
+# "unstable" only re-exports CollationKeySink, for sort keys that refuse
+# instead of aborting when they cannot grow; the version is pinned exactly.
+icu_collator = { version = "=2.3.1", features = ["unstable"] }
 icu_locale_core = "=2.3.0"
 astro-float-num = { version = "=0.3.7", default-features = false, features = ["std"] }
-base64 = { version = "=0.22.1", default-features = false }
+base64 = { version = "=0.23.1", default-features = false }
 md-5 = { version = "=0.11.0", default-features = false }
 sha1 = { version = "=0.11.0", default-features = false }
 sha2 = { version = "=0.11.0", default-features = false }
+
+[dev-dependencies]
+# Exact arithmetic for the generated decimal power table and its tests.
+num-bigint = { version = "=0.5.1", default-features = false }
 
 # Same as the workspace release profile, for crates.io installs (cargo
 # ignores workspace profiles there). Workspace builds warn that this copy is
@@ -50,3 +56,6 @@ opt-level = 2
 panic = "abort"
 overflow-checks = true
 lto = false
+# Typical jobs run a median 2% faster (up to 6%) with one codegen unit;
+# clean builds take about 45% longer.
+codegen-units = 1

@@ -403,6 +403,9 @@ mod table_checks;
 #[path = "record_separators/case_aware.rs"]
 mod case_aware;
 
+#[path = "record_separators/record_intake.rs"]
+mod record_intake;
+
 #[path = "record_separators/transpose.rs"]
 mod transpose;
 

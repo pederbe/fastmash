@@ -1,9 +1,12 @@
 //! Linux x86-64 process primitives. No application code runs after fork.
 //! Internal to Fastmash's executables; not a stable API. Functions that act
 //! on a descriptor borrow it, so they cannot outlive its owner.
+use std::ffi::CString;
 use std::io;
 use std::marker::PhantomData;
 use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
+use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 
 pub const CANCEL: u64 = (1 << 0) | (1 << 1) | (1 << 14);
 
@@ -88,7 +91,16 @@ pub fn cancellation_dispositions() -> io::Result<()> {
     Ok(())
 }
 pub fn default_sigpipe() -> io::Result<()> {
-    let action = [0u64; 4];
+    sigpipe(0)
+}
+/// Ignores SIGPIPE, so that a write to a pipe without a reader fails with
+/// `EPIPE` instead of ending the process.
+pub fn ignore_sigpipe() -> io::Result<()> {
+    sigpipe(1)
+}
+/// Sets SIGPIPE's disposition: `SIG_DFL` (0) or `SIG_IGN` (1).
+fn sigpipe(disposition: u64) -> io::Result<()> {
+    let action = [disposition, 0, 0, 0];
     call(13, [13, action.as_ptr() as usize, 0, 8, 0, 0]).map(|_| ())
 }
 pub fn pidfd(pid: u32) -> io::Result<OwnedFd> {
@@ -125,9 +137,26 @@ pub fn close_on_exec_extras() -> io::Result<()> {
     // CLOSE_RANGE_CLOEXEC preserves runtime-owned descriptors until exec.
     call(436, [3, u32::MAX as usize, 4, 0, 0, 0]).map(|_| ())
 }
+/// Whether `close_on_exec_extras` can work here: the same call, which needs
+/// Linux 5.11, on a range that no descriptor can be in, so nothing changes.
+pub fn close_range_cloexec() -> io::Result<()> {
+    call(436, [u32::MAX as usize, u32::MAX as usize, 4, 0, 0, 0]).map(|_| ())
+}
 /// Whether `fd` names an open descriptor (F_GETFD), without owning it.
 pub fn is_open(fd: RawFd) -> bool {
     fd >= 0 && call(72, [fd as usize, 1, 0, 0, 0, 0]).is_ok()
+}
+/// `access` modes: write, and execute or search.
+pub(crate) const W_OK: usize = 2;
+pub(crate) const X_OK: usize = 1;
+/// Whether this process may use `path` in every way `mode` names, following
+/// symbolic links (`access`). `X_OK` fails for a regular file on a `noexec`
+/// mount, as executing it would.
+pub(crate) fn access(path: &Path, mode: usize) -> bool {
+    let Ok(path) = CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    call(21, [path.as_ptr() as usize, mode, 0, 0, 0, 0]).is_ok()
 }
 pub fn cloexec(fd: BorrowedFd<'_>, enabled: bool) -> io::Result<()> {
     let fd = fd.as_raw_fd() as usize;

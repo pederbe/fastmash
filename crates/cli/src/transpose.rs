@@ -1,7 +1,11 @@
 //! Compact ragged table storage; missing cells are emitted without storing padding.
 use super::{
-    Failure, annotated, failure, headers::output::Buffered, options::Options, os_failure, records,
-    unsupported,
+    Failure,
+    buffered_stdout::BufferedStdout,
+    failure,
+    intake::{self, Intake},
+    options::Options,
+    records, unsupported,
 };
 use std::io::{BufRead, Write};
 
@@ -43,7 +47,7 @@ impl Table {
         Ok(())
     }
 
-    fn write<W: Write>(&self, output: &mut Buffered<'_, W>, options: &Options) {
+    fn write<W: Write>(&self, output: &mut BufferedStdout<'_, W>, options: &Options) {
         for column in 0..self.columns {
             let mut row_start = 0;
             for (row, &row_end) in self.row_ends.iter().enumerate() {
@@ -71,36 +75,19 @@ impl Table {
 
 pub(super) fn run<W: Write>(
     reader: &mut impl BufRead,
-    output: &mut Buffered<'_, W>,
+    output: &mut BufferedStdout<'_, W>,
     options: &Options,
 ) -> Result<(), Failure> {
     let mut table = Table::default();
     let mut record = Vec::new();
-    let read_error = loop {
-        match records::read_record_terminated(reader, &mut record, usize::MAX, options.record_end) {
-            Ok(false) => break None,
-            Ok(true) => (),
-            Err(records::ReadError::Io(error)) => break Some(error),
-            Err(_) => return Err(unsupported("transpose memory allocation failed")),
-        }
-        if options.vnlog {
-            if !annotated::prepare(&mut record, false)? {
-                continue;
-            }
-        } else if options.skip_comments && records::is_comment(&record) {
-            continue;
-        }
-        table.push(&record, options)?;
-    };
+    // GNU's transpose reads no Input header (datamash.c transpose_file).
+    let mut intake = Intake::new(options, intake::Header::None);
+    while let Some(row) = intake.next(reader, &mut record)? {
+        table.push(row.data(), options)?;
+    }
     drop(record);
     table.write(output, options);
-    read_error.map_or(Ok(()), |error| {
-        Err(if error.raw_os_error() == Some(5) {
-            failure(b"read error: Input/output error\n".to_vec())
-        } else {
-            os_failure(&error, true)
-        })
-    })
+    intake.finish()
 }
 
 #[cfg(test)]

@@ -33,12 +33,7 @@ pub(super) fn resolve_with(
     super::command_memory::reserve(&mut resolved, requests.len())?;
     for request in requests {
         let field = records::fields(record, delimiter).position(|span| {
-            let label = &record[span.start..span.start + span.length];
-            let end = label
-                .iter()
-                .position(|&byte| byte == 0)
-                .unwrap_or(label.len());
-            label[..end] == request.name
+            super::headers::label(&record[span.start..span.start + span.length]) == request.name
         });
         let Some(field) = field else {
             let mut message = b"column name ".to_vec();

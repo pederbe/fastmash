@@ -100,7 +100,9 @@ The most visible ones:
 
 Fastmash is at **0.1**, a preview release: usable today on Linux x86-64 and
 WSL2, with the differences above. Before 1.0, minor releases may still change
-behavior; every change is listed in the [changelog](CHANGELOG.md). macOS (Apple Silicon) and native Windows are planned.
+behavior; every change is listed in the [changelog](CHANGELOG.md). macOS on
+Apple Silicon is a later target. Windows users run the Linux version through WSL2;
+native Windows is outside the current product scope.
 See the [roadmap](https://fastmash.io/roadmap.html).
 
 ## Documentation

@@ -1,4 +1,3 @@
-
 # Testing
 
 Fastmash's job is to give the same answers as GNU datamash, faster, and to give
@@ -22,11 +21,13 @@ All commands run from the repository root on Linux x86-64 or WSL2.
 cargo fmt --all --check                  # formatting
 cargo clippy --workspace --all-targets -- -D warnings   # lints
 cargo test --workspace                   # unit and integration tests
+cargo build --release                    # the binaries the corpus runs
 python3 scripts/check_regressions.py --binary target/release/fastmash
+python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
 ```
 
 CI runs only when started manually, to preserve the limited Actions minutes.
-A change is ready for review when all four checks pass locally.
+A change is ready for review when all of these checks pass locally.
 
 ## Layers
 
@@ -58,15 +59,21 @@ The regression corpus is a set of more than 3,000 commands, each with its
 exact expected standard output, standard error and exit status. Expected
 results for compatible behavior were observed from GNU datamash 1.9, running
 each case twice, on the reference hosts. Cases where Fastmash intentionally
-differs record Fastmash's documented behavior instead, with the reason.
+differs record Fastmash's documented behavior instead; the
+[differences page](https://fastmash.io/guide/differences.html) gives the
+reasons.
 
 ```sh
+cargo build --release   # fastmash and fastmash-sort-supervisor, side by side
 python3 scripts/check_regressions.py --binary target/release/fastmash --keep-going
 python3 scripts/check_regressions.py --help
 ```
 
 A run stops at the first mismatch and prints the case, the expected bytes and
-the actual bytes.
+the actual bytes. The cases give their input through a pipe; `--stdin-file` runs
+those with ordinary input again with standard input as a regular file, against the same
+expectations. Both modes need coverage: hash grouping applies to eligible files
+and to eligible piped input in language locales, with different replay paths.
 
 ### Compatibility cases
 
@@ -120,5 +127,5 @@ Windows drive: tests are much faster there.
 | Workflow | When | What |
 | --- | --- | --- |
 | `ci.yml` | Manual dispatch | Format, Clippy, tests, regression corpus on Ubuntu |
-| `docs.yml` | Manual dispatch | Builds the website and documentation and checks links; Cloudflare deploys separately |
+| `docs.yml` | Manual dispatch | Builds the website and checks links |
 | `release.yml` | Manual dispatch on a version tag | Builds, tests and publishes release binaries |

@@ -74,8 +74,12 @@ impl PrimitiveCell {
     pub(crate) const V2: Self = Self(2);
     pub(crate) const V3: Self = Self(3);
     pub(crate) const V4: Self = Self(4);
+    // Only the bit-serial square root, the tests' reference, uses these.
+    #[cfg(test)]
     pub(crate) const V5: Self = Self(5);
+    #[cfg(test)]
     pub(crate) const V6: Self = Self(6);
+    #[cfg(test)]
     pub(crate) const V7: Self = Self(7);
 }
 

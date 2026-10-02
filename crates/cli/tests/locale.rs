@@ -83,10 +83,59 @@ fn every_locale_uses_its_own_glibc_number_rules() {
 }
 
 #[test]
-fn locales_without_a_one_byte_decimal_point_or_utf8_are_refused_for_numbers() {
-    // ps_AF's decimal separator is U+066B; fr_FR without a codeset is Latin-1.
-    for lang in ["ps_AF.UTF-8", "fr_FR", "nb_NO.UTF-8@euro"] {
+fn locales_whose_numbers_fastmash_cannot_write_are_refused() {
+    // ps_AF's decimal separator is U+066B. fr_FR's thousands separator is
+    // U+202F, whose bytes differ outside UTF-8: fr_FR without a codeset is
+    // Latin-1, and fr_FR@euro Latin-9.
+    for lang in ["ps_AF.UTF-8", "fr_FR", "fr_FR@euro", "fr_FR.ISO-8859-1"] {
         let out = run(&[("LANG", lang)], &["sum", "1"], b"1\n");
+        assert_output(&out, 77, b"");
+    }
+}
+
+/// Checked against GNU datamash 1.9 with glibc 2.43's locales compiled on
+/// LOCPATH (a name with no locale falls back to C in `setlocale`; glibc
+/// drops a modifier it has no locale for).
+#[test]
+fn unknown_and_variant_locale_names_follow_glibc() {
+    // No such locale: C, whose decimal point is '.'.
+    for lang in ["xx_YY.UTF-8", "unknown", "de"] {
+        let out = run(&[("LANG", lang)], &["sum", "1"], b"1.5\n3\n");
+        assert_output(&out, 0, b"4.5\n");
+        let out = run(&[("LANG", lang)], &["sum", "1"], b"1,5\n");
+        assert_eq!(out.status.code(), Some(1), "{lang}");
+        let out = run(
+            &[("LANG", lang)],
+            &["-s", "-g", "1", "count", "1"],
+            b"b\na\n_c\n",
+        );
+        assert_output(&out, 0, b"_c\t1\na\t1\nb\t1\n");
+    }
+    // Modifiers: glibc's own locale (numbers of their own), or the base.
+    for (lang, input, output) in [
+        ("nb_NO.UTF-8@euro", &b"1,5\n3\n"[..], &b"4,5\n"[..]),
+        ("de_DE.UTF-8@euro", b"1,5\n3\n", b"4,5\n"),
+        ("en_US.UTF-8@nothing", b"1.5\n3\n", b"4.5\n"),
+    ] {
+        let out = run(&[("LANG", lang)], &["sum", "1"], input);
+        assert_output(&out, 0, output);
+    }
+    for (lang, output) in [
+        ("nan_TW.UTF-8@latin", &b"1,234,567.5\n"[..]),
+        ("nan_TW.UTF-8", b"123,4567.5\n"),
+    ] {
+        let out = run(
+            &[("LANG", lang)],
+            &["--format", "%'.1f", "sum", "1"],
+            b"1234567.5\n",
+        );
+        assert_output(&out, 0, output);
+    }
+    // Other character sets keep ASCII separators; sorting in them is refused.
+    for lang in ["de_DE", "de_DE.ISO-8859-1", "de_DE@euro"] {
+        let out = run(&[("LANG", lang)], &["sum", "1"], b"1,5\n3\n");
+        assert_output(&out, 0, b"4,5\n");
+        let out = run(&[("LANG", lang)], &["-s", "-g", "1", "count", "1"], b"a\n");
         assert_output(&out, 77, b"");
     }
 }

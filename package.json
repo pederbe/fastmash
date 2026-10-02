@@ -8,6 +8,7 @@
     "wrangler": "4.141.0"
   },
   "overrides": {
-    "lodash-es": "4.18.0"
+    "lodash-es": "4.18.1",
+    "undici": "7.29.1"
   }
 }

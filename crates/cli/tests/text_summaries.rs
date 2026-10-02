@@ -272,14 +272,17 @@ fn text_allocation_failure_is_explicit() {
 }
 
 #[test]
-fn text_final_output_allocation_failure_is_explicit() {
+fn text_final_output_is_written_without_a_second_copy() {
+    // The 11 MB result row streams through the output buffer; a copy of it
+    // would not fit in the 32 MiB allowance beside the collected values.
     let out = command_with_resources(
         &["collapse", "1"],
         &b"transcript\n".repeat(1_000_000),
         false,
         true,
     );
-    assert_eq!(out.status.code(), Some(77), "{:?}", out.stderr);
-    assert!(out.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("output memory allocation failed"));
+    assert!(out.status.success(), "{:?}", out.stderr);
+    let mut expected = b"transcript,".repeat(1_000_000);
+    *expected.last_mut().unwrap() = b'\n';
+    assert_eq!(out.stdout, expected);
 }

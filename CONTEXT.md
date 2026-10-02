@@ -4,6 +4,9 @@ Fastmash is a fast Rust command-line tool for Linux that computes statistics and
 table transformations over delimited text. It implements GNU datamash's command
 language so that datamash workflows can move to it with few or no changes.
 
+Use **Fastmash** for the product in prose and display text, and `fastmash`
+for commands and identifiers, including package and repository names.
+
 ## Command language
 
 **Command**:
@@ -32,12 +35,13 @@ _Avoid_: Using "mode" for the `mode` statistic
 
 **Per-row operation**:
 An operation that produces one output value for each input record rather than
-one summary, such as `round`, `base64` or `getnum`.
+one summary, such as `round`, `base64`, `getnum` or `cut` (which prints the
+selected fields).
 _Avoid_: Linewise operation, line mode, per-line operation
 
 **Field mode**:
-A mode that selects or rearranges fields within each record: `cut`, `reverse`
-and `noop`.
+A mode that rearranges or passes through the fields of each record: `reverse`
+and `noop`. `cut` is a per-row operation, as in GNU datamash, not a field mode.
 
 **Table mode**:
 A mode that treats the input as a whole table: `check`, `transpose` and `rmdup`.
@@ -105,9 +109,18 @@ A run of consecutive records with equal grouping keys. Records with equal keys
 form one group only when they are adjacent, or when `-s` sorts them together first.
 
 **Sort route**:
-The way Fastmash brings equal keys together for `-s`: sorting in memory, spilling
-to temporary disk storage, or delegating to the system `sort` through the sort
-supervisor.
+The way Fastmash brings equal keys together for `-s` with grouping keys, decided
+before input is read: hash grouping first where it applies, then the sort it
+falls back to, either in process (in memory, spilling to temporary disk storage
+as needed) or the system `sort` through the sort supervisor.
+
+**Hash grouping**:
+The sort route for `-s` on input whose grouping keys repeat, from a file or,
+in a language locale, from a pipe: each group's records are collected apart as
+they arrive, and only the groups are sorted. Where that cannot give the sorted
+result exactly, Fastmash reads the input again and sorts it; piped input is
+held in memory to be read again.
+_Avoid_: Hash mode, hash aggregation
 
 **Spill**:
 Temporarily writing sorted runs to disk so that sorting large input does not
@@ -160,7 +173,10 @@ _Avoid_: Refusal
 
 **Internal failure**:
 A detected violation of Fastmash's own invariants, never expected in normal use.
-Most are reported with exit status 70.
+Numerical invariant and table-identity failures exit with status 70; other
+internal failures exit with status 77 or abort the process. When one failure
+follows another, the status is the more serious: 70 over 77 over 1. A diagnostic
+that cannot be written makes the status 1.
 
 ## Compatibility
 

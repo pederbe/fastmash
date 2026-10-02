@@ -15,14 +15,17 @@ Try it on your own data, and tell us about jobs where it is slower.
 
 ## Why does Fastmash refuse my locale?
 
-Fastmash has the number rules of every UTF-8 glibc locale (without an `@`
-modifier) built in, but sorts only in the language locales where its Unicode
-collation was checked to match glibc (194 of them, such as `fr_FR`, `es_ES`
-and `pl_PL`). In other locales, such as `cs_CZ` or `nb_NO`, it refuses to
-sort rather than order keys differently from GNU. It also refuses numbers in
-locales that aren't UTF-8 (a name without `.UTF-8` is accepted when glibc's
-default for it is UTF-8, such as `hi_IN`). Set `LC_COLLATE=C.UTF-8` (or
-`LC_ALL=C.UTF-8`) for byte ordering.
+Fastmash has the number rules of every glibc locale built in, `@` modifier
+locales included, but sorts only in the language locales where its Unicode
+collation was checked to order letters and digits as glibc does (194 of them,
+such as `fr_FR`, `es_ES` and `pl_PL`); punctuation and symbols follow glibc's
+own table there, with a few exceptions, such as some keys with punctuation
+next to digits (see [Differences](guide/differences.md)). In other locales, such as `cs_CZ` or `nb_NO`, it refuses to
+sort. It refuses numbers only where it cannot write a locale's separators:
+`ps_AF`, whose decimal separator is not one byte, and a character set other
+than UTF-8 when the thousands separator is not ASCII (such as `fr_FR` in
+Latin-1). A name glibc has no locale for behaves as `C`, as in GNU datamash.
+Set `LC_COLLATE=C.UTF-8` (or `LC_ALL=C.UTF-8`) for byte ordering.
 
 ## Can it read CSV files?
 
@@ -36,10 +39,10 @@ datamash. Convert such files first, for example with
 
 ## Why are there two executables?
 
-`fastmash-sort-supervisor` runs the system `sort` safely for the sorted jobs
-that Fastmash's own sorter doesn't handle yet (some statistics in the C
-locales). Keep it in the same
-directory as `fastmash`.
+`fastmash-sort-supervisor` runs the system `sort` safely for some sorted jobs
+in the C locales, where the system `sort` is faster on large input. Keep it in
+the same directory as `fastmash`: without it, those jobs sort inside Fastmash,
+with the same output.
 
 ## Why exit status 77?
 
@@ -57,8 +60,8 @@ every machine; GNU datamash's depend on the hardware and C library. See
 
 ## Does it work on macOS or Windows?
 
-On Windows, use WSL2. macOS on Apple Silicon and native Windows are planned;
-see the [roadmap](roadmap.md).
+On Windows, use WSL2. macOS on Apple Silicon is a later target; see the
+[roadmap](roadmap.md). Native Windows is outside the current product scope.
 
 ## How does Fastmash relate to GNU datamash?
 

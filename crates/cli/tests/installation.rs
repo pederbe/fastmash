@@ -42,7 +42,7 @@ fn installed_pair_and_missing_companion() {
     assert!(median.status.success());
     assert_eq!(median.stdout, b"2\n");
 
-    // A standalone copy exercises the user-visible partial-install failure.
+    // A standalone copy, without the supervisor, sorts such jobs in process.
     let alone = cwd.join("fastmash");
     fs::copy(&binary, &alone).unwrap();
     fs::write(cwd.join("input"), b"b\t2\t3\na\t1\t2\na\t3\t6\n").unwrap();
@@ -50,16 +50,9 @@ fn installed_pair_and_missing_companion() {
     assert!(complete.status.success(), "{complete:?}");
     assert_eq!(complete.stdout, b"a\t2\nb\t0\n");
     let missing = invoke(&alone, &cwd, &["-sg1", "pcov", "2:3"]);
-    assert_eq!(missing.status.code(), Some(77), "{missing:?}");
-    assert!(missing.stdout.is_empty());
-    assert_eq!(
-        String::from_utf8_lossy(&missing.stderr),
-        format!(
-            "{}: unable to start sort supervisor\n\
-             hint: install fastmash-sort-supervisor in the same directory as fastmash\n",
-            alone.display()
-        )
-    );
+    assert!(missing.status.success(), "{missing:?}");
+    assert_eq!(missing.stdout, b"a\t2\nb\t0\n");
+    assert!(missing.stderr.is_empty(), "{missing:?}");
     let independent = invoke(&alone, &cwd, &["sum", "2"]);
     assert!(independent.status.success());
     assert_eq!(independent.stdout, b"6\n");

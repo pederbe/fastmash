@@ -22,7 +22,9 @@ cargo build
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo build --release
 python3 scripts/check_regressions.py --binary target/release/fastmash
+python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
 ```
 
 Run the full set before declaring a change complete, and report any command

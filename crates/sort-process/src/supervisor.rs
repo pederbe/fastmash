@@ -374,7 +374,7 @@ fn exec_sort(parent: u32, root: &OsStr, config: Config) -> io::Result<()> {
     linux::close_on_exec_extras()?;
     linux::default_sigpipe()?;
     linux::restore_mask(config.mask);
-    let mut sort = Command::new("/usr/bin/sort");
+    let mut sort = Command::new(crate::SYSTEM_SORT);
     sort.env_clear()
         .env("LC_ALL", "C")
         .env("LANG", "C")
@@ -409,9 +409,13 @@ fn text(arg: &OsStr) -> io::Result<String> {
 fn run() -> io::Result<()> {
     // Paths may be any bytes, so arguments are read as OsString.
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
-    // --supervise CONTROL PARENT BASE CONFIG... | --exec-sort PARENT ROOT CONFIG...
+    // --supervise-PROTOCOL CONTROL PARENT BASE CONFIG... | --exec-sort PARENT ROOT CONFIG...
     let (role, fixed) = match args.first().and_then(|a| a.to_str()) {
-        Some("--supervise") => ("--supervise", 4),
+        Some(role) if role == format!("--supervise-{}", crate::PROTOCOL) => ("--supervise", 4),
+        Some(role) if role.starts_with("--supervise-") => {
+            mismatch(args.get(1));
+            return Err(invalid());
+        }
         Some("--exec-sort") => ("--exec-sort", 3),
         _ => return Err(invalid()),
     };
@@ -458,6 +462,20 @@ fn run() -> io::Result<()> {
         }
     }
 }
+/// Tells a `fastmash` from another release, through the control descriptor
+/// every protocol version passes after the role, that this companion does
+/// not speak its version.
+fn mismatch(control: Option<&OsString>) {
+    let Some(control) = control.and_then(|c| c.to_str()?.parse::<i32>().ok()) else {
+        return;
+    };
+    if control > 2 && linux::is_open(control) {
+        // SAFETY: an open descriptor inherited for this process alone; it is
+        // borrowed only to send one message before the process exits.
+        let control = unsafe { std::os::fd::BorrowedFd::borrow_raw(control) };
+        let _ = Message::new(Kind::Mismatch).send(control);
+    }
+}
 /// Runs the supervisor or sort-exec role named by the first argument.
 pub fn main() {
     if let Err(error) = run() {
@@ -465,10 +483,21 @@ pub fn main() {
         // Only the exec role emits a sorter-startup diagnostic while the original
         // is still consuming its pipes. The supervisor reports through control.
         if std::env::args_os().nth(1).as_deref() == Some(OsStr::new("--exec-sort")) {
-            eprintln!("fastmash-sort-supervisor: {error}");
+            report(&error);
         }
         std::process::exit(77);
     }
+}
+/// Writes the exec role's diagnostic. A failed write is ignored, so the role
+/// exits 77 whatever its standard error is (`eprintln!` would panic, and the
+/// process abort). SIGPIPE, whose default the role restores for the sort just
+/// before exec, is ignored again first: a pipe without a reader then fails
+/// the write instead of ending the process.
+fn report(error: &io::Error) {
+    let _ = linux::ignore_sigpipe();
+    // Formatted first, so that it goes out in one write.
+    let message = format!("fastmash-sort-supervisor: {error}\n");
+    let _ = io::Write::write_all(&mut io::stderr(), message.as_bytes());
 }
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ jobs:
     name: Format and lint
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           # Pinned like the release builder, so a new Rust release's lints do
@@ -34,7 +34,7 @@ jobs:
     name: Test
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: stable
@@ -43,12 +43,13 @@ jobs:
       - run: cargo build --release --locked
       # The supervisor must sit beside the binary (built by the workspace build).
       - run: python3 scripts/check_regressions.py --binary target/release/fastmash
+      - run: python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
 
   msrv:
     name: Minimum supported Rust version
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: "1.88" # rust-version in crates/*/Cargo.toml
@@ -58,7 +59,7 @@ jobs:
     name: Dependency licenses and advisories
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Each published crate carries the licence texts; keep them identical.
       - name: Licence texts in every crate
         run: |

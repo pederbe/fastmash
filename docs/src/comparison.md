@@ -30,9 +30,10 @@ want the same digits on every machine, or want clear errors where datamash
 1.9 aborts or reads past its data. Your commands don't change; the
 [differences](guide/differences.md) are listed on one page.
 
-**Stay with GNU datamash when** you need macOS, Windows or a non-x86 CPU,
-when a job sorts data far larger than memory (datamash with GNU `sort` is
-still faster there), or when you need a GNU-maintained tool.
+**Stay with GNU datamash when** you need macOS, native Windows or a non-x86
+CPU, or when you need a GNU-maintained tool. Some disk-spilling jobs still
+favor GNU on native Linux; the [benchmarks](benchmarks/index.md) show the
+costs and measurement conditions.
 
 ## Miller
 

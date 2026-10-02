@@ -39,6 +39,9 @@ pub(super) struct Options {
     pub seed: Option<u32>,
     pub presentation: super::presentation::Presentation,
     pub locale: super::locale::Policy,
+    /// `FASTMASH_SORT_MEMORY_BYTES` from the environment, which only the
+    /// native sort reads (and refuses when it is invalid).
+    pub sort_memory: Option<OsString>,
 }
 
 #[derive(Clone, Copy)]
@@ -100,7 +103,7 @@ const OPTIONS: &[Descriptor] = &[
     descriptor(b"collapse-delimiter", Some(b'c'), true, Setting::Collapse),
     descriptor(b"sort", Some(b's'), false, Setting::Sort),
     // Existing required-value semantics differ from GNU 1.9's defective long
-    // seed declaration. See random-selection-delivery.md for the accepted repair.
+    // seed declaration: `--seed` takes a required value, as `-S` does.
     descriptor(b"seed", Some(b'S'), true, Setting::Seed),
     descriptor(b"no-strict", None, false, Setting::TableOnly),
     descriptor(b"narm", None, false, Setting::Na),
@@ -286,6 +289,7 @@ pub(super) fn parse_with_policy(
             ..Default::default()
         },
         locale,
+        sort_memory: None,
     };
     let mut explicit_output = None;
     let mut at = 0;
@@ -440,6 +444,48 @@ pub(super) fn parse_with_policy(
 }
 
 impl Options {
+    /// Whether GNU's deprecation warning for `--full` applies: `--full` with
+    /// Operations that are not Per-row operations.
+    pub(super) fn warns_full(&self) -> bool {
+        self.full && !self.linewise
+    }
+
+    /// Whether each Group of `-s` is exactly the records whose sort keys the
+    /// sort compares equal, in input order, however the sort route brings
+    /// them together, which hash grouping relies on: not with vnlog
+    /// annotations or Per-row operations. With `-W` the sort keys keep the
+    /// blanks before each field, which Groups ignore; hash grouping keys its
+    /// classes by them and checks that no two differ only there. Every option
+    /// is named, so that a new one is judged.
+    pub(super) fn groups_are_sort_key_classes(&self) -> bool {
+        let Self {
+            group: _,
+            operands: _,
+            input: _,
+            output: _,
+            collapse: _,
+            record_end: _,
+            full: _,
+            linewise,
+            crosstab: _,
+            strict: _,
+            header_in: _,
+            header_out: _,
+            skip_comments: _,
+            narm: _,
+            vnlog,
+            filler: _,
+            explicit_output: _,
+            sort: _,
+            ignore_case: _,
+            seed: _,
+            presentation: _,
+            locale: _,
+            sort_memory: _,
+        } = self;
+        !vnlog && !linewise
+    }
+
     pub(super) fn validate_annotation(&self) -> Result<(), Failure> {
         if !self.vnlog {
             return Ok(());

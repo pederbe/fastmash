@@ -1,5 +1,6 @@
 //! Owned segments with byte-encoded offsets and reusable projection ranges.
 use super::{Failure, allocation};
+use crate::locale;
 use std::{cmp::Ordering, ops::Range};
 
 /// Recent collation sort keys by key text. Grouping keys usually repeat, and a
@@ -17,15 +18,14 @@ impl SortKeys {
     const LONGEST: usize = 64;
 
     /// Append the sort key of `text` to `out`.
-    fn write(
+    pub(super) fn write(
         &mut self,
-        collator: &icu_collator::CollatorBorrowed<'_>,
+        collator: &locale::Collator,
         text: &str,
         out: &mut Vec<u8>,
-    ) {
+    ) -> Result<(), Failure> {
         if text.len() > Self::LONGEST {
-            collator.write_sort_key_to(text, out).unwrap();
-            return;
+            return sort_key(collator, text, out);
         }
         if self.slots.is_empty() && self.slots.try_reserve_exact(Self::SLOTS).is_ok() {
             self.slots.resize_with(Self::SLOTS, Default::default);
@@ -35,17 +35,17 @@ impl SortKeys {
             (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
         });
         let Some(slot) = self.slots.get_mut(hash as usize % Self::SLOTS) else {
-            collator.write_sort_key_to(text, out).unwrap();
-            return;
+            return sort_key(collator, text, out);
         };
         let (cached, key) = slot;
         // An empty slot holds no key: every sort key has at least one byte.
         if !key.is_empty() && cached == text.as_bytes() {
+            out.try_reserve(key.len()).map_err(|_| allocation())?;
             out.extend_from_slice(key);
-            return;
+            return Ok(());
         }
         let start = out.len();
-        collator.write_sort_key_to(text, out).unwrap();
+        sort_key(collator, text, out)?;
         let computed = &out[start..];
         cached.clear();
         key.clear();
@@ -56,11 +56,47 @@ impl SortKeys {
             cached.clear();
             key.clear();
         }
+        Ok(())
     }
 }
 
-pub(super) trait Storage: Sized {
+/// Appends the collation sort key of `text` to `out`, refusing if `out`
+/// cannot grow.
+fn sort_key(collator: &locale::Collator, text: &str, out: &mut Vec<u8>) -> Result<(), Failure> {
+    collator
+        .write_key(text, out)
+        .map_err(|locale::KeyTooLarge| allocation())
+}
+
+/// Segments whose first `key_count` are a record's grouping keys, as sorting
+/// stores them.
+pub(super) trait Keys {
+    fn key_count(&self) -> usize;
+    fn segment(&self, at: usize) -> &[u8];
+    /// Orders by the key segments in turn, then by key count.
+    fn compare_keys(&self, other: &Self) -> Ordering {
+        let (a, b) = (self.key_count(), other.key_count());
+        for at in 0..a.min(b) {
+            let order = self.segment(at).cmp(other.segment(at));
+            if order != Ordering::Equal {
+                return order;
+            }
+        }
+        a.cmp(&b)
+    }
+}
+
+/// A record's segments: its grouping keys, then its projected fields (packed)
+/// or its original bytes.
+pub(super) trait Storage: Keys + Sized {
     const ORIGINAL: bool;
+    fn original(&self) -> Option<&[u8]>;
+}
+
+/// Storage built from a projection: the records of the reference sorts that
+/// tests compare sort chunks with.
+#[cfg(test)]
+pub(super) trait Build: Storage {
     fn build(
         raw: &[u8],
         data: &[u8],
@@ -68,21 +104,272 @@ pub(super) trait Storage: Sized {
         keys: usize,
         fold: bool,
     ) -> Result<Self, Failure>;
-    fn key_count(&self) -> usize;
-    fn segment(&self, at: usize) -> &[u8];
-    fn original(&self) -> Option<&[u8]>;
-    fn compare_keys(&self, other: &Self) -> Ordering;
-    fn owned_bytes(&self) -> Result<usize, Failure>;
-    fn language_keys(
-        &mut self,
-        _: &icu_collator::CollatorBorrowed<'_>,
-        _: &mut SortKeys,
-        _: Vec<Vec<u8>>,
-    ) -> Result<(), Failure> {
+    /// Storage whose key segments are `keys`, split at `ends`, followed by
+    /// `original`.
+    fn language(_keys: &[u8], _ends: &[usize], _original: &[u8]) -> Result<Self, Failure> {
         Err(super::unsupported(
             "internal language sorter requires original records",
         ))
     }
+}
+
+/// A record in a sort chunk's arena: a table of the segments' cumulative end
+/// offsets, `width` bytes each (little-endian), then the segments. The width
+/// is the smallest of 1, 2, 4 and 8 bytes that holds the segments' total
+/// length, so a small record costs one byte per segment and a record of any
+/// size or segment count fits.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct View<'a> {
+    /// The end table.
+    table: &'a [u8],
+    /// The segments.
+    payload: &'a [u8],
+    /// The first segment's end, which is read most.
+    first: usize,
+    width: u8,
+    count: u32,
+    keys: u32,
+}
+
+impl<'a> View<'a> {
+    /// The end-table width for segments of `length` bytes in total.
+    pub(super) fn width(length: usize) -> u8 {
+        if length <= 0xff {
+            1
+        } else if length <= 0xffff {
+            2
+        } else if length <= 0xffff_ffff {
+            4
+        } else {
+            8
+        }
+    }
+    /// Appends `end` to an end table of width `width`.
+    pub(super) fn put_end(out: &mut Vec<u8>, end: usize, width: u8) {
+        match width {
+            1 => out.push(end as u8),
+            2 => out.extend_from_slice(&(end as u16).to_le_bytes()),
+            4 => out.extend_from_slice(&(end as u32).to_le_bytes()),
+            _ => out.extend_from_slice(&(end as u64).to_le_bytes()),
+        }
+    }
+    #[inline]
+    fn read(table: &[u8], width: u8, at: usize) -> usize {
+        match width {
+            1 => usize::from(table[at]),
+            2 => usize::from(u16::from_le_bytes([table[2 * at], table[2 * at + 1]])),
+            4 => {
+                let bytes = &table[4 * at..4 * at + 4];
+                u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize
+            }
+            _ => u64::from_le_bytes(table[8 * at..8 * at + 8].try_into().unwrap()) as usize,
+        }
+    }
+    /// The record of `count` segments (the first `keys` of them keys) whose
+    /// end table, of `width`-byte entries, starts `bytes`.
+    #[inline]
+    pub(super) fn new(bytes: &'a [u8], width: u8, count: usize, keys: usize) -> Self {
+        let (table, rest) = bytes.split_at(count * usize::from(width));
+        let (first, length) = match count {
+            0 => (0, 0),
+            1 => {
+                let end = Self::read(table, width, 0);
+                (end, end)
+            }
+            _ => (
+                Self::read(table, width, 0),
+                Self::read(table, width, count - 1),
+            ),
+        };
+        Self {
+            table,
+            payload: &rest[..length],
+            first,
+            width,
+            count: count as u32,
+            keys: keys as u32,
+        }
+    }
+    /// The end of segment `at`.
+    #[inline]
+    fn end(&self, at: usize) -> usize {
+        if at == 0 {
+            self.first
+        } else if at + 1 == self.count as usize {
+            self.payload.len()
+        } else {
+            Self::read(self.table, self.width, at)
+        }
+    }
+    /// Segment `at`, borrowed from the arena rather than from the view.
+    #[inline]
+    pub(super) fn bytes(&self, at: usize) -> &'a [u8] {
+        let start = if at == 0 { 0 } else { self.end(at - 1) };
+        &self.payload[start..self.end(at)]
+    }
+    /// Every segment's bytes.
+    pub(super) fn payload(&self) -> &'a [u8] {
+        self.payload
+    }
+}
+
+impl Keys for View<'_> {
+    #[inline]
+    fn key_count(&self) -> usize {
+        self.keys as usize
+    }
+    #[inline]
+    fn segment(&self, at: usize) -> &[u8] {
+        self.bytes(at)
+    }
+}
+
+/// A sorted record's storage: decoded from a run, or viewed in the chunk
+/// that stayed in memory.
+pub(super) enum Mixed<'a, S> {
+    Owned(S),
+    View(View<'a>),
+}
+
+impl<S: Storage> Keys for Mixed<'_, S> {
+    #[inline]
+    fn key_count(&self) -> usize {
+        match self {
+            Self::Owned(storage) => storage.key_count(),
+            Self::View(view) => view.key_count(),
+        }
+    }
+    #[inline]
+    fn segment(&self, at: usize) -> &[u8] {
+        match self {
+            Self::Owned(storage) => storage.segment(at),
+            Self::View(view) => view.bytes(at),
+        }
+    }
+}
+
+impl<S: Storage> Storage for Mixed<'_, S> {
+    const ORIGINAL: bool = S::ORIGINAL;
+    #[inline]
+    fn original(&self) -> Option<&[u8]> {
+        S::ORIGINAL.then(|| self.segment(self.key_count()))
+    }
+}
+
+/// Per-thread buffers for building language records.
+#[derive(Default)]
+pub(super) struct LanguageScratch {
+    /// Each key's field span within the data.
+    pub(super) identities: Vec<Range<usize>>,
+    /// The key segments ([`language_segments`]).
+    pub(super) bytes: Vec<u8>,
+    /// The end of each key segment in `bytes`.
+    pub(super) ends: Vec<usize>,
+    /// Key texts as they are read.
+    pub(super) text: KeyText,
+}
+
+/// Buffers for a key text as language sorting reads it.
+#[derive(Default)]
+pub(super) struct KeyText {
+    /// The text case-folded.
+    pub(super) folded: String,
+    /// The text with glibc's contractions composed.
+    pub(super) composed: String,
+}
+
+/// Appends a record's language key segments to `out`, ending each in `ends`:
+/// per key its collation sort key and then its identity, so that keys glibc's
+/// `strcoll` ties leave the order to the next key, as GNU `sort` does.
+///
+/// Key `at` is sorted by the sort key of `text(at)`, ASCII-uppercased with
+/// `fold`. Its identity is `identity(at)`, the key field (ASCII-lowercased
+/// with `fold`), which orders the spellings the collator ties as glibc's
+/// fourth level does: by code point, except for the letters glibc places
+/// otherwise against their decomposition ([`locale::Collator::write_identity`]).
+/// Both are read as the sort reads them (uppercased with `fold`) with
+/// glibc's contractions composed ([`locale::compose`]), which glibc ties with
+/// the letters they spell, so keys spelled so tie on every segment and stay
+/// in input order, as in the stable sort GNU runs.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn language_segments<'a>(
+    count: usize,
+    mut text: impl FnMut(usize) -> Result<&'a str, Failure>,
+    identity: impl Fn(usize) -> &'a [u8],
+    fold: bool,
+    collator: &locale::Collator,
+    sort_keys: &mut SortKeys,
+    scratch: &mut KeyText,
+    out: &mut Vec<u8>,
+    ends: &mut Vec<usize>,
+) -> Result<(), Failure> {
+    let KeyText { folded, composed } = scratch;
+    out.clear();
+    ends.clear();
+    ends.try_reserve_exact(2 * count)
+        .map_err(|_| allocation())?;
+    for at in 0..count {
+        let original = text(at)?;
+        let mut text = original;
+        if fold {
+            folded.clear();
+            folded.try_reserve(text.len()).map_err(|_| allocation())?;
+            folded.push_str(text);
+            folded.make_ascii_uppercase();
+            text = folded.as_str();
+        }
+        if compose(text, composed)? {
+            text = composed.as_str();
+        }
+        sort_keys.write(collator, text, out)?;
+        ends.push(out.len());
+        let field = identity(at);
+        let start = out.len();
+        // The identity is usually the key text, read just so; otherwise it is
+        // read as the sort reads it: GNU `sort -f` uppercases.
+        let read = if field == original.as_bytes() {
+            Some(text)
+        } else if field.is_ascii() {
+            None
+        } else if let Ok(mut written) = std::str::from_utf8(field) {
+            if fold {
+                folded.clear();
+                folded
+                    .try_reserve(written.len())
+                    .map_err(|_| allocation())?;
+                folded.push_str(written);
+                folded.make_ascii_uppercase();
+                written = folded.as_str();
+            }
+            if compose(written, composed)? {
+                written = composed.as_str();
+            }
+            Some(written)
+        } else {
+            None
+        };
+        let placed = match read {
+            Some(read) => collator
+                .write_identity(read, out)
+                .map_err(|locale::KeyTooLarge| allocation())?,
+            None => false,
+        };
+        if !placed {
+            let bytes = read.map_or(field, str::as_bytes);
+            out.try_reserve(bytes.len()).map_err(|_| allocation())?;
+            out.extend_from_slice(bytes);
+        }
+        if fold {
+            out[start..].make_ascii_lowercase();
+        }
+        ends.push(out.len());
+    }
+    Ok(())
+}
+
+/// [`locale::compose`], refusing if `out` cannot grow.
+fn compose(text: &str, out: &mut String) -> Result<bool, Failure> {
+    locale::compose(text, out).map_err(|locale::KeyTooLarge| allocation())
 }
 
 /// Short records keep their bytes inline, with one-byte end offsets, so the
@@ -130,7 +417,7 @@ impl Segments {
         }
         Self::heap(count, payload)
     }
-    /// Heap storage, whose bytes `heap_bytes_mut` exposes for incremental filling.
+    /// Heap storage for `count` segments, with room for `payload` bytes.
     pub(super) fn heap(count: usize, payload: usize) -> Result<Self, Failure> {
         let header = count
             .checked_mul(std::mem::size_of::<usize>())
@@ -143,9 +430,61 @@ impl Segments {
         bytes.resize(header, 0);
         Ok(Self::Heap { bytes, count })
     }
-    /// Heap storage from bytes already holding `count` offsets and payload.
-    pub(super) fn from_heap(bytes: Vec<u8>, count: usize) -> Self {
-        Self::Heap { bytes, count }
+    /// Storage for `count` segments whose lengths `length` yields in order, with
+    /// a zeroed payload for `payload_mut` to fill. Small records stay inline, so
+    /// decoding them allocates nothing; a record of more than `INLINE` segments
+    /// is always on the heap and takes its ends directly.
+    pub(super) fn with_lengths(
+        count: usize,
+        mut length: impl FnMut() -> Result<usize, Failure>,
+    ) -> Result<Self, Failure> {
+        let mut segments = if count <= INLINE {
+            let mut lengths = [0; INLINE];
+            let mut total = 0usize;
+            for slot in &mut lengths[..count] {
+                *slot = length()?;
+                total = total.checked_add(*slot).ok_or_else(allocation)?;
+            }
+            // `new` checks that the offsets and payload fit, inline or on the heap.
+            let mut segments = Self::new(count, total)?;
+            let mut end = segments.header();
+            for (at, slot) in lengths[..count].iter().enumerate() {
+                end += slot;
+                segments.set_end(at, end);
+            }
+            segments
+        } else {
+            let mut segments = Self::heap(count, 0)?;
+            let mut end = segments.header();
+            for at in 0..count {
+                end = end.checked_add(length()?).ok_or_else(allocation)?;
+                segments.set_end(at, end);
+            }
+            segments
+        };
+        let end = if segments.count() == 0 {
+            segments.header()
+        } else {
+            segments.end(segments.count() - 1)
+        };
+        match &mut segments {
+            Self::Inline { len, .. } => *len = end as u8,
+            Self::Heap { bytes, .. } => {
+                bytes
+                    .try_reserve_exact(end - bytes.len())
+                    .map_err(|_| allocation())?;
+                bytes.resize(end, 0);
+            }
+        }
+        Ok(segments)
+    }
+    /// Every segment's bytes, after the offset table, for filling in place.
+    pub(super) fn payload_mut(&mut self) -> &mut [u8] {
+        let header = self.header();
+        match self {
+            Self::Inline { len, data, .. } => &mut data[header..usize::from(*len)],
+            Self::Heap { bytes, .. } => &mut bytes[header..],
+        }
     }
     pub(super) fn count(&self) -> usize {
         match self {
@@ -206,38 +545,8 @@ impl Segments {
     pub(super) fn payload(&self) -> &[u8] {
         &self.all()[self.header()..]
     }
-    /// Heap bytes owned beyond the record itself.
-    pub(super) fn capacity(&self) -> usize {
-        match self {
-            Self::Inline { .. } => 0,
-            Self::Heap { bytes, .. } => bytes.capacity(),
-        }
-    }
-    /// The heap bytes, moving inline storage to the heap first.
-    pub(super) fn heap_bytes_mut(&mut self) -> Result<&mut Vec<u8>, Failure> {
-        if let Self::Inline { .. } = self {
-            let mut heap = Self::heap(self.count(), self.payload().len())?;
-            let shift = heap.header() - self.header();
-            for at in 0..self.count() {
-                heap.set_end(at, self.end(at) + shift);
-            }
-            if let Self::Heap { bytes, .. } = &mut heap {
-                bytes.extend_from_slice(self.payload());
-            }
-            *self = heap;
-        }
-        match self {
-            Self::Heap { bytes, .. } => Ok(bytes),
-            Self::Inline { .. } => unreachable!("moved to the heap above"),
-        }
-    }
-    pub(super) fn into_vec(self) -> Vec<u8> {
-        match self {
-            Self::Inline { len, data, .. } => data[..usize::from(len)].to_vec(),
-            Self::Heap { bytes, .. } => bytes,
-        }
-    }
     /// Appends segment `at`; inline records were sized for it by `new`.
+    #[cfg(test)]
     fn append(&mut self, at: usize, value: &[u8], fold: bool) {
         let start = self.all().len();
         let end = start + value.len();
@@ -258,23 +567,28 @@ impl Segments {
         }
         self.set_end(at, end);
     }
-    fn compare(&self, other: &Self, keys: usize, other_keys: usize) -> Ordering {
-        for at in 0..keys.min(other_keys) {
-            let order = self.segment(at).cmp(other.segment(at));
-            if order != Ordering::Equal {
-                return order;
-            }
-        }
-        keys.cmp(&other_keys)
-    }
 }
 
 pub(super) struct Packed {
     pub(super) segments: Segments,
     pub(super) keys: usize,
 }
+impl Keys for Packed {
+    fn key_count(&self) -> usize {
+        self.keys
+    }
+    fn segment(&self, at: usize) -> &[u8] {
+        self.segments.segment(at)
+    }
+}
 impl Storage for Packed {
     const ORIGINAL: bool = false;
+    fn original(&self) -> Option<&[u8]> {
+        None
+    }
+}
+#[cfg(test)]
+impl Build for Packed {
     fn build(
         raw: &[u8],
         _: &[u8],
@@ -291,59 +605,27 @@ impl Storage for Packed {
         }
         Ok(Self { segments, keys })
     }
-    fn key_count(&self) -> usize {
-        self.keys
-    }
-    fn segment(&self, at: usize) -> &[u8] {
-        self.segments.segment(at)
-    }
-    fn original(&self) -> Option<&[u8]> {
-        None
-    }
-    fn compare_keys(&self, other: &Self) -> Ordering {
-        self.segments
-            .compare(&other.segments, self.keys, other.keys)
-    }
-    fn owned_bytes(&self) -> Result<usize, Failure> {
-        Ok(self.segments.capacity())
-    }
 }
 
 pub(super) struct Original {
     pub(super) segments: Segments,
 }
-impl Original {
-    pub(super) fn replace_original(&mut self, bytes: &[u8]) -> Result<(), Failure> {
-        // Keep the key segments and replace the original in heap bytes.
-        let keys = if self.key_count() == 0 {
-            0
-        } else {
-            self.segments.end(self.key_count() - 1) - self.segments.header()
-        };
-        let header = self.segments.count() * std::mem::size_of::<usize>();
-        let heap = self.segments.heap_bytes_mut()?;
-        heap.truncate(header + keys);
-        heap.try_reserve_exact(bytes.len())
-            .map_err(|_| allocation())?;
-        self.segments.append(self.key_count(), bytes, false);
-        Ok(())
+impl Keys for Original {
+    fn key_count(&self) -> usize {
+        self.segments.count() - 1
     }
-    pub(super) fn into_original(self) -> Vec<u8> {
-        let at = self.key_count();
-        let start = if at == 0 {
-            self.segments.header()
-        } else {
-            self.segments.end(at - 1)
-        };
-        let end = self.segments.end(at);
-        let mut bytes = self.segments.into_vec();
-        bytes.copy_within(start..end, 0);
-        bytes.truncate(end - start);
-        bytes
+    fn segment(&self, at: usize) -> &[u8] {
+        self.segments.segment(at)
     }
 }
 impl Storage for Original {
     const ORIGINAL: bool = true;
+    fn original(&self) -> Option<&[u8]> {
+        Some(self.segment(self.key_count()))
+    }
+}
+#[cfg(test)]
+impl Build for Original {
     fn build(
         raw: &[u8],
         data: &[u8],
@@ -361,54 +643,20 @@ impl Storage for Original {
         segments.append(keys, data, false);
         Ok(Self { segments })
     }
-    fn language_keys(
-        &mut self,
-        collator: &icu_collator::CollatorBorrowed<'_>,
-        sort_keys: &mut SortKeys,
-        identity: Vec<Vec<u8>>,
-    ) -> Result<(), Failure> {
-        let mut keys = Vec::new();
-        keys.try_reserve_exact(
-            self.key_count()
-                .checked_add(identity.len())
-                .ok_or_else(allocation)?,
-        )
-        .map_err(|_| allocation())?;
-        for at in 0..self.key_count() {
-            let text = super::locale::text(self.segment(at))?;
-            let mut key = Vec::new();
-            sort_keys.write(collator, text, &mut key);
-            keys.push(key);
+    fn language(keys: &[u8], ends: &[usize], original: &[u8]) -> Result<Self, Failure> {
+        let count = ends.len().checked_add(1).ok_or_else(allocation)?;
+        let length = keys
+            .len()
+            .checked_add(original.len())
+            .ok_or_else(allocation)?;
+        let mut segments = Segments::new(count, length)?;
+        let mut start = 0;
+        for (at, &end) in ends.iter().enumerate() {
+            segments.append(at, &keys[start..end], false);
+            start = end;
         }
-        keys.extend(identity);
-        let raw = self.original().unwrap();
-        let length = keys.iter().try_fold(raw.len(), |n, key| {
-            n.checked_add(key.len()).ok_or_else(allocation)
-        })?;
-        let mut segments =
-            Segments::new(keys.len().checked_add(1).ok_or_else(allocation)?, length)?;
-        for (at, key) in keys.iter().enumerate() {
-            segments.append(at, key, false);
-        }
-        segments.append(keys.len(), raw, false);
-        self.segments = segments;
-        Ok(())
-    }
-    fn key_count(&self) -> usize {
-        self.segments.count() - 1
-    }
-    fn segment(&self, at: usize) -> &[u8] {
-        self.segments.segment(at)
-    }
-    fn original(&self) -> Option<&[u8]> {
-        Some(self.segment(self.key_count()))
-    }
-    fn compare_keys(&self, other: &Self) -> Ordering {
-        self.segments
-            .compare(&other.segments, self.key_count(), other.key_count())
-    }
-    fn owned_bytes(&self) -> Result<usize, Failure> {
-        Ok(self.segments.capacity())
+        segments.append(ends.len(), original, false);
+        Ok(Self { segments })
     }
 }
 
@@ -417,6 +665,55 @@ impl Storage for Original {
 #[allow(clippy::single_range_in_vec_init)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_sort_key_that_cannot_grow_refuses_and_otherwise_is_the_collators() {
+        let mut policy = crate::locale::Policy::default();
+        policy.collation = crate::locale::Collation::Language("de-DE");
+        let collator = policy.collator().ok().unwrap().unwrap();
+        let text = "\u{d6}lfeld und Stra\u{df}e, ".repeat(64);
+        let mut expected = Vec::new();
+        assert!(collator.write_key(&text, &mut expected).is_ok());
+        let mut out = Vec::new();
+        assert!(sort_key(&collator, &text, &mut out).is_ok());
+        assert_eq!(out, expected);
+        // Any write of the key can fail to grow the buffer; each refuses.
+        for fail_at in 0..4 {
+            crate::locale::KEY_WRITES_BEFORE_FAILURE.with(|count| count.set(Some(fail_at)));
+            let mut out = Vec::new();
+            let error = sort_key(&collator, &text, &mut out).err().unwrap();
+            assert_eq!(error.message, allocation().message, "{fail_at}");
+        }
+        crate::locale::KEY_WRITES_BEFORE_FAILURE.with(|count| count.set(None));
+    }
+
+    #[test]
+    fn a_sort_key_that_outgrows_its_room_is_the_collators_and_any_write_can_refuse() {
+        let mut policy = crate::locale::Policy::default();
+        policy.collation = crate::locale::Collation::Language("de-DE");
+        let collator = policy.collator().ok().unwrap().unwrap();
+        // An expanding ligature: far more than three key bytes per text byte.
+        let text = "\u{fdfa}".repeat(8);
+        let mut expected = Vec::new();
+        assert!(collator.write_key(&text, &mut expected).is_ok());
+        assert!(expected.len() > 3 * text.len() + 16, "{}", expected.len());
+        // Appended after what the buffer holds, as a projection does.
+        let mut out = b"held".to_vec();
+        assert!(sort_key(&collator, &text, &mut out).is_ok());
+        assert_eq!(out[..4], *b"held");
+        assert_eq!(out[4..], expected);
+        // Count the key's writes, then fail the first, a middle and the last.
+        crate::locale::KEY_WRITES_BEFORE_FAILURE.with(|count| count.set(Some(usize::MAX)));
+        assert!(sort_key(&collator, &text, &mut Vec::new()).is_ok());
+        let writes = usize::MAX
+            - crate::locale::KEY_WRITES_BEFORE_FAILURE.with(|count| count.get().unwrap());
+        for fail_at in [0, writes / 2, writes - 1] {
+            crate::locale::KEY_WRITES_BEFORE_FAILURE.with(|count| count.set(Some(fail_at)));
+            let error = sort_key(&collator, &text, &mut Vec::new()).err().unwrap();
+            assert_eq!(error.message, allocation().message, "{fail_at}");
+        }
+        crate::locale::KEY_WRITES_BEFORE_FAILURE.with(|count| count.set(None));
+    }
 
     #[test]
     fn cached_sort_keys_equal_direct_keys() {
@@ -446,11 +743,9 @@ mod tests {
             for round in 0..2 {
                 for text in &texts {
                     let mut direct = Vec::new();
-                    collator
-                        .write_sort_key_to(text.as_str(), &mut direct)
-                        .unwrap();
+                    assert!(collator.write_key(text, &mut direct).is_ok());
                     let mut cached = b"prefix".to_vec();
-                    cache.write(&collator, text, &mut cached);
+                    cache.write(&collator, text, &mut cached).ok().unwrap();
                     assert_eq!(&cached[6..], direct, "{text:?} round {round}");
                 }
             }
@@ -471,8 +766,8 @@ mod tests {
         }
     }
 
-    /// Records of every count and payload size around the inline limit read,
-    /// compare and move to the heap exactly like their heap equivalents.
+    /// Records of every count and payload size around the inline limit read
+    /// and compare exactly like their heap equivalents.
     #[test]
     fn inline_and_heap_segments_are_interchangeable() {
         let mut inline = 0;
@@ -485,7 +780,7 @@ mod tests {
                 let packed = Packed::build(&raw, &raw, &spans, keys, true).ok().unwrap();
                 let fits = count + payload <= INLINE;
                 inline += usize::from(fits);
-                assert_eq!(packed.owned_bytes().ok().unwrap() == 0, fits);
+                assert_eq!(matches!(packed.segments, Segments::Inline { .. }), fits);
                 for (at, span) in spans.iter().enumerate() {
                     let expected = &raw[span.clone()];
                     if at < keys {
@@ -497,12 +792,6 @@ mod tests {
                 let heap = heap_copy(&packed);
                 assert_eq!(packed.compare_keys(&heap), Ordering::Equal);
                 assert_eq!(packed.segments.payload(), heap.segments.payload());
-                let mut moved = Packed::build(&raw, &raw, &spans, keys, true).ok().unwrap();
-                moved.segments.heap_bytes_mut().ok().unwrap();
-                assert!(matches!(moved.segments, Segments::Heap { .. }));
-                for at in 0..count {
-                    assert_eq!(moved.segment(at), packed.segment(at));
-                }
             }
         }
         // Most small counts and payloads fit inline; guard against a zero limit.
@@ -524,26 +813,5 @@ mod tests {
         assert_eq!(a.compare_keys(&long), Ordering::Equal);
         assert_eq!(a.compare_keys(&two_keys), Ordering::Less);
         assert_eq!(heap_copy(&two_keys).compare_keys(&a), Ordering::Greater);
-    }
-
-    #[test]
-    fn inline_originals_replace_and_extract_with_keys() {
-        let mut record = Original::build(b"k	v", b"k	v", &[0..1], 1, true)
-            .ok()
-            .unwrap();
-        assert_eq!(record.owned_bytes().ok().unwrap(), 0);
-        assert_eq!(record.segment(0), b"K");
-        record
-            .replace_original(b"k	v # a longer note")
-            .ok()
-            .unwrap();
-        assert!(record.owned_bytes().ok().unwrap() > 0);
-        assert_eq!(record.segment(0), b"K");
-        assert_eq!(record.original(), Some(&b"k	v # a longer note"[..]));
-        assert_eq!(record.into_original(), b"k	v # a longer note");
-        let inline = Original::build(b"k	v", b"k	v", &[0..1], 1, false)
-            .ok()
-            .unwrap();
-        assert_eq!(inline.into_original(), b"k	v");
     }
 }

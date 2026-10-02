@@ -1,5 +1,9 @@
-//! Bounded header buffering over an unbuffered, borrowed transport.
-use super::Part;
+//! Standard output, buffered as GNU datamash's stdio buffers it: a bounded
+//! buffer (the output's block size, line-buffered on a terminal) over an
+//! unbuffered, borrowed transport. Every Mode writes through it. It keeps the
+//! first write error and what finalization needs, so write failures are
+//! reported in GNU's order (`command_output::complete`).
+use super::headers::Part;
 use std::io::{self, Write};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,7 +29,7 @@ pub(crate) struct Completion {
     pub unsupported_write: bool,
 }
 
-pub(crate) struct Buffered<'a, W> {
+pub(crate) struct BufferedStdout<'a, W> {
     writer: &'a mut W,
     pending: Vec<u8>,
     capacity: usize,
@@ -35,7 +39,7 @@ pub(crate) struct Buffered<'a, W> {
     unsupported_write: bool,
 }
 
-impl<'a, W: Write> Buffered<'a, W> {
+impl<'a, W: Write> BufferedStdout<'a, W> {
     pub fn new(writer: &'a mut W, capacity: usize, line_buffered: bool) -> io::Result<Self> {
         if !(1..=8192).contains(&capacity) {
             return Err(io::ErrorKind::InvalidInput.into());
@@ -286,7 +290,8 @@ mod tests {
             for percent in [1, 95, 99] {
                 for line_buffered in [false, true] {
                     let mut sink = Sink::default();
-                    let mut output = Buffered::new(&mut sink, capacity, line_buffered).unwrap();
+                    let mut output =
+                        BufferedStdout::new(&mut sink, capacity, line_buffered).unwrap();
                     let result = render(
                         b"value",
                         &[(Kind::Percentile(percent), 1)],
@@ -312,7 +317,7 @@ mod tests {
                 steps: VecDeque::from([Step::Short(1), Step::Error(28)]),
                 ..Sink::default()
             };
-            let mut output = Buffered::new(&mut sink, 4, false).unwrap();
+            let mut output = BufferedStdout::new(&mut sink, 4, false).unwrap();
             output.emit(Part::Operation(b"p"));
             output.raw(&vec![b'x'; 4 - remaining]);
             output.emit(Part::Parameter(b"95"));
@@ -339,7 +344,7 @@ mod tests {
                 (1, 2, if line { 14 } else { 0 }),
             ] {
                 let mut sink = Sink::default();
-                let mut output = Buffered::new(&mut sink, capacity, line).unwrap();
+                let mut output = BufferedStdout::new(&mut sink, capacity, line).unwrap();
                 assert!(
                     render(
                         &vec![b'a'; length],
@@ -372,7 +377,7 @@ mod tests {
                 full: true,
                 ..Sink::default()
             };
-            let mut output = Buffered::new(&mut sink, 4096, false).unwrap();
+            let mut output = BufferedStdout::new(&mut sink, 4096, false).unwrap();
             assert!(
                 render(
                     &vec![b'a'; length],
@@ -399,7 +404,7 @@ mod tests {
             full: true,
             ..Sink::default()
         };
-        let mut output = Buffered::new(&mut sink, 4096, false).unwrap();
+        let mut output = BufferedStdout::new(&mut sink, 4096, false).unwrap();
         let error = render(
             b"a",
             &[(Kind::Sum, 1), (Kind::Mean, 2)],
@@ -429,7 +434,7 @@ mod tests {
             steps: VecDeque::from([Step::Short(1), Step::Short(2)]),
             ..Sink::default()
         };
-        let mut output = Buffered::new(&mut sink, 4, false).unwrap();
+        let mut output = BufferedStdout::new(&mut sink, 4, false).unwrap();
         output.emit(Part::Name(b"abc"));
         let result = output.finish(close);
         assert!(result.first_error.is_none());
@@ -446,7 +451,7 @@ mod tests {
             steps: VecDeque::from([Step::Short(128), Step::Error(28)]),
             ..Sink::default()
         };
-        let mut output = Buffered::new(&mut sink, 128, false).unwrap();
+        let mut output = BufferedStdout::new(&mut sink, 128, false).unwrap();
         for name in [&vec![b'a'; 119][..], &vec![b'b'; 127][..]] {
             output.emit(Part::Operation(b"sum"));
             output.emit(Part::Name(name));
@@ -470,7 +475,7 @@ mod tests {
     fn initial_string_and_subsequent_name_respect_capacity_boundaries() {
         for capacity in [1, 127, 128, 129, 1024, 4096, 8192] {
             let mut sink = Sink::default();
-            let mut output = Buffered::new(&mut sink, capacity, false).unwrap();
+            let mut output = BufferedStdout::new(&mut sink, capacity, false).unwrap();
             output.before_diagnostic();
             output.emit(Part::Operation(b"sum"));
             assert_eq!(output.writer.attempts.len(), usize::from(capacity < 128));
@@ -488,7 +493,7 @@ mod tests {
     #[test]
     fn line_buffer_string_uses_last_newline_when_transfer_fits() {
         let mut sink = Sink::default();
-        let mut output = Buffered::new(&mut sink, 129, true).unwrap();
+        let mut output = BufferedStdout::new(&mut sink, 129, true).unwrap();
         output.emit(Part::Operation(b"sum"));
         output.emit(Part::Name(b"a\nb\nc"));
         assert_eq!(output.writer.attempts, vec![b"sum(a\nb\n".to_vec()]);
@@ -503,7 +508,7 @@ mod tests {
                 steps: VecDeque::from([step]),
                 ..Sink::default()
             };
-            let mut output = Buffered::new(&mut sink, 4096, false).unwrap();
+            let mut output = BufferedStdout::new(&mut sink, 4096, false).unwrap();
             output.emit(Part::Operation(b"sum"));
             output.before_diagnostic();
             let result = output.finish(close);
@@ -520,7 +525,7 @@ mod tests {
     fn close_failure_and_pending_before_successful_flush_remain_distinct() {
         for pending in [false, true] {
             let mut sink = Sink::default();
-            let mut output = Buffered::new(&mut sink, 4096, false).unwrap();
+            let mut output = BufferedStdout::new(&mut sink, 4096, false).unwrap();
             if pending {
                 output.emit(Part::Close);
             }
@@ -538,7 +543,7 @@ mod tests {
     #[test]
     fn maximum_header_streams_without_truncation() {
         let mut sink = Sink::default();
-        let mut output = Buffered::new(&mut sink, 4096, false).unwrap();
+        let mut output = BufferedStdout::new(&mut sink, 4096, false).unwrap();
         assert!(
             render(
                 &vec![b'a'; 8192],
@@ -563,7 +568,7 @@ mod tests {
             steps: VecDeque::from([Step::Short(2), Step::Error(28)]),
             ..Sink::default()
         };
-        let mut output = Buffered::new(&mut sink, 128, false).unwrap();
+        let mut output = BufferedStdout::new(&mut sink, 128, false).unwrap();
         output.emit(Part::Operation(b"sum"));
         output.emit(Part::Name(&[b'a'; 200]));
         output.emit(Part::Close);
@@ -587,7 +592,7 @@ mod tests {
             steps: VecDeque::from([Step::Error(28), Step::Error(5)]),
             ..Sink::default()
         };
-        let mut output = Buffered::new(&mut sink, 128, false).unwrap();
+        let mut output = BufferedStdout::new(&mut sink, 128, false).unwrap();
         output.emit(Part::Name(&vec![b'a'; 300]));
         output.emit(Part::Close);
         output.emit(Part::Separator(b'\n'));
@@ -606,7 +611,7 @@ mod tests {
     fn small_line_buffers_keep_direct_transfer_and_newline_boundaries() {
         for capacity in [1, 127, 128, 129] {
             let mut sink = Sink::default();
-            let mut output = Buffered::new(&mut sink, capacity, true).unwrap();
+            let mut output = BufferedStdout::new(&mut sink, capacity, true).unwrap();
             output.emit(Part::Operation(b"sum"));
             output.emit(Part::Name(b"a\nb\nc"));
             assert!(output.finish(close).first_error.is_none());
@@ -627,7 +632,7 @@ mod tests {
     fn dropping_buffer_does_not_flush_or_close_transport() {
         let mut sink = Sink::default();
         {
-            let mut output = Buffered::new(&mut sink, 4096, false).unwrap();
+            let mut output = BufferedStdout::new(&mut sink, 4096, false).unwrap();
             output.emit(Part::Operation(b"sum"));
         }
         assert!(sink.attempts.is_empty());

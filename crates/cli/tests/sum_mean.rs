@@ -183,3 +183,51 @@ fn sorted_wide_headers_comments_and_named_fields() {
     );
     assert!(out.stderr.is_empty());
 }
+
+/// Sorted numeric jobs keep only the selected fields, yet read each number
+/// as GNU does, from the field on through the rest of the record: the parse
+/// runs past a field of blanks into the next field, and past an exponent
+/// letter into a sign separator (GNU datamash 1.9, field-ops.c:378-405).
+#[test]
+fn sorted_numbers_read_on_past_their_field_as_gnu_does() {
+    let blanks = " ".repeat(600);
+    let blanks_exponent = format!("{}1e", " ".repeat(510));
+    for (args, input, status, stdout, stderr) in [
+        (
+            vec!["-s", "-g", "1", "sum", "2"],
+            format!("a\t{blanks}\t5\n"),
+            1,
+            "",
+            "internal error: input field too long (600)\n",
+        ),
+        (
+            vec!["-s", "-g", "1", "sum", "2"],
+            "a\t \t5\n".to_string(),
+            1,
+            "",
+            "invalid numeric value in line 1 field 2: ' '\n",
+        ),
+        (
+            vec!["-t", "+", "-s", "-g", "1", "sum", "2"],
+            format!("a+{blanks_exponent}+5\n"),
+            1,
+            "",
+            "internal error: input field too long (512)\n",
+        ),
+        (
+            vec!["-t", ",", "-s", "-g", "1", "sum", "2", "max", "2"],
+            "b,2\na,1e5\nb,-3\n".to_string(),
+            0,
+            "a,100000,100000\nb,-1,2\n",
+            "",
+        ),
+    ] {
+        let out = command(&args, input.as_bytes());
+        assert_eq!(out.status.code(), Some(status), "{args:?}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), stdout, "{args:?}");
+        // After the program name, which is the binary's path here.
+        let message = String::from_utf8_lossy(&out.stderr);
+        let message = message.split_once(": ").map_or(&*message, |(_, rest)| rest);
+        assert_eq!(message, stderr, "{args:?}");
+    }
+}

@@ -42,4 +42,6 @@
     - [0005: Growable, checked storage](adr/0005-growable-checked-storage.md)
     - [0006: Supervised external sort](adr/0006-supervised-external-sort.md)
     - [0007: Linux first](adr/0007-linux-first.md)
+    - [0008: Hash grouping with restart](adr/0008-hash-grouping-with-restart.md)
+    - [0009: Built-in locale tables](adr/0009-built-in-locale-tables.md)
 - [About](about.md)

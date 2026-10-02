@@ -32,7 +32,8 @@ millions of decimals.
 
 {{#include benchmarks/core-jobs.svg}}
 
-<small>* In 0.1.0, except for sorting data far larger than memory.
+<small>* In 0.1.0, some disk-spilling sorts and the distinct-value geometric-mean
+job are slower on native Linux.
 [All results and the method](benchmarks/index.md).</small>
 
 ## And better in other ways

@@ -77,7 +77,7 @@ def sha256(path):
 
 
 def synthetic(path, count, groups):
-    """The generator from the Fastmash repository (data/workloads/prepare.py)."""
+    """The synthetic input of the published benchmarks: same generator, same seed."""
     tmp = path.with_suffix('.part')
     with tmp.open('w', encoding='ascii', newline='\n') as stream:
         stream.write('sample\tgroup\tsignal\tfactor\n')

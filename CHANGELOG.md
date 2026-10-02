@@ -10,17 +10,15 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-09-29
-
-First public release.
+Planned for the first public release, 0.1.0.
 
 ### Added
 
 - The GNU datamash 1.9 command language on Linux x86-64 and WSL2: aggregate
   statistics, grouping (`-g`, `groupby`) with optional sorting (`-s`),
-  `crosstab`, field modes (`cut`, `reverse`, `noop`), table modes (`check`,
-  `transpose`, `rmdup`) and per-row operations (rounding, binning, `getnum`,
-  `base64`, checksums, path names).
+  `crosstab`, field modes (`reverse`, `noop`), table modes (`check`,
+  `transpose`, `rmdup`) and per-row operations (`cut`, rounding, binning,
+  `getnum`, `base64`, checksums, path names).
 - Named fields with input headers, generated output headers, custom field and
   output separators, whitespace splitting, NUL-terminated records, comment
   skipping, `--vnlog` input, missing-value removal (`--narm`), `--format` and

@@ -30,6 +30,10 @@ fn invoke_at(
         .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
+        // These tests are of the sort itself (its memory, spills and
+        // routes), which hash grouping would otherwise take over for input
+        // from a file.
+        .env("FASTMASH_GROUPING", "sort")
         .env("FASTMASH_SORT_MEMORY_BYTES", memory)
         .stdin(fs::File::open(&path).unwrap())
         .stdout(if full {
@@ -482,4 +486,463 @@ fn spill_write_failure_does_not_leave_named_files() {
     );
     assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
     fs::remove_dir(path).unwrap();
+}
+
+/// Spilled runs through several merge levels keep every field length (empty,
+/// and across the one-, two- and three-byte length boundaries) and the input
+/// order of equal keys: the output equals the in-memory sort.
+#[test]
+fn multi_level_spills_match_the_in_memory_sort() {
+    let lengths = [0, 1, 127, 128, 16383, 16384, 20000, 3];
+    let mut input = Vec::new();
+    let mut x = 12345u64;
+    for row in 0..700u64 {
+        x = (x * 69069 + 1) % 4294967296;
+        let key = (x >> 16) % 23;
+        let width = lengths[(x % 8) as usize];
+        let text: String = (0..width)
+            .map(|at| char::from(b'a' + ((at as u64 + row) % 26) as u8))
+            .collect();
+        let key = if key == 0 {
+            String::new()
+        } else {
+            format!("k{key}")
+        };
+        input.extend_from_slice(format!("{key}\t{}\t{text}\t{row}\n", x % 1000).as_bytes());
+    }
+    let jobs: &[&[&str]] = &[
+        // Packed records.
+        &["-s", "-g", "1", "count", "2", "collapse", "3", "last", "4"],
+        &["-s", "-g", "3,1", "first", "4"],
+        // Original records.
+        &["-s", "-g", "1", "sum", "2", "first", "3", "last", "4"],
+        &["-s", "--full", "-g", "1", "count", "2"],
+    ];
+    let binary = candidate();
+    for args in jobs {
+        let memory = invoke(&binary, args, &input, "67108864");
+        assert!(memory.status.success(), "{args:?}: {memory:?}");
+        // One record per run with "1": about four merge levels.
+        for target in ["1", "65536"] {
+            let spilled = invoke(&binary, args, &input, target);
+            assert!(spilled.status.success(), "{args:?} {target}: {spilled:?}");
+            assert_eq!(spilled.stdout, memory.stdout, "{args:?} {target}");
+            assert_eq!(spilled.stderr, memory.stderr, "{args:?} {target}");
+        }
+    }
+}
+
+/// The unsorted Group loop and the native sorted one (in memory and spilled,
+/// with packed and original records) group already sorted input alike.
+#[test]
+fn every_sort_route_groups_sorted_input_alike() {
+    let mut tab = Vec::new();
+    let mut spaced = Vec::new();
+    for row in 0..3000u32 {
+        let key = row / 7;
+        let label = ["x", "y", "z"][(key % 3) as usize];
+        tab.extend_from_slice(format!("k{key:04}\t{}\t{label}\n", row % 97).as_bytes());
+        spaced.extend_from_slice(format!("k{key:04}  {}   {label}\n", row % 97).as_bytes());
+    }
+    let jobs: &[(&[&str], &[u8])] = &[
+        // Packed records: text operations only.
+        (
+            &[
+                "-g", "1", "count", "2", "first", "3", "last", "3", "unique", "3",
+            ],
+            &tab,
+        ),
+        // Original records: numbers and the Full row.
+        (&["-g", "1", "sum", "2", "mean", "2", "median", "2"], &tab),
+        (&["--full", "-g", "1", "count", "2"], &tab),
+        (&["-g", "1,3", "countunique", "2"], &tab),
+        (&["-W", "-g", "1", "sum", "2", "collapse", "3"], &spaced),
+    ];
+    let binary = candidate();
+    for (args, input) in jobs {
+        let unsorted = invoke(&binary, args, input, "67108864");
+        assert!(unsorted.status.success(), "{args:?}: {unsorted:?}");
+        let sorted_args: Vec<&str> = ["-s"].into_iter().chain(args.iter().copied()).collect();
+        for memory in ["67108864", "4096"] {
+            let sorted = invoke(&binary, &sorted_args, input, memory);
+            assert_eq!(
+                sorted.status.code(),
+                unsorted.status.code(),
+                "{args:?} {memory}"
+            );
+            assert_eq!(sorted.stdout, unsorted.stdout, "{args:?} {memory}");
+            assert_eq!(sorted.stderr, unsorted.stderr, "{args:?} {memory}");
+        }
+    }
+}
+
+/// Runs `binary` on `input` from a regular file, in the locale and with the
+/// sort memory and grouping settings of `environment`.
+fn invoke_in(
+    binary: &std::ffi::OsStr,
+    args: &[&str],
+    input: &[u8],
+    environment: &[(&str, &str)],
+) -> Output {
+    let path = std::env::temp_dir().join(format!(
+        "grouping-in-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    fs::write(&path, input).unwrap();
+    let result = Command::new("/usr/bin/timeout")
+        .args(["--kill-after=2s", "30s"])
+        .arg(binary)
+        .args(args)
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("TZ", "UTC")
+        .envs(environment.iter().copied())
+        .stdin(fs::File::open(&path).unwrap())
+        .output()
+        .unwrap();
+    fs::remove_file(path).unwrap();
+    result
+}
+
+/// `FASTMASH_GROUPING` is read only by sorted jobs with grouping keys, the
+/// only jobs that take a Sort route; the others ignore any value.
+#[test]
+fn grouping_setting_is_active_only_for_sorted_grouping() {
+    let environment = [("LC_ALL", "C"), ("FASTMASH_GROUPING", "invalid")];
+    for args in [
+        &["-g", "1", "count", "2"][..],
+        &["-s", "count", "2"],
+        &["sum", "2"],
+        &["-s", "transpose"],
+    ] {
+        let out = invoke_in(&candidate(), args, b"a\t1\n", &environment);
+        assert_eq!(out.status.code(), Some(0), "{args:?}");
+    }
+    let out = invoke_in(
+        &candidate(),
+        &["-s", "-g", "1", "count", "2"],
+        b"a\t1\n",
+        &environment,
+    );
+    assert_eq!(out.status.code(), Some(77));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("FASTMASH_GROUPING must be"));
+}
+
+/// Hash grouping of sorted Groups, and the sort it restarts into, write what
+/// the sort writes, in byte order and in a language locale, whether the
+/// classes fit their memory or not.
+#[test]
+fn hash_grouping_writes_what_the_sort_writes() {
+    let mut numbered = Vec::new();
+    for row in 0..3000u32 {
+        let key = (row * 7919) % 429;
+        numbered.extend_from_slice(format!("k{key:04}\t{}\tx{}\n", row % 97, row % 5).as_bytes());
+    }
+    let mut words = Vec::new();
+    let names = [
+        "apple",
+        "Apple",
+        "APPLE",
+        "b-1",
+        "b_1",
+        "éclair",
+        "Zebra",
+        "zebra",
+        "",
+        "e\u{301}clair",
+        "й",
+        "и\u{306}",
+    ];
+    for row in 0..500usize {
+        let name = names[(row * 5) % names.len()];
+        let other = names[(row * 3) % names.len()];
+        words.extend_from_slice(format!("{name}\t{other}\t{}\n", row % 11).as_bytes());
+    }
+    let jobs: &[(&[&str], &[u8])] = &[
+        (&["-s", "-g", "1", "count", "2", "sum", "2"], &numbered),
+        (
+            &["-s", "-g", "1", "first", "3", "last", "3", "unique", "3"],
+            &numbered,
+        ),
+        (&["-s", "--full", "-g", "1", "median", "2"], &numbered),
+        (&["-s", "--header-out", "-g", "3,1", "mean", "2"], &numbered),
+        (
+            &["-s", "-i", "-g", "1", "count", "1", "collapse", "2"],
+            &words,
+        ),
+        (&["-s", "-g", "2,1", "sum", "3"], &words),
+        (&["-s", "-i", "--full", "-g", "2", "last", "3"], &words),
+        (&["-s", "crosstab", "1,2", "sum", "3"], &words),
+        // Operations that the system sort serves in the C locales: a restart
+        // leaves standard input where it began, for the sort to read.
+        (&["-s", "-g", "1", "rms", "2", "geomean", "2"], &numbered),
+        (&["-s", "-H", "-g", "1", "rms", "2"], &numbered),
+        (
+            &["-s", "--header-out", "-g", "3", "harmmean", "2", "ms", "2"],
+            &numbered,
+        ),
+        (
+            &["-s", "--full", "-g", "1", "pskew", "2", "jarque", "2"],
+            &numbered,
+        ),
+        (
+            &["-s", "-g", "3,1", "pcov", "2:2", "spearson", "2:2"],
+            &numbered,
+        ),
+    ];
+    let binary = candidate();
+    for locale in ["C", "en_US.UTF-8"] {
+        for memory in ["67108864", "4096"] {
+            for (args, input) in jobs {
+                let environment = |grouping| {
+                    [
+                        ("LC_ALL", locale),
+                        ("FASTMASH_SORT_MEMORY_BYTES", memory),
+                        ("FASTMASH_GROUPING", grouping),
+                    ]
+                };
+                let sorted = invoke_in(&binary, args, input, &environment("sort"));
+                assert!(sorted.status.success(), "{args:?}: {sorted:?}");
+                for grouping in ["hash", "hash:restart=0", "hash:restart=100"] {
+                    let hashed = invoke_in(&binary, args, input, &environment(grouping));
+                    let case = format!("{args:?} {locale} {memory} {grouping}");
+                    assert_eq!(hashed.status.code(), sorted.status.code(), "{case}");
+                    assert_eq!(hashed.stdout, sorted.stdout, "{case}");
+                    assert_eq!(hashed.stderr, sorted.stderr, "{case}");
+                }
+            }
+        }
+    }
+    // A key the language sort refuses sends hash grouping back to the sort,
+    // which refuses it.
+    let invalid = b"a\t1\n\xff\t2\nb\t3\n";
+    let args = ["-s", "-g", "1", "sum", "2"];
+    let refused = |grouping| {
+        invoke_in(
+            &binary,
+            &args,
+            invalid,
+            &[("LC_ALL", "en_US.UTF-8"), ("FASTMASH_GROUPING", grouping)],
+        )
+    };
+    let (sorted, hashed) = (refused("sort"), refused("hash"));
+    assert_eq!(sorted.status.code(), Some(77), "{sorted:?}");
+    assert_eq!(
+        (hashed.status.code(), &hashed.stdout, &hashed.stderr),
+        (sorted.status.code(), &sorted.stdout, &sorted.stderr)
+    );
+    // Hash grouping ran, on standard input from a regular file only.
+    let args = ["-s", "-g", "1", "count", "2"];
+    let traced = [
+        ("LC_ALL", "C"),
+        ("FASTMASH_GROUPING", "hash"),
+        ("FASTMASH_SORT_TRACE", "1"),
+    ];
+    let hashed = invoke_in(&binary, &args, &numbered, &traced);
+    assert_eq!(
+        String::from_utf8_lossy(&hashed.stderr),
+        "sort route: hash first, then native sort of the selected fields\n\
+         hash grouping: 429 Groups of 3000 records\n"
+    );
+    let mut piped = Command::new(&binary)
+        .args(args)
+        .env_clear()
+        .envs(traced)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::io::Write::write_all(piped.stdin.as_mut().unwrap(), &numbered).unwrap();
+    drop(piped.stdin.take());
+    let piped = piped.wait_with_output().unwrap();
+    assert_eq!(piped.stdout, hashed.stdout);
+    assert!(!String::from_utf8_lossy(&piped.stderr).contains("hash grouping"));
+}
+
+/// With `-z -W`, GNU datamash sorts with `sort -z` and no `-t`, which splits
+/// keys at a newline as at any blank, while datamash's own fields keep it:
+/// records whose sort keys tie stay in input order, and Groups follow the
+/// fields. The outputs are GNU datamash 1.9's, with GNU sort 9.7.
+#[test]
+fn zero_terminated_whitespace_keys_split_at_newlines_as_the_sort_does() {
+    let jobs: [(&[u8], &[&str], &[u8]); 6] = [
+        (
+            b"a\nb 1\0a\nc 2\0a\nb 3\0",
+            &["-z", "-W", "-s", "-g", "1", "count", "1"],
+            b"a\nb\t1\0a\nc\t1\0a\nb\t1\0",
+        ),
+        (
+            b"q a\nb 1\0q a\nc 2\0q a\nb 3\0",
+            &["-z", "-W", "-s", "-g", "2", "count", "2"],
+            b"a\nb\t1\0a\nc\t1\0a\nb\t1\0",
+        ),
+        // The second sort key of the first two records is "\na", before " b".
+        (
+            b"q\na b 1\0q\na c 2\0q b 3\0",
+            &["-z", "-W", "-s", "-g", "1,2", "count", "2"],
+            b"q\na\tb\t1\0q\na\tc\t1\0q\tb\t1\0",
+        ),
+        (
+            b"b 1\0a\nc 2\0 a\tb 3\0x\n\na 4\0",
+            &["-z", "-W", "-s", "-g", "1", "count", "1"],
+            b"a\t1\0a\nc\t1\0b\t1\0x\n\na\t1\0",
+        ),
+        // A field of newlines alone joins the next sort field, so the third
+        // sort key of the first and last records is empty.
+        (
+            b"q \n x\0q a b\0q \n y\0",
+            &["-z", "-W", "-s", "-g", "3", "count", "3"],
+            b"x\t1\0y\t1\0b\t1\0",
+        ),
+        (
+            b"q \n y\0q a b\0q \n x\0",
+            &["-z", "-W", "-s", "-g", "3", "count", "3"],
+            b"y\t1\0x\t1\0b\t1\0",
+        ),
+    ];
+    for (input, args, expected) in jobs {
+        for locale in ["C", "en_US.UTF-8"] {
+            for grouping in ["sort", "hash"] {
+                // One byte makes the in-process sort spill.
+                for memory in ["67108864", "1"] {
+                    let out = invoke_in(
+                        &candidate(),
+                        args,
+                        input,
+                        &[
+                            ("LC_ALL", locale),
+                            ("FASTMASH_GROUPING", grouping),
+                            ("FASTMASH_SORT_MEMORY_BYTES", memory),
+                        ],
+                    );
+                    assert_eq!(
+                        (out.status.code(), out.stdout.as_slice()),
+                        (Some(0), expected),
+                        "{args:?} {locale} {grouping} {memory}: {out:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// Hash grouping that gives up sets standard input back to where the Command
+/// found it, which need not be the file's start: here a shell has read the
+/// first line, and the sort route, in process or through the system sort,
+/// reads the Input header and the records after it.
+#[test]
+fn a_restart_reads_standard_input_from_where_the_command_began() {
+    let mut input = b"read by the shell\nkey\tvalue\n".to_vec();
+    for row in 0..300u32 {
+        input.extend_from_slice(format!("k{}\t{}\n", row * 7 % 11, row % 13 + 1).as_bytes());
+    }
+    let path = std::env::temp_dir().join(format!("grouping-offset-{}", std::process::id()));
+    fs::write(&path, &input).unwrap();
+    let binary = candidate();
+    let run = |grouping: &str, args: &[&str]| {
+        Command::new("/usr/bin/timeout")
+            .args(["--kill-after=2s", "30s", "/bin/sh", "-c"])
+            .arg("IFS= read -r _ && exec \"$0\" \"$@\"")
+            .arg(&binary)
+            .args(args)
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("LC_ALL", "C")
+            .env("FASTMASH_GROUPING", grouping)
+            .stdin(fs::File::open(&path).unwrap())
+            .output()
+            .unwrap()
+    };
+    for args in [
+        &["-s", "-H", "-g", "1", "geomean", "2"][..],
+        &["-s", "-H", "-g", "key", "sum", "value"],
+    ] {
+        let sorted = run("sort", args);
+        assert!(sorted.status.success(), "{args:?}: {sorted:?}");
+        assert!(sorted.stdout.starts_with(b"GroupBy(key)\t"), "{sorted:?}");
+        for grouping in ["hash", "hash:restart=0", "hash:restart=100"] {
+            let hashed = run(grouping, args);
+            assert_eq!(
+                (hashed.status.code(), &hashed.stdout, &hashed.stderr),
+                (sorted.status.code(), &sorted.stdout, &sorted.stderr),
+                "{args:?} {grouping}"
+            );
+        }
+    }
+    fs::remove_file(path).unwrap();
+}
+
+/// The address space, in bytes, of an eight-thread language sort of 300,000
+/// rows under an address-space limit of `limit` bytes, paused after two
+/// thirds of its input, with the `environment` added; the sort is checked to
+/// complete with the right output.
+fn paused_language_sort(limit: u64, environment: &[(&str, &str)]) -> u64 {
+    use std::io::Write;
+    use std::os::unix::process::CommandExt;
+    let rows: Vec<u8> = (0..300_000u32)
+        .flat_map(|n| format!("k{:05}\t{}\n", n * 7919 % 20_000, n % 1000).into_bytes())
+        .collect();
+    let mut command = Command::new(candidate());
+    command
+        .args(["-s", "-g", "1", "count", "2"])
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("LC_ALL", "en_US.UTF-8")
+        .env("OMP_NUM_THREADS", "8")
+        .env("TMPDIR", std::env::temp_dir())
+        .envs(environment.iter().copied())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    // SAFETY: only async-signal-safe setrlimit and alarm run between fork
+    // and exec. The alarm, which exec keeps, ends a sort that hangs.
+    unsafe {
+        command.pre_exec(move || {
+            let limit = libc::rlimit {
+                rlim_cur: limit,
+                rlim_max: limit,
+            };
+            if libc::setrlimit(libc::RLIMIT_AS, &limit) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            libc::alarm(60);
+            Ok(())
+        });
+    }
+    let mut child = command.spawn().unwrap();
+    let mut input = child.stdin.take().unwrap();
+    // Once the sort has read most of two thirds of the rows, it has
+    // projected several batches of them on eight threads.
+    let (first, rest) = rows.split_at(rows.len() / 3 * 2);
+    let _ = input.write_all(first);
+    let status = fs::read_to_string(format!("/proc/{}/status", child.id())).unwrap_or_default();
+    let _ = input.write_all(rest);
+    drop(input);
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{environment:?}: {output:?}");
+    let expected: String = (0..20_000).map(|key| format!("k{key:05}\t15\n")).collect();
+    assert!(output.stdout == expected.as_bytes());
+    let size: u64 = status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmSize:"))
+        .and_then(|size| size.trim().strip_suffix(" kB"))
+        .and_then(|size| size.trim().parse().ok())
+        .unwrap_or_else(|| panic!("no address-space size in {status:?}"));
+    size << 10
+}
+
+/// Under an address-space limit, a language sort that projects on eight
+/// threads completes within a fraction of the limit: the malloc arenas are
+/// capped (one below 1 GiB). With the arena count that the environment sets,
+/// or without the cap, each thread's arena reserves 64 MiB, and the paused
+/// sort takes most of the limit (about 480 MiB of 512 where measured).
+#[test]
+fn eight_thread_language_sorts_use_a_fraction_of_an_address_space_limit() {
+    const LIMIT: u64 = 512 << 20;
+    let capped = paused_language_sort(LIMIT, &[]);
+    assert!(capped < LIMIT / 2, "{capped} bytes of address space");
+    let eight = paused_language_sort(LIMIT, &[("MALLOC_ARENA_MAX", "8")]);
+    assert!(eight > LIMIT / 2, "{eight} bytes with eight arenas");
 }

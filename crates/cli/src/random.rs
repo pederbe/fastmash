@@ -32,6 +32,54 @@ impl SeedSource for OsSeedSource {
     }
 }
 
+/// Hash state for the tables that `crosstab` and `rmdup` key by input bytes.
+/// Seeded from the kernel when it has bytes ready, like std's `RandomState`,
+/// and from a fixed seed otherwise: std's state aborts the process where no
+/// randomness is available (a seccomp filter denying `getrandom` in a chroot
+/// without /dev/urandom), and the tables' results never depend on the seed.
+/// The seed is hashed once, into the hasher each key's hash starts from.
+#[derive(Clone, Debug)]
+pub(super) struct TableState(std::hash::DefaultHasher);
+
+const GRND_NONBLOCK: usize = 1;
+const FIXED_SEED: u64 = 0x9e37_79b9_7f4a_7c15;
+
+impl TableState {
+    /// The state for `seed`, or for the fixed seed without one.
+    fn seeded(seed: Option<u64>) -> Self {
+        let mut hasher = std::hash::DefaultHasher::new();
+        std::hash::Hasher::write_u64(&mut hasher, seed.unwrap_or(FIXED_SEED));
+        Self(hasher)
+    }
+
+    fn kernel_seed() -> Option<u64> {
+        let mut bytes = [0u8; 8];
+        // SAFETY: the kernel writes at most `bytes.len()` bytes to `bytes`.
+        let read = unsafe {
+            crate::linux::syscall(
+                GETRANDOM,
+                bytes.as_mut_ptr() as usize,
+                bytes.len(),
+                GRND_NONBLOCK,
+                0,
+            )
+        };
+        (read == bytes.len() as isize).then(|| u64::from_ne_bytes(bytes))
+    }
+}
+impl Default for TableState {
+    fn default() -> Self {
+        Self::seeded(Self::kernel_seed())
+    }
+}
+impl std::hash::BuildHasher for TableState {
+    type Hasher = std::hash::DefaultHasher;
+    #[inline]
+    fn build_hasher(&self) -> Self::Hasher {
+        self.0.clone()
+    }
+}
+
 pub(super) struct RandomState {
     words: [u32; 31],
     front: usize,
@@ -192,5 +240,63 @@ mod tests {
         let restarted_group: Vec<_> = (0..3).map(|_| restarted.draw()).collect();
         assert_ne!(second_group, restarted_group);
         assert_eq!(first_group, restarted_group);
+    }
+}
+
+#[cfg(test)]
+mod table_state_tests {
+    use super::*;
+    use std::hash::BuildHasher;
+
+    #[test]
+    fn table_hashes_depend_only_on_the_state_and_the_key() {
+        let key: &[u8] = b"label";
+        for state in [
+            TableState::seeded(Some(FIXED_SEED)),
+            TableState::seeded(Some(1)),
+            TableState::default(),
+        ] {
+            assert_eq!(state.hash_one(key), state.hash_one(key));
+            assert_eq!(state.hash_one(key), state.clone().hash_one(key));
+        }
+        assert_ne!(
+            TableState::seeded(Some(1)).hash_one(key),
+            TableState::seeded(Some(2)).hash_one(key)
+        );
+    }
+
+    #[test]
+    fn a_table_key_hashes_as_its_seed_then_the_key_without_a_kernel_seed_the_fixed_one() {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+        // Hashing the seed before each key, as each hash did before the
+        // seeded hasher was kept.
+        let reseeded = |seed: u64, key: &dyn Fn(&mut DefaultHasher)| {
+            let mut hasher = DefaultHasher::new();
+            hasher.write_u64(seed);
+            key(&mut hasher);
+            hasher.finish()
+        };
+        for seed in [0, 1, FIXED_SEED, u64::MAX] {
+            let state = TableState::seeded(Some(seed));
+            for label in [
+                &b""[..],
+                &b"k000"[..],
+                &b"a longer label than one SipHash block"[..],
+            ] {
+                assert_eq!(
+                    state.hash_one(label.to_vec()),
+                    reseeded(seed, &|hasher| label.to_vec().hash(hasher))
+                );
+            }
+            assert_eq!(
+                state.hash_one((3usize, 7usize)),
+                reseeded(seed, &|hasher| (3usize, 7usize).hash(hasher))
+            );
+        }
+        // No kernel seed: the fixed seed, never an abort.
+        assert_eq!(
+            TableState::seeded(None).hash_one(b"k000".to_vec()),
+            reseeded(FIXED_SEED, &|hasher| b"k000".to_vec().hash(hasher))
+        );
     }
 }

@@ -106,7 +106,10 @@ Some points worth knowing when reading the code:
 - **Operations share work.** When several operations read the same field, the
   conversion, running sums and retained samples are shared. `median`, `q1` and
   `q3` on one field sort one sample set, and the moment statistics share one
-  pass over their inputs.
+  pass over their inputs. The operation set (`operation_set.rs`) plans this
+  sharing once the fields are known, reports what the command needs before
+  input is read, and collects records, resets between groups and writes
+  results.
 - **Groups are adjacent records.** Without `-s`, a group ends when its key
   changes, and state for the next group starts fresh. That is what makes
   unsorted grouping a single streaming pass.
@@ -117,33 +120,111 @@ Some points worth knowing when reading the code:
 ## Sorting
 
 `-s` sorts records by their grouping keys before grouping. Fastmash chooses a
-**sort route** for each command:
+**sort route** for each command before it reads input (`sort_route.rs`: `plan`,
+then `run`): whether hash grouping comes first, and which sort follows it. The
+external route's startup checks run then, with the others, so the
+sort after hash grouping is known before hash grouping starts:
 
 ```mermaid
 flowchart TD
-    A["-s with grouping keys"] --> B{"Supported by the<br/>native sorter?"}
+    A["-s with grouping keys"] --> R{"Input from a file, or piped<br/>in a language locale;<br/>no --vnlog or rand?"}
+    R -- yes --> Y[Hash grouping<br/>collect each group apart,<br/>sort only the groups]
+    Y -- "keys repeat, all exact" --> G
+    Y -- "otherwise: read the<br/>input again" --> B
+    R -- no --> B{"Supported by the<br/>native sorter?"}
     B -- yes --> C[Sort in memory<br/>stable, by projected keys]
-    C --> D{"Chunk exceeds<br/>FASTMASH_SORT_MEMORY_BYTES?"}
+    C --> D{"Chunk full, and memory<br/>too tight to hold the input?"}
     D -- no --> G[Grouping]
     D -- yes --> E[Spill sorted runs to<br/>anonymous files in TMPDIR]
     E --> F[Merge runs]
     F --> G
-    B -- no --> X["External route:<br/>sort supervisor runs /usr/bin/sort"]
+    B -- no --> H{"System sort can<br/>run and work here?"}
+    H -- no --> C
+    H -- yes --> X["External route:<br/>sort supervisor runs /usr/bin/sort"]
     X --> G
 ```
-<!-- description: With -s and grouping keys, jobs the native sorter supports are sorted in memory; chunks larger than FASTMASH_SORT_MEMORY_BYTES are spilled as sorted runs to anonymous files in TMPDIR and merged. Other jobs take the external route, where the sort supervisor runs /usr/bin/sort. Both routes feed grouping. -->
+<!-- description: With -s and grouping keys, jobs whose input comes from a file, or from a pipe in a language locale (without --vnlog or rand), are grouped by hash first: each group's records are collected apart and only the groups are sorted; where that is not exact or pays too little, the input is read again and sorted by the route the job would otherwise take. Jobs the native sorter supports are sorted in memory; a full chunk that memory does not allow to hold the rest of the input is spilled as a sorted run to anonymous files in TMPDIR, and the runs are merged. Other jobs take the external route, where the sort supervisor runs /usr/bin/sort, if the system sort can run and work there; otherwise they are sorted in memory too. Both routes feed grouping. -->
 
+- **Hash grouping** comes first, before the choice between the native and
+  the external route, when standard input is a regular file
+  (`projected_hash.rs`). GNU datamash sorts
+  with a stable `sort -s`, so each of its groups is exactly the records with
+  one key tuple, in input order. Hash grouping collects each tuple's records into that
+  group's own operation state as they arrive, keeping every group's state in
+  one flat array (the operation set's plans are shared; each group has only
+  its running values, plus a separate store for operations that keep values),
+  then sorts only the tuples, in the sort's order, and writes the groups
+  through the same writer. It gives up before writing anything when the
+  result might differ from the sort's (a missing or NUL key, a key the
+  collation refuses, any operation error), when the groups are estimated to
+  hold fewer than eight records each or, while records of a group rarely come
+  together, to hold more state than the processor's caches (16 MiB), or when
+  they outgrow the sort's memory target. The estimate is judged after 8,192
+  records and at each doubling: the file's records from its length, and its
+  groups from those seen once and twice (the Chao1 estimate of the groups not
+  yet seen, of which the rest of the file is expected to show a share). When
+  it gives up, the input is read again from its start, header included,
+  through the route the job would otherwise take. Piped input can be read
+  again only if it was kept: in a language locale, whose sort holds whole
+  records anyway, a replay reader holds what hash grouping reads in 1 MiB
+  blocks charged to the same memory budget, and the native sort reads them
+  back, releasing each, and then the rest of the pipe; its chunk leaves room
+  for what is still held. A pipe has no length, so the rest of it is taken to
+  be as long as what was read. In the `C` locales piped input sorts, because
+  the held input would take several times the memory of a sort that keeps
+  only the selected fields (`FASTMASH_PIPE_GROUPING` changes either). With
+  `-W`, whose sort keys keep the blanks before each field that groups ignore,
+  a group is keyed by its fields with those blanks, as the sort compares
+  them, and hash grouping gives up where two keys differ only in the blanks,
+  or where a `-z` record holds a newline. `--vnlog` and `rand` (one generator
+  across all groups) always sort.
 - The **native route** sorts in process. It covers counting and text
   operations, basic statistics, quantiles, modes, MAD and variance, and every
   operation in the language locales, whose text ordering comes from
   pinned Unicode ICU data built into the program rather than the host's locale files.
+  A language sort key (`locale.rs`) is the ICU collation key, at three
+  levels, of the text with the characters glibc ignores (punctuation, most
+  symbols and spaces, from glibc's iso14651_t1_common in `collation_glibc.rs`)
+  left out and those some locales weigh first replaced by the lowest weight,
+  followed by glibc's fourth level, written so that its bytes compare as
+  glibc compares it item by item: the ranks of the ignored characters and
+  the weighted characters between them, each after the count of letters
+  without a fourth-level weight (Han, letters a locale adds) skipped before
+  it, with runs of weighted characters written as counts.
+- A **chunk** holds the records being sorted in one arena (each record's
+  grouping keys, then the fields its operations use, or the whole record with
+  `--full`, in the language locales, or for numbers when the field separator
+  could continue one, since a number is read on from its field's start into
+  the rest of the record as GNU datamash reads it) and a
+  16-byte entry per record: the first key's eight-byte prefix, the key length
+  and the arena offset. A stable radix sort orders the entries by prefix.
+  Records whose prefixes tie on longer keys are sorted the same way by their
+  next eight key bytes, round by round; complete keys are compared only in
+  small groups and after 64 bytes of a key. Ties keep input order. In the
+  language locales, collation keys are computed in batches on several
+  threads. The chunk, with the batches' share, stays within its memory target:
+  64 MiB at first. When a chunk fills, it may grow instead of
+  spilling: to hold the whole input of a regular file (an estimate from the
+  bytes read so far, at most the buffer GNU `sort` would use for the file), or
+  to twice its size for piped input, when the memory read at that moment
+  allows it. The chunk may take at most a quarter of the available memory, a
+  share per processor of what is free under each cgroup memory limit (so that
+  as many jobs as processors fit together), a share per running Fastmash of
+  the host's available memory, and half of any address-space limit, and only
+  while less than half the swap is in use. A fact that cannot be read keeps
+  the chunk as it is. `FASTMASH_SORT_MEMORY_BYTES` fixes the target instead.
+  The last chunk is read in place, without copying records; earlier chunks
+  are spilled and merged with it.
 - **Spill** writes sorted runs to anonymous temporary files (`O_TMPFILE`, or
   where the filesystem lacks it a private file unlinked as soon as it is open),
   which the kernel removes automatically when Fastmash exits, however it exits.
 - The **external route** remains, in the C locales, for `rand`, the other means
   (`geomean`, `harmmean`, `ms`, `rms`), skewness, kurtosis, normality tests,
   paired statistics and sorted `rmdup`. Its temporary files go in a private
-  directory in `TMPDIR`, which the supervisor creates and removes.
+  directory in `TMPDIR`, which the supervisor creates and removes. Where it
+  cannot run or work (the conditions are in `sort_route::sort`,
+  `sorted_input::available` and `fastmash_sort_process::available`), these
+  jobs take the native route.
 
 ### The sort supervisor
 
@@ -207,11 +288,13 @@ Numerical behavior is where Fastmash differs most from a straightforward port.
 | 0 | Success | |
 | 1 | Error in the command or its input | Unknown option, non-numeric value, missing field, write failure |
 | 77 | Refusal | Unsupported feature or locale, checked allocation failure, numerical capacity reached |
-| 70 | Internal failure | A violated numerical invariant; please report it |
+| 70 | Internal failure | A violated numerical invariant or a failed numerical table identity check; please report it |
 
 Diagnostics are written to standard error as `fastmash: message`, sometimes
-followed by a `hint:` line suggesting a fix. If an error and a refusal both
-occur, the refusal status wins. Other internal failures are reported with
+followed by a `hint:` line suggesting a fix. When one failure follows another
+(for example a failed write of the output after an error), the more serious
+status wins: 70 over 77 over 1 (`failure::combine`). A diagnostic that cannot
+be written makes the status 1. Other internal failures are reported with
 status 77 (for example an internal conversion failure) or, since panics abort,
 end the process with `SIGABRT`; all of them are bugs.
 
@@ -219,11 +302,14 @@ end the process with `SIGABRT`; all of them are bugs.
 
 - **`unsafe` code** is limited to operating-system interfaces (Linux system
   calls for standard streams, process supervision and temporary files), one
-  fixed-size arena allocation in the numerics crate, and one x86-64 `div`
+  fixed-size arena allocation in the numerics crate, one x86-64 `div`
   instruction for 128-by-64-bit division in decimal parsing, guarded by an
-  assertion of its precondition. (Test-only research code that exercises the
-  x87 unit for comparisons is excluded from release builds.) The conversion
-  and numeric-contract crates forbid `unsafe` entirely. Every other crate
+  assertion of its precondition, an x86-64 cache prefetch hint when a sorted
+  chunk is read, which never dereferences its address, a glibc `mallopt` call
+  at startup that caps malloc arenas under an address-space limit, and
+  unchecked slicing of a sort run file's read buffer, whose bounds are kept
+  as a documented invariant (checked slicing cost 4% on a spilling job). The
+  conversion and numeric-contract crates forbid `unsafe` entirely. Every other crate
   denies unsafe operations inside `unsafe fn` without an explicit block and
   warns on any `unsafe` block without a `// SAFETY:` comment, which CI treats
   as an error.
@@ -238,7 +324,7 @@ end the process with `SIGABRT`; all of them are bugs.
 | Dependency | Why |
 | --- | --- |
 | `rustc_apfloat` | Software IEEE arithmetic for 80-bit values |
-| `astro-float` | Arbitrary-precision arithmetic for `log` and `exp` |
+| `astro-float-num` | Arbitrary-precision arithmetic for `log` and `exp` |
 | `icu_collator`, `icu_locale_core` | Language-locale text ordering from pinned Unicode data |
 | `memchr` | Fast byte searching for record and field splitting |
 | `num-bigint`, `num-integer`, `num-traits` | Exact decimal conversion |
@@ -251,12 +337,18 @@ end the process with `SIGABRT`; all of them are bugs.
 | --- | --- |
 | The overall flow | `crates/cli/src/main.rs` |
 | Option parsing | `crates/cli/src/options.rs` |
-| Operations, selectors and modes | `crates/cli/src/grammar.rs` |
+| The operations: names, spellings, what each needs and shares | `crates/cli/src/operation.rs` |
+| Command syntax: operations, selectors and modes | `crates/cli/src/grammar.rs` |
+| Planning and shared work of a command's operations | `crates/cli/src/operation_set.rs` |
+| Binding named fields and grouping keys to the Input header | `crates/cli/src/binding.rs` |
+| Reading records: comments, vnlog, the input header, read errors | `crates/cli/src/intake.rs` |
 | Records and field splitting | `crates/cli/src/records.rs` |
+| The sort route | `crates/cli/src/sort_route.rs`, `sorted_input.rs` (the system sort) |
+| Hash grouping, and holding piped input to read it again | `crates/cli/src/projected_hash.rs`, `replay.rs` |
 | Sorting and spill | `crates/cli/src/projected_sort.rs`, `projected_spill.rs` |
 | A statistic, for example quantiles | `crates/cli/src/ordered_statistics.rs` |
-| Output and exit status | `crates/cli/src/command_output.rs` |
-| Number parsing and printing | `crates/conversion/src/` |
+| Output and exit status | `crates/cli/src/command_output.rs`, `buffered_stdout.rs`, `failure.rs` |
+| Number parsing and printing | `crates/conversion/src/`; numeric fields: `crates/cli/src/decimal.rs` |
 | Arithmetic | `crates/portable-numerics/src/lib.rs`, `crates/cli/src/numerics.rs` |
 | `log` and `exp` | `crates/cli/src/mean_math.rs`, `guarded_log.rs`, `boundary_exp.rs` |
 

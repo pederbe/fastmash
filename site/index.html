@@ -71,7 +71,7 @@
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="./" aria-label="Fastmash home"><img class="brand-mark" src="favicon.svg" alt="" width="22" height="22">fastmash</a>
+  <a class="brand" href="./" aria-label="Fastmash home"><img class="brand-mark" src="favicon.svg" alt="" width="22" height="22">Fastmash</a>
   <nav aria-label="Main">
     <a href="introduction.html">Docs</a>
     <a href="benchmarks/index.html">Benchmarks</a>
@@ -84,7 +84,7 @@
     <div class="hero-copy">
       <p class="eyebrow">Command-line statistics for delimited text</p>
       <h1>Fastmash is faster than GNU&nbsp;datamash<a class="star" href="#fine-print" aria-label="See the fine print">*</a></h1>
-      <p class="lede">The datamash commands you already know: sums, quantiles, grouping, crosstabs and 70 more operations. Written in Rust, up to <strong>4× faster</strong> on real jobs.</p>
+      <p class="lede">The datamash commands you already know, over 70 operations and modes: sums, quantiles, grouping, crosstabs and more. Written in Rust, up to <strong>4× faster</strong> on real jobs.</p>
       <div class="installer" id="install">
         <div class="install-tabs" role="tablist" aria-label="Ways to install">
           <button type="button" role="tab" id="tab-script" aria-controls="panel-script" aria-selected="true">Script</button>
@@ -136,7 +136,7 @@
       </div>
     </div>
 
-    <figure class="terminal" aria-label="Example: grouped statistics with fastmash">
+    <figure class="terminal" aria-label="Example: grouped statistics with Fastmash">
       <div class="terminal-bar" aria-hidden="true"><span></span><span></span><span></span></div>
 <pre><code><span class="prompt">$</span> fastmash -H -s -g site median reading &lt; data.tsv
 <span class="out">GroupBy(site)	median(reading)
@@ -157,7 +157,7 @@ chr2	2	4	7.5</span>
     <div class="chart">
 <!-- chart -->
     </div>
-    <p class="fine-print" id="fine-print">* In 0.1.0, except for sorting data far larger than memory. <a href="benchmarks/index.html">All results and the method</a></p>
+    <p class="fine-print" id="fine-print">* In 0.1.0, some disk-spilling sorts and the distinct-value geometric-mean job are slower on native Linux. <a href="benchmarks/index.html">All results and the method</a></p>
   </section>
 
   <section class="better" aria-labelledby="better-title">

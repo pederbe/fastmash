@@ -53,7 +53,13 @@ distributions ship different versions.
    cargo fmt --all --check
    cargo clippy --workspace --all-targets -- -D warnings
    cargo test --workspace
+   cargo build --release
+   python3 scripts/check_regressions.py --binary target/release/fastmash
+   python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
    ```
+
+   The last two commands run the regression corpus, with its input piped and
+   from a file, as CI does.
 
 5. Update documentation in the same pull request when user-visible behavior
    changes: the user guide under `docs/`, `--help` text, and `CHANGELOG.md`.

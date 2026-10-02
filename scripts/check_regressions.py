@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Run the release regression cases against any fastmash build.
 
-Unlike check_cli_regressions.py, this does not build, pin or admit the binary:
-it checks behavior only, so contributors and CI can run it on any Linux host.
+This does not build, pin or qualify the binary: it checks behavior only, so
+contributors and CI can run it on any Linux host.
 It uses the retained invocation and comparison (regression_cases.py). By default it runs the
-newest fixture, tests/cli/cases-v2.jsonl.gz; --fixture selects another.
+newest fixture, tests/cli/cases-v3.jsonl.gz; --fixture selects another.
+The cases give their input through a pipe; --stdin-file gives it as a regular
+file instead, to the cases whose input is ordinary, with the same expectations,
+so that the routes only input from a file takes (hash grouping) are checked too.
 
 Requirements: Linux, Python 3.10+, /usr/bin/sort, an unblocked signal mask,
 and fastmash-sort-supervisor beside the binary. Run it serially: concurrent
@@ -24,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import regression_cases  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / 'tests/cli/cases-v2.jsonl.gz'
+FIXTURE = ROOT / 'tests/cli/cases-v3.jsonl.gz'
 
 
 def load_fixture(path):
@@ -57,6 +60,13 @@ def matches(case, observed):
 invoke = regression_cases.invoke
 
 
+def file_input(case):
+    """Whether the case's input can come from a regular file instead: ordinary
+    input and output, and no input held open."""
+    return (case['io'] == 'normal' and not case.get('observe_held')
+            and not case.get('hold_stdin'))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', type=Path, required=True,
@@ -65,11 +75,16 @@ def main():
     parser.add_argument('--match', default='', help='only run cases whose id contains this text')
     parser.add_argument('--keep-going', action='store_true',
                         help='run every case instead of stopping at the first mismatch')
+    parser.add_argument('--stdin-file', action='store_true',
+                        help='give ordinary input as a regular file instead of a pipe; '
+                             'cases with other input transports are left out')
     args = parser.parse_args()
     binary = args.binary.resolve()
     if not binary.is_file() or not binary.with_name('fastmash-sort-supervisor').is_file():
         parser.exit(1, f'{binary} and fastmash-sort-supervisor beside it are required\n')
     cases = [case for case in load_fixture(args.fixture) if args.match in case['id']]
+    if args.stdin_file:
+        cases = [dict(case, io='file') for case in cases if file_input(case)]
     failed = []
     attempted = 0
     with tempfile.TemporaryDirectory(prefix='fastmash-regressions-') as directory:
