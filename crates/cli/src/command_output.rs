@@ -22,6 +22,12 @@ pub(super) trait CommandOutput {
         keys: &[u64],
     ) -> Result<(), Failure>;
     fn key(&mut self, bytes: &[u8], separator: u8);
+    fn first_decoded(
+        &mut self,
+        record: super::csv_input::View<'_>,
+        operations: &OperationSet,
+        keys: &[u64],
+    ) -> Result<(), Failure>;
     fn result(&mut self, bytes: &[u8], separator: u8);
     fn row(&mut self, fields: &[Vec<u8>], separator: u8) -> Result<(), Failure>;
 }
@@ -47,30 +53,49 @@ pub(super) struct Results<'a, W> {
     table: Option<super::crosstab::Table>,
     input: records::Separator,
     output: u8,
+    csv: bool,
     record_end: u8,
     named: bool,
     enabled: bool,
     full: bool,
     vnlog: bool,
     profile: fastmash_conversion::profile::Profile,
+    result_names: &'a super::result_names::ResultNames,
 }
 impl<'a, W: Write> Results<'a, W> {
-    pub fn new(buffer: BufferedStdout<'a, W>, options: &options::Options) -> Self {
+    pub fn new(buffer: BufferedStdout<'a, W>, options: &'a options::Options) -> Self {
         Self {
             buffer,
             table: options.crosstab.then(super::crosstab::Table::default),
             input: options.input,
             output: options.output,
+            csv: options.csv_out,
             record_end: options.record_end,
             named: options.header_in,
             enabled: options.header_out,
             full: options.full,
             vnlog: options.vnlog,
             profile: options.presentation.profile,
+            result_names: &options.result_names,
         }
     }
 }
 impl<W: Write> Results<'_, W> {
+    fn full_header<'r>(&mut self, fields: impl Iterator<Item = &'r [u8]>) {
+        for (index, bytes) in fields.enumerate() {
+            let generated = (!self.named).then(|| headers::generated(index as u64 + 1));
+            let label = generated
+                .as_ref()
+                .map_or_else(|| headers::label(bytes), |label| label.as_bytes());
+            if self.csv {
+                self.buffer.csv_field(label);
+            } else {
+                self.buffer.formatted(label);
+            }
+            self.buffer.emit(headers::Part::Separator(self.output));
+        }
+    }
+
     /// The Output header of a sorted record that keeps only its selected
     /// fields (never with `--full`, nor named from an Input header):
     /// `field` looks each one up.
@@ -97,7 +122,13 @@ impl<W: Write> Results<'_, W> {
     ) -> Result<(), Failure> {
         for &key in keys.iter().filter(|_| !self.full) {
             let bytes = field(key)?;
-            if self.named {
+            if self.csv {
+                let generated = (!self.named).then(|| headers::generated(key));
+                let label = generated
+                    .as_ref()
+                    .map_or_else(|| headers::label(bytes), |label| label.as_bytes());
+                self.buffer.csv_parts(&[b"GroupBy(", label, b")"]);
+            } else if self.named {
                 self.buffer.group_header(headers::label(bytes));
             } else {
                 self.buffer.group_header(headers::generated(key).as_bytes());
@@ -107,11 +138,25 @@ impl<W: Write> Results<'_, W> {
         let mut requests = Vec::new();
         super::command_memory::reserve(&mut requests, operations.len())?;
         requests.extend(operations.requests());
+        if self.csv {
+            return headers::render_fields(
+                &requests,
+                field,
+                (b',', b'\n', self.profile),
+                self.named,
+                self.result_names,
+                |header, separator| {
+                    header.with_fragments(|fragments| self.buffer.csv_parts(fragments));
+                    self.buffer.emit(headers::Part::Separator(separator));
+                },
+            );
+        }
         headers::render_requests(
             &requests,
             field,
             (self.output, self.record_end, self.profile),
             self.named,
+            self.result_names,
             |part| self.buffer.emit(part),
         )
     }
@@ -143,17 +188,10 @@ impl<W: Write> CommandOutput for Results<'_, W> {
             self.buffer.formatted(b"# ");
         }
         if self.full {
-            for (index, span) in records::fields(record, self.input).enumerate() {
-                if self.named {
-                    self.buffer.formatted(headers::label(
-                        &record[span.start..span.start + span.length],
-                    ));
-                } else {
-                    self.buffer
-                        .formatted(headers::generated(index as u64 + 1).as_bytes());
-                }
-                self.buffer.emit(headers::Part::Separator(self.output));
-            }
+            self.full_header(
+                records::fields(record, self.input)
+                    .map(|span| &record[span.start..span.start + span.length]),
+            );
         }
         // One pass over the record serves every key and request.
         let mut index =
@@ -166,22 +204,53 @@ impl<W: Write> CommandOutput for Results<'_, W> {
         self.selected(field, operations, keys)
     }
     fn key(&mut self, bytes: &[u8], separator: u8) {
-        self.buffer.raw(bytes);
-        self.buffer.emit(headers::Part::Separator(separator));
+        if self.csv {
+            self.buffer.csv_field(bytes);
+            self.buffer.emit(headers::Part::Separator(b','));
+        } else {
+            self.buffer.raw(bytes);
+            self.buffer.emit(headers::Part::Separator(separator));
+        }
+    }
+    fn first_decoded(
+        &mut self,
+        record: super::csv_input::View<'_>,
+        operations: &OperationSet,
+        keys: &[u64],
+    ) -> Result<(), Failure> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.full {
+            self.full_header(record.fields());
+        }
+        self.selected(|field| record.field(field), operations, keys)
+            .map_err(|error| record.location.annotate(error))
     }
     fn result(&mut self, bytes: &[u8], separator: u8) {
-        self.buffer.formatted(bytes);
-        self.buffer.emit(headers::Part::Separator(separator));
+        if self.csv {
+            self.buffer.csv_field(bytes);
+            self.buffer
+                .emit(headers::Part::Separator(if separator == self.record_end {
+                    b'\n'
+                } else {
+                    b','
+                }));
+        } else {
+            self.buffer.formatted(bytes);
+            self.buffer.emit(headers::Part::Separator(separator));
+        }
     }
     fn row(&mut self, fields: &[Vec<u8>], separator: u8) -> Result<(), Failure> {
         for (at, field) in fields.iter().enumerate() {
-            self.buffer.formatted(field);
-            self.buffer
-                .emit(headers::Part::Separator(if at + 1 == fields.len() {
+            self.result(
+                field,
+                if at + 1 == fields.len() {
                     self.record_end
                 } else {
                     separator
-                }));
+                },
+            );
         }
         Ok(())
     }

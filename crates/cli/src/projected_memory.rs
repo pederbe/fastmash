@@ -457,6 +457,7 @@ fn running_sorts(root: &Path) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_dir::TempDir as Root;
 
     const MIB: u64 = 1 << 20;
     const GIB: u64 = 1 << 30;
@@ -663,18 +664,7 @@ mod tests {
         );
     }
 
-    /// A directory of fake `/proc` and `/sys` files, removed when dropped.
-    struct Root(PathBuf);
     impl Root {
-        fn new(name: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!(
-                "fastmash-sort-memory-{name}-{}",
-                std::process::id()
-            ));
-            let _ = fs::remove_dir_all(&dir);
-            fs::create_dir_all(&dir).unwrap();
-            Self(dir)
-        }
         fn file(&self, path: &str, contents: &str) -> &Self {
             let path = self.0.join(path);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -682,10 +672,31 @@ mod tests {
             self
         }
     }
-    impl Drop for Root {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
+
+    #[test]
+    fn a_rejected_root_cannot_redirect_fixture_writes() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+        let parent = Root::new("memory-symlink-parent");
+        let sentinel = parent.0.join("sentinel");
+        fs::write(&sentinel, b"untouched").unwrap();
+        let occupied = parent.0.join("old-root");
+        let nested = occupied.join("proc/self");
+        fs::create_dir_all(&nested).unwrap();
+        symlink(&sentinel, nested.join("cgroup")).unwrap();
+        // Without write permission here, a failed removal leaves the symlink.
+        fs::set_permissions(&nested, fs::Permissions::from_mode(0o500)).unwrap();
+        let result = Root::create(occupied);
+        // Restore access for the test-owned parent's cleanup, even on failure.
+        fs::set_permissions(&nested, fs::Permissions::from_mode(0o700)).unwrap();
+        match result {
+            Err(error) => assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists),
+            Ok(root) => {
+                root.file("proc/self/cgroup", "overwritten");
+                panic!("a preexisting root was accepted");
+            }
         }
+        assert_eq!(fs::read_link(nested.join("cgroup")).unwrap(), sentinel);
+        assert_eq!(fs::read(sentinel).unwrap(), b"untouched");
     }
 
     #[test]

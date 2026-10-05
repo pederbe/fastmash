@@ -24,5 +24,6 @@ fi
 # Wrangler for the deploy step, at the version package-lock.json pins; no
 # install scripts, so Puppeteer fetches no browser.
 npm ci --ignore-scripts --no-audit --no-fund
+python3 -m unittest discover -s scripts -p 'test_build_site.py'
 "$MDBOOK" build docs
 FASTMASH_DIAGRAMS=committed python3 scripts/build_site.py docs/book

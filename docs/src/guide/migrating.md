@@ -73,4 +73,8 @@ LC_ALL=C sort -s -t "$(printf '\t')" -k1,1 data.tsv | fastmash -g 1 sum 2
 ## Remember
 
 `-t,` splits on commas and does not parse quoted CSV, in both programs.
+Fastmash adds explicit `--csv-in`, `--csv-out` and `--csv` switches for
+[quoted CSV](csv-and-result-names.md); they leave existing separator commands
+unchanged. Result names, weighted mean, Top-N selection, dataset comparison and
+table health are also optional extensions.
 `spearson` is the sample Pearson correlation, in both programs.

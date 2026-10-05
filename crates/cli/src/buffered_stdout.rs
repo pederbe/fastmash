@@ -176,7 +176,7 @@ impl<'a, W: Write> BufferedStdout<'a, W> {
     pub fn emit(&mut self, part: Part<'_>) {
         // Errors belong to finalization; rendering must continue to later fields.
         let _ = match part {
-            Part::Operation(bytes) => self.string(bytes),
+            Part::Operation(bytes) | Part::ResultName(bytes) => self.string(bytes),
             Part::Name(bytes) => self.prefixed(b'(', bytes),
             Part::PairName(bytes) => self.prefixed(b',', bytes),
             Part::Parameter(bytes) => self.prefixed(b':', bytes),
@@ -196,6 +196,39 @@ impl<'a, W: Write> BufferedStdout<'a, W> {
     /// A full fwrite span, including any embedded NUL bytes.
     pub fn raw(&mut self, bytes: &[u8]) {
         let _ = self.string(bytes);
+    }
+
+    /// Encode one complete byte field; transport errors remain finalization's responsibility.
+    pub fn csv_field(&mut self, bytes: &[u8]) {
+        self.csv_parts(&[bytes]);
+    }
+
+    /// Scan all parts of a logical field before emitting any quoting.
+    pub fn csv_parts(&mut self, parts: &[&[u8]]) {
+        let quoted = parts.iter().all(|part| part.is_empty())
+            || parts.iter().any(|part| {
+                part.iter()
+                    .any(|b| matches!(b, b',' | b'"' | b'\r' | b'\n'))
+            });
+        if !quoted {
+            for part in parts {
+                self.raw(part);
+            }
+            return;
+        }
+        let _ = self.character(b'"');
+        for bytes in parts {
+            let mut start = 0;
+            for (at, &byte) in bytes.iter().enumerate() {
+                if byte == b'"' {
+                    self.raw(&bytes[start..at]);
+                    self.raw(b"\"\"");
+                    start = at + 1;
+                }
+            }
+            self.raw(&bytes[start..]);
+        }
+        let _ = self.character(b'"');
     }
 
     /// GNU emits GroupBy(name) as one printf call with its own staging buffer.

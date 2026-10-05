@@ -8,6 +8,9 @@ newest fixture, tests/cli/cases-v3.jsonl.gz; --fixture selects another.
 The cases give their input through a pipe; --stdin-file gives it as a regular
 file instead, to the cases whose input is ordinary, with the same expectations,
 so that the routes only input from a file takes (hash grouping) are checked too.
+For a development build, --expected-version verifies its explicit CLI version
+in the documented successful version cases; all other frozen expectations
+remain unchanged, including version-option errors and transport failures.
 
 Requirements: Linux, Python 3.10+, /usr/bin/sort, an unblocked signal mask,
 and fastmash-sort-supervisor beside the binary. Run it serially: concurrent
@@ -29,6 +32,15 @@ import regression_cases  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / 'tests/cli/cases-v3.jsonl.gz'
 
+# These cases print the successful version action, including option precedence.
+# Required-value, sentinel and transport-failure cases retain frozen outcomes.
+VERSION_CASES = frozenset({
+    'version', 'version-locale', 'version-first', 'version-before-unknown',
+    'output-header-reference:version-precedence', 'header-aliases:alias-then-version',
+    'named-fields:version', 'whitespace:version', 'skip-comments:version',
+    'narm:version', 'count:version',
+})
+
 
 def load_fixture(path):
     """Cases from a fixture, verified against its provenance record."""
@@ -45,16 +57,18 @@ def load_fixture(path):
     return cases
 
 
-def expected(case):
+def expected(case, expected_version=None):
     """The case's expectation, with file-backed output resolved to bytes."""
     result = dict(case['expected'])
+    if expected_version is not None and case['id'] in VERSION_CASES:
+        result['stdout_hex'] = f'fastmash {expected_version}\n'.encode().hex()
     if 'stdout_file' in result:
         result['stdout_hex'] = (ROOT / result.pop('stdout_file')).read_bytes().hex()
     return result
 
 
-def matches(case, observed):
-    return regression_cases.matches(dict(case, expected=expected(case)), observed)
+def matches(case, observed, expected_version=None):
+    return regression_cases.matches(dict(case, expected=expected(case, expected_version)), observed)
 
 
 invoke = regression_cases.invoke
@@ -75,6 +89,9 @@ def main():
     parser.add_argument('--match', default='', help='only run cases whose id contains this text')
     parser.add_argument('--keep-going', action='store_true',
                         help='run every case instead of stopping at the first mismatch')
+    parser.add_argument('--expected-version',
+                        help='verify this explicit version in successful version cases only; '
+                             'default: the frozen fixture expectation')
     parser.add_argument('--stdin-file', action='store_true',
                         help='give ordinary input as a regular file instead of a pipe; '
                              'cases with other input transports are left out')
@@ -92,7 +109,7 @@ def main():
             attempted += 1
             # Diagnostics print argv[0]; the v2 expectations use fastmash.
             observed = invoke({'name': 'fastmash', **case}, binary, Path(directory))
-            if matches(case, observed):
+            if matches(case, observed, args.expected_version):
                 continue
             failed.append(case["id"])
             # A supervisor can outlive a failed invocation; each owns a group.
@@ -101,7 +118,7 @@ def main():
             except (KeyError, ProcessLookupError):
                 pass
             print(f"FAIL {case['id']}: {' '.join(observed['argv'][1:])}")
-            for key, value in expected(case).items():
+            for key, value in expected(case, args.expected_version).items():
                 if observed.get(key) != value:
                     print(f'  {key}: expected {value!r}, observed {observed.get(key)!r}')
             if not args.keep_going:

@@ -1,7 +1,8 @@
 # Compared with other tools
 
-Fastmash does one thing: it runs GNU datamash commands, faster, with the same
-numbers on every machine. Other good tools cover much more ground. This page
+Fastmash runs GNU datamash commands with portable results, and extends that
+workflow with quoted CSV, weighted means, record selection, table health and
+dataset comparison. Other good tools cover much more ground. This page
 says honestly where each one fits. Facts about the other tools come from their
 own documentation (checked September 2026); tell us if something has changed.
 
@@ -12,8 +13,8 @@ own documentation (checked September 2026); tell us if something has changed.
 | Command language | datamash's | datamash's | Its own verbs and DSL | Its own subcommands | Its own subcommands |
 | Written in | Rust | C | Go | Rust | Go |
 | Licence | MIT or Apache-2.0 | GPL-3.0-or-later | BSD-2-Clause | MIT | MIT |
-| Input | Tab or single-byte delimited text | Tab or single-byte delimited text | CSV (RFC 4180), TSV, JSON and more | CSV, TSV, Excel, Parquet and more | CSV and TSV |
-| Quoted CSV fields | No | No | Yes | Yes | Yes |
+| Input | Delimited text and explicit quoted CSV | Tab or single-byte delimited text | CSV (RFC 4180), TSV, JSON and more | CSV, TSV, Excel, Parquet and more | CSV and TSV |
+| Quoted CSV fields | Yes, in supported calculation, selection and comparison modes | No | Yes | Yes | Yes |
 | Grouped statistics | Yes | Yes | Yes (`stats1 -g`) | Through `pivotp` or `sqlp` | Yes (`summary -g`) |
 | Joins, filters, reshaping | No | No | Yes | Yes | Yes |
 | Platforms | Linux x86-64 | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
@@ -44,7 +45,7 @@ reshaping. Its `stats1` verb computes grouped statistics (count, sum, mean,
 median and any percentile, mode, variance, skewness and more) without
 sorting the input first.
 
-**Choose Miller when** your data is quoted CSV or JSON, or the job needs more
+**Choose Miller when** your data is JSON, or the job needs more
 than statistics: filtering, joining or transforming records.
 **Choose Fastmash when** the job is a datamash-style summary of delimited
 text and speed or exact datamash output matters.
@@ -77,12 +78,15 @@ datamash output, or its speed on large inputs.
 
 ## Using them together
 
-These tools combine well. If your data is quoted CSV, let one of the others
-convert it and pipe the result into Fastmash:
+These tools combine well. Fastmash can read quoted CSV directly:
+
+```sh
+fastmash --csv -H -s -g region mean price < data.csv
+```
+
+Use another tool to filter or join records, then Fastmash to summarize them.
+For ordinary text workflows, a quote-aware conversion remains useful:
 
 ```sh
 mlr --icsv --otsv cat data.csv | fastmash -H -s -g region mean price
 ```
-
-Or use Fastmash to summarise, and another tool to join or reshape the
-summary.

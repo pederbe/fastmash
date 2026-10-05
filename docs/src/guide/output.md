@@ -1,5 +1,11 @@
 # Numbers, output and locales
 
+Calculation results always contain plain data, including when terminal color
+is forced. Use [quoted CSV](csv-and-result-names.md) to encode complete output
+fields, and `--result-name=INDEX:NAME` with an output header to replace generated
+result labels. [Terminal color](terminal-color.md) covers human-readable help,
+health reports and failure prefixes.
+
 ## Reading numbers
 
 Numerical operations accept decimal numbers (`42`, `-3.5`, `1e-9`),

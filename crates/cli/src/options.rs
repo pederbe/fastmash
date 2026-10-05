@@ -3,6 +3,7 @@
 #[cfg(test)]
 use super::command_memory::FAIL_RESERVATION;
 use super::command_memory::reserve;
+use super::terminal_style::ColorMode;
 use super::{Failure, failure, records::Separator, unsupported, unsupported_hint};
 use std::{
     borrow::Cow,
@@ -16,11 +17,19 @@ pub(super) enum Action {
     Version,
 }
 
+pub(super) struct Scan {
+    pub action: Result<Action, Failure>,
+    pub color: ColorMode,
+}
+
 pub(super) struct Options {
     pub group: Option<OsString>,
     pub operands: Vec<OsString>,
     pub input: Separator,
     pub output: u8,
+    pub csv_out: bool,
+    pub csv_in: bool,
+    pub(super) supplied_output: bool,
     pub collapse: u8,
     pub record_end: u8,
     pub full: bool,
@@ -29,11 +38,13 @@ pub(super) struct Options {
     pub strict: bool,
     pub header_in: bool,
     pub header_out: bool,
+    pub explicit_header_out: bool,
+    pub result_names: super::result_names::ResultNames,
     pub skip_comments: bool,
     pub narm: bool,
     pub vnlog: bool,
     pub filler: Cow<'static, [u8]>,
-    explicit_output: bool,
+    pub(super) explicit_output: bool,
     pub sort: bool,
     pub ignore_case: bool,
     pub seed: Option<u32>,
@@ -42,10 +53,11 @@ pub(super) struct Options {
     /// `FASTMASH_SORT_MEMORY_BYTES` from the environment, which only the
     /// native sort reads (and refuses when it is invalid).
     pub sort_memory: Option<OsString>,
+    pub(super) controls: super::preparation::Controls,
 }
 
 #[derive(Clone, Copy)]
-enum Setting {
+pub(super) enum Setting {
     Full,
     TableOnly,
     Filler,
@@ -59,6 +71,10 @@ enum Setting {
     HeaderIn,
     HeaderOut,
     Headers,
+    ResultName,
+    CsvOut,
+    CsvIn,
+    Csv,
     Comments,
     Na,
     Sort,
@@ -66,6 +82,8 @@ enum Setting {
     Seed,
     Format,
     Round,
+    Color,
+    NoColor,
     Help,
     Version,
     Unavailable,
@@ -112,6 +130,15 @@ const OPTIONS: &[Descriptor] = &[
     descriptor(b"help", Some(b'h'), false, Setting::Help),
     descriptor(b"version", Some(b'V'), false, Setting::Version),
 ];
+
+// Extensions use exact spelling and never enter GNU's prefix matching.
+const RESULT_NAME: Descriptor = descriptor(b"result-name", None, true, Setting::ResultName);
+const CSV_OUT: Descriptor = descriptor(b"csv-out", None, false, Setting::CsvOut);
+const CSV_IN: Descriptor = descriptor(b"csv-in", None, false, Setting::CsvIn);
+const CSV: Descriptor = descriptor(b"csv", None, false, Setting::Csv);
+const COLOR: Descriptor = descriptor(b"color", None, true, Setting::Color);
+const NO_COLOR: Descriptor = descriptor(b"no-color", None, false, Setting::NoColor);
+const EXTENSIONS: &[&Descriptor] = &[&RESULT_NAME, &CSV_OUT, &CSV_IN, &CSV, &COLOR, &NO_COLOR];
 
 const fn descriptor(
     long: &'static [u8],
@@ -162,8 +189,30 @@ fn diagnostic(parts: &[&[u8]], name: &[u8]) -> Failure {
     failure(message)
 }
 
+fn exact_long(token: &[u8]) -> Option<&'static Descriptor> {
+    EXTENSIONS
+        .iter()
+        .copied()
+        .chain(OPTIONS)
+        .find(|option| option.long == token)
+}
+
+/// Help recognizes complete option names, never GNU's abbreviations or a
+/// prefix of a numeric value such as `-inf`.
+pub(super) fn documented_option(token: &[u8]) -> bool {
+    if token == b"--" {
+        true
+    } else if let Some(long) = token.strip_prefix(b"--") {
+        exact_long(long).is_some()
+    } else {
+        token.len() == 2
+            && token[0] == b'-'
+            && OPTIONS.iter().any(|option| option.short == Some(token[1]))
+    }
+}
+
 fn match_long(token: &[u8], spelling: &[u8], name: &[u8]) -> Result<&'static Descriptor, Failure> {
-    if let Some(exact) = OPTIONS.iter().find(|option| option.long == token) {
+    if let Some(exact) = exact_long(token) {
         return Ok(exact);
     }
     let mut matches = OPTIONS
@@ -253,11 +302,34 @@ pub(super) fn parse(
     parse_with_policy(args, name, posixly_correct, Default::default())
 }
 
+#[cfg(test)]
 pub(super) fn parse_with_policy(
     args: &[OsString],
     name: &[u8],
     posixly_correct: bool,
     locale: super::locale::Policy,
+) -> Result<Action, Failure> {
+    scan_with_policy(args, name, posixly_correct, locale).action
+}
+
+pub(super) fn scan_with_policy(
+    args: &[OsString],
+    name: &[u8],
+    posixly_correct: bool,
+    locale: super::locale::Policy,
+) -> Scan {
+    let mut color = ColorMode::Auto;
+    let action = parse_options(args, name, posixly_correct, locale, false, &mut color);
+    Scan { action, color }
+}
+
+fn parse_options(
+    args: &[OsString],
+    name: &[u8],
+    posixly_correct: bool,
+    locale: super::locale::Policy,
+    allow_unavailable: bool,
+    color: &mut ColorMode,
 ) -> Result<Action, Failure> {
     if args.iter().any(|arg| arg.as_bytes().contains(&0)) {
         return Err(unsupported("NUL bytes in arguments are unsupported"));
@@ -267,6 +339,9 @@ pub(super) fn parse_with_policy(
         operands: Vec::new(),
         input: Separator::Literal(b'\t'),
         output: b'\t',
+        csv_out: false,
+        csv_in: false,
+        supplied_output: false,
         collapse: b',',
         record_end: b'\n',
         full: false,
@@ -275,6 +350,8 @@ pub(super) fn parse_with_policy(
         strict: true,
         header_in: false,
         header_out: false,
+        explicit_header_out: false,
+        result_names: Default::default(),
         skip_comments: false,
         narm: false,
         vnlog: false,
@@ -290,6 +367,7 @@ pub(super) fn parse_with_policy(
         },
         locale,
         sort_memory: None,
+        controls: Default::default(),
     };
     let mut explicit_output = None;
     let mut at = 0;
@@ -370,6 +448,7 @@ pub(super) fn parse_with_policy(
             } else {
                 None
             };
+            options.controls.record(option.setting, option.long);
             match option.setting {
                 Setting::Full => options.full = true,
                 // These options have no effect in aggregation. Their table-mode
@@ -390,17 +469,45 @@ pub(super) fn parse_with_policy(
                 Setting::ZeroTerminated => options.record_end = 0,
                 Setting::Help => return Ok(Action::Help),
                 Setting::Version => return Ok(Action::Version),
+                Setting::Color => {
+                    *color = match value.unwrap() {
+                        b"auto" => ColorMode::Auto,
+                        b"always" => ColorMode::Always,
+                        b"never" => ColorMode::Never,
+                        _ => {
+                            return Err(failure(
+                                b"invalid color mode; use auto, always or never\n".to_vec(),
+                            ));
+                        }
+                    };
+                }
+                Setting::NoColor => *color = ColorMode::Never,
                 Setting::HeaderIn => options.header_in = true,
-                Setting::HeaderOut => options.header_out = true,
+                Setting::HeaderOut => {
+                    options.header_out = true;
+                    options.explicit_header_out = true;
+                }
                 Setting::Headers => {
                     options.header_in = true;
                     options.header_out = true;
+                    options.explicit_header_out = true;
                 }
-                Setting::Comments => options.skip_comments = true,
+                Setting::Comments => {
+                    options.skip_comments = true;
+                    options.controls.record_csv_input(option.long);
+                }
+                Setting::ResultName => options.result_names.add(value.unwrap())?,
+                Setting::CsvOut => options.csv_out = true,
+                Setting::CsvIn => options.csv_in = true,
+                Setting::Csv => {
+                    options.csv_in = true;
+                    options.csv_out = true;
+                }
                 Setting::Na => options.narm = true,
                 Setting::Sort => options.sort = true,
                 Setting::IgnoreCase => options.ignore_case = true,
                 Setting::Whitespace => {
+                    options.controls.record_csv_input(option.long);
                     options.input = Separator::Whitespace;
                     options.output = b'\t';
                 }
@@ -408,7 +515,40 @@ pub(super) fn parse_with_policy(
                 Setting::Seed => options.seed = Some(seed(value.unwrap())?),
                 Setting::Format => options.presentation.format(value.unwrap())?,
                 Setting::Round => options.presentation.round(value.unwrap())?,
-                Setting::Unavailable => return Err(unavailable(bytes)),
+                Setting::Unavailable => {
+                    // Only this unsupported-setting path needs a classification
+                    // pass: the mode may follow it. Reuse the same scanner so
+                    // values, option permutations and -- retain their meaning.
+                    let extended_mode = if allow_unavailable {
+                        true
+                    } else if let Ok(Action::Calculate(parsed)) =
+                        // The classification pass can see later controls;
+                        // only the outer scanner selects presentation policy.
+                        parse_options(
+                            args,
+                            name,
+                            posixly_correct,
+                            locale,
+                            true,
+                            &mut ColorMode::Auto,
+                        )
+                    {
+                        parsed
+                            .operands
+                            .first()
+                            .is_some_and(|arg| matches!(arg.as_bytes(), b"health" | b"compare"))
+                            || matches!(
+                                super::grammar::requests_selection(&parsed.operands),
+                                Ok(true)
+                            )
+                    } else {
+                        false
+                    };
+                    if !extended_mode {
+                        return Err(unavailable(bytes));
+                    }
+                    options.controls.record_unavailable(option.long);
+                }
                 Setting::Input | Setting::Output | Setting::Collapse => {
                     let [delimiter] = value.unwrap() else {
                         return Err(failure(
@@ -417,10 +557,12 @@ pub(super) fn parse_with_policy(
                     };
                     match option.setting {
                         Setting::Input => {
+                            options.controls.record_csv_input(option.long);
                             options.input = Separator::Literal(*delimiter);
                             options.output = *delimiter;
                         }
                         Setting::Output => {
+                            options.supplied_output = true;
                             // GNU's signed char 0xff behaves as an unset override.
                             explicit_output = (*delimiter != 0xff).then_some(*delimiter);
                         }
@@ -440,6 +582,9 @@ pub(super) fn parse_with_policy(
     }
     options.output = explicit_output.unwrap_or(options.output);
     options.explicit_output = explicit_output.is_some();
+    if options.csv_out {
+        options.output = b',';
+    }
     Ok(Action::Calculate(Box::new(options)))
 }
 
@@ -463,6 +608,9 @@ impl Options {
             operands: _,
             input: _,
             output: _,
+            csv_out: _,
+            csv_in: _,
+            supplied_output: _,
             collapse: _,
             record_end: _,
             full: _,
@@ -471,6 +619,8 @@ impl Options {
             strict: _,
             header_in: _,
             header_out: _,
+            explicit_header_out: _,
+            result_names: _,
             skip_comments: _,
             narm: _,
             vnlog,
@@ -482,28 +632,9 @@ impl Options {
             presentation: _,
             locale: _,
             sort_memory: _,
+            controls: _,
         } = self;
         !vnlog && !linewise
-    }
-
-    pub(super) fn validate_annotation(&self) -> Result<(), Failure> {
-        if !self.vnlog {
-            return Ok(());
-        }
-        let message: Option<&[u8]> = if self.filler.as_ref() != b"-" {
-            Some(b"vnlog processing always uses '-' for empty fields\n")
-        } else if self.input != Separator::Whitespace {
-            Some(b"vnlog processing is whitespace-delimited\n")
-        } else if self.output != b' ' {
-            Some(b"vnlog processing always uses ' ' to separate output fields\n")
-        } else if self.explicit_output {
-            Some(b"vnlog processing always uses the default output delimiter\n")
-        } else if self.record_end != b'\n' {
-            Some(b"vnlog processing always uses '\\n' to terminate output lines\n")
-        } else {
-            None
-        };
-        message.map_or(Ok(()), |message| Err(failure(message.to_vec())))
     }
 }
 #[cfg(test)]
@@ -513,6 +644,71 @@ mod tests {
 
     fn args(parts: &[&str]) -> Vec<OsString> {
         parts.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn color_state_tracks_only_controls_consumed_by_the_outer_scan() {
+        for (parts, posix, color, succeeds) in [
+            (
+                vec!["--color=always", "--help", "--no-color"],
+                false,
+                ColorMode::Always,
+                true,
+            ),
+            (
+                vec!["--help", "--color=always"],
+                false,
+                ColorMode::Auto,
+                true,
+            ),
+            (
+                vec!["--color=never", "--color=invalid", "--color=always"],
+                false,
+                ColorMode::Never,
+                false,
+            ),
+            (vec!["-t", "--color=always"], false, ColorMode::Auto, false),
+            (vec!["--", "--color=always"], false, ColorMode::Auto, true),
+            (
+                vec!["count", "1", "--color=always"],
+                true,
+                ColorMode::Auto,
+                true,
+            ),
+            (
+                vec!["count", "1", "--color=always"],
+                false,
+                ColorMode::Always,
+                true,
+            ),
+            (
+                vec![
+                    "--color=never",
+                    "--sort-cmd=/bin/sort",
+                    "--color=always",
+                    "count",
+                    "1",
+                ],
+                false,
+                ColorMode::Never,
+                false,
+            ),
+            (
+                vec![
+                    "--color=never",
+                    "--sort-cmd=/bin/sort",
+                    "--color=always",
+                    "health",
+                ],
+                false,
+                ColorMode::Always,
+                true,
+            ),
+        ] {
+            let scan = scan_with_policy(&args(&parts), b"fastmash", posix, Default::default());
+            assert_eq!(scan.color, color, "{parts:?}, posix={posix}");
+            assert_eq!(scan.action.is_ok(), succeeds, "{parts:?}, posix={posix}");
+        }
     }
     fn parsed(parts: &[&str]) -> Options {
         match parse(&args(parts), b"fastmash", false).ok().unwrap() {

@@ -19,9 +19,8 @@ way to influence them.
 ## Later
 
 - **macOS on Apple Silicon.**
-- **Extensions beyond GNU datamash**, considered once compatibility and
-  performance are solid. Candidates include quoted CSV input and custom
-  output column names.
+- **Further table workflows**, guided by ordinary data-processing needs and
+  feedback on the existing CSV, health, selection and comparison features.
 
 ## Towards 1.0
 

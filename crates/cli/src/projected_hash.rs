@@ -535,26 +535,28 @@ fn classify<O: CommandOutput>(
     let header_lines = intake.line();
     let fold = options.ignore_case;
     let generated_header = options.header_out && !options.header_in;
-    let width = operations.len();
+    let operation_count = operations.len();
     let kept_numbers = operations.kept_numbers();
     let mut kept_text = Vec::new();
-    if kept_text.try_reserve_exact(width).is_err() {
+    if kept_text.try_reserve_exact(operation_count).is_err() {
         return Ok(ALLOCATION);
     }
     kept_text.extend(operations.kept_text());
     let keeps = kept_numbers != 0 || !kept_text.is_empty();
-    let class_bytes = operations.state_bytes()
+    let mut groups = operations.dense_groups();
+    let class_bytes = groups.group_bytes()
         + std::mem::size_of::<Representative>()
         + 4 * std::mem::size_of::<u64>();
     let mut budget = target.bytes;
-    let mut used = 0usize;
+    // The dense owner adds one Binding reference to the previous vector.
+    let mut used = std::mem::size_of::<&OperationSet>();
     let mut table = Table::new();
     let mut blanks = (options.input == records::Separator::Whitespace)
         .then(|| Blanks::new(options.record_end == 0));
     let mut spellings = collator.is_some().then(Spellings::new);
-    // Each class's Group state (`width` Operations' state, class after class),
-    // its record count and its representative.
-    let (mut states, mut counts, mut representatives) = (Vec::new(), Vec::new(), Vec::new());
+    // Each class's record count and representative. OperationSet keeps the
+    // calculation state densely, in the same insertion order as these classes.
+    let (mut counts, mut representatives) = (Vec::new(), Vec::new());
     let mut index = records::FieldIndex::selecting(keys.iter().copied().chain(operations.fields()));
     let mut spans = Vec::new();
     if spans.try_reserve_exact(keys.len()).is_err() {
@@ -641,7 +643,7 @@ fn classify<O: CommandOutput>(
                         let Some(representative) = representative(raw, keys.len()) else {
                             return Ok(ALLOCATION);
                         };
-                        if !operations.fresh_states(&mut states)
+                        if groups.add_group().is_none()
                             || counts.try_reserve(1).is_err()
                             || representatives.try_reserve(1).is_err()
                         {
@@ -693,14 +695,7 @@ fn classify<O: CommandOutput>(
                 return Ok(MEMORY);
             }
         }
-        let Ok(keep) = operations.collect_into(
-            &mut states[class * width..(class + 1) * width],
-            raw,
-            &mut index,
-            line,
-            options,
-            arithmetic,
-        ) else {
+        let Ok(keep) = groups.collect(class, raw, &mut index, line, options, arithmetic) else {
             return Ok(FAILED);
         };
         if keep && counts[class] != 0 {
@@ -729,7 +724,7 @@ fn classify<O: CommandOutput>(
         }
         counts[class] += 1;
         if records == judged {
-            let hot = operations.state_bytes()
+            let hot = groups.group_bytes()
                 + 4 * std::mem::size_of::<u64>()
                 + table.tuples.len() / table.len().max(1);
             // Input of unknown length, such as a pipe, is taken to go on
@@ -786,10 +781,15 @@ fn classify<O: CommandOutput>(
         } else {
             line
         };
-        operations.swap_states(&mut states[class * width..(class + 1) * width]);
-        let mut context =
-            grouping::Context::new(operations, keys, options, arithmetic, None, output);
-        grouping::write_group(&mut representative.record, next, &mut context)?;
+        grouping::write_completed_group(
+            &mut representative.record,
+            next,
+            groups.completion(class),
+            keys,
+            options,
+            arithmetic,
+            output,
+        )?;
     }
     output.end(options)?;
     Ok(Outcome::Written)
@@ -935,7 +935,7 @@ mod tests {
         let environment = crate::Environment {
             grouping: Some(grouping.into()),
             pipe_grouping: piped.then(|| "hash".into()),
-            ..crate::Environment::from_env()
+            ..crate::Environment::from_env(crate::terminal_style::Detection::from_env())
         };
         let mut report = |error: &Failure| {
             reported.push(error.message.clone());

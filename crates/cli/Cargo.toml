@@ -45,6 +45,8 @@ sha1 = { version = "=0.11.0", default-features = false }
 sha2 = { version = "=0.11.0", default-features = false }
 
 [dev-dependencies]
+# Independent byte-reader check for canonical CSV output, not the input parser.
+csv-core = "=0.1.13"
 # Exact arithmetic for the generated decimal power table and its tests.
 num-bigint = { version = "=0.5.1", default-features = false }
 

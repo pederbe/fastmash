@@ -281,15 +281,23 @@ impl Scanner {
         ))
     }
 
-    fn field(&mut self, kind: Kind, range_end: bool) -> Result<Field, Failure> {
-        let token = self.next();
-        let token = token?;
-        match token.kind {
+    fn decode_field(&self, token: Token) -> Result<Option<Field>, Failure> {
+        Ok(match token.kind {
             TokenKind::Integer(_) if self.named_numbers => {
-                Ok(Field::Name(decode_identifier(self.spelling(token))?))
+                Some(Field::Name(decode_identifier(self.spelling(token))?))
             }
-            TokenKind::Integer(n) if n > 0 => Ok(Field::Number(n as u64)),
-            TokenKind::Identifier => Ok(Field::Name(decode_identifier(self.spelling(token))?)),
+            TokenKind::Integer(n) if n > 0 => Some(Field::Number(n as u64)),
+            TokenKind::Identifier => Some(Field::Name(decode_identifier(self.spelling(token))?)),
+            _ => None,
+        })
+    }
+
+    fn field(&mut self, kind: Kind, range_end: bool) -> Result<Field, Failure> {
+        let token = self.next()?;
+        if let Some(field) = self.decode_field(token)? {
+            return Ok(field);
+        }
+        match token.kind {
             TokenKind::Integer(_) | TokenKind::Float(_) => {
                 let mut message = b"invalid field '".to_vec();
                 message.extend_from_slice(self.spelling(token));
@@ -320,6 +328,29 @@ pub(super) fn quoted(name: &str, utf8: bool) -> String {
 
 fn operation_error(reason: &str, kind: Kind, utf8: bool) -> Failure {
     failure(format!("{reason} for operation {}\n", quoted(kind.name(), utf8)).into_bytes())
+}
+
+/// One health selector with the existing identifier and positional syntax.
+pub(super) fn single_field(
+    argument: &OsString,
+    named_numbers: bool,
+    profile: Profile,
+    utf8: bool,
+) -> Result<Field, Failure> {
+    let mut scanner = Scanner::from_args(std::slice::from_ref(argument), true)?;
+    scanner.named_numbers = named_numbers;
+    scanner.profile = profile;
+    scanner.utf8 = utf8;
+    let token = scanner.next()?;
+    let field = scanner
+        .decode_field(token)?
+        .ok_or_else(|| failure(b"health: invalid single-field selector\n".to_vec()))?;
+    if scanner.next()?.kind != TokenKind::End {
+        return Err(failure(
+            b"health: expected one field, without a list, range or pair\n".to_vec(),
+        ));
+    }
+    Ok(field)
 }
 
 fn pair_required(kind: Kind, utf8: bool) -> Failure {
@@ -649,7 +680,16 @@ fn parse_operations_for_mode(
         let token = scanner.next()?;
         let decoded = decode_identifier(scanner.spelling(token))?;
         let spelling = decoded.as_slice();
-        if (grouped && is_group(spelling))
+        if mode == "compare" {
+            if let Some(direction) = selection_direction(spelling) {
+                selection_command(scanner, direction, Vec::new())?;
+                return Err(unsupported("compare does not support Top-N selection"));
+            }
+            if spelling.eq_ignore_ascii_case(b"health") {
+                return Err(unsupported("compare does not support another mode"));
+            }
+        }
+        if ((grouped || mode == "compare") && is_group(spelling))
             || [
                 b"reverse".as_slice(),
                 b"nop",
@@ -663,6 +703,9 @@ fn parse_operations_for_mode(
             .iter()
             .any(|m| spelling.eq_ignore_ascii_case(m))
         {
+            if mode == "compare" {
+                return Err(unsupported("compare does not support another mode"));
+            }
             return Err(quoted_error(
                 b"conflicting operation ",
                 spelling,
@@ -674,6 +717,9 @@ fn parse_operations_for_mode(
         }
         let Some(kind) = Kind::from_spelling(spelling) else {
             if spelling.eq_ignore_ascii_case(b"transpose") {
+                if mode == "compare" {
+                    return Err(unsupported("compare does not support another mode"));
+                }
                 return Err(quoted_error(
                     b"conflicting operation ",
                     spelling,
@@ -692,7 +738,9 @@ fn parse_operations_for_mode(
             && requests
                 .first()
                 .map_or(kind.is_line(), |r| r.kind.is_line());
-        if (kind.is_line()) != expected_line || (grouped && kind.is_line()) {
+        // Comparison refuses unsupported families after every request's grammar
+        // is parsed, so a malformed Selector remains a command Error.
+        if mode != "compare" && ((kind.is_line()) != expected_line || (grouped && kind.is_line())) {
             let expected = if expected_line && !grouped {
                 "line"
             } else {
@@ -754,9 +802,46 @@ fn is_group(bytes: &[u8]) -> bool {
         .any(|name| bytes.eq_ignore_ascii_case(name))
 }
 
+fn selection_direction(bytes: &[u8]) -> Option<super::selection::Direction> {
+    if bytes.eq_ignore_ascii_case(b"top") {
+        Some(super::selection::Direction::Highest)
+    } else if bytes.eq_ignore_ascii_case(b"bottom") {
+        Some(super::selection::Direction::Lowest)
+    } else {
+        None
+    }
+}
+
+fn selected_direction(
+    scanner: &mut Scanner,
+) -> Result<Option<super::selection::Direction>, Failure> {
+    let token = scanner.peek()?;
+    if token.kind != TokenKind::Identifier {
+        return Ok(None);
+    }
+    Ok(selection_direction(&decode_identifier(
+        scanner.spelling(token),
+    )?))
+}
+
+/// Classify the selection Mode before refusing an unsupported option. Use the
+/// same escaped identifiers and positional Grouping syntax as Command parsing;
+/// the actual parser still diagnoses the count, Selector and extra operands.
+pub(super) fn requests_selection(args: &[OsString]) -> Result<bool, Failure> {
+    let mut scanner = Scanner::from_args(args, true)?;
+    let token = scanner.peek()?;
+    if token.kind == TokenKind::Identifier && is_group(&decode_identifier(scanner.spelling(token))?)
+    {
+        scanner.next()?;
+        group_fields(&mut scanner, "groupby")?;
+    }
+    Ok(selected_direction(&mut scanner)?.is_some())
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Mode {
     Aggregate,
+    Compare,
     Crosstab,
     Line,
     Reverse,
@@ -764,12 +849,16 @@ pub(super) enum Mode {
     Noop,
     Check { lines: u64, fields: u64 },
     Dedup,
+    Health,
+    Select(super::selection::Selection),
 }
 
 pub(super) struct Command {
     pub mode: Mode,
     pub keys: Vec<Field>,
     pub operations: Vec<Request>,
+    pub ranking: Option<Field>,
+    pub comparison: Option<super::comparison::Request>,
 }
 
 #[cfg(test)]
@@ -784,16 +873,43 @@ pub(super) fn command_for_format(
     profile: Profile,
     utf8: bool,
 ) -> Result<Command, Failure> {
-    if let Some(group) = group {
+    if args.first().is_some_and(|arg| arg.as_bytes() == b"compare") {
+        return comparison_command(args, group, named_numbers, profile, utf8);
+    }
+    if args.first().is_some_and(|arg| arg.as_bytes() == b"health") {
+        return Ok(Command {
+            mode: Mode::Health,
+            keys: Vec::new(),
+            operations: Vec::new(),
+            ranking: None,
+            comparison: None,
+        });
+    }
+    let grouped_keys = if let Some(group) = group {
         let mut scanner = Scanner::from_args(std::slice::from_ref(group), true)?;
         scanner.named_numbers = named_numbers;
         scanner.profile = profile;
         scanner.utf8 = utf8;
-        let keys = group_fields(&mut scanner, "groupby")?;
-        let mut scanner = Scanner::from_args(args, true)?;
-        scanner.named_numbers = named_numbers;
-        scanner.profile = profile;
-        scanner.utf8 = utf8;
+        Some(group_fields(&mut scanner, "groupby")?)
+    } else {
+        None
+    };
+    let mut scanner = if grouped_keys.is_some() {
+        Scanner::from_args(args, true)?
+    } else {
+        Scanner::new(args)?
+    };
+    scanner.named_numbers = named_numbers;
+    scanner.profile = profile;
+    scanner.utf8 = utf8;
+    let token = scanner.peek()?;
+    let decoded = decode_identifier(scanner.spelling(token))?;
+    let direction = selection_direction(&decoded);
+    if let Some(direction) = direction {
+        scanner.next()?;
+        return selection_command(&mut scanner, direction, grouped_keys.unwrap_or_default());
+    }
+    if let Some(keys) = grouped_keys {
         let operations = parse_operations(&mut scanner, true)?;
         if operations.is_empty() {
             return Err(unsupported("grouping requires at least one operation"));
@@ -802,14 +918,10 @@ pub(super) fn command_for_format(
             mode: Mode::Aggregate,
             keys,
             operations,
+            ranking: None,
+            comparison: None,
         });
     }
-    let mut scanner = Scanner::new(args)?;
-    scanner.named_numbers = named_numbers;
-    scanner.profile = profile;
-    scanner.utf8 = utf8;
-    let token = scanner.peek()?;
-    let decoded = decode_identifier(scanner.spelling(token))?;
     if decoded.eq_ignore_ascii_case(b"crosstab") || decoded.eq_ignore_ascii_case(b"ct") {
         scanner.next()?;
         let keys = group_fields(&mut scanner, "crosstab")?;
@@ -854,6 +966,8 @@ pub(super) fn command_for_format(
             mode: Mode::Crosstab,
             keys,
             operations,
+            ranking: None,
+            comparison: None,
         });
     }
     if decoded.eq_ignore_ascii_case(b"check") {
@@ -862,6 +976,8 @@ pub(super) fn command_for_format(
             mode: check_options(&mut scanner)?,
             keys: Vec::new(),
             operations: Vec::new(),
+            ranking: None,
+            comparison: None,
         });
     }
     if decoded.eq_ignore_ascii_case(b"rmdup") || decoded.eq_ignore_ascii_case(b"dedup") {
@@ -885,6 +1001,8 @@ pub(super) fn command_for_format(
             mode: Mode::Dedup,
             keys,
             operations: Vec::new(),
+            ranking: None,
+            comparison: None,
         });
     }
     let table_mode = if decoded.eq_ignore_ascii_case(b"reverse") {
@@ -910,6 +1028,8 @@ pub(super) fn command_for_format(
             mode,
             keys: Vec::new(),
             operations: Vec::new(),
+            ranking: None,
+            comparison: None,
         });
     }
     if !is_group(&decoded) {
@@ -922,10 +1042,16 @@ pub(super) fn command_for_format(
             },
             keys: Vec::new(),
             operations,
+            ranking: None,
+            comparison: None,
         });
     }
     scanner.next()?;
     let keys = group_fields(&mut scanner, "groupby")?;
+    if let Some(direction) = selected_direction(&mut scanner)? {
+        scanner.next()?;
+        return selection_command(&mut scanner, direction, keys);
+    }
     let operations = parse_operations(&mut scanner, true)?;
     if operations.is_empty() {
         return Err(failure(b"missing operation\n".to_vec()));
@@ -934,6 +1060,170 @@ pub(super) fn command_for_format(
         mode: Mode::Aggregate,
         keys,
         operations,
+        ranking: None,
+        comparison: None,
+    })
+}
+
+fn comparison_command(
+    args: &[OsString],
+    group: Option<&OsString>,
+    named_numbers: bool,
+    profile: Profile,
+    utf8: bool,
+) -> Result<Command, Failure> {
+    let missing =
+        || failure(b"compare requires BEFORE AFTER and at least one operation\n".to_vec());
+    let before = args.get(1).ok_or_else(missing)?;
+    let after = args.get(2).ok_or_else(missing)?;
+    if before.as_bytes() == b"-" && after.as_bytes() == b"-" {
+        return Err(failure(
+            b"compare permits stdin on at most one side\n".to_vec(),
+        ));
+    }
+    let copy = |path: &OsString| -> Result<OsString, Failure> {
+        use std::os::unix::ffi::OsStringExt;
+        let mut bytes = Vec::new();
+        reserve(&mut bytes, path.as_bytes().len())?;
+        bytes.extend_from_slice(path.as_bytes());
+        Ok(OsString::from_vec(bytes))
+    };
+    let unsigned = |argument: Option<&OsString>| -> Result<u64, Failure> {
+        let bytes = argument
+            .ok_or_else(|| failure(b"missing comparison modifier value\n".to_vec()))?
+            .as_bytes();
+        if bytes.is_empty() || !bytes.iter().all(u8::is_ascii_digit) {
+            return Err(failure(
+                b"comparison modifiers require positive unsigned decimal integers\n".to_vec(),
+            ));
+        }
+        bytes
+            .iter()
+            .try_fold(0u64, |n, b| {
+                n.checked_mul(10)?.checked_add(u64::from(b - b'0'))
+            })
+            .filter(|n| *n != 0)
+            .ok_or_else(|| {
+                failure(b"comparison modifier value is zero or outside u64 range\n".to_vec())
+            })
+    };
+    let mut at = 3;
+    let ranking = if args.get(at).is_some_and(|arg| arg.as_bytes() == b"rank") {
+        at += 1;
+        let result = unsigned(args.get(at))?;
+        at += 1;
+        let percent = match args.get(at).map(|arg| arg.as_bytes()) {
+            Some(b"percent") => {
+                at += 1;
+                true
+            }
+            Some(b"absolute") => {
+                at += 1;
+                false
+            }
+            _ => false,
+        };
+        let limit = if args.get(at).is_some_and(|arg| arg.as_bytes() == b"limit") {
+            at += 1;
+            let limit = unsigned(args.get(at))?;
+            at += 1;
+            Some(limit)
+        } else {
+            None
+        };
+        Some(super::comparison::Ranking {
+            result: usize::try_from(result - 1).map_err(|_| {
+                failure(b"comparison rank result is outside addressable range\n".to_vec())
+            })?,
+            percent,
+            limit,
+        })
+    } else {
+        None
+    };
+    if at == args.len() {
+        return Err(missing());
+    }
+    let mut scanner = Scanner::from_args(&args[at..], false)?;
+    scanner.named_numbers = named_numbers;
+    scanner.profile = profile;
+    scanner.utf8 = utf8;
+    let operations = parse_operations_for_mode(&mut scanner, false, "compare")?;
+    if operations.is_empty() {
+        return Err(missing());
+    }
+    if ranking
+        .as_ref()
+        .is_some_and(|rank| rank.result >= operations.len())
+    {
+        return Err(failure(
+            b"comparison rank result exceeds the number of results\n".to_vec(),
+        ));
+    }
+    let keys = if let Some(group) = group {
+        let mut scanner = Scanner::from_args(std::slice::from_ref(group), true)?;
+        scanner.named_numbers = named_numbers;
+        scanner.profile = profile;
+        scanner.utf8 = utf8;
+        group_fields(&mut scanner, "groupby")?
+    } else {
+        Vec::new()
+    };
+    Ok(Command {
+        mode: Mode::Compare,
+        keys,
+        operations,
+        ranking: None,
+        comparison: Some(super::comparison::Request {
+            before: copy(before)?,
+            after: copy(after)?,
+            ranking,
+        }),
+    })
+}
+
+fn selection_command(
+    scanner: &mut Scanner,
+    direction: super::selection::Direction,
+    keys: Vec<Field>,
+) -> Result<Command, Failure> {
+    // The count has its own unsigned decimal contract, rather than the GNU
+    // scanner's signed field-integer or floating-parameter syntax.
+    let start = scanner.position;
+    let end = scanner.script[start..]
+        .iter()
+        .position(|byte| space(*byte))
+        .map_or(scanner.script.len(), |length| start + length);
+    let count = scanner.script[start..end]
+        .strip_prefix(b":")
+        .filter(|digits| !digits.is_empty())
+        .and_then(|digits| {
+            digits.iter().try_fold(0u64, |count, byte| {
+                byte.is_ascii_digit()
+                    .then_some(u64::from(byte.wrapping_sub(b'0')))
+                    .and_then(|digit| count.checked_mul(10)?.checked_add(digit))
+            })
+        })
+        .filter(|count| *count != 0)
+        .ok_or_else(|| {
+            failure(b"Top-N selection requires a count from 1 through 18446744073709551615, written as :N\n".to_vec())
+        })?;
+    scanner.position = end;
+    let field = scanner.next()?;
+    let ranking = scanner
+        .decode_field(field)?
+        .ok_or_else(|| failure(b"Top-N selection requires one ranking Field\n".to_vec()))?;
+    if scanner.next()?.kind != TokenKind::End {
+        return Err(failure(
+            b"Top-N selection requires exactly one single-field Selector and cannot mix with other Operations or Modes\n".to_vec(),
+        ));
+    }
+    Ok(Command {
+        mode: Mode::Select(super::selection::Selection { direction, count }),
+        keys,
+        operations: Vec::new(),
+        ranking: Some(ranking),
+        comparison: None,
     })
 }
 

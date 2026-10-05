@@ -15,6 +15,9 @@ static page in site/. This:
 - writes a Markdown copy of every docs page next to its HTML (guide/output.md
   beside guide/output.html), with mdBook includes resolved, and links it from
   the page as its text/markdown alternate;
+- adds page descriptions, keyboard-accessible navigation and skip links;
+- aligns HTML, menu, search, canonical and sitemap URLs with Cloudflare's
+  extensionless routes, retaining the generated HTML files on disk;
 - renders each Mermaid diagram to static SVG, in a dark and a light variant
   (site/diagrams/*.json), and replaces the code block with a <figure> whose
   caption is the `<!-- description: ... -->` comment that must follow it; no
@@ -29,6 +32,7 @@ static page in site/. This:
 """
 import hashlib
 import html
+import json
 import os
 from pathlib import Path
 import re
@@ -36,6 +40,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from urllib.parse import urlsplit, urlunsplit
 from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +49,39 @@ SRC = ROOT / 'docs' / 'src'
 INCLUDE = re.compile(r'\{\{#include\s+([^}\s]+)\s*\}\}')
 MERMAID = re.compile(r'<pre><code class="language-mermaid">(.*?)</code></pre>\s*'
                      r'(?:<!-- description: (.*?) -->)?', re.S)
+
+
+def site_url(url):
+    """Use Cloudflare's default HTML routes; leave other sites and assets alone."""
+    parts = urlsplit(url)
+    if parts.scheme and parts.scheme not in ('http', 'https'):
+        return url
+    if parts.netloc and parts.netloc != urlsplit(SITE).netloc:
+        return url
+    path = parts.path
+    if path == 'index.html' or path.endswith('/index.html'):
+        path = path[:-len('index.html')] or './'
+    elif path.endswith('.html'):
+        path = path[:-len('.html')]
+    return urlunsplit(parts._replace(path=path))
+
+
+def site_links(text):
+    """Rewrite URL attributes, without changing code examples or external links."""
+    def tag(match):
+        def attribute(attr):
+            url = html.unescape(attr.group(2))
+            return attr.group(1) + html.escape(site_url(url), quote=True) + attr.group(3)
+        return re.sub(r'((?:href|src)=["\'])(.*?)(["\'])', attribute, match.group(0))
+    return re.sub(r'<(?:a|link|iframe)\b[^>]*>', tag, text)
+
+
+def descriptions():
+    values = json.loads((ROOT / 'docs' / 'descriptions.json').read_text(encoding='utf-8'))
+    paths = {path for _, _, path in chapters()}
+    if set(values) != paths or any(not isinstance(v, str) or not v.strip() for v in values.values()):
+        sys.exit('docs/descriptions.json must contain one nonempty description per chapter')
+    return values
 
 
 def version():
@@ -105,18 +143,92 @@ def landing(book):
 
 
 def docs_markdown(book):
+    summaries = descriptions()
     for _, _, path in chapters():
         (book / path).parent.mkdir(parents=True, exist_ok=True)
         (book / path).write_text(markdown(path), encoding='utf-8')
-        html = book / Path(path).with_suffix('.html')
-        page = html.read_text(encoding='utf-8')
-        url = f'{SITE}/{Path(path).with_suffix(".html").as_posix()}'
+        page_path = book / Path(path).with_suffix('.html')
+        page = page_path.read_text(encoding='utf-8')
+        url = site_url(f'{SITE}/{Path(path).with_suffix(".html").as_posix()}')
+        summary = html.escape(summaries[path], quote=True)
+        for attribute in ('name="description"', 'property="og:description"'):
+            page, count = re.subn(r'<meta ' + attribute + r' content="[^"]*">',
+                                  lambda _: f'<meta {attribute} content="{summary}">', page)
+            if count != 1:
+                sys.exit(f'{page_path}: expected one {attribute} meta tag')
         alternate = (f'<link rel="alternate" type="text/markdown" '
                      f'href="{Path(path).name}">\n'
                      f'<link rel="canonical" href="{url}">\n'
                      f'<meta property="og:url" content="{url}">\n')
         if 'type="text/markdown"' not in page:
-            html.write_text(page.replace('</head>', alternate + '</head>', 1), encoding='utf-8')
+            page = page.replace('</head>', alternate + '</head>', 1)
+        page_path.write_text(page, encoding='utf-8')
+
+
+def navigation(book):
+    for page_path in book.rglob('*.html'):
+        if page_path in (book / 'index.html', book / 'toc.html'):
+            continue
+        page = page_path.read_text(encoding='utf-8')
+        root = os.path.relpath(book, page_path.parent).replace(os.sep, '/')
+
+        def button(match):
+            attrs = match.group(1).replace(' for="mdbook-sidebar-toggle-anchor"', '')
+            return (f'<button type="button"{attrs}>{match.group(2)}</button>'
+                    f'<noscript><a class="sidebar-contents-link" href="{root}/toc.html">'
+                    'Contents</a></noscript>')
+
+        page, count = re.subn(r'<label([^>]*\bid="mdbook-sidebar-toggle"[^>]*)>(.*?)</label>',
+                              button, page, flags=re.S)
+        if count != 1 or page.count('<main>') != 1 or page.count('<body>') != 1:
+            sys.exit(f'{page_path}: mdBook navigation markup changed; update the site builder')
+        page = page.replace('<body>', '<body>\n<a class="skip-link" href="#main-content">'
+                            'Skip to content</a>', 1)
+        page = page.replace('<main>', '<main id="main-content" tabindex="-1">', 1)
+        # Long examples and tables must remain horizontally scrollable by keyboard.
+        # Put focus on code itself: mdBook scrolls <code>, not its <pre> parent.
+        page = re.sub(r'(<pre\b[^>]*>\s*<code\b)([^>]*)(>)',
+                      lambda m: m.group(1) + m.group(2) + ' tabindex="0"' + m.group(3), page)
+        page = page.replace('<div class="table-wrapper">',
+                            '<div class="table-wrapper" tabindex="0">')
+        page_path.write_text(page, encoding='utf-8')
+
+
+def routes(book):
+    # These generated scripts also contain links. Give changed contents a new
+    # filename so a browser cannot reuse the old, content-hashed asset.
+    renamed = {}
+    for prefix in ('toc', 'searchindex'):
+        assets = list(book.glob(f'{prefix}-*.js'))
+        if len(assets) != 1:
+            sys.exit(f'{book}: expected one generated {prefix} script')
+        old = assets[0]
+        text = old.read_text(encoding='utf-8')
+        if prefix == 'toc':
+            text = site_links(text)
+            # Directory URLs already match the rewritten TOC links. mdBook's
+            # index.html alias would otherwise prevent marking them active.
+            text, count = re.subn(r"\s*if \(current_page\.endsWith\('/'\)\) \{\s*"
+                                  r"current_page \+= 'index\.html';\s*\}", '', text)
+            if count != 1:
+                sys.exit(f'{old}: mdBook current-page matching changed; update the site builder')
+        else:
+            def search_urls(match):
+                urls = json.loads(match.group(1))
+                return '"doc_urls":' + json.dumps([site_url(url) for url in urls])
+            text, count = re.subn(r'"doc_urls":(\[[^\]]*\])', search_urls, text)
+            if count != 1:
+                sys.exit(f'{old}: mdBook search index changed; update the site builder')
+        new = book / f'{prefix}-{hashlib.sha256(text.encode()).hexdigest()[:8]}.js'
+        if old != new:
+            new.write_bytes(text.encode('utf-8'))
+            old.unlink()
+            renamed[old.name] = new.name
+    for page_path in book.rglob('*.html'):
+        page = site_links(page_path.read_text(encoding='utf-8'))
+        for old, new in renamed.items():
+            page = page.replace(old, new)
+        page_path.write_text(page, encoding='utf-8')
 
 
 def render(source, theme, target):
@@ -185,9 +297,9 @@ def llms_txt(book):
     lines = [
         '# Fastmash',
         '',
-        '> Fast command-line statistics for delimited text: a Rust implementation of',
-        '> the GNU datamash command language, up to four times faster on real jobs,',
-        '> with identical results on every machine.',
+        '> Fast command-line statistics and table workflows for text and quoted CSV.',
+        '> GNU datamash commands, portable results, weighted means, complete-record',
+        '> selection, table health and dataset comparison.',
         '',
         f'Version {version()}. Linux x86-64 and WSL2. Install:',
         '`curl -fsSL https://fastmash.io/install.sh | sh`, or `cargo install --locked fastmash`.',
@@ -204,7 +316,7 @@ def llms_txt(book):
 
 
 def sitemap(book):
-    pages = [''] + [str(Path(path).with_suffix('.html')).replace('\\', '/')
+    pages = [''] + [site_url(Path(path).with_suffix('.html').as_posix())
                     for _, _, path in chapters()]
     entries = ''.join(f'  <url><loc>{escape(SITE + "/" + page)}</loc></url>\n' for page in pages)
     (book / 'sitemap.xml').write_text(
@@ -222,6 +334,8 @@ def main(book):
     landing(book)
     diagrams(book)
     docs_markdown(book)
+    navigation(book)
+    routes(book)
     llms_txt(book)
     sitemap(book)
     print(f'landing page, install.sh, diagrams, Markdown pages, llms.txt and sitemap.xml written to {book}')

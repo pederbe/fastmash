@@ -20,9 +20,20 @@ mod buffered_stdout;
 mod checksum;
 mod collation_glibc;
 mod collation_locales;
+#[cfg(test)]
+mod color_tests;
 mod command_memory;
 mod command_output;
+mod command_sources;
+#[cfg(test)]
+mod command_test_support;
+mod comparison;
+#[cfg(test)]
+mod comparison_tests;
 mod crosstab;
+mod csv_input;
+#[cfg(test)]
+mod csv_input_tests;
 mod decimal;
 mod decimal_powers;
 mod dispersion;
@@ -32,6 +43,11 @@ mod grammar;
 mod grouping;
 mod guarded_exp;
 mod guarded_log;
+mod health;
+mod health_render;
+#[cfg(test)]
+mod health_tests;
+mod help;
 mod intake;
 mod line_numeric;
 mod linux;
@@ -51,6 +67,9 @@ mod options;
 mod ordered_statistics;
 mod paired;
 mod path_fields;
+mod preparation;
+#[cfg(test)]
+mod preparation_tests;
 mod presentation;
 mod projected_sort;
 mod random;
@@ -61,14 +80,27 @@ mod robust_statistics;
 mod routing_tests;
 mod samples;
 mod scalar_text;
+mod selection;
+#[cfg(test)]
+mod selection_tests;
 mod sort_route;
 mod sorted_input;
 mod standard_io;
 mod table_checks;
 mod table_modes;
+mod terminal_style;
+#[cfg(test)]
+#[path = "../tests/support/temp_dir.rs"]
+mod test_dir;
+#[cfg(test)]
+#[path = "../tests/support/terminal.rs"]
+mod test_terminal;
 mod text_order;
 mod text_samples;
 mod transpose;
+mod weighted;
+#[cfg(test)]
+mod weighted_tests;
 
 #[cfg(test)]
 use failure::MESSAGE_FAILS;
@@ -201,20 +233,23 @@ struct Environment {
     /// `FASTMASH_PIPE_GROUPING`, which only sorted Commands with Grouping
     /// keys read (and refuse when it is invalid).
     pipe_grouping: Option<std::ffi::OsString>,
+    terminal: terminal_style::Detection,
 }
 
 impl Environment {
-    fn from_env() -> Self {
+    fn from_env(terminal: terminal_style::Detection) -> Self {
         Self {
             locale: locale::Policy::from_env(),
             posixly_correct: std::env::var_os("POSIXLY_CORRECT").is_some(),
             grouping: std::env::var_os("FASTMASH_GROUPING"),
             sort_memory: std::env::var_os("FASTMASH_SORT_MEMORY_BYTES"),
             pipe_grouping: std::env::var_os("FASTMASH_PIPE_GROUPING"),
+            terminal,
         }
     }
 }
 
+#[cfg(test)]
 fn run(
     reader: &mut impl replay::Rewind,
     writer: &mut impl command_output::Transport,
@@ -222,10 +257,18 @@ fn run(
     name: &[u8],
     report: &mut impl FnMut(&Failure) -> bool,
 ) -> Result<i32, Failure> {
-    run_in(reader, writer, args, name, report, Environment::from_env())
+    run_in(
+        reader,
+        writer,
+        args,
+        name,
+        report,
+        Environment::from_env(terminal_style::Detection::from_env()),
+    )
 }
 
 /// [`run`] in `environment`.
+#[cfg(test)]
 fn run_in(
     reader: &mut impl replay::Rewind,
     writer: &mut impl command_output::Transport,
@@ -245,6 +288,7 @@ fn run_in(
     )
 }
 
+#[cfg(test)]
 fn run_with_seed_source(
     reader: &mut impl replay::Rewind,
     writer: &mut impl command_output::Transport,
@@ -254,26 +298,84 @@ fn run_with_seed_source(
     seed_source: &mut impl random::SeedSource,
     environment: Environment,
 ) -> Result<i32, Failure> {
+    run_with_sources(
+        (reader, &mut command_sources::Files),
+        writer,
+        args,
+        name,
+        report,
+        seed_source,
+        environment,
+    )
+}
+
+#[cfg(test)]
+fn run_with_sources(
+    input: (
+        &mut impl replay::Rewind,
+        &mut impl command_sources::Resolver,
+    ),
+    writer: &mut impl command_output::Transport,
+    args: &[std::ffi::OsString],
+    name: &[u8],
+    report: &mut impl FnMut(&Failure) -> bool,
+    seed_source: &mut impl random::SeedSource,
+    environment: Environment,
+) -> Result<i32, Failure> {
+    let scan =
+        options::scan_with_policy(args, name, environment.posixly_correct, environment.locale);
+    run_scanned_with_sources(
+        input,
+        writer,
+        (scan, environment),
+        name,
+        report,
+        seed_source,
+    )
+}
+
+/// Dispatches the same scanned Command for process and controlled transports.
+/// The process resolves diagnostic styling before consuming a failed action.
+fn run_scanned_with_sources(
+    input: (
+        &mut impl replay::Rewind,
+        &mut impl command_sources::Resolver,
+    ),
+    writer: &mut impl command_output::Transport,
+    scanned: (options::Scan, Environment),
+    name: &[u8],
+    report: &mut impl FnMut(&Failure) -> bool,
+    seed_source: &mut impl random::SeedSource,
+) -> Result<i32, Failure> {
+    let (reader, sources) = input;
+    let (scan, mut environment) = scanned;
     let policy = environment.locale;
-    let action = options::parse_with_policy(args, name, environment.posixly_correct, policy);
-    let information: Option<&[u8]> = match &action {
-        Ok(options::Action::Help) => Some(include_bytes!("help.txt")),
-        Ok(options::Action::Version) => {
-            Some(concat!("fastmash ", env!("CARGO_PKG_VERSION"), "\n").as_bytes())
+    let style = environment
+        .terminal
+        .style(scan.color, terminal_style::Destination::Stdout);
+    let action = scan.action;
+    match &action {
+        Ok(options::Action::Help) => {
+            return help::write(writer, style)
+                .map(|()| 0)
+                .map_err(|e| os_failure(&e, false));
         }
-        _ => None,
-    };
-    if let Some(output) = information {
-        return records::write_output(writer, output)
+        Ok(options::Action::Version) => {
+            return records::write_output(
+                writer,
+                concat!("fastmash ", env!("CARGO_PKG_VERSION"), "\n").as_bytes(),
+            )
             .map(|()| 0)
             .map_err(|e| os_failure(&e, false));
+        }
+        _ => {}
     }
     let profile = policy.numeric;
     let options::Action::Calculate(mut options) = action? else {
         unreachable!("informational action already handled")
     };
     options.presentation.profile = profile;
-    options.sort_memory = environment.sort_memory;
+    options.sort_memory = environment.sort_memory.take();
     let command = grammar::command_for_format(
         &options.operands,
         options.group.as_ref(),
@@ -281,61 +383,28 @@ fn run_with_seed_source(
         profile,
         policy.utf8,
     )?;
-    options.linewise = command.mode == grammar::Mode::Line;
-    options.crosstab = command.mode == grammar::Mode::Crosstab;
-    // GNU's rmdup compares keys exactly; -i only changes its sort order.
-    if options.ignore_case
-        && match command.mode {
-            grammar::Mode::Aggregate | grammar::Mode::Crosstab => true,
-            grammar::Mode::Dedup => options.sort,
-            _ => false,
-        }
-    {
-        policy.case_folding()?;
-    }
-    if matches!(
-        command.mode,
-        grammar::Mode::Reverse
-            | grammar::Mode::Transpose
-            | grammar::Mode::Noop
-            | grammar::Mode::Check { .. }
-            | grammar::Mode::Dedup
-    ) {
-        options.validate_annotation()?;
-        setup_sigpipe()?;
-        return table_modes::run(reader, writer, &options, command.mode, command.keys, report);
-    }
-    let binding = binding::Binding::new(name, command.operations, command.keys)?;
-    let needs = binding
-        .operations
-        .needs(options.presentation.spec.is_some());
-    if needs.numeric_locale {
-        policy.numbers()?;
-    }
-    if binding.names_fields() && !options.header_in {
-        return Err(failure(
-            b"-H or --header-in must be used with named columns\n".to_vec(),
-        ));
-    }
-    options.validate_annotation()?;
-    // The Sort route of a sorted Command with Grouping keys.
-    let route = if options.sort && !binding.keys.is_empty() {
-        policy.sorting()?;
-        let native = binding.operations.native_sort();
-        let facts = sort_route::Facts {
-            hash_eligible: projected_sort::hash_eligible(&options, &binding.operations),
-            grouping: projected_sort::grouping(environment.grouping.as_deref())?,
-            language: policy.language(),
-            covered: native != operation_set::NativeSort::Unsupported,
-            packed: projected_sort::packed(&options, native),
-            hold: sort_route::Hold::setting(environment.pipe_grouping.as_deref())?,
+    let (options, binding, needs, route) =
+        match preparation::prepare(&mut options, command, &environment, name)? {
+            preparation::Prepared::Comparison(prepared) => {
+                setup_sigpipe()?;
+                return comparison::run(reader, writer, sources, prepared, name, report);
+            }
+            preparation::Prepared::Health(prepared) => {
+                setup_sigpipe()?;
+                return health::run(reader, writer, prepared.into_options(), style, report);
+            }
+            preparation::Prepared::Table(prepared) => {
+                let (options, mode, keys) = prepared.into_parts();
+                setup_sigpipe()?;
+                return table_modes::run(reader, writer, options, mode, keys, report);
+            }
+            preparation::Prepared::Selection(prepared) => {
+                let (options, request, binding) = prepared.into_parts();
+                setup_sigpipe()?;
+                return selection::run(reader, writer, options, request, binding, report);
+            }
+            preparation::Prepared::Ordinary(prepared) => prepared.into_parts(),
         };
-        Some(sort_route::plan(facts, || {
-            sorted_input::available(options.input)
-        }))
-    } else {
-        None
-    };
     let mut cleared = None;
     let (mut arithmetic, mut random) = initialize_before_input(
         route.is_some_and(|route| route.sort == sort_route::Sort::External),
@@ -354,7 +423,7 @@ fn run_with_seed_source(
             route,
             reader,
             writer,
-            &options,
+            options,
             binding,
             &mut arithmetic,
             random.as_mut(),
@@ -365,11 +434,11 @@ fn run_with_seed_source(
     let (capacity, line_buffered) = writer.buffering();
     let buffer = buffered_stdout::BufferedStdout::new(writer, capacity, line_buffered)
         .map_err(|e| os_failure(&e, false))?;
-    let mut output = command_output::Results::new(buffer, &options);
+    let mut output = command_output::Results::new(buffer, options);
     let result = calculate(
         reader,
         &mut output,
-        &options,
+        options,
         binding,
         &mut arithmetic,
         random.as_mut(),
@@ -393,6 +462,9 @@ fn calculate(
     // The Input header, where the external route read it before sorting.
     prepared: Option<Vec<u8>>,
 ) -> Result<(), Failure> {
+    if options.csv_in {
+        return csv_input::calculate(reader, output, options, binding, arithmetic, random);
+    }
     let mut random = random;
     // When the Input header was not found before sorting, GNU reads it again
     // from the sorted stream, and warns about --full only then (datamash.c
@@ -407,8 +479,7 @@ fn calculate(
     if let Some(record) = prepared {
         output.first(&record, &binding.operations, &binding.keys)?;
     }
-    let grouped = !binding.keys.is_empty() || options.full || options.linewise;
-    let mut grouping = grouping::Grouping::new();
+    let mut calculation = grouping::Calculation::new(&binding.keys, options);
     let mut spare = grouping::Raw::for_keys(binding.keys.len(), records::FieldIndex::default())?;
     // The records' field index, set up once the fields are resolved.
     let mut index = None;
@@ -439,30 +510,20 @@ fn calculate(
             spare.index_fields(index.fresh());
             index
         });
-        if grouped {
-            let mut context = grouping::Context::new(
-                &mut binding.operations,
-                &binding.keys,
-                options,
-                arithmetic,
-                random.as_deref_mut(),
-                output,
-            );
-            grouping.push_in_place(
-                &mut spare,
-                || grouping::Raw::for_keys(binding.keys.len(), index.fresh()),
-                line,
-                &mut context,
-            )?;
-        } else {
-            spare.collect_ungrouped(
-                &mut binding.operations,
-                line,
-                options,
-                arithmetic,
-                random.as_deref_mut(),
-            )?;
-        }
+        let mut context = grouping::Context::new(
+            &mut binding.operations,
+            &binding.keys,
+            options,
+            arithmetic,
+            random.as_deref_mut(),
+            output,
+        );
+        calculation.push_in_place(
+            &mut spare,
+            || grouping::Raw::for_keys(binding.keys.len(), index.fresh()),
+            line,
+            &mut context,
+        )?;
     }
     let line = intake.line();
     let mut context = grouping::Context::new(
@@ -473,13 +534,7 @@ fn calculate(
         None,
         output,
     );
-    let finished = grouping.finish(line, &mut context)?;
-    if !finished && line > u64::from(options.header_in) {
-        binding
-            .operations
-            .write_ungrouped_results(output, arithmetic, options)?;
-    }
-    output.end(options)?;
+    calculation.finish(line, &mut context)?;
     intake.finish()
 }
 
@@ -530,11 +585,16 @@ const INPUT_BUFFER: usize = 128 << 10;
 
 #[cfg_attr(test, allow(dead_code))]
 fn run_process() {
+    let terminal = terminal_style::Detection::from_env();
     let args = match options::collect_args(std::env::args_os()) {
         Ok(args) => args,
         Err(error) => {
             let mut stderr = standard_io::Stderr;
-            let _ = stderr.write_all(b"fastmash: ");
+            let style = terminal.style(
+                terminal_style::ColorMode::Auto,
+                terminal_style::Destination::Stderr,
+            );
+            let _ = failure::write_prefix(&mut stderr, b"fastmash", style);
             let _ = stderr.write_all(reported(&error));
             std::process::exit(error.status);
         }
@@ -544,25 +604,37 @@ fn run_process() {
         .map_or(b"fastmash".as_slice(), |v| v.as_bytes());
     let mut stdin = io::BufReader::with_capacity(INPUT_BUFFER, standard_io::Stdin);
     let mut stdout = command_output::Stdout::new();
-    let mut report = |error: &Failure| {
-        let mut stderr = standard_io::Stderr;
-        let wrote = stderr
-            .write_all(name)
-            .and_then(|_| stderr.write_all(b": "))
-            .and_then(|_| stderr.write_all(reported(error)))
-            .and_then(|_| stderr.flush());
-        wrote.is_ok()
-    };
+    let environment = Environment::from_env(terminal);
     // argc can be 0 (execve with an empty argv before Linux 5.18).
     let operands = args.get(1..).unwrap_or_default();
-    let result = run(&mut stdin, &mut stdout, operands, name, &mut report);
-    // `run` has completed its output, reporting any failure; a status of 1
+    let scan = options::scan_with_policy(
+        operands,
+        name,
+        environment.posixly_correct,
+        environment.locale,
+    );
+    let style = environment
+        .terminal
+        .style(scan.color, terminal_style::Destination::Stderr);
+    let mut report = |error: &Failure| {
+        let mut stderr = standard_io::Stderr;
+        failure::write(&mut stderr, name, error, style).is_ok()
+    };
+    let result = run_scanned_with_sources(
+        (&mut stdin, &mut command_sources::Files),
+        &mut stdout,
+        (scan, environment),
+        name,
+        &mut report,
+        &mut random::OsSeedSource,
+    );
+    // The Command has completed its output, reporting any failure; a status of 1
     // may already stand for a diagnostic it could not write.
     let (mut status, mut reported_all) = match result {
         Ok(status) => (status, status != 1),
         Err(error) => (error.status, report(&error)),
     };
-    // Standard output is still open where `run` stopped before any output.
+    // Standard output is still open where the Command stopped before any output.
     if let Err(error) = stdout.close()
         && error.raw_os_error() != Some(9)
     {
@@ -1049,6 +1121,9 @@ mod command_tests {
 }
 
 mod headers;
+mod result_names;
+#[cfg(test)]
+mod result_names_tests;
 
 #[cfg(test)]
 mod portable_routing_tests {
@@ -1101,6 +1176,7 @@ mod environment_tests {
             grouping: None,
             sort_memory: None,
             pipe_grouping: None,
+            terminal: Default::default(),
         };
         let args: Vec<std::ffi::OsString> = args.iter().map(Into::into).collect();
         let mut reader = io::Cursor::new(input);

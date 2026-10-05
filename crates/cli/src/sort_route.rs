@@ -172,6 +172,34 @@ pub(super) fn run(
     if let Some(record) = sorting.header() {
         binding.header(record, options)?;
     }
+    // A weighted Command with no Input header at clean EOF has no calculation
+    // domain. Reuse calculation and output finalization without asking sort to
+    // interpret its unresolved named keys. Present headers and read errors keep
+    // the ordinary external-sort path.
+    if binding.operations.has_weighted_mean()
+        && binding.unresolved_keys()
+        && sorting.clean_header_eof(options)
+    {
+        let (capacity, line_buffered) = writer.buffering();
+        let buffer = buffered_stdout::BufferedStdout::new(writer, capacity, line_buffered)
+            .map_err(|e| os_failure(&e, false))?;
+        let mut output = command_output::Results::new(buffer, options);
+        let result = calculate(
+            &mut std::io::empty(),
+            &mut output,
+            options,
+            binding,
+            arithmetic,
+            random,
+            None,
+        );
+        return Ok(command_output::complete(
+            output.buffer,
+            result,
+            command_output::Transport::close,
+            report,
+        ));
+    }
     let sorted = sorting.start(&binding.keys, options)?;
     let (capacity, line_buffered) = writer.buffering();
     let buffer = buffered_stdout::BufferedStdout::new(writer, capacity, line_buffered)

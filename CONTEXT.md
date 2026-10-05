@@ -7,6 +7,9 @@ language so that datamash workflows can move to it with few or no changes.
 Use **Fastmash** for the product in prose and display text, and `fastmash`
 for commands and identifiers, including package and repository names.
 
+This glossary covers current behavior and selected post-release concepts.
+The user guide describes implemented capabilities.
+
 ## Command language
 
 **Command**:
@@ -30,7 +33,8 @@ _Avoid_: "Family" on its own (see **Job family**)
 
 **Mode**:
 The overall way a command processes its input: aggregating (optionally in
-groups), crosstab, per-row operations, or one of the field modes and table modes.
+groups), Dataset comparison, crosstab, per-row operations, Top-N selection, or one of the field modes
+and table modes.
 _Avoid_: Using "mode" for the `mode` statistic
 
 **Per-row operation**:
@@ -44,7 +48,8 @@ A mode that rearranges or passes through the fields of each record: `reverse`
 and `noop`. `cut` is a per-row operation, as in GNU datamash, not a field mode.
 
 **Table mode**:
-A mode that treats the input as a whole table: `check`, `transpose` and `rmdup`.
+A mode that treats the input as a whole table: `check`, `transpose`, `rmdup`
+and `health`, which produces a Table health report.
 
 **Crosstab**:
 A pivot table of one calculation over every pair of values of two grouping keys.
@@ -53,7 +58,8 @@ _Avoid_: Cross-tabulation
 ## Input
 
 **Record**:
-One input unit, ended by a newline, or by a NUL byte with `-z`.
+One logical input unit composed of fields. In ordinary delimited text, it ends
+at a newline or, with `-z`, a NUL byte; quoted CSV permits line breaks within fields.
 _Avoid_: Row (except for per-row operations), line
 
 **Field**:
@@ -62,32 +68,51 @@ header, by its name.
 _Avoid_: Column (except when talking about headers and tables)
 
 **Field separator**:
-The single byte, or run of whitespace with `-W`, that splits an input record
-into fields. Tab by default.
+In ordinary delimited text, the single byte, or run of whitespace with `-W`,
+that splits an input record into fields. Tab by default.
 _Avoid_: Input delimiter
 
+**Quoted CSV**:
+An explicitly selected input or output format with comma-separated fields,
+where double quoting permits commas, quotes and line breaks within a field.
+
 **Output delimiter**:
-The byte written between results in an output record. It follows the field
-separator unless set explicitly.
+The byte written between fields of an ordinary delimited-text output record,
+following the Field separator unless set explicitly. CSV output uses commas
+between individually encoded fields.
 
 **Collapse delimiter**:
 The byte written between the values listed by `unique` and `collapse`. Comma by
 default.
 
 **Selector**:
-The field argument of an operation: a single field, a list or range of fields,
-or a `LEFT:RIGHT` field pair for paired operations.
+The field argument within a Command, such as an Operation's input or a Top-N
+ranking field. Operations accept a single field, a list or range of fields,
+or a `LEFT:RIGHT` field pair for paired operations; selection accepts one field.
 _Avoid_: Field spec
+
+**Binding**:
+The assignment of a Selector's Fields and requested keys to positions in a
+dataset. Names use that dataset's Input header; positional Fields keep their
+requested positions.
 
 **Input header**:
 A first record that names the fields instead of carrying data (`--header-in`, `-H`).
 
 **Output header**:
-A first output record that Fastmash generates to label the results, such as
-`sum(reading)` (`--header-out`, `-H`).
+A first output record that labels calculation results, such as `sum(reading)`,
+or copied fields in Top-N selection (`--header-out`, `-H`).
+
+**Result name**:
+A supplied label for an Operation-produced output column, including a selected
+field from `cut`. It replaces the generated label, excluding Grouping keys and
+the copied-field prefix from `--full`. In a Dataset comparison, it names one
+summary result throughout that result's before, after and change columns.
 
 **Full row**:
-A complete input record printed before a group's results with `--full`.
+A complete input record's fields copied before calculation results with `--full`,
+including Per-row results. CSV copies decoded field values, not their original
+quote spelling.
 
 **Filler**:
 The text printed for a missing cell in crosstab and ragged `transpose` output
@@ -108,18 +133,21 @@ _Avoid_: Group field, sort key
 A run of consecutive records with equal grouping keys. Records with equal keys
 form one group only when they are adjacent, or when `-s` sorts them together first.
 
+**Top-N selection**:
+Selecting at most N records by the highest or lowest values of one numeric
+ranking field, across a dataset or within each Group. Complete records appear
+in rank order, with earlier original input records winning ties.
+
 **Sort route**:
-The way Fastmash brings equal keys together for `-s` with grouping keys, decided
-before input is read: hash grouping first where it applies, then the sort it
-falls back to, either in process (in memory, spilling to temporary disk storage
-as needed) or the system `sort` through the sort supervisor.
+The way Fastmash brings equal Grouping keys together for `-s`, by sorting in
+memory with Spill as needed or, for ordinary delimited text, by another eligible
+route such as Hash grouping or the system `sort`.
 
 **Hash grouping**:
-The sort route for `-s` on input whose grouping keys repeat, from a file or,
-in a language locale, from a pipe: each group's records are collected apart as
-they arrive, and only the groups are sorted. Where that cannot give the sorted
-result exactly, Fastmash reads the input again and sorts it; piped input is
-held in memory to be read again.
+A Sort route for eligible ordinary delimited-text input whose Grouping keys
+repeat: each Group's records are collected as they arrive, and only the Groups
+are sorted. Where that cannot give the sorted result exactly, Fastmash reads
+the input again and sorts it, retaining piped input for that replay.
 _Avoid_: Hash mode, hash aggregation
 
 **Spill**:
@@ -133,6 +161,44 @@ that runs the system `sort` for the external sort route and cleans up after it.
 _Avoid_: Companion, sorter process
 
 ## Results
+
+**Table health report**:
+A report of identified or suspected data-quality issues in a dataset, assessed
+against expectations for its fields and records.
+
+**Health expectation**:
+A requirement for a field or record, supplied by the user or inferred from
+patterns in the data. Supplied requirements take precedence over inference.
+
+**Health finding**:
+A reported observation, suspected inconsistency with an inferred expectation,
+or violation of a supplied expectation.
+
+**Health validation**:
+Assessment of a dataset against supplied health expectations, with violations
+treated as validation failures. Inferred findings alone are advisory.
+
+**Weighted mean**:
+An average in which each value contributes according to an associated weight:
+the sum of weighted values divided by the sum of their weights.
+
+**Contribution weight**:
+A finite nonnegative number describing how much an observation contributes to
+a weighted mean. Zero contributes nothing; a valid mean needs positive total weight.
+
+**Dataset comparison**:
+A report of differences between statistical summaries of two datasets.
+
+**Comparison key**:
+An ordered tuple of complete Field byte strings, decoded for Quoted CSV,
+identifying corresponding summaries in a Dataset comparison. Each distinct key
+has at most one summary per dataset, independent of adjacency or quote spelling;
+its Records retain their encounter order.
+
+**Comparison ranking**:
+Ordering matched Comparison keys by the magnitude of one selected result's
+available difference or percentage. A limit caps ranked keys; every one-sided
+or unavailable key remains visible after them.
 
 **Portable results**:
 The product property that one Fastmash version gives identical results

@@ -2,9 +2,14 @@
 
 **Fast command-line statistics for delimited text.**
 
-Fastmash summarizes, groups and reshapes tab-separated or delimited text. It
+Fastmash summarizes, groups and reshapes delimited text and quoted CSV. It
 accepts the command language of [GNU datamash](https://www.gnu.org/software/datamash/),
 so if you already use `datamash`, you already know how to use Fastmash.
+
+It also reads quoted CSV directly, gives your result columns stable names,
+calculates weighted means and selects the highest or lowest complete records.
+Inspect a table's health or compare summaries from two exports with the same
+field selectors and portable arithmetic.
 
 ```console
 $ cat readings.tsv
@@ -38,7 +43,7 @@ job are slower on native Linux.
 
 ## And better in other ways
 
-| | GNU datamash 1.9 | Fastmash |
+| Feature | GNU datamash 1.9 | Fastmash |
 | --- | --- | --- |
 | Results | Depend on the CPU and the C math library | **Identical on every machine**: all arithmetic in software |
 | Locales | Need locale data installed; silently fall back to `C` without it | **Built in**: numbers in 318 locales, sorting in 194 |
@@ -58,6 +63,9 @@ switching means changing one word.
 - [Install Fastmash](install.md) on Linux x86-64 or WSL2
 - [Quick start](quick-start.md): a five-minute tour
 - [Operations](guide/operations.md): every statistic and transformation
+- [Quoted CSV and result names](guide/csv-and-result-names.md): structured input and useful report labels
+- [Highest and lowest records](guide/top-n-records.md): keep the records behind the numbers
+- [Table health](guide/table-health.md) and [dataset comparison](guide/dataset-comparison.md): inspect data and understand changes
 
 Fastmash is open source under the MIT or Apache-2.0 license.
 [Source on GitHub](https://github.com/pederbe/fastmash).

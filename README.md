@@ -20,8 +20,8 @@
 
 ---
 
-Fastmash summarizes, groups and reshapes tab-separated or delimited text from
-the command line. It accepts the same commands as
+Fastmash summarizes, groups and reshapes tab-separated text and quoted CSV from
+the command line. It accepts the command language of
 [GNU datamash](https://www.gnu.org/software/datamash/), so most existing scripts can
 switch by changing one word.
 
@@ -41,6 +41,9 @@ west	8	4
 - **The datamash commands you already use.** Over 70 operations and modes,
   datamash's options and field selectors, grouping, headers, `crosstab`,
   `transpose` and more.
+- **Useful table workflows.** Read and write quoted CSV, name result columns,
+  calculate weighted means, select the highest or lowest complete records,
+  compare two datasets and inspect or validate table health.
 - **The same answer everywhere.** Arithmetic is implemented in software, so the
   same Fastmash version gives identical results on every supported machine,
   whatever its CPU or math library.
@@ -73,15 +76,25 @@ printf '1\t2\n3\t4\n' | fastmash sum 1 mean 2
 # Group by column 1 after sorting, then count and take the median of column 2
 fastmash -s -g 1 count 2 median 2 < measurements.tsv
 
-# Comma-separated input with a header row
-fastmash -t, --header-in -s -g region sum revenue < sales.csv
+# Quoted CSV, named fields and a stable output label
+fastmash --csv -H -s -g region --result-name=1:total sum revenue < sales.csv
+
+# Weighted mean and the highest five complete records
+fastmash -H wmean price:units < sales.tsv
+fastmash --csv -H top:5 revenue < sales.csv
+
+# Inspect a table, or compare numerical summaries of two exports
+fastmash --header-in health type revenue number nonmissing id validate < sales.tsv
+fastmash --csv -H -g region compare before.csv after.csv sum revenue
 
 # Per-row transformations
 fastmash round 3 sha256 1 < data.tsv
 ```
 
-`-t,` splits on literal commas; quoted CSV fields are not parsed. The
-[user guide](https://fastmash.io/guide/) covers every operation, option and mode.
+`--csv` reads and writes strict quoted CSV; `--csv-in` and `--csv-out` select
+each direction separately. `-t,` retains literal comma splitting for existing
+datamash commands. The [user guide](https://fastmash.io/guide/) covers every
+operation, option and mode, including their format and resource limits.
 
 ## Compatibility
 
@@ -95,6 +108,11 @@ The most visible ones:
 - Inputs that crash GNU datamash 1.9 or give it undefined behavior are errors
   or refusals in Fastmash.
 - `--sort-cmd` and the explicit `line` mode are not provided.
+
+Quoted CSV, custom result names, weighted mean, Top-N selection, dataset
+comparison and table health are Fastmash extensions. Help and readable health
+reports use terminal color automatically; `--no-color` suppresses it. Calculation
+results, CSV, health TSV and version output always keep plain data bytes.
 
 ## Status
 

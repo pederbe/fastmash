@@ -29,13 +29,36 @@ Set `LC_COLLATE=C.UTF-8` (or `LC_ALL=C.UTF-8`) for byte ordering.
 
 ## Can it read CSV files?
 
-It splits on any single byte, so `-t,` works for simple comma-separated data.
-It does not interpret quoted fields such as `"Smith, John"`, just like GNU
-datamash. Convert such files first, for example with
-[Miller](https://miller.readthedocs.io/) (`mlr --icsv --otsv cat`),
-[qsv](https://github.com/dathere/qsv) or
-[csvtk](https://bioinf.shenwei.me/csvtk/) (`csvtk csv2tab`). See
-[Compared with other tools](comparison.md).
+Yes. `--csv-in` reads strict quoted CSV, `--csv-out` encodes output fields, and
+`--csv` selects both. Quoted fields can contain commas, quotes and line breaks;
+format switches do not infer headers. Aggregates, per-row operations, Top-N
+selection and dataset comparison support CSV, including their supported grouped
+workflows. Table health and legacy table/field modes remain ordinary-text only.
+`-t,` still means literal comma splitting, as in GNU datamash. See
+[Quoted CSV and result names](guide/csv-and-result-names.md).
+
+## Can I check a table before calculating?
+
+`fastmash --header-in health < data.tsv` reports inconsistent widths, missing
+values, mixed lexical types and examples. Add known rules such as
+`type price number nonmissing id width 3 validate` to fail on declared
+violations. Inferred findings stay advisory. A versioned TSV report is available
+for scripts. See [Table health reports](guide/table-health.md).
+
+## Can I compare two exports with different column orders?
+
+Yes. With `-H`, named fields bind independently to each input header.
+`fastmash -H -g category compare before.tsv after.tsv sum revenue` reports each
+key's before, after, signed difference and percentage, including added and
+removed keys. Keys consolidate across each whole dataset; they need not be
+adjacent. See [Dataset comparison](guide/dataset-comparison.md).
+
+## Will terminal color change data in a pipeline?
+
+No. Only help, the program prefix on failures and readable health reports use
+color. Calculation results, CSV, health TSV and version output remain plain even
+with `--color=always`. Styling defaults to automatic terminal detection;
+`--no-color` disables it. See [Terminal color](guide/terminal-color.md).
 
 ## Why are there two executables?
 

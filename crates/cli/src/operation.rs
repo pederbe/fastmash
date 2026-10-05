@@ -29,6 +29,7 @@ pub(super) enum Kind {
     Range,
     Sum,
     Mean,
+    Wmean,
     Geomean,
     Harmmean,
     Ms,
@@ -81,6 +82,7 @@ pub(super) const PLAIN_OPERATIONS: &[(&[u8], Kind)] = &[
     (b"range", Kind::Range),
     (b"sum", Kind::Sum),
     (b"mean", Kind::Mean),
+    (b"wmean", Kind::Wmean),
     (b"geomean", Kind::Geomean),
     (b"harmmean", Kind::Harmmean),
     (b"ms", Kind::Ms),
@@ -137,6 +139,7 @@ impl Kind {
             Kind::Range => "range",
             Kind::Sum => "sum",
             Kind::Mean => "mean",
+            Kind::Wmean => "wmean",
             Kind::Geomean => "geomean",
             Kind::Harmmean => "harmmean",
             Kind::Ms => "ms",
@@ -241,6 +244,7 @@ impl Kind {
             | Kind::Range
             | Kind::Sum
             | Kind::Mean
+            | Kind::Wmean
             | Kind::Geomean
             | Kind::Harmmean
             | Kind::Ms
@@ -345,6 +349,7 @@ impl Kind {
             | Self::Scov
             | Self::Ppearson
             | Self::Spearson
+            | Self::Wmean
             | Self::Dotprod => false,
         }
     }
@@ -372,6 +377,7 @@ impl Kind {
                     | Self::Rounding(_)
                     | Self::Bin(_)
                     | Self::Mean
+                    | Self::Wmean
                     | Self::Min
                     | Self::Max
                     | Self::Absmin
@@ -405,6 +411,10 @@ impl Kind {
         matches!(self, Self::Jarque | Self::Dpo)
     }
     pub(super) fn is_paired(self) -> bool {
+        self.keeps_pair_samples() || self == Self::Wmean
+    }
+    /// Pair-shaped input alone does not require retaining paired samples.
+    pub(super) fn keeps_pair_samples(self) -> bool {
         matches!(
             self,
             Self::Pcov | Self::Scov | Self::Ppearson | Self::Spearson | Self::Dotprod
@@ -445,6 +455,7 @@ impl Kind {
             | Self::Range
             | Self::Sum
             | Self::Mean
+            | Self::Wmean
             | Self::Harmmean
             | Self::Ms
             | Self::Median
@@ -506,7 +517,7 @@ mod tests {
             );
         }
         // Each kind of the catalog is reached by some spelling.
-        assert_eq!(kinds.len(), 52);
+        assert_eq!(kinds.len(), 53);
         for alias in ["echo", "uniq"] {
             assert_ne!(Kind::from_spelling(alias.as_bytes()).unwrap().name(), alias);
         }
@@ -522,7 +533,7 @@ mod tests {
             assert_eq!(kind.crosses_groups(), kind == Kind::Rand, "{spelling}");
             assert_eq!(
                 kind.is_paired(),
-                ["pcov", "scov", "ppearson", "spearson", "dotprod"].contains(&kind.name()),
+                ["pcov", "scov", "ppearson", "spearson", "dotprod", "wmean"].contains(&kind.name()),
                 "{spelling}"
             );
         }

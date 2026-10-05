@@ -22,6 +22,9 @@ fastmash: invalid numeric value in line 3 field 2: 'n/a'
 ```
 
 Some are followed by a `hint:` line suggesting a fix.
+In a terminal, the program prefix can appear in red; the message body keeps the
+default foreground. [Color controls](terminal-color.md) change presentation,
+never the exit status or calculation output.
 
 ## Always check the exit status
 
@@ -37,6 +40,12 @@ if ! fastmash -s -g 1 sum 2 < data.tsv > totals.tsv; then
   exit 1
 fi
 ```
+
+Dataset comparison completes both input scans and all calculations before
+writing its report, including the header. Output write failures can still leave
+partial bytes. Table health likewise completes inspection before report emission;
+`health ... validate` can emit a complete report and return 1 for declared
+violations. Advisory findings alone do not make validation fail.
 
 ## Why refusals exist
 
@@ -74,6 +83,12 @@ What grows with the input:
 - Operations that need every value (quantiles, dispersion, paired statistics,
   `unique`, `collapse`) keep the values of the current group.
 - `rmdup`, `transpose` and `crosstab` keep their tables in memory.
+- Top-N selection keeps at most N candidates for the active group or dataset;
+  N limits record count, not bytes.
+- Dataset comparison keeps keys, per-key calculation state and required samples
+  in memory; these do not spill.
+- Table health keeps field counters, widths, header labels and bounded examples
+  in memory, with no fixed total-memory guarantee.
 - `-s` keeps a sort buffer, spilling to disk beyond the chunk target. Sorted
   numerical jobs keep the original records until they are processed.
 

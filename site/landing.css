@@ -38,6 +38,13 @@ body {
 a { color: var(--teal); text-underline-offset: 3px; }
 a:hover { color: #5eead4; }
 :focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; border-radius: 4px; }
+.skip-link {
+  position: fixed; top: 1rem; left: 1rem; z-index: 1000;
+  padding: 0.7rem 1rem; border-radius: 6px; background: var(--teal); color: var(--teal-ink);
+  font-weight: 600; transform: translateY(calc(-100% - 2rem));
+}
+.skip-link:focus { transform: none; }
+.skip-link:hover { color: var(--teal-ink); }
 code { font-family: var(--mono); font-size: 0.9em; }
 h1, h2 { text-wrap: balance; letter-spacing: -0.02em; line-height: 1.1; margin: 0; }
 
@@ -60,18 +67,25 @@ h1, h2 { text-wrap: balance; letter-spacing: -0.02em; line-height: 1.1; margin: 
 
 /* Hero */
 .hero {
+  position: relative; isolation: isolate;
   display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
   gap: 48px; align-items: center;
   padding-block: 56px 72px;
+}
+.hero::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse at 83% 38%, rgba(45, 212, 191, 0.13), transparent 58%);
 }
 .eyebrow {
   margin: 0 0 14px; color: var(--teal);
   font: 500 13px/1.4 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
 }
 h1 { font-size: clamp(2.3rem, 5.4vw, 4.1rem); font-weight: 800; }
-.star { color: var(--amber); text-decoration: none; font-weight: 800; }
+.hero-accent { color: var(--teal); }
+.star { color: var(--amber); text-decoration: underline; font-weight: 800; }
 .lede { margin: 20px 0 28px; color: var(--muted); font-size: 1.12rem; max-width: 34rem; }
 .lede strong { color: var(--fg); }
+.hero-proof { color: var(--muted); font-size: 14px; margin: -8px 0 24px; }
 
 .install {
   display: flex; align-items: center; gap: 8px;
@@ -117,18 +131,23 @@ h1 { font-size: clamp(2.3rem, 5.4vw, 4.1rem); font-weight: 800; }
 /* Terminal */
 .terminal {
   margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
-  overflow: hidden; box-shadow: 0 30px 80px -30px rgba(45, 212, 191, 0.25);
+  overflow: hidden;
+  box-shadow: 0 0 28px 2px rgba(45, 212, 191, 0.22),
+              0 0 80px 10px rgba(45, 212, 191, 0.14);
 }
-.terminal-bar { display: flex; gap: 7px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.terminal-bar { display: flex; align-items: center; gap: 7px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .terminal-bar span { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.terminal-bar small { margin-left: auto; font: 500 12px/1.5 var(--mono); color: var(--muted); }
 .terminal pre, .diff { margin: 0; overflow-x: auto; scrollbar-width: thin; }
 .terminal code {
   display: block; padding: 18px 20px 22px; font-size: 14px; line-height: 1.75; tab-size: 8;
   color: var(--fg); white-space: pre;
 }
 .prompt { color: var(--amber); }
-.out { color: var(--teal); }
-.cursor { display: inline-block; width: 8px; height: 1.1em; vertical-align: -0.2em; background: var(--teal); animation: blink 1.1s steps(1) infinite; }
+.cli-syntax { color: #67d8ef; }
+.terminal-omission { color: var(--muted); }
+.terminal figcaption { padding: 14px 20px; margin: 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.cursor { display: inline-block; width: 8px; height: 1.1em; vertical-align: -0.2em; background: var(--teal); }
 @keyframes blink { 50% { opacity: 0; } }
 
 /* Sections */
@@ -136,6 +155,21 @@ section { padding-block: 56px; border-top: 1px solid var(--line); }
 .section-head { max-width: 44rem; margin-bottom: 28px; }
 h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); font-weight: 800; }
 .section-head p { margin: 12px 0 0; color: var(--muted); }
+.section-head .eyebrow { margin: 0 0 14px; color: var(--teal); }
+
+/* Three concrete workflows keep the extra capabilities easy to explore. */
+.workflow-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.workflow-card {
+  display: flex; flex-direction: column; align-items: flex-start; min-width: 0;
+  padding: 24px; border: 1px solid var(--line); border-radius: 12px;
+  background: linear-gradient(145deg, var(--surface), var(--bg));
+}
+.workflow-card h3 { margin: 0; font-size: 1.25rem; line-height: 1.35; letter-spacing: -0.02em; }
+.workflow-card > p:not(.workflow-index) { margin: 14px 0 20px; color: var(--muted); font-size: 15px; }
+.workflow-index { color: var(--teal); font: 500 12px/1.5 var(--mono); letter-spacing: 0.05em; margin: 0 0 22px; }
+.workflow-card pre { width: 100%; margin: auto 0 20px; padding: 14px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); overflow-x: auto; scrollbar-width: thin; }
+.workflow-card pre code { font-size: 11.5px; line-height: 1.65; }
+.workflow-card a { font-size: 14px; padding-block: 4px; }
 
 /* Benchmark chart (generated SVG, inlined at build time) */
 .chart { background: var(--surface); border: 1px solid var(--amber); border-radius: 12px; padding: 20px 16px 8px; overflow-x: auto; }
@@ -193,6 +227,8 @@ h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); font-weight: 800; }
 @media (max-width: 880px) {
   .hero, .switch { grid-template-columns: minmax(0, 1fr); gap: 36px; }
   .hero { padding-block: 32px 48px; }
+  .workflow-grid { grid-template-columns: minmax(0, 1fr); }
+  .workflow-card pre code { font-size: 13px; }
 }
 @media (max-width: 640px) {
   body { font-size: 16px; padding-inline: 16px; }
@@ -204,6 +240,37 @@ h2 { font-size: clamp(1.7rem, 3.4vw, 2.5rem); font-weight: 800; }
   .gnu::before { content: "GNU datamash: "; color: var(--muted); font-weight: 600; }
   .terminal code, .diff code { font-size: 12.5px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .cursor { animation: none; }
+/* Content is always visible. Reveals run once and settle in under four seconds. */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-copy.is-revealed, .terminal.is-revealed, .workflow-card.is-revealed, .switch-copy.is-revealed {
+    animation: landing-enter 1.2s ease-out;
+  }
+  .hero.is-revealed::before { animation: landing-glow 3.2s ease-in-out; }
+  .terminal.is-revealed .cursor { animation: blink 1.1s steps(1) 3; }
+  .landing-paused .is-revealed, .landing-paused .hero::before, .landing-paused .cursor { animation-play-state: paused; }
+  .hero-copy:focus-within, .terminal:focus-within, .workflow-card:focus-within, .switch-copy:focus-within { animation: none; }
+  .hero:focus-within::before { animation: none; }
+  .button, .copy, .install-tabs [role="tab"], .workflow-card { transition: border-color 160ms ease-out, transform 160ms ease-out; }
+  .button:active, .copy:active, .install-tabs [role="tab"]:active { transform: translateY(1px); }
+  .workflow-card:hover { border-color: var(--teal); transform: translateY(-3px); }
+}
+@keyframes landing-enter {
+  from { transform: translateY(18px); }
+  to { transform: translateY(0); }
+}
+@keyframes landing-glow {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce), print {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media (forced-colors: active) {
+  :focus-visible { outline-color: Highlight; }
+  .hero::before { display: none; }
+  .hero-accent, .cli-syntax, .workflow-index { color: inherit; }
+  .terminal, .workflow-card, .workflow-card pre, .install, .button { border-color: CanvasText; }
+  .workflow-card { background: Canvas; }
+  .install-tabs [role="tab"][aria-selected="true"] { border-color: Highlight; }
 }

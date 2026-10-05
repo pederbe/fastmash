@@ -10,6 +10,12 @@ use std::{
 };
 #[path = "projected_batch.rs"]
 mod batch;
+#[path = "csv_sort.rs"]
+mod decoded;
+pub(super) use decoded::Sorting as DecodedSorting;
+pub(super) use decoded::calculate as calculate_decoded;
+#[cfg(test)]
+pub(super) use decoded::{RunFault, fail_run};
 #[path = "projected_hash.rs"]
 mod hash;
 pub(super) use hash::{Setting as Grouping, eligible as hash_eligible, setting as grouping};
@@ -25,6 +31,11 @@ use storage::{Original, Packed, Storage};
 
 fn allocation() -> Failure {
     unsupported("projected sort memory allocation failed")
+}
+
+/// Check an active native route's explicit resource setting before input.
+pub(super) fn admit_memory(setting: Option<&std::ffi::OsStr>) -> Result<(), Failure> {
+    memory::target(setting).map(|_| ())
 }
 
 /// Marks a key layout that the eight-byte prefix cannot fully encode.
@@ -592,11 +603,39 @@ fn bytes_body(
 /// from its sort pipe.
 pub(super) fn sorted_rows(
     reader: &mut impl BufRead,
-    mut intake: Intake<'_>,
+    intake: Intake<'_>,
     options: &options::Options,
     keys: &[u64],
     mut consume: impl FnMut(&mut Vec<u8>) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
+    let mut bytes = Vec::new();
+    sorted_records(reader, intake, options, keys, |record, _, phase| {
+        if phase == RecordPhase::Consume {
+            bytes.clear();
+            bytes.try_reserve(record.len()).map_err(|_| allocation())?;
+            bytes.extend_from_slice(record);
+            consume(&mut bytes)?;
+        }
+        Ok(())
+    })
+}
+
+/// Source observation happens before sorting; sorted consumption keeps each
+/// Record's original accepted ordinal, including a previously read header.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum RecordPhase {
+    ObserveSource,
+    Consume,
+}
+
+pub(super) fn sorted_records(
+    reader: &mut (impl BufRead + ?Sized),
+    mut intake: Intake<'_>,
+    options: &options::Options,
+    keys: &[u64],
+    mut visit: impl FnMut(&[u8], u64, RecordPhase) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    let preceding = intake.line();
     let collator = options.locale.collator()?;
     let target = memory::target(options.sort_memory.as_deref())?;
     let mut bytes = Vec::new();
@@ -629,6 +668,7 @@ pub(super) fn sorted_rows(
     let mut batch = batch::Batch::new(threads, target.bytes);
     let mut accept = |record: batch::Projected<'_>| sorter.push_body(record, shape);
     while let Some(record) = intake.next(reader, &mut bytes)? {
+        visit(record.data(), intake.line(), RecordPhase::ObserveSource)?;
         batch.push(record.raw(), &project, &mut accept)?;
     }
     batch.finish(&project, &mut accept)?;
@@ -637,15 +677,15 @@ pub(super) fn sorted_rows(
         return intake.finish();
     }
     drop(batch);
+    drop(bytes);
     let mut sorted = sorter.finish();
     sorted.emit(|record| {
+        let ordinal = preceding
+            .checked_add(record.sequence)
+            .and_then(|n| n.checked_add(1))
+            .ok_or_else(|| unsupported("record count exceeds u64 limit"))?;
         let original = record.data.original().unwrap_or_default();
-        bytes.clear();
-        bytes
-            .try_reserve(original.len())
-            .map_err(|_| allocation())?;
-        bytes.extend_from_slice(original);
-        consume(&mut bytes)
+        visit(original, ordinal, RecordPhase::Consume)
     })
 }
 
@@ -1065,9 +1105,15 @@ fn calculate_records<W: Write, S: spill::Codec>(
     if !options.header_in {
         binding.numbered()?;
     }
+    // Weighted mean has no calculation domain before the first data Record,
+    // even when a requested header never arrives. Only clean EOF can use the
+    // ordinary empty pipeline; failed reads retain the established sort path.
     if intake.header(reader, &mut bytes, |header| binding.header(header, options))? {
         output.first(&bytes, &binding.operations, &binding.keys)?;
-    } else if options.header_in && binding.unresolved_keys() {
+    } else if options.header_in
+        && binding.unresolved_keys()
+        && !(binding.operations.has_weighted_mean() && intake.read_error().is_none())
+    {
         // GNU sorts even without an Input header, then reads it again from
         // the sort pipe and warns about --full only then (datamash.c
         // process_file). With unresolved named keys, the installed sorter
@@ -1222,7 +1268,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
     }
     drop(bytes);
     let mut sorted = sorter.finish();
-    let mut grouping = grouping::Grouping::new();
+    let mut calculation = grouping::Calculation::new(&keys, options);
     // Line numbers follow the sorted order, as GNU counts the Records it reads
     // back from its sort pipe, so the intake's count (input order) would name
     // the wrong Record; only the Input header keeps its place.
@@ -1254,7 +1300,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
                 crossings: &crossings,
                 texts,
             };
-            if let Some(unused) = grouping.push(sorted, line, &mut context)? {
+            if let Some(unused) = calculation.push(sorted, line, &mut context)? {
                 spare = Some(unused.fields);
             }
             Ok(())
@@ -1262,8 +1308,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
     }
     let mut context =
         grouping::Context::new(&mut operations, &keys, options, arithmetic, None, output);
-    grouping.finish(line, &mut context)?;
-    output.end(options)?;
+    calculation.finish(line, &mut context)?;
     intake.finish()
 }
 

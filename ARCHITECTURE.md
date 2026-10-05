@@ -9,9 +9,9 @@ It is written for contributors and for anyone evaluating the project. The
 
 | | |
 | --- | --- |
-| Language | Rust (edition 2024), about 38,000 lines across five crates |
+| Language | Rust (edition 2024), five product crates |
 | Platform | Linux x86-64 with glibc; Windows through WSL2 |
-| Interface | GNU datamash 1.9 command language: over 70 operations and modes |
+| Interface | GNU datamash 1.9 command language, with explicit CSV, health, selection, weighted mean and comparison extensions |
 | Numbers | 80-bit extended precision, implemented in software |
 | Sorting | In-memory sort with disk spill; the system `sort` for some routes |
 | Runtime dependencies | glibc, and `/usr/bin/sort` for the external sort route |
@@ -79,8 +79,11 @@ flowchart TD
     A[Arguments and environment] --> B[Parse options]
     B --> C[Resolve locale<br/>from built-in rules]
     C --> D[Parse the command grammar<br/>mode, grouping keys, operations]
-    D --> E{Mode}
-    E -- "table mode<br/>check, transpose, rmdup" --> T[Table mode runner]
+    D --> V[Validate controls and prepare<br/>one mode-specific request]
+    V --> E{Prepared mode}
+    E -- "table mode or health" --> T[Inspect or transform the table]
+    E -- "dataset comparison" --> R[Read both datasets<br/>align keys and complete summaries]
+    E -- "Top-N selection" --> U[Group and select complete records<br/>sort first when requested]
     E -- "aggregate, grouping,<br/>crosstab, per-row" --> F[Plan operations<br/>share fields, samples and sums]
     F --> G[Resolve named fields<br/>from the input header]
     G --> H{"-s with<br/>grouping keys?"}
@@ -95,14 +98,21 @@ flowchart TD
     N -- yes --> O[Compute and format results]
     O --> P[Write output]
     T --> P
+    R --> P
+    U --> P
     P --> Q[Exit status<br/>0, 1, 77 or 70]
 ```
-<!-- description: A command is parsed, its locale resolved and its command grammar parsed. Table modes (check, transpose, rmdup) go to the table mode runner. Other modes plan their operations, resolve named fields and, with -s and grouping keys, pass through the sort route. Records are then read, split into fields, converted and accumulated until each group ends, when results are computed and written. The program exits with status 0, 1, 77 or 70. -->
+<!-- description: Options, locale and grammar are resolved before validation prepares one mode-specific request. Table modes and health inspect or transform a table. Dataset comparison reads both datasets, aligns keys and finishes all summaries before output. Top-N selection groups and selects complete records, sorting first when requested. Ordinary calculations plan shared operations and named fields, prepare sorted groups when needed, then read, convert and accumulate records until each group ends. Output is written and the program exits with status 0, 1, 77 or 70. -->
 
 Some points worth knowing when reading the code:
 
 - **Planning happens before input is read.** The whole command is parsed and
-  validated first, so most usage errors appear before any output.
+  validated first, so most usage errors appear before any output. The preparation
+  module (`preparation.rs`) checks control conflicts, selectors, result names and
+  sorting eligibility in their required order, then returns one prepared request
+  for the selected mode. Private payloads keep runners from receiving an
+  unprepared request. Input headers, numerical admission and resource checks still
+  happen at their existing execution points; preparation does not open inputs.
 - **Operations share work.** When several operations read the same field, the
   conversion, running sums and retained samples are shared. `median`, `q1` and
   `q3` on one field sort one sample set, and the moment statistics share one
@@ -113,9 +123,20 @@ Some points worth knowing when reading the code:
 - **Groups are adjacent records.** Without `-s`, a group ends when its key
   changes, and state for the next group starts fresh. That is what makes
   unsorted grouping a single streaming pass.
-- **Output is written progressively.** Completed groups go to a small output
+- **Ordinary results are written progressively.** Completed groups go to a small output
   buffer that is flushed as it fills (line by line on a terminal). A failure part-way through can leave earlier rows written, which
   is why the exit status must always be checked.
+- **Formats keep field boundaries.** Ordinary text uses its separator rules.
+  Explicit CSV decodes logical records and retains complete fields and original
+  logical-record/physical-line locations; output encodes each field separately.
+  Record views let calculations borrow shared storage, while retained full rows
+  and admitted selection candidates own what must outlive that view.
+- **Comparison and health finish before reporting.** Dataset comparison keeps
+  complete keys, per-key operation state and required samples, preserving each
+  key's contribution order across each source. It finishes both scans and all
+  changes before writing. Health collects field and width counters and bounded
+  examples before emitting a readable or versioned TSV report. Neither adds
+  spill for retained samples or a total-memory guarantee.
 
 ## Sorting
 
@@ -218,6 +239,15 @@ flowchart TD
 - **Spill** writes sorted runs to anonymous temporary files (`O_TMPFILE`, or
   where the filesystem lacks it a private file unlinked as soon as it is open),
   which the kernel removes automatically when Fastmash exits, however it exits.
+- **Quoted CSV sorting** uses its own complete decoded-record route, without
+  hash replay or a text-format fallback. Record bytes, field ends, original
+  locations and required language comparison segments are packed into shared
+  chunks. Calculations borrow each chunk through group completion, and selection
+  owns records only when they enter its candidates. Actual capacities and reusable
+  decoder/key scratch count against the ordinary sort-memory policy. Checked
+  private spill framing preserves complete ragged fields and locations; bounded
+  merge heads remain owned. An oversized record and merge heads can exceed the
+  chunk target, and statistical samples retain their separate in-memory policy.
 - The **external route** remains, in the C locales, for `rand`, the other means
   (`geomean`, `harmmean`, `ms`, `rms`), skewness, kurtosis, normality tests,
   paired statistics and sorted `rmdup`. Its temporary files go in a private

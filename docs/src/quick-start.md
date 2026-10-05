@@ -74,7 +74,19 @@ $ printf '1  2\n3   4\n' | fastmash -W sum 2
 6
 ```
 
-`-t,` splits on every comma. Fastmash does not parse quoted CSV fields.
+`-t,` splits on every comma, preserving datamash's literal separator behavior.
+For quoted CSV, use `--csv` to read and write CSV or choose input/output
+independently with `--csv-in` and `--csv-out`:
+
+```console
+$ printf 'region,revenue\n"west,coast",2\neast,4\n"west,coast",6\n' | fastmash --csv -H -s -g region --result-name=1:total sum revenue
+GroupBy(region),total
+east,4
+"west,coast",8
+```
+
+Format switches do not infer headers. [Quoted CSV and result names](guide/csv-and-result-names.md)
+describes the supported modes and quoting rules.
 
 ## Statistics
 
@@ -85,6 +97,31 @@ $ printf '2\n4\n4\n4\n5\n5\n7\n9\n' | fastmash median 1 q1 1 q3 1 pstdev 1 perc:
 
 See [Operations](guide/operations.md) for the full list: means, variances,
 quantiles, modes, skewness and kurtosis, normality tests, correlation and more.
+
+## Weighted means
+
+Give each value a contribution weight with `wmean VALUE:WEIGHT`:
+
+```console
+$ printf '10\t1\n20\t3\n' | fastmash wmean 1:2
+17.5
+```
+
+Weights must be finite and nonnegative; a nonempty calculation needs positive
+retained weight. See [Weighted mean](guide/weighted-mean.md).
+
+## Keep the highest records
+
+Top-N selection retains complete records and keeps earlier input records on ties:
+
+```console
+$ printf 'A\t8\nB\t10\nC\t10\nD\t9\n' | fastmash top:2 2
+B	10
+C	10
+```
+
+Use `bottom:N` for the lowest records, and `-s -g` for a cutoff in each group.
+See [Highest and lowest records](guide/top-n-records.md).
 
 ## Per-row operations
 
@@ -108,5 +145,7 @@ $ printf '1\nNA\n3\n' | fastmash --narm mean 1
 
 - [Fields and input](guide/input.md): selectors, separators, headers, comments
 - [Grouping and sorting](guide/grouping.md): `-g`, `-s`, `crosstab`
+- [Table health](guide/table-health.md): inspect a table or validate supplied rules
+- [Dataset comparison](guide/dataset-comparison.md): before/after summaries and ranked changes
 - [Migrating from GNU datamash](guide/migrating.md)
 - `fastmash --help` lists every operation and option

@@ -66,7 +66,8 @@ release is being tagged.
      `scripts/benchmark_chart.py results` and `svg`;
    - the per-host tables on the method page and the "still faster" list on
      the benchmarks page;
-   - the demo GIF (`scripts/demo/record.mjs`) if the demo job's times moved
+   - the demo GIF and video exports (`scripts/demo/record.mjs`; see
+     `scripts/demo/README.md`) if the demo job's times moved
      noticeably, and any claims on the landing page and link-preview image.
 7. **Tag.** Move the `[Unreleased]` entries under
    `## [X.Y.Z] - YYYY-MM-DD` using the actual release date; the workflow

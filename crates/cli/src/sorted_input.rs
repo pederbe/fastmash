@@ -108,6 +108,13 @@ impl Sorting {
         self.header.as_deref()
     }
 
+    /// A requested Input header ended at clean EOF, rather than a read failure.
+    /// Keeping the recorded errno here prevents callers from treating failed
+    /// preparation as an empty calculation domain.
+    pub(super) fn clean_header_eof(&self, options: &options::Options) -> bool {
+        options.header_in && self.header.is_none() && self.header_errno.is_none()
+    }
+
     /// Starts the system sort of standard input by `keys` (field 0 for a key
     /// that stayed unresolved, which the sort then reports).
     pub(super) fn start(self, keys: &[u64], options: &options::Options) -> Result<Sorted, Failure> {

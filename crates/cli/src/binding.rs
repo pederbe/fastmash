@@ -4,6 +4,75 @@
 
 use super::{Failure, OperationSet, command_memory, grammar, named_fields, options};
 
+/// A selection's ranking Field followed by its Grouping keys, resolved before
+/// any copied Output header is emitted.
+pub(super) struct Selection {
+    fields: Vec<u64>,
+    names: Vec<named_fields::Named>,
+}
+
+impl Selection {
+    pub(super) fn new(ranking: grammar::Field, keys: Vec<grammar::Field>) -> Result<Self, Failure> {
+        let mut fields = Vec::new();
+        let mut names = Vec::new();
+        for (index, field) in std::iter::once(ranking).chain(keys).enumerate() {
+            if fields.len() == fields.capacity() {
+                command_memory::reserve(&mut fields, 1)?;
+            }
+            fields.push(match field {
+                grammar::Field::Number(number) => number,
+                grammar::Field::Name(name) => {
+                    if names.len() == names.capacity() {
+                        command_memory::reserve(&mut names, 1)?;
+                    }
+                    names.push(named_fields::Named {
+                        operation: index,
+                        target: named_fields::Target::Single,
+                        name,
+                    });
+                    0
+                }
+            });
+        }
+        Ok(Self { fields, names })
+    }
+
+    pub(super) fn header(
+        &mut self,
+        record: &[u8],
+        options: &options::Options,
+    ) -> Result<(), Failure> {
+        for (index, _, field) in
+            named_fields::resolve_with(&self.names, record, options.input, options.locale.utf8)?
+        {
+            self.fields[index] = field;
+        }
+        Ok(())
+    }
+
+    pub(super) fn ranking(&self) -> u64 {
+        self.fields[0]
+    }
+
+    pub(super) fn decoded_header(
+        &mut self,
+        record: &super::csv_input::Record,
+        options: &options::Options,
+    ) -> Result<(), Failure> {
+        for (index, _, field) in
+            named_fields::resolve_decoded(&self.names, record, options.locale.utf8)
+                .map_err(|error| record.location.annotate(error))?
+        {
+            self.fields[index] = field;
+        }
+        Ok(())
+    }
+
+    pub(super) fn keys(&self) -> &[u64] {
+        &self.fields[1..]
+    }
+}
+
 /// A Command's Operations and Grouping keys, with the field names they select
 /// until an Input header resolves them.
 pub(super) struct Binding<'p> {
@@ -67,6 +136,23 @@ impl<'p> Binding<'p> {
         let (input, utf8) = (options.input, options.locale.utf8);
         let named = named_fields::resolve_with(&self.names, record, input, utf8)?;
         for (index, _, field) in named_fields::resolve_with(&self.key_names, record, input, utf8)? {
+            self.keys[index] = field;
+        }
+        self.operations.bind(named)
+    }
+
+    /// Binds names from the decoded CSV Input header, retaining its location.
+    pub(super) fn decoded_header(
+        &mut self,
+        record: &super::csv_input::Record,
+        options: &options::Options,
+    ) -> Result<(), Failure> {
+        let named = named_fields::resolve_decoded(&self.names, record, options.locale.utf8)
+            .map_err(|error| record.location.annotate(error))?;
+        for (index, _, field) in
+            named_fields::resolve_decoded(&self.key_names, record, options.locale.utf8)
+                .map_err(|error| record.location.annotate(error))?
+        {
             self.keys[index] = field;
         }
         self.operations.bind(named)

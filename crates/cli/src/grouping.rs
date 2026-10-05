@@ -1,11 +1,11 @@
-//! The Group loop shared by every route. Consecutive records with equal
-//! grouping keys form a Group; when a Group ends, its keys (or Full row, or
-//! crosstab cell) and its Operation results are written.
+//! Calculation over prepared records: collect Operations, manage consecutive
+//! Groups when requested, and finish the result output. Routes retain input,
+//! field Binding and header preparation.
 #[cfg(test)]
 use super::selected_field;
 use super::{
-    Failure, OperationSet, command_memory, command_output, field_policy, indexed_field, numerics,
-    options, random, records, text_order,
+    Failure, Kind, OperationSet, command_memory, command_output, failure, field_policy,
+    indexed_field, named_fields, numerics, options, random, records, text_order,
 };
 
 /// What the Group loop needs from a record, however it was read or sorted.
@@ -35,6 +35,18 @@ pub(super) trait GroupRecord {
     ) -> Result<bool, Failure>;
     /// The complete record, where it is kept.
     fn original(&self) -> Option<&[u8]>;
+    /// Copies each source field before the results. Decoded records supply
+    /// their own field boundaries instead of an ordinary text separator.
+    fn full_prefix(
+        &self,
+        output: &mut impl command_output::CommandOutput,
+        options: &options::Options,
+    ) {
+        let Some(bytes) = self.original() else {
+            unreachable!("full output retains original records")
+        };
+        command_output::full_prefix(output, bytes, options);
+    }
     /// Adds this record to the Operations. True when it must become the
     /// Group's representative (for example for `last`).
     fn collect(
@@ -47,7 +59,7 @@ pub(super) trait GroupRecord {
     ) -> Result<bool, Failure>;
 }
 
-/// The state a Group loop writes through.
+/// The state a calculation writes through.
 pub(super) struct Context<'a, O> {
     pub operations: &'a mut OperationSet,
     pub keys: &'a [u64],
@@ -57,9 +69,16 @@ pub(super) struct Context<'a, O> {
     pub output: &'a mut O,
 }
 
-/// Groups records as they arrive; `finish` writes the last Group.
-pub(super) struct Grouping<R> {
-    representative: Option<R>,
+/// Collects records as they arrive; `finish` writes the remaining results and
+/// completes their output.
+pub(super) struct Calculation<R> {
+    state: Collected<R>,
+}
+
+enum Collected<R> {
+    EmptyUngrouped,
+    Ungrouped,
+    Grouped(Option<R>),
 }
 
 impl<'a, O> Context<'a, O> {
@@ -82,10 +101,14 @@ impl<'a, O> Context<'a, O> {
     }
 }
 
-impl<R: GroupRecord> Grouping<R> {
-    pub(super) fn new() -> Self {
+impl<R: GroupRecord> Calculation<R> {
+    pub(super) fn new(keys: &[u64], options: &options::Options) -> Self {
         Self {
-            representative: None,
+            state: if !keys.is_empty() || options.full || options.linewise {
+                Collected::Grouped(None)
+            } else {
+                Collected::EmptyUngrouped
+            },
         }
     }
 
@@ -98,7 +121,10 @@ impl<R: GroupRecord> Grouping<R> {
         context: &mut Context<'_, O>,
     ) -> Result<Option<R>, Failure> {
         Ok(if self.add(&mut record, line, context)? {
-            self.representative.replace(record)
+            let Collected::Grouped(representative) = &mut self.state else {
+                unreachable!("only a Group retains a representative")
+            };
+            representative.replace(record)
         } else {
             Some(record)
         })
@@ -117,16 +143,19 @@ impl<R: GroupRecord> Grouping<R> {
         context: &mut Context<'_, O>,
     ) -> Result<(), Failure> {
         if self.add(record, line, context)? {
-            match &mut self.representative {
+            let Collected::Grouped(representative) = &mut self.state else {
+                unreachable!("only a Group retains a representative")
+            };
+            match representative {
                 Some(previous) => std::mem::swap(previous, record),
-                None => self.representative = Some(std::mem::replace(record, fresh()?)),
+                None => *representative = Some(std::mem::replace(record, fresh()?)),
             }
         }
         Ok(())
     }
 
-    /// Groups and collects `record`. True when it must become the Group's
-    /// representative.
+    /// Collects `record`, transitioning Groups when requested. True when it
+    /// must become the Group's representative.
     #[inline(always)]
     fn add<O: command_output::CommandOutput>(
         &mut self,
@@ -134,7 +163,30 @@ impl<R: GroupRecord> Grouping<R> {
         line: u64,
         context: &mut Context<'_, O>,
     ) -> Result<bool, Failure> {
-        let new_group = match &mut self.representative {
+        // Once ungrouped input has started, the Record loop only collects.
+        // Marking the first Record separately avoids a state write per Record.
+        if matches!(self.state, Collected::Ungrouped) {
+            record.collect(
+                context.operations,
+                line,
+                context.options,
+                context.arithmetic,
+                context.random.as_deref_mut(),
+            )?;
+            return Ok(false);
+        }
+        let Collected::Grouped(representative) = &mut self.state else {
+            record.collect(
+                context.operations,
+                line,
+                context.options,
+                context.arithmetic,
+                context.random.as_deref_mut(),
+            )?;
+            self.state = Collected::Ungrouped;
+            return Ok(false);
+        };
+        let new_group = match representative {
             None => true,
             Some(previous) => {
                 context.options.linewise
@@ -142,10 +194,18 @@ impl<R: GroupRecord> Grouping<R> {
             }
         };
         if new_group {
-            if let Some(previous) = &mut self.representative {
+            if let Some(previous) = representative {
                 write_group(previous, line, context)?;
             }
             context.operations.reset();
+        }
+        if context.operations.has_weighted_mean() {
+            // A preceding Group completes first. Then every required key is
+            // checked before this Record can omit a weighted pair, even when
+            // --full or an earlier unequal key would otherwise hide it.
+            for &key in context.keys {
+                record.field(key, line, context.options)?;
+            }
         }
         let keep = record.collect(
             context.operations,
@@ -157,16 +217,23 @@ impl<R: GroupRecord> Grouping<R> {
         Ok(new_group || keep)
     }
 
-    /// Writes the last Group. False when no record arrived.
+    /// Writes the last Group or ungrouped results, then completes the output.
+    /// Empty input still completes the output without a result row.
     pub(super) fn finish<O: command_output::CommandOutput>(
         mut self,
         line: u64,
         context: &mut Context<'_, O>,
-    ) -> Result<bool, Failure> {
-        match &mut self.representative {
-            Some(previous) => write_group(previous, line, context).map(|()| true),
-            None => Ok(false),
+    ) -> Result<(), Failure> {
+        match &mut self.state {
+            Collected::Grouped(Some(previous)) => write_group(previous, line, context)?,
+            Collected::Ungrouped => context.operations.write_ungrouped_results(
+                context.output,
+                context.arithmetic,
+                context.options,
+            )?,
+            Collected::EmptyUngrouped | Collected::Grouped(None) => {}
         }
+        context.output.end(context.options)
     }
 }
 
@@ -177,26 +244,66 @@ pub(super) fn write_group<R: GroupRecord, O: command_output::CommandOutput>(
     line: u64,
     context: &mut Context<'_, O>,
 ) -> Result<(), Failure> {
-    let options = context.options;
+    write_completed_group(
+        record,
+        line,
+        context.operations.completion(),
+        context.keys,
+        context.options,
+        context.arithmetic,
+        context.output,
+    )
+}
+
+/// Writes either an ordinary or retained Group through the same completion
+/// capability, with Group presentation and diagnostics remaining here.
+pub(super) fn write_completed_group<R: GroupRecord, O: command_output::CommandOutput>(
+    record: &mut R,
+    line: u64,
+    mut completion: super::operation_set::GroupCompletion<'_>,
+    keys: &[u64],
+    options: &options::Options,
+    arithmetic: &mut numerics::Numerics,
+    output: &mut O,
+) -> Result<(), Failure> {
     if options.crosstab {
-        let (row, column) = record.field_pair(context.keys[0], context.keys[1], line, options)?;
-        let value = context.operations.result(0, context.arithmetic, options)?;
-        return context.output.cell(row, column, &value);
+        let (row, column) = record.field_pair(keys[0], keys[1], line, options)?;
+        let value = completion.result(0, arithmetic, options)?;
+        return output.cell(row, column, &value);
     }
     if options.full {
-        let Some(bytes) = record.original() else {
-            unreachable!("full output retains original records")
-        };
-        command_output::full_prefix(context.output, bytes, options);
+        record.full_prefix(output, options);
     }
-    for &key in context.keys.iter().filter(|_| !options.full) {
-        context
-            .output
-            .key(record.field(key, line, options)?, options.output);
+    for &key in keys.iter().filter(|_| !options.full) {
+        output.key(record.field(key, line, options)?, options.output);
     }
-    context
-        .operations
-        .write_results(context.output, context.arithmetic, options)
+    completion
+        .write_results(output, arithmetic, options)
+        .map_err(|(kind, mut error)| {
+            if kind == Kind::Wmean && !keys.is_empty() {
+                // Completion has a Group, not an offending source Record.
+                // Context is best effort if the failure left no memory.
+                let mut description = b"group keys: ".to_vec();
+                for (index, &key) in keys.iter().enumerate() {
+                    let Ok(bytes) = record.field(key, line, options) else {
+                        return error;
+                    };
+                    let label = format!("{}field {key}=", if index == 0 { "" } else { ", " });
+                    let size = label
+                        .len()
+                        .saturating_add(bytes.len().saturating_mul(4))
+                        .saturating_add(7);
+                    if description.try_reserve_exact(size).is_err() {
+                        return error;
+                    }
+                    description.extend_from_slice(label.as_bytes());
+                    named_fields::quote_with(bytes, &mut description, options.locale.utf8);
+                }
+                description.push(b'\n');
+                failure::append(&mut error, &[&description]);
+            }
+            error
+        })
 }
 
 /// A record as read from unsorted (or already sorted) input, with its field
@@ -235,17 +342,6 @@ impl Raw {
     /// Replaces the field index, once the selected fields are known.
     pub(super) fn index_fields(&mut self, fields: records::FieldIndex) {
         self.fields = fields;
-    }
-    /// Adds this record to the Operations outside any Group.
-    pub(super) fn collect_ungrouped(
-        &mut self,
-        operations: &mut OperationSet,
-        line: u64,
-        options: &options::Options,
-        arithmetic: &mut numerics::Numerics,
-        random: Option<&mut random::RandomState>,
-    ) -> Result<bool, Failure> {
-        GroupRecord::collect(self, operations, line, options, arithmetic, random)
     }
 }
 
@@ -330,6 +426,116 @@ impl GroupRecord for Raw {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn calculated(args: &[&str], rows: &[&[u8]], in_place: bool) -> Vec<u8> {
+        let args: Vec<std::ffi::OsString> = args.iter().map(Into::into).collect();
+        let options::Action::Calculate(mut options) =
+            options::parse(&args, b"fastmash", false).ok().unwrap()
+        else {
+            panic!("calculation")
+        };
+        let command = super::super::grammar::command(&options.operands, options.group.as_ref())
+            .ok()
+            .unwrap();
+        options.linewise = command.mode == super::super::grammar::Mode::Line;
+        options.crosstab = command.mode == super::super::grammar::Mode::Crosstab;
+        let mut binding =
+            super::super::binding::Binding::new(b"fastmash", command.operations, command.keys)
+                .ok()
+                .unwrap();
+        binding.numbered().ok().unwrap();
+        let mut arithmetic = numerics::Numerics::with(binding.operations.needs(false).numerics)
+            .ok()
+            .unwrap();
+        let mut bytes = Vec::new();
+        let buffer = super::super::buffered_stdout::BufferedStdout::new(&mut bytes, 4096, false)
+            .ok()
+            .unwrap();
+        let mut output = command_output::Results::new(buffer, &options);
+        let mut calculation = Calculation::new(&binding.keys, &options);
+        let mut context = Context::new(
+            &mut binding.operations,
+            &binding.keys,
+            &options,
+            &mut arithmetic,
+            None,
+            &mut output,
+        );
+        let mut spare = Raw::for_keys(binding.keys.len(), records::FieldIndex::default())
+            .ok()
+            .unwrap();
+        for (index, row) in rows.iter().enumerate() {
+            spare.bytes_mut().clear();
+            spare.bytes_mut().extend_from_slice(row);
+            if in_place {
+                let storage = spare.bytes().as_ptr();
+                calculation
+                    .push_in_place(
+                        &mut spare,
+                        || {
+                            assert!(
+                                !binding.keys.is_empty() || options.full || options.linewise,
+                                "ungrouped calculation must reuse the caller's record"
+                            );
+                            Raw::for_keys(binding.keys.len(), records::FieldIndex::default())
+                        },
+                        index as u64 + 1,
+                        &mut context,
+                    )
+                    .ok()
+                    .unwrap();
+                if binding.keys.is_empty() && !options.full && !options.linewise {
+                    assert_eq!(spare.bytes().as_ptr(), storage);
+                }
+            } else {
+                spare = calculation
+                    .push(spare, index as u64 + 1, &mut context)
+                    .ok()
+                    .unwrap()
+                    .unwrap_or_default();
+            }
+        }
+        calculation
+            .finish(rows.len() as u64, &mut context)
+            .ok()
+            .unwrap();
+        let done = output.buffer.finish(|_| Ok(()));
+        assert!(done.first_error.is_none() && done.flush_error.is_none());
+        bytes
+    }
+
+    #[test]
+    fn calculation_collects_and_completes_through_both_record_interfaces() {
+        type Job<'a> = (&'a [&'a str], &'a [&'a [u8]], &'a [u8]);
+        let jobs: &[Job<'_>] = &[
+            // `last` requests a representative, but ungrouped input still
+            // reuses its record and writes one aggregate at completion.
+            (
+                &["count", "1", "collapse", "1", "last", "1"],
+                &[b"a", b"b"],
+                b"2\ta,b\tb\n",
+            ),
+            (
+                &["--full", "-g", "1", "last", "2"],
+                &[b"a\t1", b"a\t2", b"b\t3"],
+                b"a\t2\t2\nb\t3\t3\n",
+            ),
+            (&["cut", "1"], &[b"a", b"b"], b"a\nb\n"),
+            // The last Group must reach the table before output completion.
+            (
+                &["crosstab", "1,2", "count", "3"],
+                &[b"a\tx\t1", b"a\tx\t2", b"a\ty\t3", b"b\tx\t4"],
+                b"\tx\ty\na\t2\t1\nb\t1\tN/A\n",
+            ),
+            (&["count", "1"], &[], b""),
+            (&["-g", "1", "count", "2"], &[], b""),
+        ];
+        for &(args, rows, expected) in jobs {
+            for in_place in [false, true] {
+                assert_eq!(calculated(args, rows, in_place), expected, "{args:?}");
+            }
+        }
+    }
 
     fn options() -> options::Options {
         let args: Vec<std::ffi::OsString> = ["-g", "1", "count", "1"]

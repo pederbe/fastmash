@@ -40,6 +40,14 @@ For operations that transform each record instead, see
 | `ms` | Mean of the squared values |
 | `rms` | Root mean square |
 | `trimmean[:P]` | Mean after removing the fraction `P` of values from each end (default 0; `0.5` gives the median) |
+| `wmean VALUE:WEIGHT` | Weighted mean, with finite nonnegative contribution weights |
+
+`wmean` takes one value/weight pair per result, for example `wmean price:units`
+with named fields or `wmean 2:3` with positions. It supports text or quoted CSV,
+headers, custom result names and adjacent or sorted groups. A nonempty
+calculation needs positive retained weight. `--narm` omits whole pairs after
+checking supplied partners. See [Weighted mean](weighted-mean.md) for examples,
+missing values and numerical range limits.
 
 ## Quantiles and order statistics
 

@@ -8,10 +8,13 @@ use super::{
     decimal, dispersion, field_policy, field_value, grammar, indexed_field, integer, line_numeric,
     moments, named_fields, numeric_failure, numerics, options, ordered_statistics, paired,
     presentation, random, records, robust_statistics, sample_failure, samples, scalar_text,
-    scalar_text_failure, text_samples, unsupported,
+    scalar_text_failure, text_samples, unsupported, weighted,
 };
 use moments::{excess_kurtosis, skewness};
 
+#[cfg(test)]
+#[path = "operation_completion_tests.rs"]
+mod completion_tests;
 #[cfg(test)]
 #[path = "paired_sharing_tests.rs"]
 mod paired_sharing_tests;
@@ -24,6 +27,27 @@ pub(super) mod tests;
 pub(super) struct OperationSet {
     plans: Vec<Plan>,
     states: Vec<State>,
+    weighted_mean: bool,
+}
+
+/// Dense retained Groups tied to the Binding that created them. One state
+/// vector holds every Group in insertion order; scalar state stays inline.
+pub(super) struct DenseGroups<'a> {
+    operations: &'a OperationSet,
+    states: Vec<State>,
+}
+
+/// One retained Group tied to its Binding, keeping its own state vector.
+pub(super) struct RetainedGroup<'a> {
+    operations: &'a OperationSet,
+    states: Vec<State>,
+}
+
+/// Short-lived completion of one Group, directly on its collected state.
+/// Callers cannot separate that state from the plans of its Binding.
+pub(super) struct GroupCompletion<'a> {
+    plans: &'a [Plan],
+    states: &'a mut [State],
 }
 
 /// What a Command's Operations need before input is read.
@@ -122,7 +146,9 @@ impl OperationSet {
         command_memory::reserve(&mut plans, requests.len())?;
         let mut states = Vec::new();
         command_memory::reserve(&mut states, requests.len())?;
+        let mut weighted_mean = false;
         for (index, request) in requests.into_iter().enumerate() {
+            weighted_mean |= request.kind == Kind::Wmean;
             let mut resolve = |field, target| match field {
                 grammar::Field::Number(field) => field,
                 grammar::Field::Name(name) => {
@@ -153,12 +179,19 @@ impl OperationSet {
                 pair_conversion: [None, None],
             };
             states.push(
-                State::new(plan.keeps_values())
+                State::new(plan.kind, plan.keeps_values())
                     .ok_or_else(|| unsupported("command memory allocation failed"))?,
             );
             plans.push(plan);
         }
-        Ok((Self { plans, states }, names))
+        Ok((
+            Self {
+                plans,
+                states,
+                weighted_mean,
+            },
+            names,
+        ))
     }
 
     /// Applies resolved field names, then links the Operations that share
@@ -223,6 +256,11 @@ impl OperationSet {
         self.plans.len()
     }
 
+    /// Immutable Operation presence, retained through Binding and Group resets.
+    pub(super) fn has_weighted_mean(&self) -> bool {
+        self.weighted_mean
+    }
+
     /// Every field the Operations select, in request order.
     pub(super) fn fields(&self) -> impl Iterator<Item = u64> + Clone + '_ {
         self.plans
@@ -253,6 +291,26 @@ impl OperationSet {
                 record,
                 index: fields,
             },
+            &self.plans,
+            &mut self.states,
+            line,
+            options,
+            arithmetic,
+            random,
+        )
+    }
+
+    /// Collects already decoded fields with the same Operation and random state.
+    pub(super) fn collect_decoded<'r>(
+        &mut self,
+        record: &mut impl Fields<'r>,
+        line: u64,
+        options: &options::Options,
+        arithmetic: &mut numerics::Numerics,
+        random: Option<&mut random::RandomState>,
+    ) -> Result<bool, Failure> {
+        collect(
+            record,
             &self.plans,
             &mut self.states,
             line,
@@ -343,15 +401,26 @@ impl OperationSet {
         fields
     }
 
-    /// Appends fresh state for each Operation to `states`: a Group's state
-    /// kept apart from these Operations, which [`OperationSet::collect_into`]
-    /// updates. False without memory for it.
-    pub(super) fn fresh_states(&self, states: &mut Vec<State>) -> bool {
-        if states.try_reserve(self.plans.len()).is_err() {
-            return false;
+    /// Retained Groups that share this Binding and one dense state vector.
+    pub(super) fn dense_groups(&self) -> DenseGroups<'_> {
+        DenseGroups {
+            operations: self,
+            states: Vec::new(),
         }
+    }
+
+    /// Completion of the ordinary Group without changing its storage.
+    pub(super) fn completion(&mut self) -> GroupCompletion<'_> {
+        GroupCompletion {
+            plans: &self.plans,
+            states: &mut self.states,
+        }
+    }
+
+    /// Adds the fresh Operation state after its caller has reserved storage.
+    fn initialize_states(&self, states: &mut Vec<State>) -> bool {
         for plan in &self.plans {
-            let Some(state) = State::new(plan.keeps_values()) else {
+            let Some(state) = State::new(plan.kind, plan.keeps_values()) else {
                 return false;
             };
             states.push(state);
@@ -359,45 +428,32 @@ impl OperationSet {
         true
     }
 
-    /// [`OperationSet::collect`] into `states`, a Group's state kept apart
-    /// ([`OperationSet::fresh_states`]).
-    pub(super) fn collect_into(
-        &self,
-        states: &mut [State],
-        record: &[u8],
-        fields: &mut records::FieldIndex,
-        line: u64,
-        options: &options::Options,
-        arithmetic: &mut numerics::Numerics,
-    ) -> Result<bool, Failure> {
-        collect(
-            &mut Whole {
-                record,
-                index: fields,
-            },
-            &self.plans,
+    /// Constructs one complete retained Group using Command allocation checks.
+    /// Failed construction exposes no owner with incomplete state.
+    pub(super) fn retained_group(&self) -> Result<RetainedGroup<'_>, Failure> {
+        let mut states = Vec::new();
+        command_memory::reserve(&mut states, self.plans.len())?;
+        if !self.initialize_states(&mut states) {
+            return Err(unsupported("command memory allocation failed"));
+        }
+        Ok(RetainedGroup {
+            operations: self,
             states,
-            line,
-            options,
-            arithmetic,
-            None,
-        )
-    }
-
-    /// Exchanges the current Group's state with `states`, a Group's state
-    /// kept apart, whose results are then written as the current Group's.
-    pub(super) fn swap_states(&mut self, states: &mut [State]) {
-        self.states.swap_with_slice(states);
+        })
     }
 
     /// The bytes one Group's state takes before it keeps any values.
-    pub(super) fn state_bytes(&self) -> usize {
+    fn state_bytes(&self) -> usize {
         self.plans
             .iter()
             .map(|plan| {
                 std::mem::size_of::<State>()
-                    + if plan.keeps_values() {
-                        std::mem::size_of::<Kept>()
+                    + if plan.keeps_values() || plan.kind == Kind::Wmean {
+                        if plan.kind == Kind::Wmean {
+                            std::mem::size_of::<weighted::Accumulator>()
+                        } else {
+                            std::mem::size_of::<Kept>()
+                        }
                     } else {
                         0
                     }
@@ -451,48 +507,19 @@ impl OperationSet {
         arithmetic: &mut numerics::Numerics,
         options: &options::Options,
     ) -> Result<Vec<u8>, Failure> {
-        summarize(
-            &self.plans,
-            &mut self.states,
-            at,
-            arithmetic,
-            options.collapse,
-            &options.presentation,
-            options.ignore_case,
-        )
+        self.completion().result(at, arithmetic, options)
     }
 
     /// Writes one group's results in request order. Text results go straight
-    /// to the output, without copying each result.
+    /// to the output, without copying each result. A completion failure carries
+    /// its Operation kind so grouped callers can add applicable context.
     pub(super) fn write_results(
         &mut self,
         output: &mut impl command_output::CommandOutput,
         arithmetic: &mut numerics::Numerics,
         options: &options::Options,
-    ) -> Result<(), Failure> {
-        let operation_count = self.plans.len();
-        for at in 0..operation_count {
-            let separator = if at + 1 == operation_count {
-                options.record_end
-            } else {
-                options.output
-            };
-            if let Some(bytes) = text_result(&self.plans[at], &self.states[at]) {
-                output.result(bytes, separator);
-                continue;
-            }
-            let value = summarize(
-                &self.plans,
-                &mut self.states,
-                at,
-                arithmetic,
-                options.collapse,
-                &options.presentation,
-                options.ignore_case,
-            )?;
-            output.result(&value, separator);
-        }
-        Ok(())
+    ) -> Result<(), (Kind, Failure)> {
+        self.completion().write_results(output, arithmetic, options)
     }
 
     /// Writes the one result row of an ungrouped calculation. With a paired
@@ -506,7 +533,9 @@ impl OperationSet {
         options: &options::Options,
     ) -> Result<(), Failure> {
         if self.plans.iter().any(|plan| plan.kind.is_paired()) {
-            return self.write_results(output, arithmetic, options);
+            return self
+                .write_results(output, arithmetic, options)
+                .map_err(|(_, error)| error);
         }
         let mut fields = Vec::new();
         command_memory::reserve(&mut fields, self.plans.len())?;
@@ -514,6 +543,179 @@ impl OperationSet {
             fields.push(self.result(at, arithmetic, options)?);
         }
         output.row(&fields, options.output)
+    }
+}
+
+impl DenseGroups<'_> {
+    /// Appends one complete Group and returns its insertion index. On failure,
+    /// previous Groups stay usable and no partial Group is exposed.
+    pub(super) fn add_group(&mut self) -> Option<usize> {
+        let width = self.operations.plans.len();
+        assert_ne!(width, 0, "retained Groups require Operations");
+        command_memory::reserve(&mut self.states, width).ok()?;
+        let start = self.states.len();
+        if !self.operations.initialize_states(&mut self.states) {
+            self.states.truncate(start);
+            return None;
+        }
+        Some(start / width)
+    }
+
+    /// The fixed bytes of one Group, including its separately kept stores.
+    pub(super) fn group_bytes(&self) -> usize {
+        self.operations.state_bytes()
+    }
+
+    /// Adds an ordinary-text Record to a Group, preserving request order and
+    /// whether this Record must replace the Group's representative.
+    pub(super) fn collect(
+        &mut self,
+        group: usize,
+        record: &[u8],
+        fields: &mut records::FieldIndex,
+        line: u64,
+        options: &options::Options,
+        arithmetic: &mut numerics::Numerics,
+    ) -> Result<bool, Failure> {
+        let range = self.range(group);
+        collect(
+            &mut Whole {
+                record,
+                index: fields,
+            },
+            &self.operations.plans,
+            &mut self.states[range],
+            line,
+            options,
+            arithmetic,
+            None,
+        )
+    }
+
+    /// Completes the selected retained Group without installing its state in
+    /// the ordinary Group or requiring a restoration step.
+    pub(super) fn completion(&mut self, group: usize) -> GroupCompletion<'_> {
+        let range = self.range(group);
+        GroupCompletion {
+            plans: &self.operations.plans,
+            states: &mut self.states[range],
+        }
+    }
+
+    fn range(&self, group: usize) -> std::ops::Range<usize> {
+        let width = self.operations.plans.len();
+        let start = group.checked_mul(width).expect("retained Group index fits");
+        let end = start
+            .checked_add(width)
+            .expect("retained Group extent fits");
+        assert!(end <= self.states.len(), "retained Group exists");
+        start..end
+    }
+}
+
+impl RetainedGroup<'_> {
+    /// Adds ordinary-text or decoded-CSV Fields in request order, using this
+    /// Group's Binding and shared calculations.
+    pub(super) fn collect_fields<'r>(
+        &mut self,
+        record: &mut impl Fields<'r>,
+        line: u64,
+        options: &options::Options,
+        arithmetic: &mut numerics::Numerics,
+    ) -> Result<bool, Failure> {
+        collect(
+            record,
+            &self.operations.plans,
+            &mut self.states,
+            line,
+            options,
+            arithmetic,
+            None,
+        )
+    }
+
+    /// Completes this Group directly, without installing or restoring state.
+    pub(super) fn completion(&mut self) -> GroupCompletion<'_> {
+        GroupCompletion {
+            plans: &self.operations.plans,
+            states: &mut self.states,
+        }
+    }
+}
+
+impl GroupCompletion<'_> {
+    /// The number of results, in request order, for checked retained output.
+    pub(super) fn len(&self) -> usize {
+        self.plans.len()
+    }
+
+    fn complete(
+        &mut self,
+        at: usize,
+        arithmetic: &mut numerics::Numerics,
+        options: &options::Options,
+    ) -> Result<Completed<'_>, Failure> {
+        complete(
+            self.plans,
+            self.states,
+            at,
+            arithmetic,
+            options.collapse,
+            options.presentation.utf8,
+            options.ignore_case,
+        )
+    }
+
+    /// One rendered result, for output that retains a crosstab cell.
+    pub(super) fn result(
+        &mut self,
+        at: usize,
+        arithmetic: &mut numerics::Numerics,
+        options: &options::Options,
+    ) -> Result<Vec<u8>, Failure> {
+        self.complete(at, arithmetic, options)
+            .and_then(|result| result.render(&options.presentation))
+    }
+
+    /// One typed numerical result with exact Count promotion. Text here is
+    /// an internal failure rather than an implicitly converted number.
+    pub(super) fn numerical_result(
+        &mut self,
+        at: usize,
+        arithmetic: &mut numerics::Numerics,
+        options: &options::Options,
+    ) -> Result<numerics::Value, Failure> {
+        match self.complete(at, arithmetic, options)? {
+            Completed::Count(count) => Ok(integer(count)),
+            Completed::Number(value) => Ok(value),
+            Completed::Borrowed(_) | Completed::Text(_) => {
+                Err(numeric_failure(numerics::NumericFailure::Invariant))
+            }
+        }
+    }
+
+    /// Writes results progressively in request order, borrowing retained text
+    /// for each output call and preserving the failed Operation's kind.
+    pub(super) fn write_results(
+        &mut self,
+        output: &mut impl command_output::CommandOutput,
+        arithmetic: &mut numerics::Numerics,
+        options: &options::Options,
+    ) -> Result<(), (Kind, Failure)> {
+        let operation_count = self.plans.len();
+        for at in 0..operation_count {
+            let kind = self.plans[at].kind;
+            let separator = if at + 1 == operation_count {
+                options.record_end
+            } else {
+                options.output
+            };
+            self.complete(at, arithmetic, options)
+                .map_err(|error| (kind, error))?
+                .write(output, separator, &options.presentation)
+                .map_err(|error| (kind, error))?;
+        }
+        Ok(())
     }
 }
 
@@ -542,8 +744,7 @@ impl Plan {
             || kind.is_moment()
             || kind.is_normality()
             || kind.is_dispersion()
-            || kind.is_paired()
-            || matches!(self.selector, Selector::Pair { .. })
+            || kind.keeps_pair_samples()
             || self.keeps_text()
     }
 
@@ -558,13 +759,27 @@ impl Plan {
 /// and the values kept from every record live apart, for the Operations
 /// that keep them.
 #[repr(C)]
-pub(super) struct State {
+struct State {
     value: numerics::Value,
     count: u64,
     parsed: Option<numerics::Value>,
     maximum: numerics::Value,
     text: scalar_text::ScalarText,
-    kept: Option<Box<[Kept; 1]>>,
+    stored: Option<Stored>,
+}
+
+/// A request owns either retained observations or fixed-size weighted totals.
+/// Sharing conversion or pair-shaped syntax does not choose this storage.
+enum Stored {
+    Kept(Box<[Kept; 1]>),
+    Weighted(Box<[weighted::Accumulator; 1]>),
+}
+
+fn boxed_state<T>(value: T) -> Option<Box<[T; 1]>> {
+    let mut slot = Vec::new();
+    command_memory::reserve_exact(&mut slot, 1).ok()?;
+    slot.push(value);
+    Box::<[T; 1]>::try_from(slot.into_boxed_slice()).ok()
 }
 
 /// The values an Operation keeps from every record, and what it computes
@@ -582,12 +797,11 @@ struct Kept {
 impl State {
     /// Fresh state, with a store for kept values when `keeps`; `None`
     /// without memory for it.
-    fn new(keeps: bool) -> Option<Self> {
-        let kept = if keeps {
-            let mut slot = Vec::new();
-            slot.try_reserve_exact(1).ok()?;
-            slot.push(Kept::default());
-            Some(Box::<[Kept; 1]>::try_from(slot.into_boxed_slice()).ok()?)
+    fn new(kind: Kind, keeps: bool) -> Option<Self> {
+        let stored = if kind == Kind::Wmean {
+            Some(Stored::Weighted(boxed_state(weighted::Accumulator::new())?))
+        } else if keeps {
+            Some(Stored::Kept(boxed_state(Kept::default())?))
         } else {
             None
         };
@@ -597,22 +811,37 @@ impl State {
             parsed: None,
             maximum: integer(0),
             text: scalar_text::ScalarText::default(),
-            kept,
+            stored,
         })
     }
 
     fn kept(&self) -> &Kept {
-        &self
-            .kept
+        match self
+            .stored
             .as_ref()
-            .expect("Operations that keep values own a store")[0]
+            .expect("Operations that keep values own a store")
+        {
+            Stored::Kept(kept) => &kept[0],
+            Stored::Weighted(_) => unreachable!("weighted totals do not retain samples"),
+        }
     }
 
     fn kept_mut(&mut self) -> &mut Kept {
-        &mut self
-            .kept
+        match self
+            .stored
             .as_mut()
-            .expect("Operations that keep values own a store")[0]
+            .expect("Operations that keep values own a store")
+        {
+            Stored::Kept(kept) => &mut kept[0],
+            Stored::Weighted(_) => unreachable!("weighted totals do not retain samples"),
+        }
+    }
+
+    fn weighted(&mut self) -> &mut weighted::Accumulator {
+        match self.stored.as_mut().expect("weighted request owns totals") {
+            Stored::Weighted(weighted) => &mut weighted[0],
+            Stored::Kept(_) => unreachable!("weighted requests own fixed-size totals"),
+        }
     }
 
     fn reset(&mut self) {
@@ -621,8 +850,14 @@ impl State {
         self.count = 0;
         self.parsed = None;
         self.text.clear();
-        if let Some(kept) = &mut self.kept {
-            let kept = &mut kept[0];
+        if let Some(stored) = &mut self.stored {
+            let kept = match stored {
+                Stored::Kept(kept) => &mut kept[0],
+                Stored::Weighted(weighted) => {
+                    weighted[0] = weighted::Accumulator::new();
+                    return;
+                }
+            };
             kept.samples.clear();
             kept.raw_deviation = None;
             kept.moments.clear();
@@ -718,12 +953,14 @@ fn link_shared_fields(operations: &mut [Plan]) -> Result<(), Failure> {
         operation.conversion_source = None;
         operation.pair_conversion = [None, None];
         if let Selector::Pair { left, right } = operation.selector {
-            entries.push((
-                Family::Pairs,
-                selector(operation.selector),
-                index,
-                Role::Member,
-            ));
+            if operation.kind.keeps_pair_samples() {
+                entries.push((
+                    Family::Pairs,
+                    selector(operation.selector),
+                    index,
+                    Role::Member,
+                ));
+            }
             for (side, field) in [left, right].into_iter().enumerate() {
                 entries.push((
                     Family::Conversion,
@@ -793,11 +1030,17 @@ fn collect<'r>(
         }
         if let Selector::Pair { left, right } = plan.selector {
             let [left_source, right_source] = plan.pair_conversion;
-            let samples = &mut state.kept_mut().pair_samples;
             let mut parse = |source: Option<usize>, field| match source {
                 Some(source) => Ok(previous[source].parsed),
                 None => record.number(field, line, options),
             };
+            if plan.kind == Kind::Wmean {
+                let value = parse(left_source, left)?;
+                let weight = parse(right_source, right)?;
+                state.weighted().push(value, weight, right, line)?;
+                continue;
+            }
+            let samples = &mut state.kept_mut().pair_samples;
             if let Some(value) = parse(left_source, left)? {
                 samples
                     .push_left(value)
@@ -1132,21 +1375,67 @@ fn text_result<'s>(plan: &Plan, state: &'s State) -> Option<&'s [u8]> {
     };
     Some(state.text.output().unwrap_or(absent))
 }
+
+/// Completed values retain their meaning until presentation. Borrowed text
+/// keeps the ordinary output path from copying every selected text value.
+enum Completed<'s> {
+    Count(u64),
+    Number(numerics::Value),
+    Borrowed(&'s [u8]),
+    Text(Vec<u8>),
+}
+
+impl Completed<'_> {
+    fn render(self, presentation: &presentation::Presentation) -> Result<Vec<u8>, Failure> {
+        match self {
+            Self::Count(count) => format_count(count, presentation),
+            Self::Number(value) => presentation.render(numerics::Numerics::value80(value)),
+            Self::Text(bytes) => Ok(bytes),
+            Self::Borrowed(bytes) => {
+                let mut result = Vec::new();
+                result
+                    .try_reserve_exact(bytes.len())
+                    .map_err(|_| scalar_text_failure(scalar_text::Error::Allocation))?;
+                result.extend_from_slice(bytes);
+                Ok(result)
+            }
+        }
+    }
+
+    fn write(
+        self,
+        output: &mut impl command_output::CommandOutput,
+        separator: u8,
+        presentation: &presentation::Presentation,
+    ) -> Result<(), Failure> {
+        match self {
+            Self::Borrowed(bytes) => output.result(bytes, separator),
+            Self::Text(bytes) => output.result(&bytes, separator),
+            result => output.result(&result.render(presentation)?, separator),
+        }
+        Ok(())
+    }
+}
+
 /// The result of the Operation at `at`. Paired, moment, normality,
 /// dispersion, ordered-sample and MAD results read the work (samples, pairs,
 /// dispersion, cached moments or deviation) they may share with another
 /// Operation through its source index; the rest summarize their own state.
-fn summarize(
+fn complete<'s>(
     plans: &[Plan],
-    states: &mut [State],
+    states: &'s mut [State],
     at: usize,
     arithmetic: &mut numerics::Numerics,
     collapse: u8,
-    presentation: &presentation::Presentation,
+    utf8: bool,
     ignore_case: bool,
-) -> Result<Vec<u8>, Failure> {
+) -> Result<Completed<'s>, Failure> {
     let plan = &plans[at];
     if let Selector::Pair { left, right } = plan.selector {
+        if plan.kind == Kind::Wmean {
+            let value = states[at].weighted().result(left, right)?;
+            return Ok(Completed::Number(value));
+        }
         let kind = match plan.kind {
             Kind::Pcov => paired::Kind::Covariance { sample: false },
             Kind::Scov => paired::Kind::Covariance { sample: true },
@@ -1156,15 +1445,11 @@ fn summarize(
             _ => unreachable!("paired selector has a paired operation kind"),
         };
         let owner = &states[plan.sample_source.unwrap_or(at)];
-        let value = owner.kept().pair_samples.summarize(
-            kind,
-            plan.kind,
-            left,
-            right,
-            arithmetic,
-            presentation.utf8,
-        )?;
-        return presentation.render(numerics::Numerics::value80(value));
+        let value = owner
+            .kept()
+            .pair_samples
+            .summarize(kind, plan.kind, left, right, arithmetic, utf8)?;
+        return Ok(Completed::Number(value));
     }
     if plan.kind.is_moment() || plan.kind.is_normality() {
         let kind = plan.kind;
@@ -1175,7 +1460,7 @@ fn summarize(
             arithmetic,
             &mut owner.moments,
         )?;
-        return presentation.render(numerics::Numerics::value80(value));
+        return Ok(Completed::Number(value));
     }
     if plan.kind.is_dispersion() {
         let kind = plan.kind;
@@ -1189,22 +1474,14 @@ fn summarize(
         } else {
             value
         };
-        return presentation.render(numerics::Numerics::value80(value));
+        return Ok(Completed::Number(value));
     }
     if !plan.kind.uses_shared_sorted_samples() && !plan.kind.is_mad() {
-        return summarize_own_state(
-            plan,
-            &mut states[at],
-            arithmetic,
-            collapse,
-            presentation,
-            ignore_case,
-        );
+        return complete_own_state(plan, &mut states[at], arithmetic, collapse, ignore_case);
     }
     let kind = plan.kind;
     if states[at].count == 0 {
-        return presentation
-            .render(fastmash_conversion::convert::quiet_nan(false).map_err(conversion_failure)?);
+        return Ok(Completed::Number(super::quiet_nan()));
     }
     let source = plan.sample_source.unwrap_or(at);
     if kind.is_mad() {
@@ -1218,7 +1495,7 @@ fn summarize(
             }
         };
         let value = robust_statistics::scale(deviation, kind == Kind::Mad)?;
-        return presentation.render(numerics::Numerics::value80(value));
+        return Ok(Completed::Number(value));
     }
     let sorted = states[source]
         .kept_mut()
@@ -1249,25 +1526,25 @@ fn summarize(
         Kind::Trimmean(trim) => ordered_statistics::trimmed(sorted, trim)?,
         _ => unreachable!("ordered-sample finalizer has a supported kind"),
     };
-    presentation.render(numerics::Numerics::value80(value))
+    Ok(Completed::Number(value))
 }
 
 /// The result of an Operation that reads only its own state: text, counts
-/// and running values. [`summarize`] handles every Operation that may read
+/// and running values. [`complete`] handles every Operation that may read
 /// work shared with another Operation first.
-fn summarize_own_state(
+fn complete_own_state<'s>(
     plan: &Plan,
-    state: &mut State,
+    state: &'s mut State,
     arithmetic: &mut numerics::Numerics,
     collapse: u8,
-    presentation: &presentation::Presentation,
     ignore_case: bool,
-) -> Result<Vec<u8>, Failure> {
+) -> Result<Completed<'s>, Failure> {
     if plan.kind == Kind::Unique {
         return state
             .kept_mut()
             .text_samples
             .unique(collapse, ignore_case)
+            .map(Completed::Text)
             .map_err(|error| text_sample_failure(plan.kind, error));
     }
     if plan.kind == Kind::Collapse {
@@ -1275,42 +1552,35 @@ fn summarize_own_state(
             .kept_mut()
             .text_samples
             .collapse(collapse)
+            .map(Completed::Text)
             .map_err(|error| text_sample_failure(plan.kind, error));
     }
-    if let Some(bytes) = text_result(plan, state) {
-        let mut result = Vec::new();
-        result
-            .try_reserve_exact(bytes.len())
-            .map_err(|_| scalar_text_failure(scalar_text::Error::Allocation))?;
-        result.extend_from_slice(bytes);
-        return Ok(result);
-    }
-    if state.count == 0 {
-        return presentation.render(match plan.kind {
-            Kind::Sum | Kind::Count | Kind::Countunique => {
-                fastmash_numeric_contract::Value80::signed_zero(false)
-            }
-            Kind::Min | Kind::Absmin => {
-                fastmash_conversion::convert::infinity(true).map_err(conversion_failure)?
-            }
-            Kind::Max | Kind::Absmax => {
-                fastmash_conversion::convert::infinity(false).map_err(conversion_failure)?
-            }
-            _ => fastmash_conversion::convert::quiet_nan(false).map_err(conversion_failure)?,
-        });
-    }
-    if plan.kind == Kind::Count {
-        return format_count(state.count, presentation);
-    }
-    if plan.kind == Kind::Countunique {
-        return format_count(
+    if plan.kind == Kind::Countunique && state.count != 0 {
+        return Ok(Completed::Count(
             state
                 .kept_mut()
                 .text_samples
                 .count_unique(ignore_case)
                 .map_err(|error| text_sample_failure(plan.kind, error))? as u64,
-            presentation,
-        );
+        ));
+    }
+    if let Some(bytes) = text_result(plan, state) {
+        return Ok(Completed::Borrowed(bytes));
+    }
+    if state.count == 0 {
+        return Ok(Completed::Number(match plan.kind {
+            Kind::Sum | Kind::Count | Kind::Countunique => integer(0),
+            Kind::Min | Kind::Absmin => {
+                numerics::canonical(fastmash_numeric_contract::Raw80::new(0xffff, 1 << 63))
+            }
+            Kind::Max | Kind::Absmax => {
+                numerics::canonical(fastmash_numeric_contract::Raw80::new(0x7fff, 1 << 63))
+            }
+            _ => super::quiet_nan(),
+        }));
+    }
+    if plan.kind == Kind::Count {
+        return Ok(Completed::Count(state.count));
     }
     let value = if plan.kind == Kind::Range {
         decimal::subtract(state.maximum, state.value)?
@@ -1328,5 +1598,5 @@ fn summarize_own_state(
     } else {
         value
     };
-    presentation.render(numerics::Numerics::value80(value))
+    Ok(Completed::Number(value))
 }

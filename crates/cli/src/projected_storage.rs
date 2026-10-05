@@ -17,6 +17,20 @@ impl SortKeys {
     const SLOTS: usize = 256;
     const LONGEST: usize = 64;
 
+    /// Actual cache allocations, including unused slot capacity.
+    pub(super) fn retained_bytes(&self) -> Option<usize> {
+        self.slots.iter().try_fold(
+            self.slots
+                .capacity()
+                .checked_mul(std::mem::size_of::<(Vec<u8>, Vec<u8>)>())?,
+            |bytes, (text, key)| {
+                bytes
+                    .checked_add(text.capacity())?
+                    .checked_add(key.capacity())
+            },
+        )
+    }
+
     /// Append the sort key of `text` to `out`.
     pub(super) fn write(
         &mut self,

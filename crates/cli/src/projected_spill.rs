@@ -275,14 +275,14 @@ fn run_buffer_memory(size: usize) -> Result<Vec<u8>, Failure> {
 /// writes to the file for a run that completes, but refuses when the buffer
 /// cannot be allocated instead of aborting. A run that fails is abandoned:
 /// dropping the writer does not flush it.
-struct RunWriter<W: Write> {
+pub(super) struct RunWriter<W: Write> {
     inner: W,
     /// The buffered bytes; its capacity is the buffer's size.
     buffer: Vec<u8>,
 }
 impl<W: Write> RunWriter<W> {
     /// Writes to `inner` through a buffer of `size` bytes.
-    fn new(size: usize, inner: W) -> Result<Self, Failure> {
+    pub(super) fn new(size: usize, inner: W) -> Result<Self, Failure> {
         Ok(Self {
             buffer: run_buffer_memory(size)?,
             inner,
@@ -300,7 +300,7 @@ impl<W: Write> RunWriter<W> {
         written
     }
     /// Writes the buffered bytes on and returns the writer.
-    fn into_inner(mut self) -> io::Result<W> {
+    pub(super) fn into_inner(mut self) -> io::Result<W> {
         self.flush_buffer()?;
         Ok(self.inner)
     }
@@ -349,7 +349,7 @@ impl<W: Write> Write for RunWriter<W> {
 /// Reads a run file through a buffer as `BufReader` does, with the same reads
 /// from the file, but refuses when the buffer cannot be allocated instead of
 /// aborting.
-struct RunReader<R: Read> {
+pub(super) struct RunReader<R: Read> {
     inner: R,
     /// The buffer: its capacity is its size, and all of it is initialized
     /// (zeroed) at the first refill, as safe code reads only into
@@ -365,7 +365,7 @@ struct RunReader<R: Read> {
 }
 impl<R: Read> RunReader<R> {
     /// Reads from `inner` through a buffer of `size` bytes.
-    fn new(size: usize, inner: R) -> Result<Self, Failure> {
+    pub(super) fn new(size: usize, inner: R) -> Result<Self, Failure> {
         Ok(Self {
             inner,
             buffer: run_buffer_memory(size)?,
@@ -446,6 +446,28 @@ impl<R: Read> BufRead for RunReader<R> {
         self.at = self.at.wrapping_add(amount).min(self.end);
     }
 }
+impl<R: Read + Seek> Seek for RunReader<R> {
+    fn stream_position(&mut self) -> io::Result<u64> {
+        self.inner
+            .stream_position()?
+            .checked_sub((self.end - self.at) as u64)
+            .ok_or_else(|| io::Error::other("run position precedes buffered bytes"))
+    }
+    fn seek(&mut self, position: io::SeekFrom) -> io::Result<u64> {
+        let position = match position {
+            io::SeekFrom::Current(offset) => io::SeekFrom::Current(
+                offset
+                    .checked_sub((self.end - self.at) as i64)
+                    .ok_or_else(|| io::Error::other("run seek offset overflow"))?,
+            ),
+            other => other,
+        };
+        let result = self.inner.seek(position);
+        self.at = 0;
+        self.end = 0;
+        result
+    }
+}
 /// A reader's `read` alone, for `Read`'s provided `read_exact`.
 struct Unbuffered<'a, R: Read>(&'a mut RunReader<R>);
 impl<R: Read> Read for Unbuffered<'_, R> {
@@ -523,7 +545,7 @@ fn complete(writer: RunWriter<File>) -> Result<File, Failure> {
 // 1.5-million-row spills at the default chunk target with unchanged chunk
 // memory; decoded heads and read buffers scale with the fan-in
 // (measured when it was chosen). A merge policy, not an input-size limit.
-const MERGE_INPUTS: usize = 8;
+pub(super) const MERGE_INPUTS: usize = 8;
 
 #[cfg(test)]
 thread_local! {
@@ -541,7 +563,7 @@ const RUN_BUFFERS: usize = MERGE_INPUTS + 1;
 /// or reads: a 128th of the target, from 64 bytes to 256 KiB. Larger buffers
 /// take fewer system calls; the chunk leaves `RUN_BUFFERS` of them out of
 /// its memory (`chunk_memory`).
-fn run_buffer(target: usize) -> usize {
+pub(super) fn run_buffer(target: usize) -> usize {
     (target / 128).clamp(64, 256 << 10)
 }
 
@@ -1530,6 +1552,25 @@ mod tests {
     use super::*;
     use std::fs::OpenOptions;
     use std::io::{BufReader, BufWriter};
+    #[test]
+    fn run_position_queries_preserve_buffered_read_ahead() {
+        let mut reader = RunReader::new(16, io::Cursor::new(b"abcdefghijklmnopqrst"))
+            .unwrap_or_else(|_| panic!("buffer"));
+        let mut first = [0; 2];
+        reader.read_exact(&mut first).unwrap();
+        assert_eq!(&first, b"ab");
+        assert_eq!(reader.stream_position().unwrap(), 2);
+        assert_eq!(reader.inner.position(), 16);
+        reader.read_exact(&mut first).unwrap();
+        assert_eq!(&first, b"cd");
+        assert_eq!(reader.stream_position().unwrap(), 4);
+        reader.seek(io::SeekFrom::Current(-2)).unwrap();
+        reader.read_exact(&mut first).unwrap();
+        assert_eq!(&first, b"cd");
+        reader.seek(io::SeekFrom::Start(0)).unwrap();
+        reader.read_exact(&mut first).unwrap();
+        assert_eq!(&first, b"ab");
+    }
     fn record<S: Codec + Build>(sequence: u64) -> Record<S> {
         let bytes = [(sequence % 3) as u8, b'\t', b'v', 0, 0xff, sequence as u8];
         super::super::project::<S>(

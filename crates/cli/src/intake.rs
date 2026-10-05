@@ -1,7 +1,8 @@
-//! Record intake: how every Mode takes in its Records.
+//! Text Record intake: how text Modes take in their Records.
 //!
 //! GNU datamash reads all input through one function (text-lines.c
-//! `line_record_fread`); Fastmash does the same through an [`Intake`]. Its
+//! `line_record_fread`); Fastmash text Modes use an [`Intake`]. Strict CSV
+//! calculations decode Records separately in [`super::csv_input`]. Its text
 //! policy names the record terminator, which Records are skipped (a
 //! [`Filter`]) and whether the first accepted Record is the Input header. The
 //! intake yields that header once, annotation-stripped, then data Records,
@@ -160,12 +161,25 @@ impl<'p> Intake<'p> {
         buffer: &mut Vec<u8>,
         resolve: impl FnOnce(&[u8]) -> Result<(), Failure>,
     ) -> Result<bool, Failure> {
+        self.header_captured(reader, buffer, |_| (), |bytes, ()| resolve(bytes))
+    }
+
+    /// Captures caller-bounded raw bytes before vnlog strips an accepted header.
+    /// Captures for skipped prologue Records are discarded immediately.
+    pub(super) fn header_captured<R: BufRead + ?Sized, C>(
+        &mut self,
+        reader: &mut R,
+        buffer: &mut Vec<u8>,
+        mut capture: impl FnMut(&[u8]) -> C,
+        resolve: impl FnOnce(&[u8], C) -> Result<(), Failure>,
+    ) -> Result<bool, Failure> {
         while self.header_pending {
             if !self.read(reader, buffer)? {
                 return Ok(false);
             }
+            let captured = capture(buffer);
             if let Accepted::Header = self.accept(buffer)? {
-                resolve(buffer)?;
+                resolve(buffer, captured)?;
                 self.warn();
                 return Ok(true);
             }

@@ -2,12 +2,14 @@
 
 ## Records and fields
 
-Input is a sequence of **records**, each ended by a newline (or by a NUL byte
-with `-z`). The last record may omit its terminator. Each record is split into
-**fields**, by default at every tab.
+Ordinary delimited-text input is a sequence of **records**, each ended by a
+newline (or by a NUL byte with `-z`). The last record may omit its terminator.
+Each record is split into **fields**, by default at every tab.
 
-Carriage returns are kept as data, so files with Windows line endings may need
-converting first (for example with `tr -d '\r'`).
+Carriage returns are kept as data in ordinary text, so files with Windows line
+endings may need converting first (for example with `tr -d '\r'`). Explicit
+[quoted CSV input](csv-and-result-names.md) accepts LF and CRLF record endings
+and permits line breaks inside quoted fields.
 
 ## Selecting fields
 
@@ -45,7 +47,10 @@ $ printf 'a;1\nb;2\n' | fastmash -t ';' sum 2
 ```
 
 `-t,` does not understand CSV quoting: a comma inside a quoted field still
-splits it. Convert quoted CSV to TSV first if your data needs it.
+splits it. Use `--csv-in` to read quoted CSV, or `--csv` for both input and
+output. Format switches do not imply headers. CSV input conflicts with `-t`,
+`-W` and `-C`; either CSV direction conflicts with `-z` and `--vnlog`.
+See [Quoted CSV and result names](csv-and-result-names.md).
 
 ## Headers
 

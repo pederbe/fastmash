@@ -12,7 +12,12 @@ use std::{
     time::{Duration, Instant},
 };
 
-const SUPERVISOR: &str = env!("CARGO_BIN_EXE_fastmash-sort-supervisor");
+#[path = "support/executable.rs"]
+mod executable;
+
+#[path = "support/temp_dir.rs"]
+mod test_dir;
+use test_dir::TempDir as Scratch;
 
 fn wait(child: &mut Child, limit: Duration) -> ExitStatus {
     let start = Instant::now();
@@ -30,7 +35,7 @@ fn wait(child: &mut Child, limit: Duration) -> ExitStatus {
 }
 
 fn exec_sort(parent: &str, root: &str) -> std::process::Output {
-    Command::new(SUPERVISOR)
+    Command::new(executable::supervisor())
         .args(["--exec-sort", parent, root, "0", "9", "1", "1"])
         .env_clear()
         .stdin(Stdio::null())
@@ -88,7 +93,7 @@ fn the_exec_role_exits_77_whatever_its_standard_error() {
     let rejected = ["--exec-sort", &parent, "/tmp", "0", "9", "1", "1"];
     let unexecutable = ["--exec-sort", &parent, root, "0", "9", &keys, "1"];
     let run = |args: &[&str], stderr: Stdio| {
-        let mut command = Command::new(SUPERVISOR);
+        let mut command = Command::new(executable::supervisor());
         command
             .args(args)
             .env_clear()
@@ -149,7 +154,7 @@ fn small_stack() -> std::io::Result<()> {
 /// Start an external-route job with `TMPDIR` set (or unset for `None`), in
 /// `cwd`, keeping its input open so the sort is still running.
 fn start_external(tmpdir: Option<&std::ffi::OsStr>, cwd: &std::path::Path) -> Child {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_fastmash"));
+    let mut command = Command::new(executable::fastmash());
     // `geomean` in the C locale takes the external sort route.
     command
         .args(["-s", "-g", "1", "geomean", "2"])
@@ -190,21 +195,34 @@ fn running_root(fastmash: &mut Child) -> PathBuf {
     }
 }
 
-/// A fresh directory, canonical (fastmash resolves relative paths against the
-/// physical working directory) and removed even when a test fails.
-struct Scratch(PathBuf);
-impl Scratch {
-    fn new(name: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("fastmash-test-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        Self(fs::canonicalize(dir).unwrap())
-    }
+#[test]
+fn scratch_rejects_a_preexisting_directory() {
+    let parent = Scratch::new("collision-parent");
+    let occupied = parent.0.join("occupied");
+    fs::create_dir(&occupied).unwrap();
+    fs::write(occupied.join("sentinel"), b"untouched").unwrap();
+    assert!(matches!(
+        Scratch::create(occupied.clone()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists
+    ));
+    assert_eq!(fs::read(occupied.join("sentinel")).unwrap(), b"untouched");
 }
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.0);
-    }
+
+#[test]
+fn scratch_rejects_a_preexisting_symlink() {
+    use std::os::unix::fs::symlink;
+    let parent = Scratch::new("symlink-parent");
+    let target = parent.0.join("target");
+    fs::create_dir(&target).unwrap();
+    fs::write(target.join("sentinel"), b"untouched").unwrap();
+    let occupied = parent.0.join("occupied");
+    symlink(&target, &occupied).unwrap();
+    assert!(matches!(
+        Scratch::create(occupied.clone()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists
+    ));
+    assert_eq!(fs::read_link(occupied).unwrap(), target);
+    assert_eq!(fs::read(target.join("sentinel")).unwrap(), b"untouched");
 }
 
 #[test]
@@ -280,7 +298,7 @@ fn external_sort_threads_follow_gnu_sort_defaults() {
         (vec![("OMP_NUM_THREADS", "3")], 3),
         (vec![("OMP_NUM_THREADS", "5"), ("OMP_THREAD_LIMIT", "2")], 2),
     ] {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_fastmash"));
+        let mut command = Command::new(executable::fastmash());
         command
             .args(["-s", "-g", "1", "geomean", "2"])
             .env_clear()
@@ -312,7 +330,7 @@ fn unusable_tmpdir_is_a_clear_error() {
     let cwd = Scratch::new("unusable");
     for tmpdir in ["/nonexistent/fastmash", ""] {
         let output = run_in(
-            Path::new(env!("CARGO_BIN_EXE_fastmash")),
+            Path::new(&executable::fastmash()),
             &cwd.0,
             ["-s", "-g", "1", "geomean", "2"],
             &[("TMPDIR", tmpdir), ("FASTMASH_SORT_MEMORY_BYTES", "1")],
@@ -324,7 +342,7 @@ fn unusable_tmpdir_is_a_clear_error() {
             String::from_utf8_lossy(&output.stderr),
             format!(
                 "{}: sort temporary I/O error: No such file or directory (os error 2)\n",
-                env!("CARGO_BIN_EXE_fastmash")
+                executable::fastmash().to_string_lossy()
             ),
             "{tmpdir:?}"
         );
@@ -339,7 +357,7 @@ fn unusable_tmpdir_sorts_small_input_in_process() {
     use std::os::unix::fs::PermissionsExt;
     let cwd = Scratch::new("small-unusable");
     let read_only = Scratch::new("read-only-tmpdir");
-    fs::set_permissions(&read_only.0, fs::Permissions::from_mode(0o555)).unwrap();
+    fs::set_permissions(&read_only.0, fs::Permissions::from_mode(0o500)).unwrap();
     let file = cwd.0.join("file");
     fs::write(&file, b"").unwrap();
     for tmpdir in [
@@ -349,7 +367,7 @@ fn unusable_tmpdir_sorts_small_input_in_process() {
         "",
     ] {
         let output = run_in(
-            Path::new(env!("CARGO_BIN_EXE_fastmash")),
+            Path::new(&executable::fastmash()),
             &cwd.0,
             ["-s", "-g", "1", "geomean", "2"],
             &[("TMPDIR", tmpdir)],
@@ -375,7 +393,7 @@ fn a_separator_byte_from_0x80_sorts_in_process() {
         let mut args = vec![OsString::from("-t"), OsString::from_vec(vec![0xa7])];
         args.extend(job.iter().map(OsString::from));
         let output = run_in(
-            Path::new(env!("CARGO_BIN_EXE_fastmash")),
+            Path::new(&executable::fastmash()),
             &cwd.0,
             &args,
             &[],
@@ -391,9 +409,25 @@ fn a_separator_byte_from_0x80_sorts_in_process() {
 /// that would use the system `sort` in process, with the same output.
 #[test]
 fn a_missing_supervisor_sorts_in_process() {
-    let dir = Scratch::new("no-supervisor");
+    use std::os::unix::fs::PermissionsExt;
+    let parent = Scratch::new("no-supervisor");
+    let occupied = parent.0.join("old-root");
+    fs::create_dir(&occupied).unwrap();
+    let marker = parent.0.join("executed");
+    let stale_supervisor = occupied.join("fastmash-sort-supervisor");
+    let script = format!(
+        "#!/bin/sh\nprintf stale > '{}'\nexit 77\n",
+        marker.display()
+    );
+    fs::write(&stale_supervisor, &script).unwrap();
+    fs::set_permissions(&stale_supervisor, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(matches!(
+        Scratch::create(occupied),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists
+    ));
+    let dir = Scratch::create(parent.0.join("fresh-root")).unwrap();
     let fastmash = dir.0.join("fastmash");
-    fs::copy(env!("CARGO_BIN_EXE_fastmash"), &fastmash).unwrap();
+    fs::copy(executable::fastmash(), &fastmash).unwrap();
     for (job, expected) in [
         (&["-s", "-g", "1", "rms", "2"][..], "a\t2\nb\t5\n"),
         (&["-s", "rmdup", "1"], "a\t2\nb\t1\n"),
@@ -403,6 +437,8 @@ fn a_missing_supervisor_sorts_in_process() {
         assert_eq!(output.stdout, expected.as_bytes(), "{job:?}");
         assert!(output.stderr.is_empty(), "{job:?}: {output:?}");
     }
+    assert!(!marker.exists(), "the stale supervisor ran");
+    assert_eq!(fs::read(stale_supervisor).unwrap(), script.as_bytes());
 }
 
 /// The supervisor marks inherited descriptors close-on-exec with
@@ -420,7 +456,7 @@ fn without_close_range_cloexec_jobs_sort_in_process() {
             (&["-s", "-g", "1", "rms", "2"][..], "a\t2\nb\t5\n"),
             (&["-s", "rmdup", "1"], "a\t2\nb\t1\n"),
         ] {
-            let mut command = Command::new(env!("CARGO_BIN_EXE_fastmash"));
+            let mut command = Command::new(executable::fastmash());
             command
                 .args(job)
                 .env_clear()
@@ -520,7 +556,7 @@ fn sort_root(fastmash: u32) -> Option<PathBuf> {
 
 #[test]
 fn interrupted_external_sort_leaves_no_temporary_directory() {
-    let mut fastmash = Command::new(env!("CARGO_BIN_EXE_fastmash"))
+    let mut fastmash = Command::new(executable::fastmash())
         // `geomean` in the C locale takes the external sort route.
         .args(["-s", "-g", "1", "geomean", "2"])
         .env_clear()
@@ -619,7 +655,7 @@ fn a_killed_sort_is_named_before_read_error_on_close() {
             stderr,
             format!(
                 "{named}\n{}: read error (on close)\n",
-                env!("CARGO_BIN_EXE_fastmash")
+                executable::fastmash().to_string_lossy()
             )
         );
     }
@@ -643,7 +679,7 @@ fn a_long_header_in_a_file_is_read_in_chunks() {
         input.extend_from_slice(format!("k{:05}\t1\n", n * 7919 % rows).as_bytes());
     }
     fs::write(&path, &input).unwrap();
-    let mut fastmash = Command::new(env!("CARGO_BIN_EXE_fastmash"))
+    let mut fastmash = Command::new(executable::fastmash())
         // `geomean` in the C locale takes the external sort route.
         .args(["-s", "--header-in", "-g", "1", "geomean", "2"])
         .env_clear()
@@ -698,7 +734,7 @@ fn ignored_cancellation_signals_fall_back_to_native_sorting() {
             let mut child = Command::new("/bin/sh")
                 .arg("-c")
                 .arg(script)
-                .arg(env!("CARGO_BIN_EXE_fastmash"))
+                .arg(executable::fastmash())
                 .args(args)
                 .env_clear()
                 .env("PATH", "/usr/bin:/bin")
@@ -772,11 +808,14 @@ fn with_companion(name: &str, script: &str) -> (PathBuf, std::process::Output) {
     use std::os::unix::fs::PermissionsExt;
     let dir = Scratch::new(name);
     let fastmash = dir.0.join("fastmash");
-    fs::copy(env!("CARGO_BIN_EXE_fastmash"), &fastmash).unwrap();
+    fs::copy(executable::fastmash(), &fastmash).unwrap();
     let companion = dir.0.join("fastmash-sort-supervisor");
     fs::write(
         &companion,
-        format!("#!/bin/sh\nREAL='{SUPERVISOR}'\n{script}\n"),
+        format!(
+            "#!/bin/sh\nREAL='{}'\n{script}\n",
+            executable::supervisor().to_string_lossy()
+        ),
     )
     .unwrap();
     fs::set_permissions(&companion, fs::Permissions::from_mode(0o755)).unwrap();

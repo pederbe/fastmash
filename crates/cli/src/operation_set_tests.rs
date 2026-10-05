@@ -37,6 +37,358 @@ fn requests(options: &options::Options) -> OperationSet {
 fn args(items: &[&str]) -> Vec<std::ffi::OsString> {
     items.iter().map(std::ffi::OsString::from).collect()
 }
+
+fn completed_bytes(
+    mut completion: GroupCompletion<'_>,
+    options: &options::Options,
+    arithmetic: &mut numerics::Numerics,
+) -> (Vec<u8>, Result<(), (Kind, Failure)>) {
+    let mut bytes = Vec::new();
+    let buffer =
+        super::super::buffered_stdout::BufferedStdout::new(&mut bytes, 4096, false).unwrap();
+    let mut output = command_output::Results::new(buffer, options);
+    let result = completion.write_results(&mut output, arithmetic, options);
+    assert!(output.buffer.finish(|_| Ok(())).first_error.is_none());
+    (bytes, result)
+}
+
+#[test]
+fn retained_groups_collect_interleaved_shared_results_and_complete_independently() {
+    let opts = options(&[
+        "count", "1", "sum", "1", "mean", "1", "median", "1", "q1", "1", "pvar", "1", "median",
+        "1", "first", "2", "last", "2",
+    ]);
+    let mut set = requests(&opts);
+    set.bind([]).ok().unwrap();
+    let mut first = set.retained_group().ok().unwrap();
+    let mut second = set.retained_group().ok().unwrap();
+    let mut arithmetic = numerics::Numerics::new(false).unwrap();
+    let mut index = records::FieldIndex::selecting(set.fields());
+    for (line, group, record) in [
+        (1, true, b"1\talpha".as_slice()),
+        (2, false, b"10\tone"),
+        (3, true, b"3\tbeta"),
+        (4, false, b"14\ttwo"),
+    ] {
+        index.clear();
+        let group = if group { &mut first } else { &mut second };
+        group
+            .collect_fields(
+                &mut Whole {
+                    record,
+                    index: &mut index,
+                },
+                line,
+                &opts,
+                &mut arithmetic,
+            )
+            .ok()
+            .unwrap();
+    }
+    let (bytes, result) = completed_bytes(second.completion(), &opts, &mut arithmetic);
+    assert!(result.is_ok());
+    assert_eq!(bytes, b"2\t24\t12\t12\t11\t4\t12\tone\ttwo\n");
+    let (bytes, result) = completed_bytes(first.completion(), &opts, &mut arithmetic);
+    assert!(result.is_ok());
+    assert_eq!(bytes, b"2\t4\t2\t2\t1.5\t1\t2\talpha\tbeta\n");
+    drop((first, second));
+    set.collect_line(b"7\tordinary", 5, &opts, &mut arithmetic, None)
+        .ok()
+        .unwrap();
+    let (bytes, result) = completed_bytes(set.completion(), &opts, &mut arithmetic);
+    assert!(result.is_ok());
+    assert_eq!(bytes, b"1\t7\t7\t7\t7\t0\t7\tordinary\tordinary\n");
+}
+
+#[test]
+fn retained_group_construction_and_collection_failures_keep_other_groups_usable() {
+    let opts = options(&["count", "1", "median", "1", "wmean", "1:2"]);
+    let mut set = requests(&opts);
+    set.bind([]).ok().unwrap();
+    let mut first = set.retained_group().ok().unwrap();
+    for successful_reservations in [0, 2] {
+        command_memory::FAIL_RESERVATION.with(|fail| fail.set(Some(successful_reservations)));
+        let error = set.retained_group().err().unwrap();
+        assert_eq!(error.status, 77);
+        assert_eq!(error.message, b"command memory allocation failed\n");
+    }
+    let mut second = set.retained_group().ok().unwrap();
+    let mut arithmetic = numerics::Numerics::new(false).unwrap();
+    let mut index = records::FieldIndex::selecting(set.fields());
+    samples::FAIL_GROWTH.with(|fail| fail.set(true));
+    let error = first
+        .collect_fields(
+            &mut Whole {
+                record: b"2\t1",
+                index: &mut index,
+            },
+            1,
+            &opts,
+            &mut arithmetic,
+        )
+        .err()
+        .unwrap();
+    assert_eq!(error.status, 77);
+    assert_eq!(error.message, b"median sample memory allocation failed\n");
+    index.clear();
+    second
+        .collect_fields(
+            &mut Whole {
+                record: b"8\t1",
+                index: &mut index,
+            },
+            2,
+            &opts,
+            &mut arithmetic,
+        )
+        .ok()
+        .unwrap();
+    let (bytes, result) = completed_bytes(second.completion(), &opts, &mut arithmetic);
+    assert!(result.is_ok());
+    assert_eq!(bytes, b"1\t8\t8\n");
+}
+
+#[test]
+fn retained_group_typed_completion_failure_leaves_the_next_group_independent() {
+    let opts = options(&["--narm", "count", "1", "dotprod", "1:2"]);
+    let mut set = requests(&opts);
+    set.bind([]).ok().unwrap();
+    let mut first = set.retained_group().ok().unwrap();
+    let mut second = set.retained_group().ok().unwrap();
+    let mut arithmetic = numerics::Numerics::new(false).unwrap();
+    let mut index = records::FieldIndex::selecting(set.fields());
+    for (line, failed, record) in [
+        (1, true, b"1\tNA".as_slice()),
+        (2, false, b"2\t3"),
+        (3, true, b"2\t3"),
+    ] {
+        index.clear();
+        let group = if failed { &mut first } else { &mut second };
+        group
+            .collect_fields(
+                &mut Whole {
+                    record,
+                    index: &mut index,
+                },
+                line,
+                &opts,
+                &mut arithmetic,
+            )
+            .ok()
+            .unwrap();
+    }
+    let mut completion = first.completion();
+    assert_eq!(completion.len(), 2);
+    assert_eq!(
+        opts.presentation
+            .render(numerics::Numerics::value80(
+                completion
+                    .numerical_result(0, &mut arithmetic, &opts)
+                    .ok()
+                    .unwrap(),
+            ))
+            .ok()
+            .unwrap(),
+        b"2"
+    );
+    let error = completion
+        .numerical_result(1, &mut arithmetic, &opts)
+        .err()
+        .unwrap();
+    assert_eq!(error.status, 1);
+    assert_eq!(
+        error.message,
+        b"input error for operation 'dotprod': fields 1,2 have different number of items\n"
+    );
+    let mut completion = second.completion();
+    assert_eq!(
+        opts.presentation
+            .render(numerics::Numerics::value80(
+                completion
+                    .numerical_result(0, &mut arithmetic, &opts)
+                    .ok()
+                    .unwrap(),
+            ))
+            .ok()
+            .unwrap(),
+        b"1"
+    );
+    assert_eq!(
+        opts.presentation
+            .render(numerics::Numerics::value80(
+                completion
+                    .numerical_result(1, &mut arithmetic, &opts)
+                    .ok()
+                    .unwrap(),
+            ))
+            .ok()
+            .unwrap(),
+        b"6"
+    );
+}
+
+#[test]
+fn retained_group_numerical_completion_rejects_an_unexpected_text_result() {
+    let opts = options(&["first", "1"]);
+    let mut set = requests(&opts);
+    set.bind([]).ok().unwrap();
+    let mut group = set.retained_group().ok().unwrap();
+    let mut arithmetic = numerics::Numerics::new(false).unwrap();
+    let mut index = records::FieldIndex::selecting(set.fields());
+    group
+        .collect_fields(
+            &mut Whole {
+                record: b"text",
+                index: &mut index,
+            },
+            1,
+            &opts,
+            &mut arithmetic,
+        )
+        .ok()
+        .unwrap();
+    let error = group
+        .completion()
+        .numerical_result(0, &mut arithmetic, &opts)
+        .err()
+        .unwrap();
+    assert_eq!(error.status, 70);
+    assert_eq!(error.message, b"internal numerical invariant failure\n");
+}
+
+#[test]
+fn dense_groups_collect_interleaved_shared_results_and_complete_independently() {
+    let opts = options(&[
+        "count", "1", "sum", "1", "mean", "1", "median", "1", "q1", "1", "pvar", "1", "median",
+        "1", "first", "2", "last", "2",
+    ]);
+    let mut set = requests(&opts);
+    set.bind([]).ok().unwrap();
+    let mut groups = set.dense_groups();
+    let first = groups.add_group().unwrap();
+    let second = groups.add_group().unwrap();
+    let mut arithmetic = numerics::Numerics::new(false).unwrap();
+    let mut index = records::FieldIndex::selecting(set.fields());
+    for (line, group, record) in [
+        (1, first, b"1\talpha".as_slice()),
+        (2, second, b"10\tone"),
+        (3, first, b"3\tbeta"),
+        (4, second, b"14\ttwo"),
+    ] {
+        index.clear();
+        groups
+            .collect(group, record, &mut index, line, &opts, &mut arithmetic)
+            .ok()
+            .unwrap();
+    }
+    let (bytes, result) = completed_bytes(groups.completion(second), &opts, &mut arithmetic);
+    assert!(result.is_ok());
+    assert_eq!(bytes, b"2\t24\t12\t12\t11\t4\t12\tone\ttwo\n");
+    let (bytes, result) = completed_bytes(groups.completion(first), &opts, &mut arithmetic);
+    assert!(result.is_ok());
+    assert_eq!(bytes, b"2\t4\t2\t2\t1.5\t1\t2\talpha\tbeta\n");
+    // Completing retained Groups leaves the ordinary Group ready to collect.
+    set.collect_line(b"7\tordinary", 5, &opts, &mut arithmetic, None)
+        .ok()
+        .unwrap();
+    let (bytes, result) = completed_bytes(set.completion(), &opts, &mut arithmetic);
+    assert!(result.is_ok());
+    assert_eq!(bytes, b"1\t7\t7\t7\t7\t0\t7\tordinary\tordinary\n");
+}
+
+#[test]
+fn dense_group_construction_failure_keeps_previous_groups_and_next_index() {
+    let opts = options(&["count", "1", "median", "1", "wmean", "1:2"]);
+    let mut set = requests(&opts);
+    set.bind([]).ok().unwrap();
+    let mut groups = set.dense_groups();
+    assert_eq!(groups.add_group(), Some(0));
+    // Fail both vector growth and later initialization using the established
+    // allocation fixture. Incomplete Groups cannot be selected afterwards.
+    for successful_reservations in [0, 2] {
+        command_memory::FAIL_RESERVATION.with(|fail| fail.set(Some(successful_reservations)));
+        assert_eq!(groups.add_group(), None);
+    }
+    assert_eq!(groups.add_group(), Some(1));
+    let mut arithmetic = numerics::Numerics::new(false).unwrap();
+    let mut index = records::FieldIndex::selecting(set.fields());
+    groups
+        .collect(0, b"2\t1", &mut index, 1, &opts, &mut arithmetic)
+        .ok()
+        .unwrap();
+    index.clear();
+    groups
+        .collect(1, b"8\t1", &mut index, 2, &opts, &mut arithmetic)
+        .ok()
+        .unwrap();
+    for (group, expected) in [(0, b"1\t2\t2\n".as_slice()), (1, b"1\t8\t8\n")] {
+        let (bytes, result) = completed_bytes(groups.completion(group), &opts, &mut arithmetic);
+        assert!(result.is_ok());
+        assert_eq!(bytes, expected);
+    }
+}
+
+#[test]
+fn dense_group_collection_failure_leaves_other_groups_independent() {
+    let opts = options(&["count", "1", "median", "1"]);
+    let mut set = requests(&opts);
+    set.bind([]).ok().unwrap();
+    let mut groups = set.dense_groups();
+    let first = groups.add_group().unwrap();
+    let second = groups.add_group().unwrap();
+    let mut arithmetic = numerics::Numerics::new(false).unwrap();
+    let mut index = records::FieldIndex::selecting(set.fields());
+    samples::FAIL_GROWTH.with(|fail| fail.set(true));
+    let error = groups
+        .collect(first, b"2", &mut index, 1, &opts, &mut arithmetic)
+        .err()
+        .unwrap();
+    assert_eq!(error.status, 77);
+    assert_eq!(error.message, b"median sample memory allocation failed\n");
+    index.clear();
+    groups
+        .collect(second, b"8", &mut index, 2, &opts, &mut arithmetic)
+        .ok()
+        .unwrap();
+    let (bytes, result) = completed_bytes(groups.completion(second), &opts, &mut arithmetic);
+    assert!(result.is_ok());
+    assert_eq!(bytes, b"1\t8\n");
+}
+
+#[test]
+fn retained_completion_failure_keeps_progressive_text_and_operation_context() {
+    let opts = options(&["--narm", "first", "3", "count", "1", "dotprod", "1:2"]);
+    let mut set = requests(&opts);
+    set.bind([]).ok().unwrap();
+    let mut groups = set.dense_groups();
+    let first = groups.add_group().unwrap();
+    let second = groups.add_group().unwrap();
+    let mut arithmetic = numerics::Numerics::new(false).unwrap();
+    let mut index = records::FieldIndex::selecting(set.fields());
+    for (line, group, record) in [
+        (1, first, b"1\tNA\talpha".as_slice()),
+        (2, second, b"2\t3\tbeta"),
+        (3, first, b"2\t3\tgamma"),
+    ] {
+        index.clear();
+        groups
+            .collect(group, record, &mut index, line, &opts, &mut arithmetic)
+            .ok()
+            .unwrap();
+    }
+    let (bytes, result) = completed_bytes(groups.completion(first), &opts, &mut arithmetic);
+    assert_eq!(bytes, b"alpha\t2\t");
+    let (kind, error) = result.err().unwrap();
+    assert_eq!(kind, Kind::Dotprod);
+    assert_eq!(error.status, 1);
+    assert_eq!(
+        error.message,
+        b"input error for operation 'dotprod': fields 1,2 have different number of items\n"
+    );
+    let (bytes, result) = completed_bytes(groups.completion(second), &opts, &mut arithmetic);
+    assert!(result.is_ok());
+    assert_eq!(bytes, b"beta\t1\t6\n");
+}
 struct NoEntropy;
 impl random::SeedSource for NoEntropy {
     fn seed(&mut self) -> Result<u32, ()> {
@@ -313,9 +665,12 @@ fn parsed_signaling_nan_stops_before_mutation_but_preserves_paired_left() {
         assert_eq!(set.states[0].count, 0);
         assert!(
             set.states[0]
-                .kept
+                .stored
                 .as_ref()
-                .is_none_or(|kept| kept[0].samples.as_slice().is_empty())
+                .is_none_or(|stored| match stored {
+                    Stored::Kept(kept) => kept[0].samples.as_slice().is_empty(),
+                    Stored::Weighted(_) => true,
+                })
         );
         assert!(
             numerics::Numerics::value80(set.states[0].value)

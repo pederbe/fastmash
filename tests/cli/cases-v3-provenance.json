@@ -1,6 +1,6 @@
 {
   "cases": 3137,
   "content_sha256": "a785e5d48c750a57007a4dd693735f8726edf11c27b85898a7595c6966a6235a",
-  "fixture_sha256": "be1f1d301d7004c81185256ee5c7549a7202b977457901dec9306afe3f6dc48d",
+  "fixture_sha256": "b665bacd907c5a3325c19bc86a849d404a07107cd3b4ec79e00136868657d210",
   "note": "Expected results of the regression suite: GNU datamash 1.9 behavior, with the differences documented in docs/src/guide/differences.md."
 }

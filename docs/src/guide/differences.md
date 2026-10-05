@@ -1,11 +1,35 @@
 # Differences from GNU datamash
 
 Fastmash aims to behave exactly like GNU datamash 1.9. This page lists the
-known intentional differences. Anything else that behaves differently is a bug:
+known intentional differences and explicit extensions. Other differences in
+GNU-compatible commands are bugs:
 please [report it](https://github.com/pederbe/fastmash/issues/new/choose).
 
 Comparisons were made against GNU datamash 1.9 on x86-64 Linux. Other GNU
 versions and builds can differ from each other as well.
+
+## Fastmash extensions
+
+These features extend the command language through explicit options, Operations
+or Modes. Ordinary GNU-compatible commands keep the compatibility rules on this
+page. The linked guides describe each extension's supported combinations and
+limits; no comparative workflow speed or memory claim is implied.
+
+- [Quoted CSV and custom result names](csv-and-result-names.md) add explicit
+  quoted input/output formats and supplied labels for calculation results.
+- [Table health](table-health.md) inspects structural and missing-value
+  observations, inferred types and supplied expectations, with readable and TSV
+  reports and optional validation.
+- [Top-N selection](top-n-records.md) returns the highest or lowest complete
+  Records by one numeric Field, retaining original input order for ties.
+- [Weighted mean](weighted-mean.md) adds `wmean VALUE:WEIGHT` with finite,
+  nonnegative contribution weights and checked numerical range limits.
+- [Dataset comparison](dataset-comparison.md) summarizes two raw datasets and
+  reports their numerical changes, with complete Comparison keys and optional
+  ranking.
+- [Terminal color](terminal-color.md) styles help, failure prefixes and readable
+  health reports on eligible terminals, or under explicit controls. Data output,
+  health TSV and version bytes remain plain, even when color is forced.
 
 ## Numbers
 

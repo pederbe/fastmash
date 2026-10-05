@@ -204,6 +204,8 @@ fn sigpipe_policy_in_isolated_test_processes() {
     for case in [
         "blocked",
         "blocked-sorted",
+        "blocked-comparison",
+        "blocked-health",
         "help",
         "version",
         "grammar",
@@ -232,22 +234,64 @@ fn sigpipe_child() {
         return;
     };
     let old = fastmash_sort_process::linux::mask(None).unwrap();
-    if ["blocked", "blocked-sorted", "help", "version", "grammar"].contains(&case.as_str()) {
+    if [
+        "blocked",
+        "blocked-sorted",
+        "blocked-comparison",
+        "blocked-health",
+        "help",
+        "version",
+        "grammar",
+    ]
+    .contains(&case.as_str())
+    {
         fastmash_sort_process::linux::mask(Some(old | (1 << 12))).unwrap();
-        let args: Vec<std::ffi::OsString> = match case.as_str() {
-            "help" => vec!["--help".into()],
-            "version" => vec!["--version".into()],
-            "grammar" => vec!["not-an-operation".into(), "1".into()],
-            "blocked-sorted" => ["-s", "-g", "1", "count", "2"].map(Into::into).to_vec(),
-            _ => vec!["count".into(), "1".into()],
+        let spellings = match case.as_str() {
+            "help" => vec!["--help"],
+            "version" => vec!["--version"],
+            "grammar" => vec!["not-an-operation", "1"],
+            "blocked-sorted" => vec!["-s", "-g", "1", "count", "2"],
+            "blocked-comparison" => vec!["compare", "before", "after", "count", "1"],
+            "blocked-health" => vec!["health", "bogus"],
+            _ => vec!["count", "1"],
+        };
+        let args: Vec<std::ffi::OsString> = spellings.iter().map(Into::into).collect();
+        if case == "blocked-comparison" {
+            // Refuse the first Binding reservation if it runs before signals.
+            let prefix = command_test_support::scanning_reservations(&spellings);
+            command_memory::FAIL_RESERVATION.with(|slot| slot.set(Some(prefix)));
+        }
+        let mut input = command_test_support::Input {
+            bytes: b"1\n",
+            segment: 1,
+            error: Some(5),
+        };
+        let mut sources = command_test_support::Sources {
+            inputs: [
+                command_test_support::Input {
+                    bytes: b"before",
+                    segment: 1,
+                    error: Some(5),
+                },
+                command_test_support::Input {
+                    bytes: b"after",
+                    segment: 1,
+                    error: Some(5),
+                },
+            ],
+            closes: [None, None],
+            opened: 0,
+            completed: 0,
         };
         let mut bytes = Vec::new();
-        let result = run(
-            &mut &b"1\n"[..],
+        let result = run_with_sources(
+            (&mut input, &mut sources),
             &mut bytes,
             &args,
             b"fastmash",
             &mut |_| true,
+            &mut NoEntropy,
+            Environment::from_env(Default::default()),
         );
         match case.as_str() {
             "help" => {
@@ -271,6 +315,14 @@ fn sigpipe_child() {
                 assert_eq!(error.message, b"blocked SIGPIPE is unsupported\n");
                 assert!(bytes.is_empty());
             }
+        }
+        assert_eq!(input.bytes, b"1\n");
+        assert_eq!((sources.opened, sources.completed), (0, 0));
+        if case == "blocked-comparison" {
+            assert_eq!(
+                command_memory::FAIL_RESERVATION.with(|slot| slot.replace(None)),
+                Some(0)
+            );
         }
         std::process::exit(0);
     }
