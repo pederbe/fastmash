@@ -4,8 +4,8 @@ pub(super) fn failing_input(binary: &OsStr, arguments: &[&str], full: bool) -> O
     failing_input_with(binary, arguments, b"a\tb\nc\td\npartial", full, "C")
 }
 
-/// Runs `binary` on `input` from a terminal whose reads fail with EIO after it,
-/// discarding a final incomplete record.
+/// Runs `binary` with a late EIO, discarding a final incomplete record.
+/// Linux uses a real PTY; Darwin uses the calibrated native read fault.
 pub(super) fn failing_input_with(
     binary: &OsStr,
     arguments: &[&str],
@@ -13,55 +13,68 @@ pub(super) fn failing_input_with(
     full: bool,
     locale: &str,
 ) -> Output {
-    use std::{io::Write, os::fd::FromRawFd};
-    let mut master = -1;
-    let mut slave = -1;
-    // Successful openpty transfers two owned descriptors. Raw mode prevents
-    // terminal newline conversion; closing the slave gives the master EIO after
-    // its queued bytes, including one incomplete record, have been consumed.
-    // SAFETY: every pointer is to a live local or null where the API allows it.
-    unsafe {
-        assert_eq!(
-            libc::openpty(
-                &mut master,
-                &mut slave,
-                std::ptr::null_mut(),
-                std::ptr::null(),
-                std::ptr::null()
-            ),
-            0
-        );
-        let mut term = std::mem::zeroed();
-        assert_eq!(libc::tcgetattr(slave, &mut term), 0);
-        libc::cfmakeraw(&mut term);
-        assert_eq!(libc::tcsetattr(slave, libc::TCSANOW, &term), 0);
+    #[cfg(target_os = "macos")]
+    {
+        let directory =
+            temp_dir::TempDir::new(&format!("read-fault-{:?}", std::thread::current().id()));
+        let path = directory.0.join("input");
+        fs::write(&path, input).unwrap();
+        Command::new(binary)
+            .arg0("fastmash")
+            .args(arguments)
+            .env_clear()
+            .env("LC_ALL", locale)
+            .env("PATH", "/usr/bin:/bin")
+            .stdin(fs::File::open(&path).unwrap())
+            .full_stdout(full)
+            .read_error_at_eof()
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap()
     }
-    // SAFETY: openpty returned two new descriptors that nothing else owns.
-    let terminal = unsafe { fs::File::from_raw_fd(master) };
-    // SAFETY: as above.
-    let mut feed = unsafe { fs::File::from_raw_fd(slave) };
-    feed.write_all(input).unwrap();
-    drop(feed);
-    Command::new(binary)
-        .arg0("fastmash")
-        .args(arguments)
-        .env_clear()
-        .env("LC_ALL", locale)
-        .env("PATH", "/usr/bin:/bin")
-        .stdin(terminal)
-        .stdout(if full {
-            Stdio::from(
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open("/dev/full")
-                    .unwrap(),
-            )
-        } else {
-            Stdio::piped()
-        })
-        .stderr(Stdio::piped())
-        .output()
-        .unwrap()
+    #[cfg(target_os = "linux")]
+    {
+        use std::{io::Write, os::fd::FromRawFd};
+        let mut master = -1;
+        let mut slave = -1;
+        // Successful openpty transfers two owned descriptors. Raw mode prevents
+        // terminal newline conversion; closing the slave gives the master EIO after
+        // its queued bytes, including one incomplete record, have been consumed.
+        // SAFETY: every pointer is to a live local or null where the API allows it.
+        unsafe {
+            assert_eq!(
+                libc::openpty(
+                    &mut master,
+                    &mut slave,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut()
+                ),
+                0
+            );
+            let mut term = std::mem::zeroed();
+            assert_eq!(libc::tcgetattr(slave, &mut term), 0);
+            libc::cfmakeraw(&mut term);
+            assert_eq!(libc::tcsetattr(slave, libc::TCSANOW, &term), 0);
+        }
+        // SAFETY: openpty returned two new descriptors that nothing else owns.
+        let terminal = unsafe { fs::File::from_raw_fd(master) };
+        // SAFETY: as above.
+        let mut feed = unsafe { fs::File::from_raw_fd(slave) };
+        feed.write_all(input).unwrap();
+        drop(feed);
+        Command::new(binary)
+            .arg0("fastmash")
+            .args(arguments)
+            .env_clear()
+            .env("LC_ALL", locale)
+            .env("PATH", "/usr/bin:/bin")
+            .stdin(terminal)
+            .full_stdout(full)
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap()
+    }
 }
 
 #[test]
@@ -263,6 +276,7 @@ fn transpose_tall_wide_and_output_failure() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn transpose_allocation_failure_is_explicit_and_has_no_output() {
     let path = std::env::temp_dir().join(format!("transpose-memory-{}", std::process::id()));
     // Three million tiny cells need more offset storage than this child's allowance.

@@ -1,6 +1,7 @@
 //! The external sort route's companion: argument validation and cancellation.
 //! Every command sets FASTMASH_GROUPING=sort: hash grouping would otherwise
 //! group input from a file without the system sort.
+#![cfg(target_os = "linux")]
 use std::{
     ffi::OsString,
     fs,

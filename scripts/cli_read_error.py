@@ -1,5 +1,6 @@
-"""Bounded real Linux PTY input EIO after a visible completed group."""
-import contextlib, errno, os, pty, resource, select, signal, subprocess, tempfile, time, tty
+"""Bounded late input EIO after a visible native-terminal completed group."""
+import contextlib, errno, os, pty, resource, select, signal, subprocess, sys, tempfile, time, tty
+import cli_streams
 
 def invoke(case, binary, directory, cap):
     if signal.pthread_sigmask(signal.SIG_BLOCK, set()):
@@ -9,6 +10,9 @@ def invoke(case, binary, directory, cap):
     if not 0<len(data)<=1024 or not ack:
         raise ValueError('Input/ack bounds')
     env={'PATH':'/usr/bin:/bin','LC_ALL':'C','TZ':'UTC'}
+    native = sys.platform == 'darwin'
+    if native:
+        env = cli_streams.native_read_error_environment(binary, env)
     argv=[case['name']]+case['args']
     with contextlib.ExitStack() as stack:
         descriptors=[]
@@ -23,7 +27,13 @@ def invoke(case, binary, directory, cap):
             stack.callback(close,slave)
             tty.setraw(slave)
             return master,slave
-        inp,producer=pair()
+        if native:
+            inp,producer=os.pipe()
+            descriptors.extend((inp,producer))
+            stack.callback(close,inp)
+            stack.callback(close,producer)
+        else:
+            inp,producer=pair()
         receiver,out=pair()
         error=stack.enter_context(tempfile.TemporaryFile(dir=directory))
         deadline=time.monotonic()+8
@@ -57,9 +67,11 @@ def invoke(case, binary, directory, cap):
             if not acknowledged: raise RuntimeError('No completed group acknowledgement')
         finally:
             if proc.poll() is None: os.killpg(proc.pid,signal.SIGKILL)
-            proc.wait()
+            proc.wait(timeout=2)
         stderr=os.pread(error.fileno(),cap+1,0)
         if len(stderr)>cap: raise RuntimeError('Error capture overflow')
         return dict(argv=argv,executable=str(binary),env=env,returncode=proc.returncode,
             timed_out=False,overflow=False,stdout_hex=output.hex(),stderr_hex=stderr.hex(),
-            acknowledged=ack.hex(),input_error_mechanism='pty-master-after-slave-close')
+            acknowledged=ack.hex(),input_error_mechanism=(
+                'pipe-eof-interposed-EIO-after-terminal-ack' if native else
+                'pty-master-after-slave-close'))

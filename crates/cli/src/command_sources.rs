@@ -1,5 +1,5 @@
 //! Independent source lifetimes inside the Command's input seam.
-use super::{Failure, command_memory, failure, intake, linux};
+use super::{Failure, command_memory, failure, intake, platform};
 use std::{
     ffi::OsStr,
     fs::File,
@@ -40,14 +40,9 @@ impl Resolver for Files {
         };
         let result = scan(&mut input);
         let fd = input.file.into_raw_fd();
-        // SAFETY: close takes no pointers. Ownership was taken from the File,
-        // and Linux releases the descriptor even when close reports an error.
-        let closed = unsafe { linux::syscall(3, fd as usize, 0, 0, 0) };
-        let completion = if closed < 0 {
-            Err(close_failure(&io::Error::from_raw_os_error(-closed as i32)))
-        } else {
-            Ok(())
-        };
+        // Ownership was taken from the File; close errors remain part of the
+        // source's completion rather than being lost through File::drop.
+        let completion = platform::close(fd as usize).map_err(|error| close_failure(&error));
         complete(result, completion)
     }
 }

@@ -25,7 +25,10 @@ Please report security problems privately, as described in
 
 ## Development setup
 
-You need Linux x86-64 (or WSL2), stable Rust, Python 3.10+ and GNU or uutils coreutils.
+You need Linux x86-64 (or WSL2), or Apple Silicon macOS 15 or later,
+stable Rust and Python 3.10+. Linux development also needs GNU or uutils
+coreutils. The published 0.1.0 binaries remain Linux-only; native macOS
+development is verified by the [native checks](TESTING.md#native-apple-silicon-development-gate).
 
 ```sh
 git clone https://github.com/pederbe/fastmash

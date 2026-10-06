@@ -1,4 +1,7 @@
 //! Executable weighted Command checks over actual files and pipes.
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
 use std::{
     fs,
     io::Write,
@@ -13,6 +16,11 @@ mod executable;
 mod temp_dir;
 
 const FULL_WARNING: &[u8] = b"fastmash: Using -f/--full with non-linewise operations is deprecated and will be disabled in a future release.\n";
+
+#[cfg(target_os = "linux")]
+const PAIRED_SORT_ROUTE: &str = "system sort";
+#[cfg(target_os = "macos")]
+const PAIRED_SORT_ROUTE: &str = "native sort";
 
 fn candidate() -> Command {
     let mut command = Command::new(executable::fastmash());
@@ -96,7 +104,7 @@ fn weighted_numeric_sort_eligibility_and_system_composition_are_exercised() {
             (
                 vec!["dotprod", "2:3"],
                 b"a\t17.5\t70\nb\t5\t10\n",
-                "system sort",
+                PAIRED_SORT_ROUTE,
             ),
         ] {
             let mut args = vec!["-s", "-g1", "wmean", "2:3"];
@@ -206,7 +214,8 @@ fn sorting_spill_and_hash_replay_preserve_the_ordered_binary80_trace() {
                 }
             }
         }
-        // Existing paired composition selects the system sort in the C locale.
+        // Existing paired composition selects the system sort on Linux in the
+        // C locale; macOS uses the native sort.
         // Zero products and these integer products are exact for dotprod too.
         let output = invoke_in(
             &[
@@ -722,7 +731,8 @@ fn sorted_named_empty_completion_keeps_header_errors_and_legacy_commands() {
             assert!(output.stdout.is_empty());
             assert!(String::from_utf8_lossy(&output.stderr).contains("header"));
         }
-        // Ordinary aggregates retain the existing system-sort empty-input path.
+        // Linux retains the system-sort empty-input error; macOS diagnoses the
+        // missing Input header directly.
         for operation in ["sum", "mean"] {
             let output = invoke_in(
                 &["-H", "-s", "-g", "key", operation, "value"],
@@ -732,7 +742,13 @@ fn sorted_named_empty_completion_keeps_header_errors_and_legacy_commands() {
             );
             assert_eq!(output.status.code(), Some(1), "{output:?}");
             assert!(output.stdout.is_empty());
+            #[cfg(target_os = "linux")]
             assert!(String::from_utf8_lossy(&output.stderr).contains("field number is zero"));
+            #[cfg(target_os = "macos")]
+            assert_eq!(
+                output.stderr, b"fastmash: missing input header for named grouping key\n",
+                "{output:?}"
+            );
         }
     }
     let directory = temp_dir::TempDir::new("weighted-empty-read-error");
@@ -754,7 +770,7 @@ fn sorted_named_empty_completion_keeps_header_errors_and_legacy_commands() {
             "{output:?}"
         );
     }
-    // A present positional key and data still take the external mixed route.
+    // A present positional key and data retain the mixed route on each platform.
     for requests in [
         vec!["wmean", "2:3", "dotprod", "2:3"],
         vec!["dotprod", "2:3", "wmean", "2:3"],
@@ -776,7 +792,11 @@ fn sorted_named_empty_completion_keeps_header_errors_and_legacy_commands() {
                 b"a\t10\t10\nb\t10\t5\n"
             }
         );
-        assert!(String::from_utf8_lossy(&output.stderr).starts_with("sort route: system sort"));
+        assert!(
+            String::from_utf8_lossy(&output.stderr)
+                .starts_with(&format!("sort route: {PAIRED_SORT_ROUTE}")),
+            "{output:?}"
+        );
     }
 }
 
@@ -838,12 +858,7 @@ fn weighted_sort_cleanup(csv: bool) {
             .env("FASTMASH_GROUPING", "sort")
             .env("FASTMASH_SORT_MEMORY_BYTES", memory)
             .stdin(fs::File::open(&input).unwrap())
-            .stdout(
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open("/dev/full")
-                    .unwrap(),
-            )
+            .full_stdout(true)
             .output()
             .unwrap();
         assert_eq!(output.status.code(), Some(1), "{output:?}");
@@ -935,12 +950,7 @@ fn real_output_failure_prevents_weighted_success() {
     let mut child = candidate()
         .args(["wmean", "1:2"])
         .stdin(Stdio::piped())
-        .stdout(
-            fs::OpenOptions::new()
-                .write(true)
-                .open("/dev/full")
-                .unwrap(),
-        )
+        .full_stdout(true)
         .spawn()
         .unwrap();
     child

@@ -50,4 +50,5 @@
     - [0007: Linux first](adr/0007-linux-first.md)
     - [0008: Hash grouping with restart](adr/0008-hash-grouping-with-restart.md)
     - [0009: Built-in locale tables](adr/0009-built-in-locale-tables.md)
+    - [0010: Native Apple Silicon macOS](adr/0010-native-apple-silicon.md)
 - [About](about.md)

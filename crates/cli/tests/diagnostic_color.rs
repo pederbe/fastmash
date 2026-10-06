@@ -1,4 +1,7 @@
 //! Failure presentation preserves diagnostic bodies and transport behavior.
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
 #[path = "support/terminal.rs"]
 mod terminal;
 use std::{
@@ -143,7 +146,7 @@ fn help_output_failures_retain_selected_diagnostic_color() {
         let output = PROGRAM
             .command(&[mode, "--help"], &[])
             .stdin(Stdio::null())
-            .stdout(File::options().write(true).open("/dev/full").unwrap())
+            .full_stdout(true)
             .stderr(Stdio::piped())
             .output()
             .unwrap();
@@ -157,6 +160,7 @@ fn help_output_failures_retain_selected_diagnostic_color() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn child_sort_diagnostics_are_forwarded_without_generated_styling() {
     let args = ["-H", "-s", "-g", "key", "geomean", "value"];
     let plain = PROGRAM.invoke(&args, b"", &[("FASTMASH_GROUPING", "sort")], false, false);
@@ -182,6 +186,44 @@ fn child_sort_diagnostics_are_forwarded_without_generated_styling() {
     assert_eq!(
         &colored.stderr[marker..],
         [PREFIX, &plain.stderr[marker + b"fastmash: ".len()..]].concat()
+    );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn native_missing_header_diagnostic_receives_the_selected_style() {
+    let plain = PROGRAM.invoke(
+        &["-H", "-s", "-g", "key", "geomean", "value"],
+        b"",
+        &[],
+        false,
+        false,
+    );
+    let styled = PROGRAM.invoke(
+        &[
+            "--color=always",
+            "-H",
+            "-s",
+            "-g",
+            "key",
+            "geomean",
+            "value",
+        ],
+        b"",
+        &[],
+        false,
+        true,
+    );
+    assert_eq!(plain.status.code(), Some(1));
+    assert_eq!(
+        plain.stderr,
+        b"fastmash: missing input header for named grouping key\n"
+    );
+    assert_eq!(styled.status, plain.status);
+    assert_eq!(styled.stdout, plain.stdout);
+    assert_eq!(
+        styled.stderr,
+        [PREFIX, b"missing input header for named grouping key\n"].concat()
     );
 }
 
@@ -213,7 +255,7 @@ fn failed_diagnostic_writes_preserve_exit_status_and_sigpipe_behavior() {
                         command.stderr(File::open("/dev/null").unwrap());
                     }
                     "full" => {
-                        command.stderr(File::options().write(true).open("/dev/full").unwrap());
+                        command.full_stderr();
                     }
                     "broken" => {
                         let (reader, writer) = std::io::pipe().unwrap();

@@ -2,12 +2,14 @@
 """Write the third-party license notices for the fastmash binaries.
 
 Collects every crate the `fastmash` package links (normal dependencies on
-x86_64 Linux) from `cargo metadata`, with each crate's license expression and
+the selected target) from `cargo metadata`, with each crate's license expression and
 the license, copyright and notice files it ships. Works with vendored and
 crates.io sources alike. Usage:
 
     python3 scripts/third_party_licenses.py > THIRD-PARTY-LICENSES.md
+    python3 scripts/third_party_licenses.py --target aarch64-apple-darwin
 """
+import argparse
 import json
 from pathlib import Path
 import subprocess
@@ -38,10 +40,10 @@ linked into the binaries under the MIT and Apache-2.0 licenses:
 """
 
 
-def linked_packages():
+def linked_packages(target):
     metadata = json.loads(subprocess.check_output(
         ['cargo', 'metadata', '--format-version', '1', '--locked',
-         '--filter-platform', 'x86_64-unknown-linux-gnu'], cwd=ROOT))
+         '--filter-platform', target], cwd=ROOT))
     packages = {package['id']: package for package in metadata['packages']}
     nodes = {node['id']: node for node in metadata['resolve']['nodes']}
     root = next(p['id'] for p in metadata['packages']
@@ -60,10 +62,18 @@ def linked_packages():
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--target', default='x86_64-unknown-linux-gnu',
+                        choices=('x86_64-unknown-linux-gnu', 'aarch64-apple-darwin'))
+    args = parser.parse_args()
     out = sys.stdout
-    out.write('# Third-party licenses\n\nThe fastmash and fastmash-sort-supervisor binaries '
+    programs = ('fastmash' if args.target == 'aarch64-apple-darwin'
+                else 'fastmash and fastmash-sort-supervisor')
+    out.write(f'# Third-party licenses\n\nThe {programs} binaries '
               'include the following third-party code.\n\n' + RUST_STD + '\n')
-    for package in linked_packages():
+    if args.target == 'aarch64-apple-darwin':
+        out.write(f'Target: `{args.target}`. The archive contains no sort supervisor.\n\n')
+    for package in linked_packages(args.target):
         out.write(f"## {package['name']} {package['version']}\n\n"
                   f"License: {package['license']}\n\n")
         directory = Path(package['manifest_path']).parent

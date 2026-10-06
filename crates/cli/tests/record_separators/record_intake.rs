@@ -45,8 +45,8 @@ fn sorted_vnlog_rmdup_reads_its_second_header_from_the_sorted_records() {
     // pipe (datamash.c open_input, remove_dups_in_file), where it skips
     // comments in the vnlog prologue (text-lines.c line_record_fread). The
     // reference host has no en_US locale, so GNU sorted in byte order; `#`
-    // records sort before letters under en_US collation too. The C locale
-    // uses the system sort, the language locale the native sort.
+    // records sort before letters under en_US collation too. On Linux the C
+    // locale uses the system sort; macOS and the language locale sort natively.
     for locale in ["C", "en_US.UTF-8"] {
         for (arguments, input, stdout) in [
             (
@@ -89,8 +89,8 @@ fn sorted_vnlog_rmdup_reads_its_second_header_from_the_sorted_records() {
 fn full_warning_follows_the_sorters_error_without_an_input_header() {
     // With no Input header before sorting, GNU reads it again from the sort
     // pipe and only then warns (datamash.c process_file), so sort's error
-    // for the unresolved name comes first. `count` sorts natively, `rms`
-    // through the system sort.
+    // for the unresolved name comes first on Linux. On macOS the native route
+    // diagnoses the missing Input header before the full warning.
     for operation in ["count", "rms"] {
         for input in [b"".as_slice(), b"#c\n"] {
             let output = run(
@@ -98,18 +98,28 @@ fn full_warning_follows_the_sorters_error_without_an_input_header() {
                 &["-C", "--full", "-s", "-H", "-g", "x", operation, "1"],
                 input,
             );
-            // Older GNU sort includes its absolute program name, as in the corpus.
-            let mut stderr = if output.stderr.starts_with(b"/usr/bin/sort: ") {
-                b"/usr/bin/".to_vec()
-            } else {
-                Vec::new()
-            };
-            stderr.extend_from_slice(
-                b"sort: field number is zero: invalid field specification '0,0'\n",
+            #[cfg(target_os = "linux")]
+            {
+                // Older GNU sort includes its absolute program name, as in the corpus.
+                let mut stderr = if output.stderr.starts_with(b"/usr/bin/sort: ") {
+                    b"/usr/bin/".to_vec()
+                } else {
+                    Vec::new()
+                };
+                stderr.extend_from_slice(
+                    b"sort: field number is zero: invalid field specification '0,0'\n",
+                );
+                stderr.extend_from_slice(WARNING);
+                stderr.extend_from_slice(b"fastmash: read error (on close)\n");
+                assert_result(&output, 1, b"", &stderr);
+            }
+            #[cfg(target_os = "macos")]
+            assert_result(
+                &output,
+                1,
+                b"",
+                b"fastmash: missing input header for named grouping key\n",
             );
-            stderr.extend_from_slice(WARNING);
-            stderr.extend_from_slice(b"fastmash: read error (on close)\n");
-            assert_result(&output, 1, b"", &stderr);
         }
     }
 }
@@ -226,10 +236,13 @@ fn a_read_error_fails_the_sort_like_the_system_sort() {
     );
     assert_eq!(output.status.code(), Some(1), "{output:?}");
     assert!(output.stdout.is_empty(), "{output:?}");
+    #[cfg(target_os = "linux")]
     assert!(
         output
             .stderr
             .ends_with(b"fastmash: read error (on close): Input/output error\n"),
         "{output:?}"
     );
+    #[cfg(target_os = "macos")]
+    assert_eq!(output.stderr, EIO);
 }

@@ -1,5 +1,7 @@
 //! Preserve invalid inherited streams without disabling Rust's descriptor safety.
+#[cfg(target_os = "linux")]
 use super::linux;
+use super::platform;
 use std::{
     fs,
     io::{self, Read, Seek, Write},
@@ -13,9 +15,11 @@ static STDERR_FAILED: AtomicBool = AtomicBool::new(false);
 // ELF executable preinitializers run before Rust's standard-fd sanitization.
 // Only raw syscalls and an atomic store are safe here; no runtime is initialized.
 #[used]
+#[cfg(target_os = "linux")]
 #[unsafe(link_section = ".preinit_array")]
 static CAPTURE: unsafe extern "C" fn() = capture;
 
+#[cfg(target_os = "linux")]
 unsafe extern "C" fn capture() {
     let mut closed = 0;
     for fd in 0..3 {
@@ -45,15 +49,53 @@ unsafe extern "C" fn capture() {
     CLOSED.store(closed, Ordering::Relaxed);
 }
 
+// dyld runs Mach-O constructors before Rust's runtime initializes and repairs
+// closed standard descriptors. libc is available here; allocation and Rust's
+// runtime are not. Native process tests verify this ordering.
+#[cfg(target_os = "macos")]
+#[used]
+#[unsafe(link_section = "__DATA,__mod_init_func,mod_init_funcs")]
+static CAPTURE: unsafe extern "C" fn() = capture;
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" fn capture() {
+    let mut closed = 0;
+    for fd in 0..3 {
+        // SAFETY: fcntl F_GETFD takes no pointers and inspects an inherited fd.
+        if unsafe { libc::fcntl(fd, libc::F_GETFD) } == -1 {
+            // SAFETY: __error returns this thread's live native errno slot.
+            if unsafe { *libc::__error() } != libc::EBADF {
+                // SAFETY: _exit ends the process without runtime teardown.
+                unsafe { libc::_exit(1) };
+            }
+            closed |= 1 << fd;
+            // Hold each closed slot with the wrong access mode, preserving an
+            // EBADF result and preventing later opens from aliasing a stream.
+            let access = if fd == 0 {
+                libc::O_WRONLY
+            } else {
+                libc::O_RDONLY
+            };
+            // SAFETY: open reads a constant NUL-terminated path, no mode is
+            // needed without O_CREAT, and the expected descriptor is free.
+            let opened = unsafe { libc::open(c"/dev/null".as_ptr(), access) };
+            if opened != fd {
+                // SAFETY: no runtime or diagnostic is safe after failed capture.
+                unsafe { libc::_exit(1) };
+            }
+        }
+    }
+    CLOSED.store(closed, Ordering::Relaxed);
+}
+
 pub(super) fn originally_closed(fd: usize) -> bool {
     CLOSED.load(Ordering::Relaxed) & (1 << fd) != 0
 }
 
 /// Child runtimes may turn invalid input into EOF. Check access before delegation.
 pub(super) fn check_input_access() -> io::Result<()> {
-    // SAFETY: fcntl F_GETFL takes no pointers.
-    let flags = result(unsafe { linux::syscall(72, 0, 3, 0, 0) })?;
-    if flags & 3 == 1 {
+    let flags = platform::flags(0)?;
+    if flags & libc::O_ACCMODE as usize == libc::O_WRONLY as usize {
         Err(io::Error::from_raw_os_error(9))
     } else {
         Ok(())
@@ -62,29 +104,22 @@ pub(super) fn check_input_access() -> io::Result<()> {
 
 pub(super) fn finish_stderr() -> bool {
     let failed = STDERR_FAILED.load(Ordering::Relaxed);
-    // SAFETY: close takes no pointers; standard error has no Rust owner and
-    // this is its last use.
-    let closed = unsafe { linux::syscall(3, 2, 0, 0, 0) };
-    !failed && (closed >= 0 || closed == -9)
-}
-
-fn result(value: isize) -> io::Result<usize> {
-    if value < 0 {
-        Err(io::Error::from_raw_os_error(-value as i32))
-    } else {
-        Ok(value as usize)
-    }
+    // Standard error has no Rust owner and this is its last use.
+    let closed = platform::close(2);
+    !failed
+        && (closed.is_ok() || closed.is_err_and(|error| error.raw_os_error() == Some(libc::EBADF)))
 }
 
 pub(super) struct Stdin;
 impl Read for Stdin {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
         loop {
-            // SAFETY: read writes at most `bytes.len()` bytes into `bytes`.
-            let value =
-                unsafe { linux::syscall(0, 0, bytes.as_mut_ptr() as usize, bytes.len(), 0) };
-            if value != -4 {
-                return result(value);
+            let result = platform::read(0, bytes);
+            if !result
+                .as_ref()
+                .is_err_and(|error| error.raw_os_error() == Some(libc::EINTR))
+            {
+                return result;
             }
         }
     }
@@ -92,13 +127,7 @@ impl Read for Stdin {
 
 impl Seek for Stdin {
     fn seek(&mut self, position: io::SeekFrom) -> io::Result<u64> {
-        let (offset, whence) = match position {
-            io::SeekFrom::Start(offset) => (offset as usize, 0),
-            io::SeekFrom::Current(offset) => (offset as usize, 1),
-            io::SeekFrom::End(offset) => (offset as usize, 2),
-        };
-        // SAFETY: lseek takes no pointers.
-        result(unsafe { linux::syscall(8, 0, offset, whence, 0) }).map(|at| at as u64)
+        platform::seek(0, position)
     }
 }
 
@@ -114,10 +143,12 @@ pub(super) fn regular_input_length() -> Option<u64> {
 
 pub(super) fn write(fd: usize, bytes: &[u8]) -> io::Result<usize> {
     loop {
-        // SAFETY: write reads at most `bytes.len()` bytes from `bytes`.
-        let value = unsafe { linux::syscall(1, fd, bytes.as_ptr() as usize, bytes.len(), 0) };
-        if value != -4 {
-            return result(value);
+        let result = platform::write(fd, bytes);
+        if !result
+            .as_ref()
+            .is_err_and(|error| error.raw_os_error() == Some(libc::EINTR))
+        {
+            return result;
         }
     }
 }

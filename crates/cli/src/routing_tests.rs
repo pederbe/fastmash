@@ -199,6 +199,7 @@ impl random::SeedSource for NoEntropy {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn sigpipe_policy_in_isolated_test_processes() {
     use std::os::unix::process::ExitStatusExt;
     for case in [
@@ -229,6 +230,7 @@ fn sigpipe_policy_in_isolated_test_processes() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn sigpipe_child() {
     let Ok(case) = std::env::var("FASTMASH_UNIT_SIGNAL_CASE") else {
         return;

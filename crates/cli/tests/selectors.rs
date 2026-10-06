@@ -1,3 +1,7 @@
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
+
 use std::{
     ffi::OsString,
     fs,
@@ -8,6 +12,7 @@ use std::{
 
 fn candidate() -> OsString {
     std::env::var_os("FASTMASH_SELECTOR_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into())
 }
 fn args(values: &[&str]) -> Vec<OsString> {
@@ -35,16 +40,7 @@ fn invoke_output(
         .env("LC_ALL", "C")
         .env("PATH", "/usr/bin:/bin")
         .stdin(fs::File::open(&path).unwrap())
-        .stdout(if full {
-            Stdio::from(
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open("/dev/full")
-                    .unwrap(),
-            )
-        } else {
-            Stdio::piped()
-        })
+        .full_stdout(full)
         .stderr(Stdio::piped())
         .output()
         .unwrap();

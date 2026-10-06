@@ -145,6 +145,9 @@ dependencies = [
 [[package]]
 name = "fastmash-sort-process"
 version = "0.1.0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "hybrid-array"

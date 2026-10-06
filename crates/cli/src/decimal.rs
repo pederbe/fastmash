@@ -644,27 +644,79 @@ fn rounded_ratio(numerator: u64, denominator: u64) -> (u64, i32) {
 }
 
 /// Quotient and remainder of `numerator / divisor` when `numerator < divisor *
-/// 2^64`, so the quotient fits in 64 bits: one hardware 128-by-64 division
-/// instead of the general 128-bit routine.
+/// 2^64`, so the quotient fits in 64 bits. x86-64 uses one hardware division;
+/// other CPUs use the exact integer operation, with the same precondition.
 fn divide_narrow(numerator: u128, divisor: u64) -> (u64, u64) {
     assert!(
         numerator >> 64 < u128::from(divisor),
         "narrow division precondition"
     );
-    let (quotient, remainder): (u64, u64);
-    // SAFETY: `div` faults only for a zero divisor or a quotient wider than 64
-    // bits; the high half is below the (therefore nonzero) divisor, so neither
-    // can happen. It reads and writes only the named registers and flags.
-    unsafe {
-        core::arch::asm!(
-            "div {divisor}",
-            divisor = in(reg) divisor,
-            inout("rax") numerator as u64 => quotient,
-            inout("rdx") (numerator >> 64) as u64 => remainder,
-            options(pure, nomem, nostack),
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        divide_portable(numerator, divisor)
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        let (quotient, remainder): (u64, u64);
+        // SAFETY: `div` faults only for a zero divisor or a quotient wider than
+        // 64 bits; the high half is below the (therefore nonzero) divisor, so
+        // neither can happen. Only named registers and flags are modified.
+        unsafe {
+            core::arch::asm!(
+                "div {divisor}",
+                divisor = in(reg) divisor,
+                inout("rax") numerator as u64 => quotient,
+                inout("rdx") (numerator >> 64) as u64 => remainder,
+                options(pure, nomem, nostack),
+            );
+        }
+        (quotient, remainder)
+    }
+}
+
+#[cfg(any(test, not(target_arch = "x86_64")))]
+fn divide_portable(numerator: u128, divisor: u64) -> (u64, u64) {
+    let divisor = u128::from(divisor);
+    ((numerator / divisor) as u64, (numerator % divisor) as u64)
+}
+
+#[cfg(test)]
+mod narrow_division_tests {
+    use super::{divide_narrow, divide_portable};
+
+    fn check(numerator: u128, divisor: u64) {
+        let expected = divide_portable(numerator, divisor);
+        let actual = divide_narrow(numerator, divisor);
+        assert_eq!(actual, expected, "{numerator} / {divisor}");
+        assert!(actual.1 < divisor);
+        assert_eq!(
+            u128::from(actual.0) * u128::from(divisor) + u128::from(actual.1),
+            numerator
         );
     }
-    (quotient, remainder)
+
+    #[test]
+    fn cpu_division_preserves_exact_quotient_and_remainder() {
+        for divisor in [1, 2, 3, 10, (1 << 32) - 1, 1 << 32, 1 << 63, u64::MAX] {
+            for high in [0, divisor / 2, divisor - 1] {
+                for low in [0, 1, 1 << 63, u64::MAX] {
+                    check((u128::from(high) << 64) | u128::from(low), divisor);
+                }
+            }
+        }
+        let mut state = 0x83a9_672d_9017_4f61u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for _ in 0..10_000 {
+            let divisor = next().max(1);
+            let high = next() % divisor;
+            check((u128::from(high) << 64) | u128::from(next()), divisor);
+        }
+    }
 }
 
 #[cfg(test)]

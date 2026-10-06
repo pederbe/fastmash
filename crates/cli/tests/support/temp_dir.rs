@@ -1,19 +1,25 @@
 //! Private directories for tests that write fixtures or copy executables.
+#[cfg(not(target_os = "macos"))]
+use std::path::Path;
 use std::{
     fs::{self, DirBuilder},
     io,
     os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 pub(crate) struct TempDir(pub(crate) PathBuf);
 
 impl TempDir {
     pub(crate) fn new(name: &str) -> Self {
-        // Use Linux's shared temporary parent rather than trusting TMPDIR's
-        // ancestors. Other users must not be able to replace an owned root.
-        let parent = Path::new("/tmp");
-        let metadata = fs::symlink_metadata(parent).unwrap();
+        // Use the shared temporary parent rather than trusting TMPDIR's
+        // ancestors. Darwin's /tmp is a root-owned link to /private/tmp.
+        // Validate that destination; Linux retains its direct-directory check.
+        #[cfg(target_os = "macos")]
+        let parent = fs::canonicalize("/tmp").unwrap();
+        #[cfg(not(target_os = "macos"))]
+        let parent = Path::new("/tmp").to_owned();
+        let metadata = fs::symlink_metadata(&parent).unwrap();
         assert!(
             metadata.is_dir()
                 && metadata.uid() == 0
