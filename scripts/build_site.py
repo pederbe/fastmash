@@ -125,7 +125,7 @@ def landing(book):
         sys.exit('site/index.html must contain exactly one <!-- chart --> marker')
     page = page.replace('<!-- chart -->', chart.strip()).replace('@VERSION@', version())
     (book / 'index.html').write_text(page, encoding='utf-8')
-    for name in ('landing.css', 'landing.js', 'demo.gif'):
+    for name in ('landing.css', 'landing-noscript.css', 'landing.js', 'demo.gif'):
         shutil.copyfile(ROOT / 'site' / name, book / name)
     shutil.copyfile(ROOT / 'install.sh', book / 'install.sh')
     shutil.copyfile(ROOT / 'site' / 'og.png', book / 'og.png')

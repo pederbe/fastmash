@@ -125,6 +125,24 @@ margins and hardware.
 Under WSL, keep the checkout and `TMPDIR` on the Linux filesystem rather than a
 Windows drive: tests are much faster there.
 
+## Website checks
+
+The landing-page browser tests cover initial loading with a delayed script,
+installation tabs, clipboard fallback, reduced motion and access to every
+installation command without JavaScript. They use Puppeteer from the existing
+diagram tooling and its installed Chrome browser. For setup, see
+[the demo tooling](scripts/demo/README.md).
+
+```sh
+python3 -m unittest discover -s scripts -p 'test_build_site.py'
+mdbook build docs
+env FASTMASH_DIAGRAMS=committed python3 scripts/build_site.py docs/book
+npm run test:landing
+```
+
+Use mdBook 0.5.4, as pinned by `scripts/build_site.sh`. Rebuild the book before
+running the site builder again, since the builder transforms the generated HTML.
+
 ## Continuous integration
 
 | Workflow | When | What |

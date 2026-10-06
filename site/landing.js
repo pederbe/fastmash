@@ -20,7 +20,7 @@ document.querySelectorAll('button[data-copy]').forEach(function (button) {
     }, select);
   });
 });
-// Install tabs: without JavaScript every option stays visible.
+// Install tabs: HTML selects the first panel before this deferred script runs.
 (function () {
   var tabs = Array.prototype.slice.call(document.querySelectorAll('.install-tabs [role="tab"]'));
   function select(tab, focus) {

@@ -10,6 +10,11 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the website's installation panel stable during loading and defer its
+  script, while retaining every installation command without JavaScript.
+
 ## [0.1.0] - 2026-10-06
 
 ### Added

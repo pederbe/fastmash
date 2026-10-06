@@ -24,6 +24,8 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preload" href="fonts/source-code-pro-v11-all-charsets-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="landing.css">
+<noscript><link rel="stylesheet" href="landing-noscript.css"></noscript>
+<script src="landing.js" defer></script>
 <script type="application/ld+json">
 {
  "@context": "https://schema.org",
@@ -102,28 +104,28 @@
           </div>
           <p class="install-note">Installs the latest release into ~/.local/bin after checking its checksum.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-cargo" aria-labelledby="tab-cargo">
+        <div class="install-panel" role="tabpanel" id="panel-cargo" aria-labelledby="tab-cargo" hidden>
           <div class="install">
             <code id="cmd-cargo" tabindex="0">cargo install --locked fastmash</code>
             <button type="button" class="copy" data-copy="cmd-cargo" aria-label="Copy the Cargo install command">Copy</button>
           </div>
           <p class="install-note">Builds from source with your Rust toolchain.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-binstall" aria-labelledby="tab-binstall">
+        <div class="install-panel" role="tabpanel" id="panel-binstall" aria-labelledby="tab-binstall" hidden>
           <div class="install">
             <code id="cmd-binstall" tabindex="0">cargo binstall fastmash</code>
             <button type="button" class="copy" data-copy="cmd-binstall" aria-label="Copy the cargo-binstall install command">Copy</button>
           </div>
           <p class="install-note">Downloads the prebuilt release binaries with cargo-binstall.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-deb" aria-labelledby="tab-deb">
+        <div class="install-panel" role="tabpanel" id="panel-deb" aria-labelledby="tab-deb" hidden>
           <div class="install">
             <code id="cmd-deb" tabindex="0">curl -LO https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash_@VERSION@_amd64.deb &amp;&amp; sudo apt install ./fastmash_@VERSION@_amd64.deb</code>
             <button type="button" class="copy" data-copy="cmd-deb" aria-label="Copy the Debian/Ubuntu install command">Copy</button>
           </div>
           <p class="install-note">The .deb package for Debian 10, Ubuntu 20.04 and newer.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-rpm" aria-labelledby="tab-rpm">
+        <div class="install-panel" role="tabpanel" id="panel-rpm" aria-labelledby="tab-rpm" hidden>
           <div class="install">
             <code id="cmd-rpm" tabindex="0">sudo dnf install https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash-@VERSION@-1.x86_64.rpm</code>
             <button type="button" class="copy" data-copy="cmd-rpm" aria-label="Copy the Fedora/RHEL install command">Copy</button>
@@ -133,7 +135,6 @@
         <p class="install-alt">Linux x86-64 and WSL2 · <a href="install.html">more about installing</a></p>
       </div>
       <p class="sr-only" id="copy-status" role="status" aria-live="polite"></p>
-      <script src="landing.js"></script>
       <div class="actions">
         <a class="button primary" href="quick-start.html">Get started</a>
         <a class="button" href="benchmarks/index.html">See the benchmarks</a>
