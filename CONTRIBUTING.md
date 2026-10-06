@@ -39,6 +39,21 @@ Having GNU datamash 1.9 installed (`apt install datamash`, `pacman -S datamash`)
 makes it easy to compare behavior. Check `datamash --version`, because
 distributions ship different versions.
 
+## Development workflow
+
+All changes enter `main` through a pull request, including the maintainer's
+changes. For planned work, agree on the scope and acceptance criteria in a
+public issue before implementing it.
+
+The maintainer creates a `contrib/` branch in this repository. Other contributors
+create a branch in their fork. Open the pull request against `main` after the
+local checks below pass, and link the issue when there is one.
+
+The maintainer reviews and merges the pull request after the required CI checks
+pass. Keep the branch current with `main` so that the checks cover the changes
+being merged. Before closing an implementation ticket, update its acceptance
+checklist and check whether its parent issue is complete.
+
 ## Before you open a pull request
 
 1. Read [ARCHITECTURE.md](ARCHITECTURE.md) for how the code fits together, and
