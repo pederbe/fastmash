@@ -8,8 +8,9 @@ use std::{
     fs::{self, File},
     io::{BufRead, BufReader, Read, Write},
     os::unix::process::{CommandExt, ExitStatusExt},
+    path::PathBuf,
     process::{Child, Command, Output, Stdio},
-    sync::mpsc,
+    sync::{OnceLock, mpsc},
     thread,
     time::{Duration, Instant},
 };
@@ -17,8 +18,32 @@ use std::{
 const SPILL: &[u8] = b"sort spill: private run opened\n";
 const FULL_WARNING: &[u8] = b"fastmash: Using -f/--full with non-linewise operations is deprecated and will be disabled in a future release.\n";
 
+static EXECUTABLE: OnceLock<temp_dir::TempDir> = OnceLock::new();
+
+extern "C" fn cleanup_executable() {
+    if let Some(root) = EXECUTABLE.get() {
+        let _ = fs::remove_dir_all(&root.0);
+    }
+}
+
+fn standalone() -> &'static temp_dir::TempDir {
+    EXECUTABLE.get_or_init(|| {
+        let root = temp_dir::TempDir::new("native-sort-executable");
+        let binary = std::env::var_os("FASTMASH_TEST_BINARY")
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
+        // Finish the copy before any fixture can spawn. An unrelated fork can
+        // inherit its writable descriptor, keeping the executable busy until exec.
+        fs::copy(binary, root.0.join("fastmash")).unwrap();
+        // SAFETY: this zero-argument callback removes only our owned root and
+        // does not panic. Register it before publishing the immutable executable.
+        assert_eq!(unsafe { libc::atexit(cleanup_executable) }, 0);
+        root
+    })
+}
+
 struct Fixture {
     root: temp_dir::TempDir,
+    binary: PathBuf,
 }
 
 impl Fixture {
@@ -26,15 +51,13 @@ impl Fixture {
         let root = temp_dir::TempDir::new(name);
         // A standalone executable also exercises the built-in fallback on
         // Linux for Operations that ordinarily use the Sort supervisor.
-        let binary = std::env::var_os("FASTMASH_TEST_BINARY")
-            .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
-        fs::copy(binary, root.0.join("fastmash")).unwrap();
+        let binary = standalone().0.join("fastmash");
         fs::create_dir(root.0.join("spill")).unwrap();
-        Self { root }
+        Self { root, binary }
     }
 
     fn command(&self, args: &[&str], memory: &str) -> Command {
-        let mut command = Command::new(self.root.0.join("fastmash"));
+        let mut command = Command::new(&self.binary);
         command
             .arg0("fastmash")
             .args(args)
@@ -390,13 +413,9 @@ fn interrupted_spill(fixture: &Fixture, csv: bool, signal: i32) {
         }
         output
     });
-    let input = if csv {
-        b"b,5\na,3\n".as_slice()
-    } else {
-        b"b\t5\na\t3\n"
-    };
-    // Keep the input open after these records. The child must stay alive
-    // waiting for more input after its first successfully anonymized run.
+    let input = if csv { b"b,5\n".as_slice() } else { b"b\t5\n" };
+    // This oversized record spills immediately. Keep input open so the child
+    // waits for the next record without starting another create/unlink window.
     let mut input_pipe = child_ref.stdin.take().unwrap();
     input_pipe.write_all(input).unwrap();
     assert_eq!(receiver.recv_timeout(Duration::from_secs(5)), Ok(()));
