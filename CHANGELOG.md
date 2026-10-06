@@ -10,7 +10,7 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
-Planned for the first public release, 0.1.0.
+## [0.1.0] - 2026-10-06
 
 ### Added
 
