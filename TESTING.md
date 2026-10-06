@@ -131,7 +131,7 @@ The landing-page browser tests cover initial loading with a delayed script,
 installation tabs, clipboard fallback, reduced motion and access to every
 installation command without JavaScript. They use Puppeteer from the existing
 diagram tooling and its installed Chrome browser. For setup, see
-[the demo tooling](scripts/demo/README.md).
+[the demo tooling](https://github.com/pederbe/fastmash/blob/main/scripts/demo/README.md).
 
 ```sh
 python3 -m unittest discover -s scripts -p 'test_build_site.py'
