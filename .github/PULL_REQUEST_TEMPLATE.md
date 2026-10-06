@@ -7,9 +7,11 @@
 <!-- Commands run, new tests added. -->
 
 - [ ] `cargo fmt --all --check`
-- [ ] `cargo clippy --workspace --all-targets`
-- [ ] `cargo test --workspace`
-- [ ] Regression corpus
+- [ ] `cargo build`
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
+- [ ] `cargo test --release --workspace`
+- [ ] `cargo build --release`
+- [ ] Regression corpus with piped input and `--stdin-file`
 
 ## Effects
 
