@@ -3,9 +3,13 @@ name: Documentation
 # Checks that the website builds and its links resolve. Deployment is not done
 # here: Cloudflare Workers Builds runs the same scripts/build_site.sh on every
 # push to main and deploys docs/book (wrangler.jsonc).
-# This Actions check runs only when started manually.
+# Automatic checks start once the repository is public.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -16,6 +20,7 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

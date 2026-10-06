@@ -5,7 +5,14 @@ Fastmash's direction, roughly in order. Plans change as we learn from users;
 [discussions](https://github.com/pederbe/fastmash/discussions) are the best
 way to influence them.
 
-## Next
+## 0.2.0: macOS on Apple Silicon
+
+Native Apple Silicon macOS support is the main feature planned for 0.2.0.
+Work begins after the 0.1.0 release, with native builds and tests in GitHub CI,
+installation support and the same portable numerical results. Linux remains
+supported. macOS support will be advertised once the port is validated.
+
+## Other planned work
 
 - **Performance.** Close the remaining gaps where GNU datamash is faster
   (large sorts that spill to disk, the geometric mean of many distinct values,
@@ -18,7 +25,6 @@ way to influence them.
 
 ## Later
 
-- **macOS on Apple Silicon.**
 - **Further table workflows**, guided by ordinary data-processing needs and
   feedback on the existing CSV, health, selection and comparison features.
 

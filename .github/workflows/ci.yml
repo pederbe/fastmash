@@ -1,8 +1,12 @@
 name: CI
 
-# Actions minutes are limited: start checks explicitly with gh workflow run CI.
+# Automatic checks start once the repository is public.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
@@ -17,6 +21,7 @@ env:
 jobs:
   check:
     name: Format and lint
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,6 +37,7 @@ jobs:
 
   test:
     name: Test
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,6 +53,7 @@ jobs:
 
   msrv:
     name: Minimum supported Rust version
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,6 +64,7 @@ jobs:
 
   licenses:
     name: Dependency licenses and advisories
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -60,5 +60,8 @@ the Linux filesystem.
 
 ## Pull requests
 
+Contributors work on a branch in their fork and open a pull request against
+`main`. The maintainer works directly on `main`.
+
 Describe what changed, why, how it was tested, and any effect on output,
 exit statuses, performance or documentation. Keep each pull request to one concern.

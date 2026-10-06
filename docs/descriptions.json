@@ -16,7 +16,7 @@
   "benchmarks/index.md": "See Fastmash 0.1.0 benchmark results against GNU datamash on real and synthetic data, including speed improvements and remaining slower cases.",
   "benchmarks/method.md": "Read how Fastmash benchmarks are measured, checked and compared, with workload definitions, hardware details and complete result tables.",
   "faq.md": "Answers to common Fastmash questions about datamash compatibility, performance, supported systems, input formats and portable results.",
-  "roadmap.md": "See Fastmash's planned improvements in performance, native sorting, locale support, packaging and platform coverage.",
+  "roadmap.md": "See Fastmash's planned Apple Silicon macOS support for 0.2.0 and further performance, sorting, locale, packaging and table-workflow improvements.",
   "contributing/index.md": "Help improve Fastmash by reporting compatibility differences, testing real data, sharing benchmarks, improving documentation or contributing code.",
   "contributing/architecture.md": "Explore Fastmash's Rust crates, command pipeline, numeric boundaries, grouping and sorting design, and the principles behind them.",
   "contributing/testing.md": "Build and test Fastmash with formatting, linting, unit tests, the regression corpus and checks for numerical or performance changes.",
