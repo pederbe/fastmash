@@ -35,7 +35,8 @@ def _calibrate_native_full(binary, library, probe, binary_hash, library_hash, pr
     # is reused. Only direct test executables receive dyld's environment.
     environment = {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'}
     def run(program, args, env, stdout=None):
-        return subprocess.run([str(program)] + args, env=env, input=b'',
+        argv0 = 'fastmash' if program == binary else str(program)
+        return subprocess.run([argv0] + args, executable=str(program), env=env, input=b'',
                               stdout=stdout or subprocess.PIPE,
                               stderr=subprocess.PIPE, timeout=5, check=False)
     for fd, loaded in ((0, False), (0, True), (1, True), (2, True)):
@@ -94,7 +95,8 @@ def _calibrate_native_read(binary, library, probe, binary_hash, library_hash, pr
     environment = {'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'}
     data = b'complete\npartial'
     def run(program, args, env):
-        return subprocess.run([str(program)] + args, env=env, input=data,
+        argv0 = 'fastmash' if program == binary else str(program)
+        return subprocess.run([argv0] + args, executable=str(program), env=env, input=data,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               timeout=5, check=False)
     for loaded, selector in ((False, None), (True, None), (True, ''),

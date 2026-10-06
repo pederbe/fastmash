@@ -21,7 +21,7 @@ It is written for contributors and for anyone evaluating the project. The
 
 The published 0.1.0 artifacts remain Linux-only. Native macOS development
 uses the built-in Sort route and private unlinked Spill storage, without a
-Sort supervisor. [ADR 0010: Native Apple Silicon macOS](docs/src/adr/0010-native-apple-silicon.md)
+Sort supervisor. [ADR 0010: Native Apple Silicon macOS](https://fastmash.io/adr/0010-native-apple-silicon.html)
 sets its platform scope and the native artifact acceptance boundary.
 
 These choices shape the whole codebase. Each is recorded as a decision in

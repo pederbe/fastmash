@@ -83,7 +83,7 @@ jobs:
       - name: Execute all applicable release workspace tests
         run: |
           cargo test --release --workspace --locked -- --list 2>&1 | tee "$EVIDENCE/test-inventory.txt"
-          cargo test --release --workspace --locked 2>&1 | tee "$EVIDENCE/workspace-tests.log"
+          cargo test --release --workspace --locked --no-fail-fast 2>&1 | tee "$EVIDENCE/workspace-tests.log"
       - name: Execute the frozen corpus through both input modes
         run: |
           cargo build --release --workspace --locked 2>&1 | tee "$EVIDENCE/build.log"
@@ -189,7 +189,7 @@ jobs:
           printf 'FASTMASH_TEST_FULL_OUTPUT_LIBRARY=%s\nFASTMASH_TEST_FULL_OUTPUT_PROBE=%s\n' "$helpers/full-output.dylib" "$helpers/full-output-probe" >> "$GITHUB_ENV"
       - name: Execute the installed command contract and both corpus modes
         run: |
-          cargo test --release --locked -p fastmash --test comparison --test csv_input --test diagnostic_color --test dispersion --test extrema --test grouping --test health --test invocation --test native_sort --test native_streams --test pipeline_failures --test presentation --test quantiles --test record_separators --test selection --test selectors --test sum_mean --test text_summaries --test weighted_mean 2>&1 | tee "$EVIDENCE/installed-tests.log"
+          cargo test --release --locked --no-fail-fast -p fastmash --test comparison --test csv_input --test diagnostic_color --test dispersion --test extrema --test grouping --test health --test invocation --test native_sort --test native_streams --test pipeline_failures --test presentation --test quantiles --test record_separators --test selection --test selectors --test sum_mean --test text_summaries --test weighted_mean 2>&1 | tee "$EVIDENCE/installed-tests.log"
           cargo test --release --locked -p fastmash --test quantiles prepared_sorted_headers_share_quantiles -- --ignored --nocapture 2>&1 | tee "$EVIDENCE/installed-quantile-headers.log"
           cargo test --release --locked -p fastmash --test sum_mean sorted_wide_headers_comments_and_named_fields -- --ignored --nocapture 2>&1 | tee "$EVIDENCE/installed-wide-headers.log"
           FASTMASH_INSTALL_PREFIX="$RUNNER_TEMP/macos-installed" cargo test --release --locked -p fastmash --test installation installed_migration_examples -- --ignored --nocapture 2>&1 | tee "$EVIDENCE/installed-migration.log"

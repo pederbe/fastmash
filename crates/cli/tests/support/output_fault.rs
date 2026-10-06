@@ -255,14 +255,19 @@ mod native {
         // Only a named candidate can use this mechanism. Never inject into a
         // protected system utility, compiler or separately observed GNU tool.
         let mut baseline = Command::new(binary);
-        baseline.arg("--version").env_clear().env("LC_ALL", "C");
+        baseline
+            .arg0("fastmash")
+            .arg("--version")
+            .env_clear()
+            .env("LC_ALL", "C");
         let version = output(&mut baseline);
         assert!(
             version.status.success() && version.stdout.starts_with(b"fastmash "),
             "native output-fault target is not Fastmash: {version:?}"
         );
         let mut null = Command::new(binary);
-        null.arg("--version")
+        null.arg0("fastmash")
+            .arg("--version")
             .env_clear()
             .env("LC_ALL", "C")
             .stdout(Stdio::null());
@@ -272,7 +277,8 @@ mod native {
             "ordinary /dev/null calibration: {ordinary_null:?}"
         );
         let mut full = Command::new(binary);
-        full.arg("--version")
+        full.arg0("fastmash")
+            .arg("--version")
             .env_clear()
             .env("LC_ALL", "C")
             .stdout(Stdio::null());
@@ -288,7 +294,11 @@ mod native {
             b"fastmash: write error: No space left on device\n"
         );
         let mut diagnostic = Command::new(binary);
-        diagnostic.arg("--bad").env_clear().env("LC_ALL", "C");
+        diagnostic
+            .arg0("fastmash")
+            .arg("--bad")
+            .env_clear()
+            .env("LC_ALL", "C");
         let ordinary = output(&mut diagnostic);
         assert_eq!(ordinary.status.code(), Some(1));
         assert!(!ordinary.stderr.is_empty());
@@ -307,7 +317,11 @@ mod native {
             "native full stderr: {failed:?}"
         );
         let mut unselected = Command::new(binary);
-        unselected.arg("--version").env_clear().env("LC_ALL", "C");
+        unselected
+            .arg0("fastmash")
+            .arg("--version")
+            .env_clear()
+            .env("LC_ALL", "C");
         inject(&mut unselected, library, 2);
         let delegated = output(&mut unselected);
         assert_eq!(delegated.status, version.status);
@@ -339,7 +353,11 @@ mod native {
         if !completed.contains(&binary) {
             calibrate(&binary, &fixture.library);
             let mut control = Command::new(&binary);
-            control.arg("reverse").env_clear().env("LC_ALL", "C");
+            control
+                .arg0("fastmash")
+                .arg("reverse")
+                .env_clear()
+                .env("LC_ALL", "C");
             input(&mut control, b"complete\npartial");
             let ordinary = output(&mut control);
             assert!(ordinary.status.success(), "ordinary EOF: {ordinary:?}");
