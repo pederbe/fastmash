@@ -92,6 +92,133 @@ release is being tagged.
 10. **Announce** the headline: a Discussions announcement, and the social
     accounts. A release with a measured improvement links its benchmark.
 
+## Patch releases
+
+Use this procedure when a report warrants a fix to a published release.
+It does not schedule a patch release. Product fixes and regression tests belong
+in this repository; the maintainer retains qualification plans, logs, source
+bindings and measurements in the private measurement repository. Published
+claims keep their supporting results here.
+
+### Triage and select the fix
+
+Record the reported version and executable checksum, complete command, input
+bytes, locale and other explicit settings, platform, stdout, diagnostic and
+exit status. Minimize the input while preserving the symptom, then reproduce
+it with the delivered release and the current source. For compatibility
+questions, check GNU datamash 1.9 and the
+[documented differences](docs/src/guide/differences.md). For numerical questions,
+use the retained independent expectations described in [TESTING.md](TESTING.md).
+
+Classify the report before choosing a release:
+
+- A defect that breaks a documented command, produces a wrong result, loses
+  data or creates a security problem may warrant an urgent patch.
+- A new operation, platform, intentional compatibility change or performance
+  improvement can wait for a minor release.
+- A documented difference or unsupported condition needs an explanation or
+  documentation correction unless the maintainer chooses to change the contract.
+
+A patch preserves the released documented behavior and Numerical profile.
+A deliberate change to printed numbers requires a new Numerical profile,
+independent verification and a changelog entry, and goes into a minor release.
+If a correctness fix would change printed numbers, follow that same rule rather
+than silently treating it as a patch. Restoring other documented behavior needs
+a regression test that fails on the released version and passes with the fix.
+
+Develop the fix on a `contrib/` branch and submit it through the normal pull
+request checks. Select only the accepted fixes for the release. If `main`
+already contains minor-release work, start the patch branch at the last published
+tag and cherry-pick the fixes with their tests and necessary prerequisites.
+Do not include the unreleased macOS feature in a Linux 0.1.x patch. Review the
+complete diff from the previous tag, including dependency and builder changes.
+
+### Build and qualify the exact candidate
+
+Apply checklist steps 1–5 to the selected patch source. Set all five crate
+versions and exact internal dependency pins to the patch version, update the
+lockfile, and keep only its user-visible fixes under `[Unreleased]`. Record the
+full source revision, lockfile hash, builder identity, compiler and flags.
+Use the pinned `release/Containerfile` and `release/build.sh` recipe already used
+by the release workflow. Build twice from the same clean source into separate
+empty target directories and compare **both** executables byte for byte. Normal
+Cargo output is suitable for development checks but is not the release artifact.
+
+Run formatting, warnings-denied Clippy, release workspace tests, minimum Rust
+version, license/advisory and documentation checks on that source. Retain the
+independent primitive, exact conversion and MPFR challenge checks. Then run the
+command tests and both corpus input modes against the candidate pair, with
+`fastmash-sort-supervisor` beside `fastmash`. The command tests include the
+independent numerical CLI fixtures and affected-feature tests; they must execute
+the candidate rather than a separately built executable.
+
+For an already built Linux candidate, this Bash block runs the maintained
+command boundary and freezes the corpus except for the explicit release version:
+
+```bash
+bash -c '
+set -euo pipefail
+candidate=$(realpath "$1")
+version=$2
+export FASTMASH_TEST_BINARY="$candidate/fastmash"
+cargo test --release --workspace --locked
+python3 -B scripts/check_regressions.py --binary "$FASTMASH_TEST_BINARY" --expected-version "$version"
+python3 -B scripts/check_regressions.py --binary "$FASTMASH_TEST_BINARY" --expected-version "$version" --stdin-file
+' -- /absolute/path/to/candidate-binaries X.Y.Z
+```
+
+Run any affected feature's opt-in tests whose prerequisites are available, and
+record the remaining exclusions with their reasons. The independent numerical
+library tests still execute the test build; the CLI fixtures and corpus exercise
+the candidate. A source, dependency, toolchain, flag or executable change
+invalidates the affected qualification and needs fresh checks. Retain the
+previous release and its records unchanged.
+
+When a change can affect performance, compare this candidate with the delivered
+predecessor and GNU datamash 1.9 under the published
+[benchmark method](docs/src/benchmarks/method.md). Fix the jobs and acceptance
+limits before measuring. Include affected jobs and representative startup,
+streaming, retained-summary and sorting guards on both measurement hosts, using
+the same inputs, settings and build recipe. Check output before timing, alternate
+the programs, and retain both sessions, CPU time, peak memory and variation.
+Resolve any material regression before proceeding. For a change with no runtime
+effect, record why new performance measurements are unnecessary. A patch that
+leaves published timing claims unchanged need not regenerate their charts.
+
+### Verify delivery and prepare the draft
+
+After qualification, update `release/qualified.sha256` to the **two candidate
+hashes**, keeping the previous release's manifest at its tag. Move the selected
+changelog entries into the dated patch section when tagging. These metadata-only
+changes must reproduce the qualified executable hashes at the final tagged
+revision; any mismatch stops the release. Verify that the tag's version, crate
+versions, notes and executable version agree.
+
+Use checklist step 7 to prepare the tag and explicitly dispatch the maintained
+Release workflow. It checks the qualified hashes, runs the workspace and candidate
+command checks plus both corpus modes, and produces a draft with the archive,
+Debian and RPM packages, checksums and provenance. Its archive and installed
+package checks use:
+
+```bash
+bash release/check-installed.sh X.Y.Z /absolute/path/to/installed/bin release/qualified.sha256
+```
+
+This check verifies both installed executable hashes, version, arithmetic and
+an actual system Sort route. Correct output from a built-in fallback does not
+prove that the installed Sort supervisor works. The workflow installs and removes
+the packages in clean Debian 12 and AlmaLinux 8 containers and verifies that both
+executables are removed. Package construction also checks that packaging did not
+rewrite either executable. Keep these checks passing before accepting the draft.
+
+Review the draft's notes and complete asset list. Download its delivered assets,
+verify their checksum sidecars and provenance, and repeat extraction/installation
+checks against the qualified manifest. Build-side checks alone do not verify an
+uploaded asset. Retain asset hashes and installation logs with qualification.
+Publish the release and crates only with the maintainer's explicit approval,
+then follow checklist steps 8–10 as authorized. Creating a draft does not authorize
+publication, additional package submissions or announcements.
+
 ## Adding macOS support in 0.2.0
 
 Native Apple Silicon macOS support is the main feature planned for 0.2.0.

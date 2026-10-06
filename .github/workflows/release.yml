@@ -48,8 +48,15 @@ jobs:
           sha256sum -c "$GITHUB_WORKSPACE/release/qualified.sha256"
       - name: Test
         run: |
-          python3 scripts/check_regressions.py --binary out/target/release/fastmash
-          python3 scripts/check_regressions.py --binary out/target/release/fastmash --stdin-file
+          version="${GITHUB_REF_NAME#v}"
+          python3 scripts/check_regressions.py --binary out/target/release/fastmash --expected-version "$version"
+          python3 scripts/check_regressions.py --binary out/target/release/fastmash --expected-version "$version" --stdin-file
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: "1.98.1"
+      - name: Workspace and exact release command checks
+        run: |
+          FASTMASH_TEST_BINARY="$PWD/out/target/release/fastmash" cargo test --release --workspace --locked
       - name: Package
         run: |
           name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
@@ -58,6 +65,14 @@ jobs:
              out/THIRD-PARTY-LICENSES.md README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$name/"
           tar -czf "$name.tar.gz" "$name"
           sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+      - name: Test the archive
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
+          installed="$RUNNER_TEMP/archive-installed"
+          mkdir "$installed"
+          tar -xzf "$name.tar.gz" -C "$installed"
+          bash release/check-installed.sh "$version" "$installed/$name" release/qualified.sha256
       # .deb and .rpm of the same bytes; release/package.sh checks that.
       - name: Linux packages
         run: |
@@ -72,11 +87,11 @@ jobs:
           done
       - name: Test the packages
         run: |
-          printf '1\t2\n3\t4\n' > sample.tsv
-          docker run --rm --network=none -v "$PWD:/w:ro" debian:12-slim bash -c \
-            'dpkg -i /w/fastmash_*_amd64.deb && fastmash sum 1 mean 2 < /w/sample.tsv && dpkg -r fastmash'
-          docker run --rm --network=none -v "$PWD:/w:ro" almalinux:8-minimal bash -c \
-            'rpm -i /w/fastmash-*.x86_64.rpm && fastmash sum 1 mean 2 < /w/sample.tsv && rpm -e fastmash'
+          version="${GITHUB_REF_NAME#v}"
+          docker run --rm --network=none -v "$PWD:/w:ro" -e VERSION="$version" debian:12-slim bash -c \
+            'set -euo pipefail; dpkg -i /w/fastmash_*_amd64.deb; bash /w/release/check-installed.sh "$VERSION" /usr/bin /w/release/qualified.sha256; dpkg -r fastmash; test ! -e /usr/bin/fastmash; test ! -e /usr/bin/fastmash-sort-supervisor'
+          docker run --rm --network=none -v "$PWD:/w:ro" -e VERSION="$version" almalinux:8-minimal bash -c \
+            'set -euo pipefail; rpm -i /w/fastmash-*.x86_64.rpm; bash /w/release/check-installed.sh "$VERSION" /usr/bin /w/release/qualified.sha256; rpm -e fastmash; test ! -e /usr/bin/fastmash; test ! -e /usr/bin/fastmash-sort-supervisor'
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
