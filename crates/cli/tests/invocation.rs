@@ -1,4 +1,7 @@
 //! Installed-command coverage for GNU option scanning, independent of operation grammar.
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
 use std::{
     ffi::OsString,
     fs,
@@ -9,6 +12,7 @@ use std::{
 
 fn candidate() -> OsString {
     std::env::var_os("FASTMASH_INVOCATION_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into())
 }
 
@@ -98,12 +102,7 @@ fn information_output_failure_is_an_error() {
             .env_clear()
             .env("LC_ALL", "C")
             .stdin(Stdio::null())
-            .stdout(
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open("/dev/full")
-                    .unwrap(),
-            )
+            .full_stdout(true)
             .output()
             .unwrap();
         assert_eq!(output.status.code(), Some(1));

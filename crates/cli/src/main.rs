@@ -1,16 +1,23 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::undocumented_unsafe_blocks)]
-// The process entry is `main` below, not Rust's runtime start (see there).
-#![cfg_attr(not(test), no_main)]
-#[cfg(not(all(
-    target_arch = "x86_64",
-    target_os = "linux",
-    target_pointer_width = "64"
+// Linux uses the direct process entry below; Darwin uses Rust's runtime start.
+#![cfg_attr(all(not(test), target_os = "linux"), no_main)]
+#[cfg(not(any(
+    all(
+        target_arch = "x86_64",
+        target_os = "linux",
+        target_pointer_width = "64"
+    ),
+    all(
+        target_arch = "aarch64",
+        target_os = "macos",
+        target_pointer_width = "64"
+    )
 )))]
-compile_error!("Fastmash supports only Linux x86-64");
-// Arguments and the standard-stream capture come from glibc initializers
-// (see `main` below); other C libraries would run with no arguments.
-#[cfg(not(target_env = "gnu"))]
+compile_error!("Fastmash supports Linux x86-64 and Apple Silicon macOS");
+// On Linux, arguments and standard-stream capture use glibc initializers
+// (see `main` below); other Linux C libraries would run with no arguments.
+#[cfg(all(target_os = "linux", not(target_env = "gnu")))]
 compile_error!("Fastmash requires glibc (target_env = \"gnu\")");
 mod annotated;
 mod base64_fields;
@@ -50,6 +57,7 @@ mod health_tests;
 mod help;
 mod intake;
 mod line_numeric;
+#[cfg(target_os = "linux")]
 mod linux;
 mod locale;
 mod log_cache;
@@ -67,6 +75,7 @@ mod options;
 mod ordered_statistics;
 mod paired;
 mod path_fields;
+mod platform;
 mod preparation;
 #[cfg(test)]
 mod preparation_tests;
@@ -118,8 +127,8 @@ use std::{
 
 fn setup_sigpipe() -> Result<(), Failure> {
     setup_sigpipe_with(
-        || fastmash_sort_process::linux::mask(None).map_err(|_| ()),
-        || fastmash_sort_process::linux::default_sigpipe().map_err(|_| ()),
+        || platform::sigpipe_mask().map_err(|_| ()),
+        || platform::default_sigpipe().map_err(|_| ()),
     )
 }
 fn setup_sigpipe_with(
@@ -568,7 +577,7 @@ fn quiet_nan() -> numerics::Value {
 /// std's own glibc initializer, so only SIGPIPE needs the runtime's setting:
 /// ignored, so failed writes are reported as errors. Before any thread
 /// starts, an address-space limit caps the malloc arenas (`malloc_arenas`).
-#[cfg(not(test))]
+#[cfg(all(not(test), target_os = "linux"))]
 #[unsafe(no_mangle)]
 extern "C" fn main(_argc: libc::c_int, _argv: *const *const libc::c_char) -> libc::c_int {
     // SAFETY: the process is still single-threaded; this is the disposition
@@ -577,6 +586,29 @@ extern "C" fn main(_argc: libc::c_int, _argv: *const *const libc::c_char) -> lib
     malloc_arenas::cap();
     run_process();
     0
+}
+
+/// Darwin uses Rust's normal runtime and its native argument initialization.
+/// The Mach-O constructor in standard_io captures inherited closed streams
+/// before that runtime sanitizes descriptors 0, 1 and 2.
+#[cfg(all(not(test), target_os = "macos"))]
+fn main() {
+    if let Err(error) = platform::admit() {
+        let mut stderr = standard_io::Stderr;
+        let reported = failure::write(
+            &mut stderr,
+            b"fastmash",
+            &error,
+            terminal_style::Style::default(),
+        )
+        .is_ok();
+        std::process::exit(if reported && standard_io::finish_stderr() {
+            error.status
+        } else {
+            1
+        });
+    }
+    run_process();
 }
 
 /// The buffer standard input is read through: large reads keep system calls

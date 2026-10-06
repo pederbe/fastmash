@@ -6,27 +6,36 @@ pub(super) trait SeedSource {
 
 pub(super) struct OsSeedSource;
 
+#[cfg(target_os = "linux")]
 const GETRANDOM: usize = 318;
+#[cfg(target_os = "linux")]
 const EINTR: isize = -4;
 
 impl SeedSource for OsSeedSource {
-    /// Four bytes from the kernel's `getrandom`, blocking like GNU until the
-    /// pool is ready. Any failure, including a seccomp-denied syscall, is an
-    /// error: there is no weaker fallback source.
+    /// Four bytes from native kernel entropy. Linux uses blocking getrandom;
+    /// macOS uses getentropy. Any failure is an error, with no weaker fallback.
     fn seed(&mut self) -> Result<u32, ()> {
         let mut bytes = [0u8; 4];
-        let mut filled = 0;
-        while filled < bytes.len() {
-            let rest = &mut bytes[filled..];
-            // SAFETY: the kernel writes at most `rest.len()` bytes to `rest`.
-            let result = unsafe {
-                crate::linux::syscall(GETRANDOM, rest.as_mut_ptr() as usize, rest.len(), 0, 0)
-            };
-            match result {
-                EINTR => {}
-                read @ 1.. => filled += read as usize,
-                _ => return Err(()),
+        #[cfg(target_os = "linux")]
+        {
+            let mut filled = 0;
+            while filled < bytes.len() {
+                let rest = &mut bytes[filled..];
+                // SAFETY: the kernel writes at most `rest.len()` bytes to `rest`.
+                let result = unsafe {
+                    crate::linux::syscall(GETRANDOM, rest.as_mut_ptr() as usize, rest.len(), 0, 0)
+                };
+                match result {
+                    EINTR => {}
+                    read @ 1.. => filled += read as usize,
+                    _ => return Err(()),
+                }
             }
+        }
+        #[cfg(target_os = "macos")]
+        // SAFETY: getentropy writes four bytes into the live fixed-size buffer.
+        if unsafe { libc::getentropy(bytes.as_mut_ptr().cast(), bytes.len()) } != 0 {
+            return Err(());
         }
         Ok(u32::from_ne_bytes(bytes))
     }
@@ -41,6 +50,7 @@ impl SeedSource for OsSeedSource {
 #[derive(Clone, Debug)]
 pub(super) struct TableState(std::hash::DefaultHasher);
 
+#[cfg(target_os = "linux")]
 const GRND_NONBLOCK: usize = 1;
 const FIXED_SEED: u64 = 0x9e37_79b9_7f4a_7c15;
 
@@ -54,6 +64,7 @@ impl TableState {
 
     fn kernel_seed() -> Option<u64> {
         let mut bytes = [0u8; 8];
+        #[cfg(target_os = "linux")]
         // SAFETY: the kernel writes at most `bytes.len()` bytes to `bytes`.
         let read = unsafe {
             crate::linux::syscall(
@@ -63,6 +74,13 @@ impl TableState {
                 GRND_NONBLOCK,
                 0,
             )
+        };
+        #[cfg(target_os = "macos")]
+        // SAFETY: getentropy writes eight bytes into the live fixed-size buffer.
+        let read = if unsafe { libc::getentropy(bytes.as_mut_ptr().cast(), bytes.len()) } == 0 {
+            bytes.len() as isize
+        } else {
+            -1
         };
         (read == bytes.len() as isize).then(|| u64::from_ne_bytes(bytes))
     }

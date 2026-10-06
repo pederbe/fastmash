@@ -81,3 +81,10 @@ prints an error from the shell that runs `sort` but ends with status 0, where
 Fastmash reports the read error with status 1; and `--help` or `--version` into a closed pipe exits with status
 77 rather than by `SIGPIPE`. Scripts should rely on exit statuses, not the
 exact text of error messages.
+
+On macOS, a sorted Command with a named Grouping key and no Input header
+reports `fastmash: missing input header for named grouping key` and exits with
+status 1. Linux retains the diagnostic from its external Sort route for that
+case. A failed input read still reports the read error and exits with status
+1; the missing-header diagnostic does not hide it. OS-owned diagnostic wording
+is checked separately from Portable results.

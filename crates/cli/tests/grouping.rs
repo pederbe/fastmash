@@ -1,3 +1,11 @@
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
+#[path = "support/process.rs"]
+mod process;
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
+
 use std::{
     fs,
     process::{Command, Output, Stdio},
@@ -21,10 +29,8 @@ fn invoke_at(
         std::thread::current().id()
     ));
     fs::write(&path, input).unwrap();
-    let mut command = Command::new("/usr/bin/timeout");
+    let mut command = process::bounded(binary, 30);
     command
-        .args(["--kill-after=2s", "30s"])
-        .arg(binary)
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
@@ -36,11 +42,7 @@ fn invoke_at(
         .env("FASTMASH_GROUPING", "sort")
         .env("FASTMASH_SORT_MEMORY_BYTES", memory)
         .stdin(fs::File::open(&path).unwrap())
-        .stdout(if full {
-            Stdio::from(fs::File::options().write(true).open("/dev/full").unwrap())
-        } else {
-            Stdio::piped()
-        })
+        .full_stdout(full)
         .stderr(Stdio::piped());
     if let Some(temporary) = temporary {
         command.env("TMPDIR", temporary);
@@ -51,6 +53,7 @@ fn invoke_at(
 }
 fn candidate() -> std::ffi::OsString {
     std::env::var_os("FASTMASH_GROUP_TEST_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into())
 }
 
@@ -435,6 +438,7 @@ fn native_spill_and_output_failures_are_explicit() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn native_variable_allocation_refusal_is_explicit() {
     let binary = candidate();
     let out = invoke(
@@ -458,34 +462,45 @@ fn native_variable_allocation_refusal_is_explicit() {
 
 #[test]
 fn spill_write_failure_does_not_leave_named_files() {
-    use std::os::unix::process::ExitStatusExt;
-    let path = std::env::temp_dir().join(format!("grouping-file-limit-{}", std::process::id()));
-    fs::create_dir(&path).unwrap();
-    let binary = candidate();
-    let out = invoke_at(
-        std::ffi::OsStr::new("/usr/bin/prlimit"),
-        &[
-            "--fsize=8192",
-            "--",
-            binary.to_str().unwrap(),
-            "-s",
-            "-g",
-            "1",
-            "count",
-            "2",
-        ],
-        &b"a\ttranscript\n".repeat(10_000),
-        "1024",
-        Some(&path),
-        false,
-    );
-    assert!(
-        out.status.signal() == Some(25) || out.status.code() == Some(153),
-        "{:?}",
-        out
-    );
-    assert_eq!(fs::read_dir(&path).unwrap().count(), 0);
-    fs::remove_dir(path).unwrap();
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+    let directory = temp_dir::TempDir::new("grouping-file-limit");
+    let input = directory.0.join("input");
+    fs::write(&input, b"a\ttranscript\n".repeat(10_000)).unwrap();
+    let temporary = directory.0.join("spill");
+    fs::create_dir(&temporary).unwrap();
+    let mut command = Command::new(candidate());
+    command
+        .args(["-s", "-g", "1", "count", "2"])
+        .env_clear()
+        .env("LC_ALL", "C")
+        .env("FASTMASH_GROUPING", "sort")
+        .env("FASTMASH_SORT_MEMORY_BYTES", "1024")
+        .env("TMPDIR", &temporary)
+        .stdin(fs::File::open(input).unwrap());
+    // SAFETY: setrlimit and sigaction are async-signal-safe. The initialized
+    // action gives the child the ordinary file-size-limit signal behavior.
+    unsafe {
+        command.pre_exec(|| {
+            let limit = libc::rlimit {
+                rlim_cur: 8192,
+                rlim_max: 8192,
+            };
+            if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            let mut action: libc::sigaction = std::mem::zeroed();
+            action.sa_sigaction = libc::SIG_DFL;
+            libc::sigemptyset(&mut action.sa_mask);
+            if libc::sigaction(libc::SIGXFSZ, &action, std::ptr::null_mut()) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            libc::alarm(30);
+            Ok(())
+        });
+    }
+    let out = command.output().unwrap();
+    assert_eq!(out.status.signal(), Some(libc::SIGXFSZ), "{out:?}");
+    assert_eq!(fs::read_dir(temporary).unwrap().count(), 0);
 }
 
 /// Spilled runs through several merge levels keep every field length (empty,
@@ -590,9 +605,7 @@ fn invoke_in(
         std::thread::current().id()
     ));
     fs::write(&path, input).unwrap();
-    let result = Command::new("/usr/bin/timeout")
-        .args(["--kill-after=2s", "30s"])
-        .arg(binary)
+    let result = process::bounded(binary, 30)
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
@@ -842,8 +855,8 @@ fn a_restart_reads_standard_input_from_where_the_command_began() {
     fs::write(&path, &input).unwrap();
     let binary = candidate();
     let run = |grouping: &str, args: &[&str]| {
-        Command::new("/usr/bin/timeout")
-            .args(["--kill-after=2s", "30s", "/bin/sh", "-c"])
+        process::bounded("/bin/sh", 30)
+            .arg("-c")
             .arg("IFS= read -r _ && exec \"$0\" \"$@\"")
             .arg(&binary)
             .args(args)
@@ -878,6 +891,7 @@ fn a_restart_reads_standard_input_from_where_the_command_began() {
 /// rows under an address-space limit of `limit` bytes, paused after two
 /// thirds of its input, with the `environment` added; the sort is checked to
 /// complete with the right output.
+#[cfg(target_os = "linux")]
 fn paused_language_sort(limit: u64, environment: &[(&str, &str)]) -> u64 {
     use std::io::Write;
     use std::os::unix::process::CommandExt;
@@ -939,6 +953,7 @@ fn paused_language_sort(limit: u64, environment: &[(&str, &str)]) -> u64 {
 /// or without the cap, each thread's arena reserves 64 MiB, and the paused
 /// sort takes most of the limit (about 480 MiB of 512 where measured).
 #[test]
+#[cfg(target_os = "linux")]
 fn eight_thread_language_sorts_use_a_fraction_of_an_address_space_limit() {
     const LIMIT: u64 = 512 << 20;
     let capped = paused_language_sort(LIMIT, &[]);

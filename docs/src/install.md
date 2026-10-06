@@ -1,7 +1,8 @@
 # Install
 
 Fastmash runs on **Linux x86-64** and on **Windows through WSL2**. macOS on
-Apple Silicon is a [later target](roadmap.md). It installs next to GNU datamash
+Apple Silicon is under development for 0.2.0. The published 0.1.0 release
+has Linux artifacts only. It installs next to GNU datamash
 without changing it. Native Windows is outside the current product scope.
 
 ## Quick install
@@ -14,6 +15,11 @@ The [script](https://fastmash.io/install.sh) downloads the latest release,
 checks its checksum and installs `fastmash` and `fastmash-sort-supervisor`
 into `~/.local/bin`. Set `FASTMASH_INSTALL_DIR` to install elsewhere, or
 `FASTMASH_VERSION` for a specific release.
+
+On Linux the script uses `sha256sum`. A macOS archive uses the system
+`shasum -a 256`, and installs only `fastmash`. Rust and GNU coreutils are
+not required to install an archive. Download and checksum failures leave an
+existing installation unchanged.
 
 The script checks the download against its published SHA-256 checksum. For a
 stronger check that the archive was built by this project's release workflow,
@@ -60,6 +66,59 @@ downloads the prebuilt release binaries instead of compiling:
 cargo binstall fastmash
 ```
 
+These commands install published versions. Version 0.1.0 does not contain
+the native macOS development changes.
+
+## Native macOS development archive
+
+For Apple Silicon with macOS 15 or later, the native development workflow
+builds one archive with a macOS 15 deployment target and tests those same bytes
+on macOS 15 and 26. It contains `fastmash`, licenses and build provenance;
+there is no macOS Sort supervisor. These CI artifacts are development builds,
+not a published macOS release, and expire according to the run's retention.
+
+Choose a successful [native macOS workflow run](https://github.com/pederbe/fastmash/actions/workflows/macos.yml)
+and download its `macos-archive` artifact. With the GitHub CLI, use
+`gh run download RUN_ID --repo pederbe/fastmash --name macos-archive` in an
+empty directory. Replace `RUN_ID` with that run's identifier. Confirm the
+run's source revision and native installation results before using its build.
+
+Run this block in Bash; invoke `bash` first if using Fish. It stops on a
+failed checksum before changing an existing installation:
+
+```bash
+bash -eu <<'EOF'
+version=$(cat archive-version.txt)
+name=fastmash-v$version-aarch64-apple-darwin
+shasum -a 256 -c "$name.tar.gz.sha256"
+tar -xzf "$name.tar.gz"
+(cd "$name" && shasum -a 256 -c binary.sha256)
+cat "$name/build-provenance.txt"
+mkdir -p ~/.local/bin
+staging=$(mktemp -d "$HOME/.local/bin/.fastmash.XXXXXX")
+trap 'rm -rf "$staging"' EXIT
+cp "$name/fastmash" "$staging/fastmash"
+chmod 755 "$staging/fastmash"
+mv -f "$staging/fastmash" ~/.local/bin/fastmash
+printf '1\n2\n' | ~/.local/bin/fastmash sum 1
+EOF
+```
+
+The final command prints `3`. The archive label includes the source revision
+and a `macos-test` suffix; `--version` reports the source's current package
+version. The provenance labels the artifact as a development test build.
+
+For a future published macOS archive, the quick installer selects
+`aarch64-apple-darwin` automatically and checks its SHA-256 file using the
+native checksum tool. The current release's quick-install URL cannot yet
+deliver a macOS archive.
+
+The archive is not Apple-notarized. Native CI records extended attributes,
+code-signing metadata and the assessment result for a terminal download,
+then executes the installed command without changing macOS security controls.
+Browser downloads can have different quarantine behavior and are outside
+these terminal checks. A checksum checks bytes, not Apple approval.
+
 ## Debian and Ubuntu
 
 ```sh
@@ -96,7 +155,9 @@ the Linux file system (such as your home directory) rather than under
 ## Uninstall
 
 ```sh
-rm ~/.local/bin/fastmash ~/.local/bin/fastmash-sort-supervisor
+rm ~/.local/bin/fastmash
+# On Linux, also remove the supervisor:
+rm ~/.local/bin/fastmash-sort-supervisor
 # or, if installed with Cargo or cargo-binstall:
 cargo uninstall fastmash
 ```

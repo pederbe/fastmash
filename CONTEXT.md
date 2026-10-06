@@ -1,6 +1,6 @@
 # Fastmash
 
-Fastmash is a fast Rust command-line tool for Linux that computes statistics and
+Fastmash is a fast Rust command-line tool that computes statistics and
 table transformations over delimited text. It implements GNU datamash's command
 language so that datamash workflows can move to it with few or no changes.
 
@@ -156,7 +156,7 @@ need to hold all of it in memory. Only sorting spills; retained samples and
 tables stay in memory.
 
 **Sort supervisor**:
-The helper executable, `fastmash-sort-supervisor`, installed beside `fastmash`,
+The Linux helper executable, `fastmash-sort-supervisor`, installed beside `fastmash`,
 that runs the system `sort` for the external sort route and cleans up after it.
 _Avoid_: Companion, sorter process
 

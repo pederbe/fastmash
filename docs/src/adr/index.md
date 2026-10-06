@@ -15,3 +15,4 @@ can be revisited; do so with a new record that supersedes the old one.
 | [0007](0007-linux-first.md) | Linux x86-64 first |
 | [0008](0008-hash-grouping-with-restart.md) | Group sorted input by hash, and sort again when unsure |
 | [0009](0009-built-in-locale-tables.md) | Built-in locale tables, not the host's locales |
+| [0010](0010-native-apple-silicon.md) | Native Apple Silicon macOS, verified through hosted commands and installed archives |

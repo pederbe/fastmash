@@ -1,3 +1,10 @@
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
+#[cfg(target_os = "macos")]
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
+
 use std::{
     ffi::{OsStr, OsString},
     fs,
@@ -58,6 +65,7 @@ mod malformed_input;
 
 fn candidate() -> OsString {
     std::env::var_os("FASTMASH_RECORD_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into())
 }
 fn args(values: &[&str]) -> Vec<OsString> {
@@ -90,16 +98,7 @@ fn invoke_locale(
         .env("LC_NUMERIC", locale)
         .env("PATH", "/usr/bin:/bin")
         .stdin(fs::File::open(&path).unwrap())
-        .stdout(if full {
-            Stdio::from(
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open("/dev/full")
-                    .unwrap(),
-            )
-        } else {
-            Stdio::piped()
-        })
+        .full_stdout(full)
         .stderr(Stdio::piped());
     if spill {
         command.env("FASTMASH_SORT_MEMORY_BYTES", "1");

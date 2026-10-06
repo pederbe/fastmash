@@ -4,10 +4,9 @@ use super::{
     intake::{self, Intake},
     *,
 };
-use std::{
-    cmp::Ordering,
-    io::{self, BufRead},
-};
+#[cfg(target_os = "linux")]
+use std::io;
+use std::{cmp::Ordering, io::BufRead};
 #[path = "projected_batch.rs"]
 mod batch;
 #[path = "csv_sort.rs"]
@@ -1114,20 +1113,32 @@ fn calculate_records<W: Write, S: spill::Codec>(
         && binding.unresolved_keys()
         && !(binding.operations.has_weighted_mean() && intake.read_error().is_none())
     {
-        // GNU sorts even without an Input header, then reads it again from
-        // the sort pipe and warns about --full only then (datamash.c
-        // process_file). With unresolved named keys, the installed sorter
-        // owns the resulting error.
-        let errno = intake.read_error().and_then(io::Error::raw_os_error);
-        let sorting = sorted_input::Sorting::read(sorted_input::admit(&options.locale)?, errno);
-        return sorting.start(&binding.keys, options)?.run(|reader, _| {
-            let mut sorted =
-                Intake::new(options, intake::Header::First).warn_full(options, binding.program);
-            sorted
-                .header(reader, &mut bytes, |_| Ok(()))
-                .and_then(|_| sorted.next(reader, &mut bytes).map(|_| ()))
-                .and_then(|()| output.end(options))
-        });
+        #[cfg(target_os = "macos")]
+        {
+            // Native commands cannot delegate unresolved keys to the Linux
+            // Sort supervisor. A failed read retains its intake diagnostic.
+            intake.finish()?;
+            return Err(failure(
+                b"missing input header for named grouping key\n".to_vec(),
+            ));
+        }
+        #[cfg(target_os = "linux")]
+        {
+            // GNU sorts even without an Input header, then reads it again from
+            // the sort pipe and warns about --full only then (datamash.c
+            // process_file). With unresolved named keys, the installed sorter
+            // owns the resulting error.
+            let errno = intake.read_error().and_then(io::Error::raw_os_error);
+            let sorting = sorted_input::Sorting::read(sorted_input::admit(&options.locale)?, errno);
+            return sorting.start(&binding.keys, options)?.run(|reader, _| {
+                let mut sorted =
+                    Intake::new(options, intake::Header::First).warn_full(options, binding.program);
+                sorted
+                    .header(reader, &mut bytes, |_| Ok(()))
+                    .and_then(|_| sorted.next(reader, &mut bytes).map(|_| ()))
+                    .and_then(|()| output.end(options))
+            });
+        }
     }
     let binding::Binding {
         mut operations,

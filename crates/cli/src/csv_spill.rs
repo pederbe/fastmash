@@ -2,7 +2,7 @@
 //! (original Record/line, field/key counts, payload/key byte lengths), checked
 //! end tables, then decoded payloads. Its preceding u64 is the body length.
 //! Run bytes are never fed to the CSV parser or ordinary text field splitting.
-use super::super::spill::{MERGE_INPUTS, RunReader, RunWriter};
+use super::super::spill::{MERGE_INPUTS, RunReader, RunWriter, temporary};
 use super::{Keys, Order, Record, Stored, StoredView, capacity};
 use crate::{Failure, command_memory, csv_input::Location, failure};
 use std::{
@@ -26,10 +26,6 @@ fn read_error(error: io::Error) -> Failure {
         io_error(error)
     }
 }
-fn temporary() -> Result<File, Failure> {
-    fastmash_sort_process::anonymous_file().map_err(io_error)
-}
-
 // The Command harness controls input/output transports. These test-only hooks
 // cover otherwise inaccessible temporary I/O, without environment switches.
 #[cfg(test)]

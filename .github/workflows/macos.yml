@@ -1,0 +1,213 @@
+name: Native macOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  MACOSX_DEPLOYMENT_TARGET: "15.0"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  native-contract:
+    name: Complete command contract on ${{ matrix.os }}
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            major: "15"
+          - os: macos-26
+            major: "26"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: "1.98.1"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Record native source, compiler and fixture identities
+        run: |
+          export EVIDENCE="$RUNNER_TEMP/native-contract"
+          printf 'EVIDENCE=%s\n' "$EVIDENCE" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE"
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" = "${{ matrix.major }}"
+          test "$(rustc -Vv | sed -n 's/^host: //p')" = aarch64-apple-darwin
+          {
+            git rev-parse HEAD
+            git status --porcelain
+            uname -a
+            sw_vers
+            rustc -Vv
+            cargo -V
+            python3 --version
+            printf 'target=aarch64-apple-darwin\nMACOSX_DEPLOYMENT_TARGET=%s\nCARGO_INCREMENTAL=%s\n' "$MACOSX_DEPLOYMENT_TARGET" "$CARGO_INCREMENTAL"
+            printf 'RUSTFLAGS=%s\nCARGO_ENCODED_RUSTFLAGS=%s\n' "${RUSTFLAGS-}" "${CARGO_ENCODED_RUSTFLAGS-}"
+            printf 'profile=release opt-level=2 panic=abort overflow-checks=true lto=false codegen-units=1\n'
+          } | tee "$EVIDENCE/identity.txt"
+          git ls-files tests/cli crates/portable-numerics/testdata crates/cli/src/testdata |
+            while IFS= read -r path; do shasum -a 256 "$path"; done > "$EVIDENCE/fixtures.sha256"
+          shasum -a 256 Cargo.toml Cargo.lock crates/*/Cargo.toml > "$EVIDENCE/manifests.sha256"
+      - name: Build and identify native fault transports
+        run: |
+          helpers="$RUNNER_TEMP/native-fault-helpers"
+          mkdir -p "$helpers"
+          rustc --edition=2024 --crate-type=cdylib -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_interposer.rs -o "$helpers/full-output.dylib"
+          rustc --edition=2024 -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_probe.rs -o "$helpers/full-output-probe"
+          shasum -a 256 "$helpers/full-output.dylib" "$helpers/full-output-probe" | tee "$EVIDENCE/fault-helpers.sha256"
+          printf 'FASTMASH_TEST_FULL_OUTPUT_LIBRARY=%s\nFASTMASH_TEST_FULL_OUTPUT_PROBE=%s\n' "$helpers/full-output.dylib" "$helpers/full-output-probe" >> "$GITHUB_ENV"
+      - name: Check formatting, native lint and corpus adapters
+        run: |
+          cargo fmt --all --check 2>&1 | tee "$EVIDENCE/fmt.log"
+          cargo clippy --workspace --all-targets --locked -- -D warnings 2>&1 | tee "$EVIDENCE/clippy.log"
+          python3 -B -m unittest discover -s scripts -p 'test_check_regressions.py' 2>&1 | tee "$EVIDENCE/corpus-adapters.log"
+      - name: Execute all applicable release workspace tests
+        run: |
+          cargo test --release --workspace --locked -- --list 2>&1 | tee "$EVIDENCE/test-inventory.txt"
+          cargo test --release --workspace --locked --no-fail-fast 2>&1 | tee "$EVIDENCE/workspace-tests.log"
+      - name: Execute the frozen corpus through both input modes
+        run: |
+          cargo build --release --workspace --locked 2>&1 | tee "$EVIDENCE/build.log"
+          binary="$GITHUB_WORKSPACE/target/release/fastmash"
+          file "$binary" | tee "$EVIDENCE/binary.txt"
+          shasum -a 256 "$binary" | tee "$EVIDENCE/binary.sha256"
+          "$binary" --version | tee "$EVIDENCE/version.txt"
+          "$binary" --help > "$EVIDENCE/help.txt"
+          version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
+          python3 -B scripts/check_regressions.py --binary "$binary" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/corpus-pipe" 2>&1 | tee "$EVIDENCE/corpus-pipe.log"
+          python3 -B scripts/check_regressions.py --binary "$binary" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/corpus-file" 2>&1 | tee "$EVIDENCE/corpus-file.log"
+      - name: Retain native command evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-contract-${{ matrix.os }}
+          path: ${{ runner.temp }}/native-contract/
+          if-no-files-found: error
+
+  archive:
+    name: Build one macOS 15 archive
+    needs: native-contract
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: "1.98.1"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Build the checksummed development archive
+        run: |
+          test "$(sw_vers -productVersion | cut -d. -f1)" = 15
+          mkdir -p "$RUNNER_TEMP/macos-archive"
+          bash release/macos-archive.sh "$RUNNER_TEMP/macos-archive" 2>&1 | tee "$RUNNER_TEMP/macos-archive/build.log"
+      - name: Retain the archive and build provenance
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macos-archive
+          path: ${{ runner.temp }}/macos-archive/
+          if-no-files-found: error
+
+  installed-contract:
+    name: Install the same archive on ${{ matrix.os }}
+    needs: archive
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            major: "15"
+          - os: macos-26
+            major: "26"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: "1.98.1"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: macos-archive
+          path: ${{ runner.temp }}/macos-archive
+      - name: Record native installation identity
+        run: |
+          export EVIDENCE="$RUNNER_TEMP/installed-contract"
+          export FASTMASH_ARCHIVE_DIR="$RUNNER_TEMP/macos-archive"
+          export FASTMASH_ARCHIVE_INSTALL_DIR="$RUNNER_TEMP/macos-installed/bin"
+          printf 'EVIDENCE=%s\nFASTMASH_ARCHIVE_DIR=%s\nFASTMASH_ARCHIVE_INSTALL_DIR=%s\n' "$EVIDENCE" "$FASTMASH_ARCHIVE_DIR" "$FASTMASH_ARCHIVE_INSTALL_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$EVIDENCE"
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" = "${{ matrix.major }}"
+          test "$(rustc -Vv | sed -n 's/^host: //p')" = aarch64-apple-darwin
+          {
+            git rev-parse HEAD
+            uname -a
+            sw_vers
+            rustc -Vv
+            cargo -V
+            printf 'MACOSX_DEPLOYMENT_TARGET=%s\nRUSTFLAGS=%s\nCARGO_ENCODED_RUSTFLAGS=%s\n' "$MACOSX_DEPLOYMENT_TARGET" "${RUSTFLAGS-}" "${CARGO_ENCODED_RUSTFLAGS-}"
+          } | tee "$EVIDENCE/identity.txt"
+          shasum -a 256 "$FASTMASH_ARCHIVE_DIR"/*.tar.gz | tee "$EVIDENCE/archive.sha256"
+      - name: Verify documented installation and preserve the installed executable
+        run: |
+          cargo test --release --locked -p fastmash --test archive_installation native_archive_installs_and_runs_outside_the_checkout -- --ignored --nocapture 2>&1 | tee "$EVIDENCE/installation.log"
+          binary="$FASTMASH_ARCHIVE_INSTALL_DIR/fastmash"
+          test -x "$binary"
+          shasum -a 256 "$binary" | tee "$EVIDENCE/binary.sha256"
+          file "$binary" | tee "$EVIDENCE/binary.txt"
+          "$binary" --version | tee "$EVIDENCE/version.txt"
+          for key in FASTMASH_TEST_BINARY FASTMASH_GROUP_TEST_BINARY FASTMASH_RECORD_BINARY FASTMASH_QUANTILE_TEST_BINARY FASTMASH_TEXT_TEST_BINARY FASTMASH_SUM_MEAN_TEST_BINARY FASTMASH_EXTREMA_BINARY FASTMASH_SELECTOR_BINARY FASTMASH_DISPERSION_BINARY FASTMASH_PRESENTATION_BINARY FASTMASH_INVOCATION_BINARY FASTMASH_FAILURE_BINARY; do
+            printf '%s=%s\n' "$key" "$binary" >> "$GITHUB_ENV"
+          done
+      - name: Build and identify native fault transports
+        run: |
+          helpers="$RUNNER_TEMP/native-fault-helpers"
+          mkdir -p "$helpers"
+          rustc --edition=2024 --crate-type=cdylib -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_interposer.rs -o "$helpers/full-output.dylib"
+          rustc --edition=2024 -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_probe.rs -o "$helpers/full-output-probe"
+          shasum -a 256 "$helpers/full-output.dylib" "$helpers/full-output-probe" | tee "$EVIDENCE/fault-helpers.sha256"
+          printf 'FASTMASH_TEST_FULL_OUTPUT_LIBRARY=%s\nFASTMASH_TEST_FULL_OUTPUT_PROBE=%s\n' "$helpers/full-output.dylib" "$helpers/full-output-probe" >> "$GITHUB_ENV"
+      - name: Execute the installed command contract and both corpus modes
+        run: |
+          cargo test --release --locked --no-fail-fast -p fastmash --test comparison --test csv_input --test diagnostic_color --test dispersion --test extrema --test grouping --test health --test invocation --test native_sort --test native_streams --test pipeline_failures --test presentation --test quantiles --test record_separators --test selection --test selectors --test sum_mean --test text_summaries --test weighted_mean 2>&1 | tee "$EVIDENCE/installed-tests.log"
+          cargo test --release --locked -p fastmash --test quantiles prepared_sorted_headers_share_quantiles -- --ignored --nocapture 2>&1 | tee "$EVIDENCE/installed-quantile-headers.log"
+          cargo test --release --locked -p fastmash --test sum_mean sorted_wide_headers_comments_and_named_fields -- --ignored --nocapture 2>&1 | tee "$EVIDENCE/installed-wide-headers.log"
+          FASTMASH_INSTALL_PREFIX="$RUNNER_TEMP/macos-installed" cargo test --release --locked -p fastmash --test installation installed_migration_examples -- --ignored --nocapture 2>&1 | tee "$EVIDENCE/installed-migration.log"
+          version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
+          python3 -B scripts/check_regressions.py --binary "$FASTMASH_TEST_BINARY" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/corpus-pipe" 2>&1 | tee "$EVIDENCE/corpus-pipe.log"
+          python3 -B scripts/check_regressions.py --binary "$FASTMASH_TEST_BINARY" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/corpus-file" 2>&1 | tee "$EVIDENCE/corpus-file.log"
+      - name: Collect representative hosted GNU comparisons
+        run: |
+          brew install datamash 2>&1 | tee "$EVIDENCE/gnu-install.log"
+          reference=$(command -v datamash)
+          "$reference" --version | tee "$EVIDENCE/gnu-version.txt"
+          shasum -a 256 "$reference" | tee "$EVIDENCE/gnu-binary.sha256"
+          cargo build --release --locked -p fastmash --example hosted_comparison 2>&1 | tee "$EVIDENCE/comparison-build.log"
+          target/release/examples/hosted_comparison "$FASTMASH_TEST_BINARY" "$reference" "$EVIDENCE/hosted-comparison" 2>&1 | tee "$EVIDENCE/comparison.log"
+      - name: Retain installation and hosted comparison evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: installed-contract-${{ matrix.os }}
+          path: ${{ runner.temp }}/installed-contract/
+          if-no-files-found: error

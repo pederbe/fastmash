@@ -10,6 +10,12 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+### Added
+
+- Native Apple Silicon macOS development builds targeting macOS 15 and later,
+  with built-in sorting and disk spill, native command checks on macOS 15 and
+  26, and a checksummed CI archive. Published 0.1.0 artifacts remain Linux-only.
+
 ### Fixed
 
 - Keep the website's installation panel stable during loading and defer its

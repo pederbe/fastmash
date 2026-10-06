@@ -1,6 +1,15 @@
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
+#[path = "support/process.rs"]
+#[cfg(target_os = "macos")]
+mod process;
+#[cfg(target_os = "linux")]
+use std::process::Command;
+
 use std::{
     fs,
-    process::{Command, Output, Stdio},
+    process::{Output, Stdio},
 };
 
 fn command(args: &[&str], input: &[u8]) -> Output {
@@ -9,6 +18,7 @@ fn command(args: &[&str], input: &[u8]) -> Output {
 
 fn invoke(args: &[&str], input: &[u8], address_space: Option<u64>, full: bool) -> Output {
     let binary = std::env::var_os("FASTMASH_QUANTILE_TEST_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
     let path = std::env::temp_dir().join(format!(
         "quantiles-{}-{:?}",
@@ -16,27 +26,35 @@ fn invoke(args: &[&str], input: &[u8], address_space: Option<u64>, full: bool) -
         std::thread::current().id()
     ));
     fs::write(&path, input).unwrap();
-    let mut command = Command::new("/usr/bin/timeout");
-    command.args(["--kill-after=2s", "60s"]);
-    if let Some(bytes) = address_space {
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let mut command = Command::new("/usr/bin/timeout");
+        command.args(["--kill-after=2s", "60s"]);
+        if let Some(bytes) = address_space {
+            command
+                .arg("/usr/bin/prlimit")
+                .arg(format!("--as={bytes}"))
+                .arg("--");
+        }
+        command.arg(&binary);
         command
-            .arg("/usr/bin/prlimit")
-            .arg(format!("--as={bytes}"))
-            .arg("--");
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = process::bounded(&binary, 60);
+    #[cfg(target_os = "macos")]
+    if let Some(bytes) = address_space {
+        panic!(
+            "the Linux address-space fixture ({bytes} bytes) needs a native allocation-failure mechanism"
+        );
     }
     let result = command
-        .arg(binary)
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
         .stdin(fs::File::open(&path).unwrap())
-        .stdout(if full {
-            Stdio::from(fs::File::options().write(true).open("/dev/full").unwrap())
-        } else {
-            Stdio::piped()
-        })
+        .full_stdout(full)
         .stderr(Stdio::piped())
         .output()
         .unwrap();

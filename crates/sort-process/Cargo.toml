@@ -8,3 +8,6 @@ repository = "https://github.com/pederbe/fastmash"
 homepage = "https://fastmash.io"
 rust-version = "1.88"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# The CLI already pins libc; typed native entropy avoids another FFI contract.
+libc = "=0.2.189"

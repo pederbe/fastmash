@@ -5,7 +5,8 @@ fastmash [INPUT OPTIONS] health [examples N] [type FIELD TYPE]
          [required FIELD] [nonmissing FIELD] [width N] [validate] [tsv]
 
 Summarize fields from standard input. Results follow request order.
-Linux x86-64 (including WSL2). Differences from GNU datamash 1.9:
+Linux x86-64 (including WSL2) and Apple Silicon macOS 15+.
+Differences from GNU datamash 1.9:
 https://fastmash.io/guide/differences.html
 
 Top-N selection: top:N FIELD selects the highest N complete records;
@@ -315,8 +316,9 @@ Examples:
 Runtime and numerical limits:
   countunique/unique/collapse retain text per operation/group until final output.
   Storage grows as needed; duplicates consume storage and allocation may fail.
-  Linux x86-64 with glibc; default %.14g formatting. The system sort route
-  (below) needs /proc; without it, those jobs sort in process.
+  Linux x86-64 with glibc, or Apple Silicon macOS 15+; default %.14g formatting.
+  The Linux system sort route (below) needs /proc; without it, those jobs sort
+  in process. macOS always uses built-in sorting and needs no sort supervisor.
   Installation and requirements: https://fastmash.io/install.html
   Locales: C/POSIX, C.UTF-8 and the glibc locales, @modifier ones included (as
   glibc, a modifier it has no locale for is dropped). Each category uses
@@ -354,13 +356,14 @@ Runtime and numerical limits:
   (piped input is held in memory for that) and sorted. FASTMASH_GROUPING=sort
   always sorts; FASTMASH_PIPE_GROUPING=sort sorts piped input, and =hash
   holds it in every locale.
-  In C/C.UTF-8, other sorted operations use /usr/bin/sort (stable, NUL-capable)
+  On Linux in C/C.UTF-8, other sorted operations use /usr/bin/sort (stable, NUL-capable)
   through fastmash-sort-supervisor beside fastmash, where both can run safely:
   HUP/INT/TERM neither ignored (as by nohup) nor blocked, waitable children,
   pidfds and close_range(CLOEXEC) (Linux 5.11+), both executable, sort not
   BusyBox or Toybox, a -t byte below 0x80 and a writable, searchable TMPDIR.
-  Otherwise they sort in process. Native spill uses O_TMPFILE, or unlinked
-  private files where TMPDIR lacks it (NFS, older overlayfs); external sorting
+  Otherwise they sort in process. Linux spill uses O_TMPFILE, or unlinked
+  private files where TMPDIR lacks it (NFS, older overlayfs). macOS uses
+  private unlinked files; external sorting on Linux
   creates a private directory in TMPDIR when it starts.
   C/C.UTF-8 sorting uses byte order. Language sorting uses pinned Rust ICU rules
   for letters and digits and glibc 2.43's table for punctuation, symbols and
