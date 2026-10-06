@@ -98,8 +98,15 @@ fn full_warning_follows_the_sorters_error_without_an_input_header() {
                 &["-C", "--full", "-s", "-H", "-g", "x", operation, "1"],
                 input,
             );
-            let mut stderr =
-                b"sort: field number is zero: invalid field specification '0,0'\n".to_vec();
+            // Older GNU sort includes its absolute program name, as in the corpus.
+            let mut stderr = if output.stderr.starts_with(b"/usr/bin/sort: ") {
+                b"/usr/bin/".to_vec()
+            } else {
+                Vec::new()
+            };
+            stderr.extend_from_slice(
+                b"sort: field number is zero: invalid field specification '0,0'\n",
+            );
             stderr.extend_from_slice(WARNING);
             stderr.extend_from_slice(b"fastmash: read error (on close)\n");
             assert_result(&output, 1, b"", &stderr);
