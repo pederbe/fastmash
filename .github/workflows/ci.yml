@@ -45,7 +45,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - run: cargo test --workspace --locked
+      - run: cargo test --release --workspace --locked
       - run: cargo build --release --locked
       # The supervisor must sit beside the binary (built by the workspace build).
       - run: python3 scripts/check_regressions.py --binary target/release/fastmash

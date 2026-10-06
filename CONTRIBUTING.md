@@ -31,7 +31,7 @@ You need Linux x86-64 (or WSL2), stable Rust, Python 3.10+ and GNU or uutils cor
 git clone https://github.com/pederbe/fastmash
 cd fastmash
 cargo build
-cargo test --workspace
+cargo test --release --workspace
 ./target/debug/fastmash --help
 ```
 
@@ -52,7 +52,7 @@ distributions ship different versions.
    ```sh
    cargo fmt --all --check
    cargo clippy --workspace --all-targets -- -D warnings
-   cargo test --workspace
+   cargo test --release --workspace
    cargo build --release
    python3 scripts/check_regressions.py --binary target/release/fastmash
    python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file

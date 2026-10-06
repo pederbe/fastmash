@@ -20,14 +20,17 @@ All commands run from the repository root on Linux x86-64 or WSL2.
 ```sh
 cargo fmt --all --check                  # formatting
 cargo clippy --workspace --all-targets -- -D warnings   # lints
-cargo test --workspace                   # unit and integration tests
+cargo test --release --workspace         # unit and integration tests
 cargo build --release                    # the binaries the corpus runs
 python3 scripts/check_regressions.py --binary target/release/fastmash
 python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
 ```
 
-CI runs only when started manually, to preserve the limited Actions minutes.
-A change is ready for review when all of these checks pass locally.
+Run the full suite with `--release`: memory-limit tests exercise the optimized
+CLI. Debug builds can exceed those limits before reaching the behavior under test.
+A change is ready for review when all of these checks pass locally. CI also runs
+on pushes and pull requests against `main` once the repository is public;
+private automatic runs skip their jobs, while manual runs remain available.
 
 ## Layers
 
@@ -126,6 +129,6 @@ Windows drive: tests are much faster there.
 
 | Workflow | When | What |
 | --- | --- | --- |
-| `ci.yml` | Manual dispatch | Format, Clippy, tests, regression corpus on Ubuntu |
-| `docs.yml` | Manual dispatch | Builds the website and checks links |
-| `release.yml` | Manual dispatch on a version tag | Builds, tests and publishes release binaries |
+| `ci.yml` | Public pushes and pull requests against `main`, or manual dispatch | Format, Clippy, release-mode tests, regression corpus on Ubuntu |
+| `docs.yml` | Public pushes and pull requests against `main`, or manual dispatch | Builds the website and checks links |
+| `release.yml` | Manual dispatch on a version tag | Builds and tests release assets, then creates a draft release |

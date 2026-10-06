@@ -21,7 +21,7 @@ tools they use. [CONTRIBUTING.md](CONTRIBUTING.md) is the full guide.
 cargo build
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo test --release --workspace
 cargo build --release
 python3 scripts/check_regressions.py --binary target/release/fastmash
 python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
