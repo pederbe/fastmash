@@ -66,6 +66,10 @@ distributions ship different versions.
 
 ### Changes that need extra care
 
+The maintainer runs release qualification on the measurement hosts for each
+release. Pull requests run CI and the regression corpus; additional performance
+qualification on those hosts is needed for pull requests that change performance.
+
 - **Numerical output.** Anything that can change a printed number, however
   slightly, needs a new numerical profile version and independent verification.
   Please discuss it in an issue first.
