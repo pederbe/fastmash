@@ -84,7 +84,9 @@ distributions ship different versions.
 
 Write a short summary line in the imperative mood ("Add trimmean parameter
 validation", not "Added…"), followed by a blank line and an explanation of *why*
-when that is not obvious. Reference issues as `#123`.
+when that is not obvious. Reference public issues as `#123` in commits and
+discussions. Use full public issue links in source comments so their repository
+is explicit. CI checks tracked files for private references.
 
 ## Tools
 
