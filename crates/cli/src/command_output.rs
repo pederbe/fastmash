@@ -1,13 +1,17 @@
 //! Command output and explicit finalization for standard output.
 use super::buffered_stdout::{BufferedStdout, Completion};
 use super::{
-    Failure, OperationSet, failure, headers, linux, options, os_failure, records, standard_io,
+    Failure, OperationSet, failure, headers, options, os_failure, platform, records, standard_io,
     unsupported,
 };
+#[cfg(target_os = "linux")]
 use std::{
-    io::{self, IsTerminal, Write},
-    marker::PhantomData,
+    io::IsTerminal,
     os::unix::fs::{FileTypeExt, MetadataExt},
+};
+use std::{
+    io::{self, Write},
+    marker::PhantomData,
     rc::Rc,
 };
 
@@ -325,6 +329,7 @@ impl Stdout {
             _single_thread: PhantomData,
         }
     }
+    #[cfg(target_os = "linux")]
     pub fn buffering(&self) -> (usize, bool) {
         match std::fs::metadata("/proc/self/fd/1") {
             Ok(meta) => {
@@ -341,19 +346,37 @@ impl Stdout {
             Err(_) => (8192, false),
         }
     }
+    #[cfg(target_os = "macos")]
+    pub fn buffering(&self) -> (usize, bool) {
+        let mut metadata = std::mem::MaybeUninit::<libc::stat>::uninit();
+        // SAFETY: fstat initializes one stat through its valid output pointer.
+        if unsafe { libc::fstat(1, metadata.as_mut_ptr()) } != 0 {
+            return (8192, false);
+        }
+        // SAFETY: successful fstat initialized the entire metadata structure.
+        let metadata = unsafe { metadata.assume_init() };
+        let size = metadata.st_blksize;
+        // SAFETY: isatty only inspects the inherited standard-output descriptor.
+        let terminal =
+            metadata.st_mode & libc::S_IFMT == libc::S_IFCHR && unsafe { libc::isatty(1) } == 1;
+        (
+            if size > 0 && size < 8192 {
+                size as usize
+            } else {
+                8192
+            },
+            terminal,
+        )
+    }
     pub fn close(&mut self) -> io::Result<()> {
         let Some(fd) = self.fd.take() else {
             return Ok(());
         };
-        // Linux close is never retried, including EINTR, because the fd may be reused.
-        // SAFETY: close takes no pointers; `fd` was taken from this writer, its owner.
-        let result = unsafe { linux::syscall(3, fd, 0, 0, 0) };
+        let result = platform::close(fd);
         if standard_io::originally_closed(fd) {
             Err(io::Error::from_raw_os_error(9))
-        } else if result < 0 {
-            Err(io::Error::from_raw_os_error(-result as i32))
         } else {
-            Ok(())
+            result
         }
     }
 }

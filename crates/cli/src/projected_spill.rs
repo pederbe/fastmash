@@ -36,8 +36,12 @@ fn corrupt() -> Failure {
     io_error("invalid run")
 }
 
-fn temporary() -> Result<File, Failure> {
-    fastmash_sort_process::anonymous_file().map_err(io_error)
+pub(super) fn temporary() -> Result<File, Failure> {
+    let file = fastmash_sort_process::anonymous_file().map_err(io_error)?;
+    if std::env::var_os("FASTMASH_SORT_TRACE").is_some() {
+        let _ = crate::standard_io::Stderr.write_all(b"sort spill: private run opened\n");
+    }
+    Ok(file)
 }
 pub(super) trait Codec: Storage + Send {
     fn segments(&self) -> &Segments;
@@ -734,6 +738,7 @@ fn arena_record(arena: &[u8], offset: usize, shape: Shape) -> (u64, u64, View<'_
 /// short records in sorted order took 146 ms with it and 303 ms without, in a
 /// micro-benchmark).
 #[inline(always)]
+#[cfg(target_arch = "x86_64")]
 fn prefetch(arena: &[u8], offset: usize) {
     use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
     let pointer = arena.as_ptr().wrapping_add(offset).cast::<i8>();
@@ -745,6 +750,12 @@ fn prefetch(arena: &[u8], offset: usize) {
         _mm_prefetch::<_MM_HINT_T0>(pointer.wrapping_add(64));
     }
 }
+
+// Correctness does not depend on this x86 cache hint. Native ARM tuning needs
+// measurements before adopting an alternative.
+#[inline(always)]
+#[cfg(not(target_arch = "x86_64"))]
+fn prefetch(_: &[u8], _: usize) {}
 
 /// The eight key bytes of record `entry` at `offset` into key `key`, as a
 /// sort word, with a length digit: the bytes left in the key when that is at

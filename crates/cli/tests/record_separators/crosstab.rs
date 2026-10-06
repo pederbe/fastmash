@@ -27,6 +27,7 @@ fn crosstab_read_failures() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn crosstab_allocation_failure_is_explicit() {
     let path = std::env::temp_dir().join(format!("crosstab-memory-{}", std::process::id()));
     let mut input = Vec::new();

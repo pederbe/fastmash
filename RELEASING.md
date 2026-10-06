@@ -95,21 +95,37 @@ release is being tagged.
 ## Adding macOS support in 0.2.0
 
 Native Apple Silicon macOS support is the main feature planned for 0.2.0.
-Begin the port after 0.1.0 is released. The 0.1.0 launch includes no macOS
-build or porting work, and its qualified Linux artifacts remain unchanged.
+The published 0.1.0 release has Linux artifacts only; its qualified files
+and the Linux release recipe remain unchanged.
 
 Use native GitHub-hosted macOS builds and tests against the public repository's
-development source. The initial build check is:
+development source. Native checks run on macOS 15 and 26. The build check is:
 
 ```sh
-cargo build --release --workspace --locked --target aarch64-apple-darwin
+MACOSX_DEPLOYMENT_TARGET=15.0 cargo build --release --locked --bin fastmash --target aarch64-apple-darwin
 ```
 
 Record the source revision, macOS version, target, Rust toolchain and build
-logs. The current source admits only Linux x86-64 with glibc; a failed build
-records the remaining porting work. Keep Linux build and behavior checks
-passing throughout the port, and preserve the portable numerical contract.
-The port design is still to be settled; Intel macOS is outside this scope.
+logs. Keep Linux build and behavior checks passing throughout the port, and
+preserve the Numerical profile. [ADR 0010: Native Apple Silicon macOS](docs/src/adr/0010-native-apple-silicon.md)
+sets the development platform boundary. Intel macOS is outside this scope.
+
+`release/macos-archive.sh OUTPUT_DIRECTORY` builds one checksummed development
+archive with a macOS 15 deployment target and records compiler, source,
+flags, binary identity and deployment metadata. Its label includes
+`macos-test` and the source revision; it is a downloadable CI artifact,
+not a release asset. Both native baselines install those same bytes outside
+the checkout through the installer, then run installed-command checks and the
+applicable frozen corpus. The workflow retains native installation and
+downloaded-file security observations without changing security policy.
+Representative GNU comparisons record exact binaries, fixture identities,
+repeated samples and output eligibility on each hosted runner.
+
+The current tag-only release workflow continues to publish Linux assets only.
+Before a macOS release, extend that explicitly authorized workflow to build,
+qualify and attest the native archive, and decide its frozen-checksum process.
+Do not treat a development CI artifact as a qualified release or modify
+`release/qualified.sha256` to hold it.
 
 Before releasing 0.2.0 with macOS support, complete these checks:
 

@@ -1,3 +1,6 @@
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
 use std::{
     io::Write,
     process::{Command, Output, Stdio},
@@ -5,6 +8,7 @@ use std::{
 
 fn command(args: &[&str], input: &[u8]) -> Output {
     let binary = std::env::var_os("FASTMASH_SUM_MEAN_TEST_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
     let mut child = Command::new(binary)
         .args(args)
@@ -131,18 +135,14 @@ fn repeated_named_fields_reset_counts_and_preserve_errors() {
 #[test]
 fn write_failure_is_not_success() {
     let binary = std::env::var_os("FASTMASH_SUM_MEAN_TEST_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
     let mut child = Command::new(binary)
         .args(["sum", "1", "mean", "1"])
         .env("LC_ALL", "C")
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
-        .stdout(
-            std::fs::OpenOptions::new()
-                .write(true)
-                .open("/dev/full")
-                .unwrap(),
-        )
+        .full_stdout(true)
         .spawn()
         .unwrap();
     child.stdin.take().unwrap().write_all(b"1\n").unwrap();

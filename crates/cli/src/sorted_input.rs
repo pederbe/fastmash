@@ -68,8 +68,11 @@ impl Sorting {
         // SAFETY: standard_io's preinitializer keeps descriptor 0 open for the
         // whole process, so the borrow cannot outlive it.
         let stdin = unsafe { BorrowedFd::borrow_raw(0) };
-        let input = fastmash_sort_process::linux::duplicate(stdin)
-            .map_err(|_| unsupported("unable to prepare sorting input"))?;
+        #[cfg(target_os = "linux")]
+        let input = fastmash_sort_process::linux::duplicate(stdin);
+        #[cfg(target_os = "macos")]
+        let input = stdin.try_clone_to_owned();
+        let input = input.map_err(|_| unsupported("unable to prepare sorting input"))?;
         let mut reader = HeaderInput::new(File::from(input))?;
         let mut intake = Intake::new(options, intake::Header::First);
         let mut record = Vec::new();

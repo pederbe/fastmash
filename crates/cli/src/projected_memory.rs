@@ -19,6 +19,8 @@
 //!
 //! A fact that cannot be read, or that contradicts another, keeps `START`.
 //! Once the chunk has spilled the sort keeps its memory.
+//! On macOS the Linux memory sources are absent, so the chunk spills at the
+//! initial target rather than growing. This is a chunk target, not an input cap.
 use super::{Failure, unsupported};
 use std::{
     fs,

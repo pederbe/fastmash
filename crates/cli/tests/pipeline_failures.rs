@@ -1,4 +1,7 @@
 //! Installed descriptor regressions. The same matrix can retain reference observations.
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
 use std::{
     ffi::OsStr,
     fs,
@@ -95,7 +98,7 @@ fn invoke(binary: &OsStr, args: &[&str], fault: &str) -> Output {
                 command.stdin(Stdio::null());
             }
             if fault == "full-output-closed-error" {
-                command.stdout(fs::File::options().write(true).open("/dev/full").unwrap());
+                command.full_stdout(true);
             }
             let fd = match fault {
                 "closed-input" => 0,
@@ -125,7 +128,7 @@ fn invoke(binary: &OsStr, args: &[&str], fault: &str) -> Output {
             command.stderr(fs::File::open("/dev/null").unwrap());
         }
         "full-output" => {
-            command.stdout(fs::File::options().write(true).open("/dev/full").unwrap());
+            command.full_stdout(true);
         }
         "broken-output" => {
             let (writer, reader) = UnixStream::pair().unwrap();
@@ -180,6 +183,7 @@ fn retain(suite: &str, name: &str, output: &Output) {
 #[test]
 fn installed_descriptor_failures_are_not_successful_empty_results() {
     let binary = std::env::var_os("FASTMASH_FAILURE_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
     for &(mode, args) in MODES {
         for &fault in FAULTS {
@@ -204,7 +208,13 @@ fn check(mode: &str, fault: &str, name: &str, output: &Output) {
     if mode == "named" && fault == "closed-output-empty" {
         assert_eq!(output.status.code(), Some(1), "{name}");
         assert!(output.stdout.is_empty(), "{name}");
+        #[cfg(target_os = "linux")]
         assert_eq!(output.stderr, b"sort: field number is zero: invalid field specification '0,0'\nfastmash: read error (on close)\n", "{name}");
+        #[cfg(target_os = "macos")]
+        assert_eq!(
+            output.stderr, b"fastmash: missing input header for named grouping key\n",
+            "{name}"
+        );
         return;
     }
     const WARNING: &[u8] = b"fastmash: Using -f/--full with non-linewise operations is deprecated and will be disabled in a future release.\n";
@@ -266,7 +276,9 @@ fn check(mode: &str, fault: &str, name: &str, output: &Output) {
         if !unused_input && !unused_output && !ordinary_output {
             let message: &[u8] = match fault {
                 "closed-input" | "write-only-input" => b"fastmash: read error: Bad file descriptor\n",
+                #[cfg(target_os = "linux")]
                 "directory-input" if mode == "named" => b"sort: field number is zero: invalid field specification '0,0'\nfastmash: read error (on close): Is a directory\n",
+                #[cfg(target_os = "linux")]
                 "directory-input" if mode == "external" => {
                     // The child owns its diagnostic; these are the two named test profiles.
                     let gnu = b"sort: read failed: -: Is a directory\nfastmash: read error (on close)\n";
@@ -309,6 +321,7 @@ fn retain_reference_descriptor_matrix() {
 #[test]
 fn calculation_failure_and_failed_diagnostic_still_finalize_output() {
     let binary = std::env::var_os("FASTMASH_FAILURE_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
     for fault in ["full-output", "full-output-closed-error"] {
         let output = invoke(

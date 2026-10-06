@@ -226,10 +226,13 @@ fn a_read_error_fails_the_sort_like_the_system_sort() {
     );
     assert_eq!(output.status.code(), Some(1), "{output:?}");
     assert!(output.stdout.is_empty(), "{output:?}");
+    #[cfg(target_os = "linux")]
     assert!(
         output
             .stderr
             .ends_with(b"fastmash: read error (on close): Input/output error\n"),
         "{output:?}"
     );
+    #[cfg(target_os = "macos")]
+    assert_eq!(output.stderr, EIO);
 }

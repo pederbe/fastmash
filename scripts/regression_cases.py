@@ -9,6 +9,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -67,7 +68,13 @@ def invoke(case, binary, directory, *, bounded=False):
             source.seek(0)
             inp, data = source, None
         if case['io'] == 'full':
-            out = stack.enter_context(open('/dev/full', 'wb'))
+            if sys.platform == 'darwin':
+                if bounded:
+                    raise ValueError('Bounded release qualification uses Linux transports')
+                env = cli_streams.native_full_environment(binary, env)
+                out = stack.enter_context(open('/dev/null', 'wb'))
+            else:
+                out = stack.enter_context(open('/dev/full', 'wb'))
         if case['io'] == 'closed-pipe':
             read_fd, out = os.pipe()
             os.close(read_fd)

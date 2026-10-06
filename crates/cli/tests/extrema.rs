@@ -1,3 +1,7 @@
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
+
 use std::{
     ffi::{OsStr, OsString},
     fs,
@@ -7,6 +11,7 @@ use std::{
 
 fn candidate() -> OsString {
     std::env::var_os("FASTMASH_EXTREMA_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into())
 }
 fn invoke(binary: &OsStr, args: &[String], input: &[u8], full: bool) -> Output {
@@ -35,16 +40,7 @@ fn invoke_at(
         .env("PATH", "/usr/bin:/bin")
         .env("FASTMASH_SORT_MEMORY_BYTES", memory)
         .stdin(fs::File::open(&path).unwrap())
-        .stdout(if full {
-            Stdio::from(
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open("/dev/full")
-                    .unwrap(),
-            )
-        } else {
-            Stdio::piped()
-        })
+        .full_stdout(full)
         .stderr(Stdio::piped());
     if let Some(temp) = temp {
         command.env("TMPDIR", temp);

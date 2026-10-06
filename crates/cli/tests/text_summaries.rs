@@ -1,7 +1,16 @@
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
+#[path = "support/process.rs"]
+#[cfg(target_os = "macos")]
+mod process;
+#[cfg(target_os = "linux")]
+use std::process::Command;
+
 use std::{
     fs::File,
     io::Write,
-    process::{Command, Output, Stdio},
+    process::{Output, Stdio},
 };
 
 fn command(args: &[&str], input: &[u8]) -> Output {
@@ -10,6 +19,7 @@ fn command(args: &[&str], input: &[u8]) -> Output {
 
 fn command_with_resources(args: &[&str], input: &[u8], full: bool, limited: bool) -> Output {
     let binary = std::env::var_os("FASTMASH_TEXT_TEST_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
     // A file avoids pipe deadlock when wide or grouped output exceeds pipe capacity.
     let path = std::env::temp_dir().join(format!(
@@ -18,24 +28,30 @@ fn command_with_resources(args: &[&str], input: &[u8], full: bool, limited: bool
         std::thread::current().id()
     ));
     File::create(&path).unwrap().write_all(input).unwrap();
-    let mut child = Command::new("/usr/bin/timeout");
-    child.args(["--kill-after=2s", "30s"]);
+    #[cfg(target_os = "linux")]
+    let mut child = {
+        let mut child = Command::new("/usr/bin/timeout");
+        child.args(["--kill-after=2s", "30s"]);
+        if limited {
+            child.args(["/usr/bin/prlimit", "--as=33554432", "--"]);
+        }
+        child.arg(&binary);
+        child
+    };
+    #[cfg(target_os = "macos")]
+    let mut child = process::bounded(&binary, 30);
+    #[cfg(target_os = "macos")]
     if limited {
-        child.args(["/usr/bin/prlimit", "--as=33554432", "--"]);
+        panic!("the Linux address-space fixture needs a native allocation-failure mechanism");
     }
     let out = child
-        .arg(binary)
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
         .stdin(File::open(&path).unwrap())
-        .stdout(if full {
-            Stdio::from(File::options().write(true).open("/dev/full").unwrap())
-        } else {
-            Stdio::piped()
-        })
+        .full_stdout(full)
         .stderr(Stdio::piped())
         .output()
         .unwrap();
@@ -259,6 +275,7 @@ fn text_output_failure_and_later_group_error_remain_visible() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
 fn text_allocation_failure_is_explicit() {
     let out = command_with_resources(
         &["collapse", "1"],
@@ -274,12 +291,13 @@ fn text_allocation_failure_is_explicit() {
 #[test]
 fn text_final_output_is_written_without_a_second_copy() {
     // The 11 MB result row streams through the output buffer; a copy of it
-    // would not fit in the 32 MiB allowance beside the collected values.
+    // would not fit in Linux's 32 MiB allowance beside the collected values.
+    // Darwin verifies the complete large output without that memory claim.
     let out = command_with_resources(
         &["collapse", "1"],
         &b"transcript\n".repeat(1_000_000),
         false,
-        true,
+        cfg!(target_os = "linux"),
     );
     assert!(out.status.success(), "{:?}", out.stderr);
     let mut expected = b"transcript,".repeat(1_000_000);

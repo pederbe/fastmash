@@ -49,7 +49,8 @@ impl Program {
     }
 }
 
-fn terminal() -> (File, File) {
+#[allow(dead_code)]
+pub fn pair() -> (File, File) {
     let (mut master, mut slave) = (-1, -1);
     assert_eq!(
         // SAFETY: openpty initializes both descriptors; null optional arguments
@@ -59,8 +60,8 @@ fn terminal() -> (File, File) {
                 &mut master,
                 &mut slave,
                 std::ptr::null_mut(),
-                std::ptr::null(),
-                std::ptr::null(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
             )
         },
         0
@@ -99,7 +100,8 @@ fn drain(mut master: File) -> thread::JoinHandle<Vec<u8>> {
             match master.read(&mut buffer) {
                 Ok(0) => break,
                 Ok(count) => output.extend_from_slice(&buffer[..count]),
-                // Linux reports EIO when every slave descriptor has closed.
+                // Linux reports EIO when every slave descriptor has closed;
+                // Darwin reports EOF, handled above.
                 Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
                 Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(error) => panic!("terminal read failed: {error}"),
@@ -115,8 +117,8 @@ pub fn output(
     stdout_terminal: bool,
     stderr_terminal: bool,
 ) -> Output {
-    let stdout = stdout_terminal.then(terminal);
-    let stderr = stderr_terminal.then(terminal);
+    let stdout = stdout_terminal.then(pair);
+    let stderr = stderr_terminal.then(pair);
     command.stdin(Stdio::piped());
     command.stdout(
         stdout
@@ -151,6 +153,7 @@ pub fn output(
     output
 }
 
+#[allow(dead_code)]
 pub fn strip_styles(bytes: &[u8]) -> Vec<u8> {
     let mut output = Vec::new();
     let mut at = 0;

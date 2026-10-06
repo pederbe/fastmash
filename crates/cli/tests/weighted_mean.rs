@@ -1,4 +1,7 @@
 //! Executable weighted Command checks over actual files and pipes.
+#[path = "support/output_fault.rs"]
+mod output_fault;
+use output_fault::OutputFault;
 use std::{
     fs,
     io::Write,
@@ -838,12 +841,7 @@ fn weighted_sort_cleanup(csv: bool) {
             .env("FASTMASH_GROUPING", "sort")
             .env("FASTMASH_SORT_MEMORY_BYTES", memory)
             .stdin(fs::File::open(&input).unwrap())
-            .stdout(
-                fs::OpenOptions::new()
-                    .write(true)
-                    .open("/dev/full")
-                    .unwrap(),
-            )
+            .full_stdout(true)
             .output()
             .unwrap();
         assert_eq!(output.status.code(), Some(1), "{output:?}");
@@ -935,12 +933,7 @@ fn real_output_failure_prevents_weighted_success() {
     let mut child = candidate()
         .args(["wmean", "1:2"])
         .stdin(Stdio::piped())
-        .stdout(
-            fs::OpenOptions::new()
-                .write(true)
-                .open("/dev/full")
-                .unwrap(),
-        )
+        .full_stdout(true)
         .spawn()
         .unwrap();
     child
