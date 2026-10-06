@@ -25,7 +25,7 @@ impl Fixture {
     fn new(name: &str) -> Self {
         let root = temp_dir::TempDir::new(name);
         // A standalone executable also exercises the built-in fallback on
-        // Linux for Operations that ordinarily use the companion.
+        // Linux for Operations that ordinarily use the Sort supervisor.
         let binary = std::env::var_os("FASTMASH_TEST_BINARY")
             .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
         fs::copy(binary, root.0.join("fastmash")).unwrap();
@@ -292,7 +292,7 @@ fn spill_storage_errors_are_reported_only_when_storage_is_needed() {
 }
 
 #[test]
-fn unseeded_random_sort_uses_native_entropy_without_a_companion() {
+fn unseeded_random_sort_uses_native_entropy_without_a_sort_supervisor() {
     let fixture = Fixture::new("native-unseeded-sort");
     let mut command = fixture.command(&["-s", "-g1", "rand", "2"], "1");
     command.env("FASTMASH_SORT_TRACE", "1");

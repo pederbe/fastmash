@@ -1116,7 +1116,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
         #[cfg(target_os = "macos")]
         {
             // Native commands cannot delegate unresolved keys to the Linux
-            // companion. A failed read retains its intake diagnostic.
+            // Sort supervisor. A failed read retains its intake diagnostic.
             intake.finish()?;
             return Err(failure(
                 b"missing input header for named grouping key\n".to_vec(),

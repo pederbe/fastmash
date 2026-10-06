@@ -1561,8 +1561,22 @@ pub(super) fn decode_one<S: Codec>(bytes: &[u8]) -> Result<Record<S>, Failure> {
 mod tests {
     use super::super::batch::{Batch, Scratch, share};
     use super::*;
-    use std::fs::OpenOptions;
     use std::io::{BufReader, BufWriter};
+    fn rejected_run_writer() -> File {
+        #[cfg(target_os = "linux")]
+        {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/full")
+                .unwrap()
+        }
+        #[cfg(target_os = "macos")]
+        {
+            // Darwin has no full device. A read-only descriptor gives a real
+            // native EBADF on write, exercising the same propagation path.
+            File::open("/dev/null").unwrap()
+        }
+    }
     #[test]
     fn run_position_queries_preserve_buffered_read_ahead() {
         let mut reader = RunReader::new(16, io::Cursor::new(b"abcdefghijklmnopqrst"))
@@ -1781,9 +1795,23 @@ mod tests {
         // and the file system its inode number once the file is gone: a
         // second descriptor keeps the file, so a new one cannot look like it.
         let kept = first.try_clone().unwrap();
-        let link = format!("/proc/self/fd/{descriptor}");
-        let target = std::fs::read_link(&link).unwrap();
-        let open = || std::fs::read_link(&link).is_ok_and(|now| now == target);
+        use std::os::unix::fs::MetadataExt;
+        let target = kept.metadata().unwrap();
+        let open = || {
+            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
+            // SAFETY: fstat writes into live storage; it may reject the closed
+            // descriptor or inspect a reused slot without borrowing that slot.
+            if unsafe { libc::fstat(descriptor, stat.as_mut_ptr()) } != 0 {
+                return false;
+            }
+            // SAFETY: successful fstat initialized the complete stat value.
+            let stat = unsafe { stat.assume_init() };
+            #[cfg(target_os = "macos")]
+            let device = stat.st_dev as u64;
+            #[cfg(target_os = "linux")]
+            let device = stat.st_dev;
+            device == target.dev() && stat.st_ino == target.ino()
+        };
         let mut seen = Vec::new();
         merge_into::<Packed>(run_sources(vec![first, second]), |row| {
             seen.push((row.sequence, open()));
@@ -1851,8 +1879,11 @@ mod tests {
         for end in 1..encoded.len() {
             assert!(decode_all::<S>(&encoded[..end]).is_err());
         }
-        let full = OpenOptions::new().write(true).open("/dev/full").unwrap();
-        assert!(Encoder::new(full).write(&record::<S>(0)).is_err());
+        assert!(
+            Encoder::new(rejected_run_writer())
+                .write(&record::<S>(0))
+                .is_err()
+        );
         let broken = run_file(&encoded[..encoded.len() - 1]);
         let pair = vec![broken, temporary().ok().unwrap()];
         assert!(merge::<S>(pair, ROW_SHAPE, 1024).is_err());
@@ -1903,8 +1934,7 @@ mod tests {
     fn full_fan_in_initialization_and_partial_consumer_failures_propagate() {
         full_fan_in_failures::<Packed>();
         full_fan_in_failures::<Original>();
-        let full = OpenOptions::new().write(true).open("/dev/full").unwrap();
-        let mut output = RunWriter::new(8 << 10, full).ok().unwrap();
+        let mut output = RunWriter::new(8 << 10, rejected_run_writer()).ok().unwrap();
         output.write_all(b"buffered bytes").unwrap();
         assert!(complete(output).is_err());
     }

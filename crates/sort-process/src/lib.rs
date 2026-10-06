@@ -1,4 +1,4 @@
-//! Private spill storage and transport for the Linux external-sort companion.
+//! Private spill storage and transport for the Linux Sort supervisor.
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::undocumented_unsafe_blocks)]
 #[cfg(not(any(
@@ -16,11 +16,11 @@
 compile_error!("fastmash-sort-process supports Linux x86-64 and Apple Silicon macOS");
 #[cfg(target_os = "linux")]
 mod external;
-/// Linux process primitives shared with the companion; not a stable API.
+/// Linux process primitives shared with the Sort supervisor; not a stable API.
 #[cfg(target_os = "linux")]
 #[doc(hidden)]
 pub mod linux;
-/// The Linux companion executable's roles; not a stable API.
+/// The Linux Sort supervisor executable's roles; not a stable API.
 #[cfg(target_os = "linux")]
 #[doc(hidden)]
 pub mod supervisor;
