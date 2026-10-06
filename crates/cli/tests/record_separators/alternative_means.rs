@@ -28,7 +28,7 @@ fn cases() -> Vec<(Vec<OsString>, Vec<u8>)> {
             "bad\n",
             "1e4933\n",
         ] {
-            // Invalid reciprocal cancellation uses the approved positive NaN;
+            // Invalid reciprocal cancellation uses the documented positive NaN;
             // its explicit policy test below is separate from GNU equality.
             if op == "harmmean" && input == "0\n-0\n" {
                 continue;
@@ -76,7 +76,7 @@ fn cases() -> Vec<(Vec<OsString>, Vec<u8>)> {
         let mut a = args(&["--narm", "-g", "1"]);
         a.extend(args(&operations));
         let mut input = b"a\t0x1p-16445\na\t0x2p-16445\nb\t0xf.fffffffffffffffp16380\nc\t1\nc\t4\nd\tNA\ne\t-0\n".to_vec();
-        // pstdev(inf) creates an approved positive NaN, unlike GNU's negative
+        // pstdev(inf) creates a documented positive NaN, unlike GNU's negative
         // NaN. Keep this equality check on the shared finite-value contract.
         if operations[0] != "pstdev" {
             input.extend_from_slice(b"f\tinf\n");
@@ -96,7 +96,7 @@ fn alternative_means_reference() {
 }
 
 #[test]
-fn approved_invalid_nan_and_output_failure() {
+fn documented_invalid_nan_and_output_failure() {
     let binary = candidate();
     // Fastmash deliberately creates positive NaN for invalid arithmetic.
     let output = invoke(&binary, &args(&["geomean", "1"]), b"0\ninf\n", false, false);

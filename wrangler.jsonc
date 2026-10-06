@@ -14,8 +14,6 @@
   // Only the custom domain serves the site: no *.workers.dev or preview URLs
   // that search engines could index.
   "workers_dev": false,
-  "preview_urls": false
-  // Until launch the site has no route, so deployments serve nothing. The
-  // launch commit adds:
-  // "routes": [{ "pattern": "fastmash.io", "custom_domain": true }]
+  "preview_urls": false,
+  "routes": [{ "pattern": "fastmash.io", "custom_domain": true }]
 }

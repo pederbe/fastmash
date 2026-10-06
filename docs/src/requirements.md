@@ -9,24 +9,26 @@ Most Linux systems from 2018 onward need nothing beyond the
 | --- | --- |
 | Linux x86-64, glibc 2.28 or later (RHEL 8, Debian 10, Ubuntu 20.04 and newer) | Supported platform for the prebuilt binaries |
 | Linux x86-64 with glibc (`x86_64-unknown-linux-gnu`) | Building from source; musl and other targets are refused at compile time |
-| `/proc` mounted | Locating the sort supervisor and checking standard streams |
-| A writable `TMPDIR` (default `/tmp`) | Temporary data for large sorted jobs; the jobs that use the system `sort` also need it writable |
+| `/proc` mounted | Needed for the system `sort` route below; without it, those jobs sort in process, and output is written in 8 KiB blocks, even to a terminal |
+| A writable `TMPDIR` (default `/tmp`) | Temporary data for large sorted jobs |
 
-A few sorted (`-s`) jobs in the `C` locales use the system `sort`, listed in
-[Grouping and sorting](guide/grouping.md#large-inputs). Those also need:
+Under an address-space limit (`ulimit -v`, as some batch schedulers set),
+Fastmash reduces the address space that its memory allocator reserves; see
+[Address-space limits](guide/errors.md#address-space-limits).
 
-- Linux 5.11 or later, and `/usr/bin/sort` from GNU coreutils or uutils
-  coreutils (the default on recent Ubuntu);
-- the `HUP`, `INT` and `TERM` signals neither blocked nor ignored, and a
-  container or security policy that allows pidfds and `close_range`. `nohup`
-  ignores `HUP`, and a script's `command &` starts with `INT` ignored, so these
-  jobs stop with status 77 there; run them in the foreground, for example in
-  `tmux` or `screen`;
-- memory for the system `sort`, which chooses its own buffer size and threads
-  as it does for GNU datamash (`FASTMASH_SORT_MEMORY_BYTES` applies only to
-  Fastmash's own sorting).
-
-All other sorted jobs sort inside Fastmash and need none of these.
+A few sorted (`-s`) jobs in the `C` locales, listed in
+[Grouping and sorting](guide/grouping.md#large-inputs), use the system `sort`
+when all of these hold: `/proc` is mounted and `fastmash-sort-supervisor` is
+beside `fastmash`; `/usr/bin/sort` is an executable from GNU coreutils or
+uutils coreutils (not BusyBox or Toybox); the field separator is ASCII; `TMPDIR` is writable; Linux
+is 5.11 or later, with pidfds and `close_range` allowed; and the `HUP`, `INT`
+and `TERM` signals are neither blocked nor ignored. Otherwise (for example
+without the supervisor or `/usr/bin/sort`, under `nohup`, for `command &` in a
+script, on an older kernel or in a restrictive container), those jobs sort
+inside Fastmash instead, with the same output but more slowly on large input.
+The system `sort` chooses its own buffer size and threads, as it does for GNU
+datamash (Fastmash's memory policy and `FASTMASH_SORT_MEMORY_BYTES` apply
+only to its own sorting).
 
 ## Locales
 

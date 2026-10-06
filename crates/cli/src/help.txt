@@ -1,8 +1,92 @@
 Usage: fastmash [OPTIONS] OPERATION FIELDS [OPERATION FIELDS ...]
+       fastmash [TEXT OPTIONS] top:N FIELD | bottom:N FIELD
+       fastmash [INPUT/OUTPUT OPTIONS] compare BEFORE AFTER [rank RESULT [absolute|percent] [limit N]] OPERATION FIELDS [...]
+fastmash [INPUT OPTIONS] health [examples N] [type FIELD TYPE]
+         [required FIELD] [nonmissing FIELD] [width N] [validate] [tsv]
 
 Summarize fields from standard input. Results follow request order.
 Linux x86-64 (including WSL2). Differences from GNU datamash 1.9:
 https://fastmash.io/guide/differences.html
+
+Top-N selection: top:N FIELD selects the highest N complete records;
+bottom:N FIELD selects the lowest. N is a positive unsigned decimal integer
+through 18446744073709551615; FIELD is one positional or escaped named field.
+Named fields require --header-in or -H. Output is in
+numeric rank order, with earlier input records winning ties. Infinities have
+their numeric order, signed zeros tie, and unskipped NaNs are errors. --narm
+omits records only for whole-field NA/N/A/NaN tokens, case-insensitively.
+With -g, each adjacent group has its own cutoff; -s prepares sorted groups.
+Rank order applies within groups, with original input ties preserved through spill.
+Keys are not copied twice. Sorting retains complete records under its memory policy.
+--header-out emits one copied-field header; -H consumes and emits a header.
+All input is checked. Completed groups may emit before a later input failure.
+At most N candidates are retained for the current group or whole dataset;
+N limits record count, not bytes. Checked capacity failures refuse with 77.
+--full is redundant, and -s without keys leaves selection unchanged.
+Selection supports ordinary text and decoded CSV, with headers and adjacent or
+sorted groups. Original input order breaks numeric ties, including after Spill.
+--csv-in selects CSV input, --csv-out quotes each complete output field, and
+--csv selects both; none implies headers. Copied data retains NUL/non-UTF-8 bytes.
+All CSV fields are checked, including omitted or nonwinning records.
+CSV input conflicts with text separators/comment filtering; any CSV conflicts
+with -z, and CSV output conflicts with an explicit output delimiter.
+Numeric presentation, result names, collapse delimiter,
+filler, seed, --no-strict, --vnlog and --sort-cmd are unsupported for selection.
+
+Dataset comparison: compare BEFORE AFTER applies the same numerical aggregates
+to two raw datasets. Sources are literal paths; standalone '-' supplies stdin
+on at most one side. Use -- before operands for paths beginning with '-'.
+Both files open independently, including identical paths; before is read first.
+Supports positional and named selectors and -g keys over ordinary text or CSV.
+--header-in or -H requires an accepted input header on each source, even when
+there is no data. Names bind independently, allowing reordered header fields;
+positions keep their requested meaning. Comparison keys
+consolidate globally, including interleaved occurrences, preserving each key's
+original contribution order. Raw duplicates contribute normally; -s is redundant.
+Keys compare as complete byte tuples, retaining field boundaries and bytes after
+NUL. -i folds only ASCII A-Z; other bytes, whitespace and numeric spellings stay
+distinct. Empty key text is valid; an absent key field is an error.
+Without ranking, reports follow normalized tuple order, comparing unsigned bytes with shorter
+prefixes first, independently of locale. Display the first before spelling,
+or the first after spelling for added keys. Ordinary adjacent grouping is unchanged.
+Columns: keys, presence, rank, rank_state, then before,
+after, difference, difference_state, percentage, percentage_state per result.
+Difference is signed after-minus-before. Percentage is difference / before * 100,
+using the signed baseline and rounded binary80 at each step, without '%' suffix.
+Both zero signs and nonfinite summaries have explicit unavailable states.
+Empty sources are absent, with no zero filling; all-omitted values retain their
+ordinary summary rules. Both inputs and every calculation finish before output.
+--header-out or -H explicitly requests one fixed report header, including with
+no data on either side. Labels use before header names when available, otherwise
+ordinary field-N labels. --result-name indexes expanded summaries once and
+replaces the label throughout that summary's six columns, leaving keys and
+presence/rank/rank_state unchanged. No comparison header is implicit.
+Before operations, rank RESULT [absolute|percent] ranks one expanded summary
+result by descending change magnitude; the default measure is absolute.
+RESULT is a 1-based result index after list/range expansion, independent of labels.
+Optional limit N follows rank and keeps at most N ranked keys, without padding;
+N accepts 1 through 18446744073709551615. Signs and overflow are errors;
+leading zeros are accepted. Modifiers occur once, before all operations.
+Matched zero changes remain eligible. Available infinite differences lead finite
+absolute magnitudes; NaNs never rank. Ties use normalized complete key order.
+Ranks are consecutive plain decimal numbers, independent of numeric formatting.
+Every unrankable key follows the winners in key order, with an empty rank and
+rank_state unavailable or one_sided. Its selected change state explains why.
+A limit caps ranked keys only, so total report records can exceed N.
+Without ranking, every key has empty rank and rank_state not_requested.
+Finite change-arithmetic overflow refuses with 77; subnormals remain permitted.
+--csv-in, --csv-out and --csv independently select strict decoded input and
+individually encoded output, without implying headers. Both sources share one
+input format. Complete decoded key bytes consolidate regardless of quote spelling.
+All fields and records are checked, including unused, omitted and nonwinning data.
+CSV errors retain original logical records, starting physical lines and detected
+syntax locations. CSV-to-text keeps unescaped text framing and permits an output
+delimiter; CSV output preserves complete fields and locale decimal commas.
+Existing CSV separator/comment, -z, --vnlog and output-delimiter conflicts apply.
+Input/calculation failures precede every output byte, including headers; output
+write or close errors can leave partial bytes and prevent successful status.
+Text-result aggregates, Full rows, other modes, --vnlog, --no-strict, explicit
+filler/collapse delimiter/seed and --sort-cmd are unsupported for comparison.
 
 Operations:
   count     Count values in the selected field, including text and empty fields
@@ -19,6 +103,7 @@ Operations:
   range     Maximum minus minimum numeric value in the selected field
   sum       Sum the selected field
   mean      Arithmetic mean of the selected field
+  wmean     Weighted mean of a VALUE:WEIGHT field pair
   geomean   Geometric mean of the selected field
   harmmean  Harmonic mean of the selected field
   ms        Mean of squared values
@@ -71,6 +156,10 @@ Options:
   -i, --ignore-case      Ignore ASCII case in grouping, sorting and text summaries
   --header-in            Use the first input record as column names
   --header-out           Label results, using input names with --header-in
+  --result-name=INDEX:NAME Replace one result label; repeat for selected results
+  --csv-out              Encode calculation/comparison output as quoted CSV
+  --csv-in               Read strict quoted CSV for calculations/comparison
+  --csv                  Same as --csv-in --csv-out
   -H, --headers          Same as --header-in --header-out
   -f, --full             Prefix results with all fields of a representative row
   --no-strict            Accepted; has no effect on aggregation
@@ -90,21 +179,53 @@ Options:
                          Use one literal byte between text-list values
   -h, --help             Show this help without reading input
   -V, --version          Show the package version without reading input
+  --color=auto|always|never Style eligible help, diagnostics and readable health
+  --no-color             Same as --color=never; the last color control wins
   --                     End option processing
 
 By default, fields and results are tab-separated; records end with LF. With -z, LF is data.
 The final input record may omit its terminator. CR bytes are retained.
-The input separator also sets the output separator unless explicitly overridden.
+For text output, the input separator also sets the output separator unless explicitly overridden.
 Unique and collapse list values are comma-separated unless -c specifies another byte.
+With --csv-out, results use commas and LF endings; commas, quotes, CR and LF
+inside a field are quoted, quotes are doubled, and empty fields print as "".
+CSV output does not imply headers. It permits text-input -t, -W and -C and the
+collapse delimiter, but conflicts with --output-delimiter, -z and --vnlog.
+With --csv-in, commas separate decoded byte fields; LF or CRLF ends records.
+Quotes open only at a field's start, doubled quotes decode to one quote, and
+quoted fields may contain commas, CR and LF. Spaces and BOM bytes remain data.
+Malformed quoting in any field and bare CR outside quotes are errors.
+A blank CSV record has one empty field; a trailing comma adds an empty field.
+Empty input has no records; a complete final record may omit its ending.
+CSV input supports aggregate and per-row operations and --full. Aggregate groups
+sort decoded keys with -s, spilling lossless temporary runs when needed under
+the maintained sort-memory policy. Statistical samples remain in memory.
+Per-row operations retain their ordinary conflict with grouping keys.
+-s without grouping keys keeps input order and does not retain input for sorting.
+CSV input conflicts with explicit -t, -W and -C; either direction conflicts with
+-z and --vnlog. --csv-in keeps text output and its normal tab default; an
+explicit output delimiter is permitted. --csv enables both directions.
+CSV switches are exact-only, idempotent, and do not imply headers.
+CSV is unavailable for crosstab, table and field modes; health remains text-only.
 All three long delimiter options also accept a separate argument.
-CSV quoting is not supported. Whitespace mode skips leading spaces/tabs and
+Text whitespace mode skips leading spaces/tabs and
 collapses runs, but trailing spaces/tabs create one empty final field.
 The last -W or -t controls input splitting; an explicit output delimiter wins.
-With --full, fields are reconstructed using the output delimiter. The row is
+With --full, fields are reconstructed using the text output delimiter or encoded
+individually for CSV output. The row is
 initially the first input row; first/last/rand and extrema selection can replace
 it. With several operations, it need not supply every result. Headers prefix all
 input column names (or generated names), rather than GroupBy labels. GNU's
 aggregate --full deprecation warning is retained for compatibility.
+Result names require explicit --header-out or -H. INDEX counts result columns
+from 1, after list/range expansion, excluding grouping keys and --full copies.
+A paired operation has one result; cut counts each selected field. Untargeted
+labels stay generated. Repeated names are permitted; repeated targets are errors.
+Names may include colons but cannot be empty. Text output rejects names containing
+its output delimiter or record terminator; CSV output quotes commas, quotes and
+line breaks in names. --result-name also accepts a separate INDEX:NAME argument
+and requires its exact spelling. It is supported for aggregate and per-row
+operations, not crosstab, table or field modes.
 Aggregation accepts ragged rows if all selected fields exist. --no-strict and
 --filler do not supply absent aggregate fields. Transpose and reverse accept
 ragged rows with --no-strict; transpose uses --filler for missing cells.
@@ -124,10 +245,24 @@ Output uses spaces and a '# ' header. Numeric-looking selectors are column names
 Use --narm separately to remove NA/N/A/NaN; '-' remains a literal value.
 Vnlog requires LF records, whitespace input, default space output and filler '-';
 conflicting options are rejected. --filler still does not supply missing fields.
-With --narm, each selected field skips missing values independently. Matching is
+Wmean accepts finite nonnegative contribution weights; fractions are valid and
+weights need not sum to one. Zero weights contribute nothing after pair validation.
+With --narm, wmean validates nonmissing value then weight before omitting the
+whole pair if either is NA/N/A/NaN. Omission is local to each weighted request.
+Every nonempty calculation needs positive retained weight (error 1 otherwise).
+Weighted finite product/total overflow, a nonzero product rounded to zero, or
+final division overflow refuses with 77. Subnormals and final underflow are allowed.
+The binary80 trace rounds weight*value, adds its product, adds the weight, then
+divides at completion in encounter order. It retains two totals per request;
+scaling weights can change rounding. Wmean does not replace the --full row.
+Text and decoded CSV reports preserve per-group encounter order through sorting
+and spill. --csv-in selects decoded fields; --csv-out encodes results, keys,
+copied fields and labels independently. --csv selects both directions.
+CSV syntax is checked even in unused fields and omitted or zero-weight records.
+With --narm, other selected fields skip missing values independently. Matching is
 exact: spaces are not trimmed. Absent columns still fail; empty fields fail for
 numeric operations.
-Paired sides compact independently, so equal retained lengths can pair values from
+Covariance, Pearson and dotprod sides compact independently, so equal retained lengths can pair values from
 different records. An empty right side yields nan before the length comparison.
 Dotprod multiplies compacted pairs and adds the products in input order.
 If all values are missing, count/sum are 0 and mean/geomean are nan.
@@ -139,7 +274,7 @@ Median/q1/q3/iqr share samples and sorting for each selected field per group.
 Pvar/svar/pstdev/sstdev share original-order samples and squared deviations per
 field, separately from quantiles. Their storage grows with the largest group.
 Storage grows with input; allocation refusal is reported instead of a sample cap.
-Paired operations retain two growable sample arrays per request; they do not spill.
+Covariance, Pearson and dotprod retain two growable sample arrays per request; they do not spill.
 Spearson is sample Pearson correlation, not Spearman rank correlation.
 Moments and normality operations share input-order samples per selected field.
 Jarque/dpo preserve GNU's tail cancellation (tiny p-values can become zero) and
@@ -163,7 +298,8 @@ Rand uses the same text and missing-value rules, consuming one shared draw per
 accepted rand field in request order. Explicit seeds give reproducible draws.
 The long --seed form requires its argument.
 Count accepts text without numeric conversion. It counts existing empty fields;
-a blank record has no fields and still reports a missing-column error.
+a blank text record has no fields and still reports a missing-column error.
+A blank CSV record has one empty field, which count accepts.
 
 Examples:
   printf 'A\t1\nA\t2\nB\t4\n' | LC_ALL=C fastmash -g 1 sum 2
@@ -173,16 +309,21 @@ Examples:
   printf 'Revenue\tCost\n2\t10\n3\t20\n' | LC_ALL=C fastmash -H sum Revenue mean Cost
   printf 'a\tb\n1\t2\n3\t4\n' | LC_ALL=C fastmash -H sum 2,1-2 count a
   printf 'a\tb\n1\t2\n3\t4\n' | LC_ALL=C fastmash -H pcov a:b
+  printf 'reading\n2\n4\n' | LC_ALL=C fastmash -H --result-name=1:total sum reading mean reading
+  printf '1\t2\n3\t4\n' | LC_ALL=C fastmash --header-out --result-name=2:total sum 2,1
 
 Runtime and numerical limits:
   countunique/unique/collapse retain text per operation/group until final output.
   Storage grows as needed; duplicates consume storage and allocation may fail.
-  Linux x86-64 with glibc; default %.14g formatting. /proc is required.
+  Linux x86-64 with glibc; default %.14g formatting. The system sort route
+  (below) needs /proc; without it, those jobs sort in process.
   Installation and requirements: https://fastmash.io/install.html
-  Locales: C/POSIX, C.UTF-8 and the glibc locales as NAME.UTF-8 (or .utf8, no
-  @modifier). Each category uses nonempty LC_ALL, its LC_* value, LANG, then C.
-  Any LC_MESSAGES is accepted, and any LC_CTYPE except with -i (see below).
-  Names without a codeset are accepted where glibc's default is UTF-8 (hi_IN).
+  Locales: C/POSIX, C.UTF-8 and the glibc locales, @modifier ones included (as
+  glibc, a modifier it has no locale for is dropped). Each category uses
+  nonempty LC_ALL, its LC_* value, LANG, then C. Any LC_MESSAGES is accepted,
+  and any LC_CTYPE except with -i (see below). A name glibc has no locale for
+  behaves as C, as in GNU. Character sets other than UTF-8 keep a locale's
+  numbers where its separators are ASCII; sorting in them is refused.
   Numbers follow the glibc 2.43 rules
   of each locale whose decimal separator is one byte (all but ps_AF): its
   decimal separator, and its thousands separator and grouping for the apostrophe
@@ -194,26 +335,38 @@ Runtime and numerical limits:
   Record, command and operation storage grows as needed; allocation can fail.
   GNU identifiers allow 511 decoded bytes.
   Sorting combinations of count, first, last, unique, countunique, collapse, sum,
-  mean, min, max, absmin, absmax, range, median, q1, q3, iqr, perc, trimmean,
+  mean, wmean, min, max, absmin, absmax, range, median, q1, q3, iqr, perc, trimmean,
   mode, antimode, madraw, mad, pvar, svar, pstdev and sstdev uses native Rust sorting.
   Numerical results follow GNU datamash 1.9 on x86-64 glibc, not every GNU build.
   NaN payload input is accepted. Invalid arithmetic generates positive canonical
   NaN; signs and last digits can differ from GNU (see the differences page).
   Unsupported cases and checked allocation refusals exit with status 77.
-  Numerical jobs retain original records to preserve numeric parsing context.
-  FASTMASH_SORT_MEMORY_BYTES sets its chunk target (default 67108864 bytes), not
-  a hard memory limit. Spill uses anonymous files in TMPDIR (default /tmp).
-  In C/C.UTF-8, other sorted operations require fastmash-sort-supervisor beside it,
-  /usr/bin/sort with stable/NUL sorting, HUP/INT/TERM neither ignored (as by
-  nohup) nor blocked, and waitable children. This route needs pidfds and
-  close_range(CLOEXEC), Linux 5.11+.
-  Native spill uses O_TMPFILE, or unlinked private files where TMPDIR lacks it
-  (NFS, older overlayfs); external sorting creates a private directory in
-  TMPDIR when it starts, so TMPDIR must be writable.
+  Native sorting keeps only the fields jobs use (whole records with --full, in
+  language locales, or for numbers when the separator is a letter, digit or the
+  decimal point). It holds the whole input in memory when memory
+  allows; otherwise it sorts 64 MiB chunks and spills them to anonymous
+  files in TMPDIR (default /tmp). FASTMASH_SORT_MEMORY_BYTES fixes the chunk
+  target; FASTMASH_SORT_TRACE reports the choice on standard error.
+  With standard input from a file whose keys repeat, or from a pipe in a
+  language locale, -s groups instead of sorting: each group's records are
+  collected as they arrive, and only the groups are sorted (hash grouping).
+  Where that cannot give the sorted result exactly, the input is read again
+  (piped input is held in memory for that) and sorted. FASTMASH_GROUPING=sort
+  always sorts; FASTMASH_PIPE_GROUPING=sort sorts piped input, and =hash
+  holds it in every locale.
+  In C/C.UTF-8, other sorted operations use /usr/bin/sort (stable, NUL-capable)
+  through fastmash-sort-supervisor beside fastmash, where both can run safely:
+  HUP/INT/TERM neither ignored (as by nohup) nor blocked, waitable children,
+  pidfds and close_range(CLOEXEC) (Linux 5.11+), both executable, sort not
+  BusyBox or Toybox, a -t byte below 0x80 and a writable, searchable TMPDIR.
+  Otherwise they sort in process. Native spill uses O_TMPFILE, or unlinked
+  private files where TMPDIR lacks it (NFS, older overlayfs); external sorting
+  creates a private directory in TMPDIR when it starts.
   C/C.UTF-8 sorting uses byte order. Language sorting uses pinned Rust ICU rules
-  in the locales whose letter order was verified against glibc 2.43, including
-  punctuation-order differences from GNU; all families use the native spill
-  engine. Keys must be valid, NUL-free UTF-8 there. Language sorting covers the
+  for letters and digits and glibc 2.43's table for punctuation, symbols and
+  spaces, in the locales whose order was verified against glibc 2.43 (some
+  keys with punctuation next to digits, and vulgar fractions, differ); all
+  families use the native spill engine. Keys must be valid, NUL-free UTF-8 there. Language sorting covers the
   glibc locales of aa af agr ak am anp ayc az bem ber bg bhb bi bs byn ce chr crh
   cy de dv en eo es eu ff fil fr fy ga gbm gd gez gl gv ha he hif hne hr hsb ht hy
   ia id ig is it ks kv kw lb lg li lij ln lv mag mfe mg mhr miq mjw mk mn mnw ms
@@ -226,8 +379,8 @@ Runtime and numerical limits:
   -i preserves original output spelling and stable sort ties. It does not fold
   column names or rmdup keys; with rmdup, it only changes requested sort order.
   Case/group identity stays byte-based with ASCII folding. -i is refused under
-  the az_AZ, crh_UA, ku_TR, tr_CY and tr_TR character types, where glibc does
-  not fold i and I.
+  the az_AZ, crh_UA, ku_TR, tr_CY, tr_TR and tt_RU@iqtelif character types,
+  where glibc does not fold i and I.
   Diagnostics remain English; UTF-8 character categories use curly quotations.
   Other numeric locales are refused only when numbers are read or printed
   (count, countunique and strbin results only with --format or --round);
@@ -243,15 +396,16 @@ Mode/antimode share sorted samples with quantiles. MAD/raw MAD share a separate
 buffer transformed in place into absolute deviations. Both families grow in
 memory and report allocation failure; sample storage does not spill to disk.
 
-Field modes: cut/echo FIELD selects fields per record; reverse reverses fields
-within each record (use --no-strict for changing widths). nop/noop consumes input;
---full emits its original records. These modes use growable record storage.
+cut/echo FIELD is a per-row operation that prints the selected fields.
+Field modes: reverse reverses the fields of each record (use --no-strict for
+changing widths); nop/noop consumes input, and with --full emits its records.
+cut and these modes use growable record storage.
 
 Per-row numeric operations: getnum[:TYPE] FIELD extracts a numeric prefix from
 the first matching character run. Types: n (digits), i (signed integer), h (hex),
 o (octal), p (digits/dot, default), d (signed digits/dot). No match, conversion
 failure or known range error produces zero. Integer conversion uses signed 64-bit
-range. Numeric type parameters are refused; use a character type from this list.
+range. Numeric type parameters are errors; use a character type from this list.
 round, floor, ceil, trunc and frac FIELD transform each selected number per row.
 round uses nearest integer with ties away from zero; frac keeps the signed
 fraction. Actual zero becomes positive zero. Unlike GNU 1.9, negative NaN remains
@@ -271,9 +425,71 @@ used; missing cells then use --filler (default N/A). Headers are ordinary rows.
 Transpose retains present fields and compact indexes in memory, without fixed
 row/column limits or disk spill; allocation failure is reported before output.
 rmdup/dedup FIELD retains the first row for each single key. Unique keys grow
-in memory and do not spill; -s uses external sorting in C/C.UTF-8 and native
-sorting in the supported language locales.
+in memory and do not spill; -s uses external sorting in C/C.UTF-8 where it can
+run (see above) and native sorting otherwise, as in the language locales.
 Multiple keys are not supported (status 77).
+
+Table health: health inspects every accepted data record and reports inconsistent
+widths, blank or duplicated header labels, and absent, empty or candidate-missing
+fields. Missing indicators are exact NA, N/A or NaN tokens in any letter case,
+without trimming; they may be valid codes. Six cell counts partition each field:
+absent, empty, candidate missing, integer, other number and text. Classification
+uses whole-field numeric syntax in the effective locale, without arithmetic.
+Integers allow leading numeric whitespace, an optional sign and decimal digits;
+fractional, exponent, hexadecimal and recognized nonfinite encodings are other
+numbers. Trailing bytes make a value text.
+Cell counts exclude the Input header and include absences before a field appears.
+Absent, empty and candidate-missing values do not participate in type inference.
+Numeric majorities infer integer if all numeric encodings are integers, otherwise
+number; text majorities infer text. Ties and no eligible values are undetermined.
+mixed_types observes numeric/text coexistence; inferred integer/number expectations
+report incompatible text as type_mismatch. Inferred text does not reject numbers.
+type FIELD integer|number|text supplies a type expectation and replaces inference
+for that field. Type checks exempt absent, empty and candidate-missing values.
+required FIELD rejects absent and empty values; nonmissing FIELD also rejects
+candidate missing tokens. If both are supplied, nonmissing is the one presence
+rule. Literal NA can pass required/text checks. width N declares the field count,
+including zero, checking both the Input header and data records. Without it, an
+Input header defines the width; otherwise the most frequent full-input width does,
+with ties choosing the smaller width. Width does not declare fields on its own.
+FIELD is one existing selector, without lists, ranges or pairs. Ordinary input
+accepts positive decimal positions or escaped exact header names, including numeric
+names. Vnlog numeric selectors remain names. Named rules require a unique full-byte
+Input-header match; ordinary positions work even with duplicated headers. Positions
+never observed are tracked sparsely, including their absent cells.
+Controls can occur in any order. Identical repeats are harmless; conflicting types,
+widths or example limits are errors. A complete ordinary report succeeds with any
+findings. validate requires at least one supplied type, presence or width rule;
+it emits the same report, returning 1 only for declared violations and 0 otherwise.
+Observations and inferred suspicions remain advisory. Empty and header-only input
+do not invent data violations; a declared width still checks an existing header.
+examples N keeps the earliest N examples per finding (default 3, zero hides them),
+each limited to 128 raw bytes. Mixed types reserve the earliest numeric and text
+witnesses when N >= 2, fill remaining slots with earliest unused values and print
+them in input order. Omissions count eligible cells separately from that finding's
+one-field count. Reports disclose omitted and truncated examples.
+Locations count accepted records from 1, including the Input header; filtered
+comments and annotations are excluded. Counts measure records, header fields or
+cells or fields and may overlap. -t, -W, -z, -C, --header-in, -H/--headers and --vnlog
+select input handling; -H/--headers contributes its input meaning to the report.
+Calculation-only options, including --header-out and result delimiters, are errors.
+The report names the effective numeric decimal separator. Field counters, width
+summaries, header bytes and bounded examples grow in memory; checked capacity
+failures refuse the command before report output. Read failures prevent a report;
+write failures fail.
+tsv selects the schema-version-1 report for scripts; readable output is the default.
+Its mandatory header has 13 columns: row_kind, category, basis, field_index,
+field_name, count, count_unit, record_index, expected, observed, sample,
+sample_truncated and examples_omitted. TAB and LF delimit the report even with -z.
+Rows contain fixed ordered summaries, ascending fields and positive findings,
+each immediately followed by its retained examples. count_unit distinguishes
+data_records, header_records, header_fields, cells and fields; finding counts
+must not be added into a total of bad records. Inapplicable cells are empty.
+Both renderers escape backslash, TAB, LF, CR and NUL as \\, \t, \n, \r and \0;
+other non-printable/non-ASCII bytes use uppercase \xHH. Labels remain complete;
+only samples are bounded to 128 raw bytes. Repeating tsv is harmless, and it
+preserves validation status and observations. The schema's complete row mapping is
+at https://fastmash.io/guide/table-health.html.
 
 base64 FIELD encodes complete raw field bytes using padded standard base64.
 debase64 FIELD strictly decodes it; whitespace, bad padding and noncanonical

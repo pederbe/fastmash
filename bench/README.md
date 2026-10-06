@@ -45,22 +45,24 @@ other busy programs first: a quiet machine gives stable numbers.
 
 ## Example output
 
-From the AMD desktop under WSL2 used for the published results:
+From the AMD Ryzen 7 9800X3D desktop on native CachyOS Linux, using the
+0.1.0 release binary on 6 October 2026. The kit uses a simpler timing method and no cgroup limit,
+so its values need not match the controlled release measurements:
 
 ```text
 Fastmash benchmark kit: fastmash 0.1.0 vs datamash (GNU datamash) 1.9
-CPU: (your CPU model); Linux (your kernel); LC_ALL=C; median of 3 runs (built-in timer)
+CPU: AMD Ryzen 7 9800X3D 8-Core Processor; Linux 7.2.9-1-cachyos; LC_ALL=C; median of 3 runs (built-in timer)
 
 | Job | Arguments | datamash (ms) | fastmash (ms) | datamash / fastmash |
 | --- | --- | ---: | ---: | ---: |
-| refgene-quantiles | `q1 9 median 9 q3 9 iqr 9` | 57.8 | 15.5 | 3.74x |
-| refgene-transcripts | `-s -g 13 count 2 collapse 2` | 111.4 | 37.4 | 2.98x |
-| refgene-exons | `-s -g 13 count 9 min 9 max 9 mean 9 median 9` | 158.2 | 67.2 | 2.35x |
-| decimal-1000000 | `-H sum 3 mean 3` | 110.3 | 53.2 | 2.07x |
-| decimal-100000 | `-H sum 3 mean 3` | 11.7 | 6.1 | 1.92x |
-| grouped-decimal-100000 | `-H -s -g 2 count 3 mean 3 median 3` | 59.1 | 30.4 | 1.94x |
-| wine-by-quality | `-t ';' -H -s -g 12 count 1 mean 11 median 11` | 7.7 | 2.5 | 3.07x |
-| wine-white-summary | `-t ';' -H mean 9 median 9 min 9 max 9` | 2.1 | 1.5 | 1.41x |
+| refgene-quantiles | `q1 9 median 9 q3 9 iqr 9` | 50.1 | 13.2 | 3.79x |
+| refgene-transcripts | `-s -g 13 count 2 collapse 2` | 45.0 | 26.5 | 1.70x |
+| refgene-exons | `-s -g 13 count 9 min 9 max 9 mean 9 median 9` | 61.8 | 35.7 | 1.73x |
+| decimal-1000000 | `-H sum 3 mean 3` | 105.3 | 46.7 | 2.26x |
+| decimal-100000 | `-H sum 3 mean 3` | 10.6 | 5.2 | 2.03x |
+| grouped-decimal-100000 | `-H -s -g 2 count 3 mean 3 median 3` | 25.4 | 14.5 | 1.76x |
+| wine-by-quality | `-t ';' -H -s -g 12 count 1 mean 11 median 11` | 2.6 | 1.2 | 2.19x |
+| wine-white-summary | `-t ';' -H mean 9 median 9 min 9 max 9` | 1.5 | 1.0 | 1.50x |
 ```
 
 ## Sharing your results

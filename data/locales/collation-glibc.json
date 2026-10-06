@@ -1,0 +1,2150 @@
+{
+ "source": "iso14651_t1_common",
+ "source_sha256": "e1941ce316bb5b1a987553e67728089475453a5225c24f8a88e8df2c1dccbfc5",
+ "unicode_decompositions": "16.0.0",
+ "ignorable": 7733,
+ "contractions": {
+  "004C 00B7": "013F",
+  "004C 0387": "013F",
+  "006C 00B7": "0140",
+  "006C 0387": "0140",
+  "0418 0306": "0419",
+  "0438 0306": "0439",
+  "0627 0653": "0622",
+  "0627 0654": "0623",
+  "0627 0655": "0625",
+  "0648 0654": "0624",
+  "064A 0654": "0626",
+  "09C7 09BE": "09CB",
+  "09C7 09D7": "09CC",
+  "0B47 0B3E": "0B4B",
+  "0B47 0B56": "0B48",
+  "0B47 0B57": "0B4C",
+  "0B92 0BD7": "0B94",
+  "0BC6 0BBE": "0BCA",
+  "0BC6 0BD7": "0BCC",
+  "0BC7 0BBE": "0BCB",
+  "0C46 0C56": "0C48",
+  "0CBF 0CD5": "0CC0",
+  "0CC6 0CC2": "0CCA",
+  "0CC6 0CC2 0CD5": "0CCB",
+  "0CC6 0CD5": "0CC7",
+  "0CC6 0CD6": "0CC8",
+  "0CCA 0CD5": "0CCB",
+  "0D46 0D3E": "0D4A",
+  "0D46 0D57": "0D4C",
+  "0D47 0D3E": "0D4B",
+  "0DD9 0DCA": "0DDA",
+  "0DD9 0DCF": "0DDC",
+  "0DD9 0DCF 0DCA": "0DDD",
+  "0DD9 0DDF": "0DDE",
+  "0DDC 0DCA": "0DDD",
+  "0E4D 0E32": "0E33",
+  "0ECD 0EB2": "0EB3",
+  "0F71 0F72": "0F73",
+  "0F71 0F74": "0F75",
+  "0F71 0F80": "0F81",
+  "0FB2 0F71 0F80": "0F77",
+  "0FB2 0F80": "0F76",
+  "0FB2 0F81": "0F77",
+  "0FB3 0F71 0F80": "0F79",
+  "0FB3 0F80": "0F78",
+  "0FB3 0F81": "0F79",
+  "1025 102E": "1026",
+  "1B05 1B35": "1B06",
+  "1B07 1B35": "1B08",
+  "1B09 1B35": "1B0A",
+  "1B0B 1B35": "1B0C",
+  "1B0D 1B35": "1B0E",
+  "1B11 1B35": "1B12",
+  "1B3A 1B35": "1B3B",
+  "1B3C 1B35": "1B3D",
+  "1B3E 1B35": "1B40",
+  "1B3F 1B35": "1B41",
+  "1B42 1B35": "1B43",
+  "11131 11127": "1112E",
+  "11132 11127": "1112F",
+  "11347 1133E": "1134B",
+  "11347 11357": "1134C",
+  "114B9 114B0": "114BC",
+  "114B9 114BA": "114BB",
+  "114B9 114BD": "114BE",
+  "115B8 115AF": "115BA",
+  "115B9 115AF": "115BB"
+ },
+ "no_fourth_everywhere": [
+  [
+   1376,
+   1376
+  ],
+  [
+   1416,
+   1416
+  ],
+  [
+   1519,
+   1519
+  ],
+  [
+   2144,
+   2154
+  ],
+  [
+   2160,
+   2183
+  ],
+  [
+   2185,
+   2190
+  ],
+  [
+   2229,
+   2229
+  ],
+  [
+   2238,
+   2249
+  ],
+  [
+   2556,
+   2556
+  ],
+  [
+   3165,
+   3165
+  ],
+  [
+   3293,
+   3293
+  ],
+  [
+   3332,
+   3332
+  ],
+  [
+   3718,
+   3718
+  ],
+  [
+   3721,
+   3721
+  ],
+  [
+   3724,
+   3724
+  ],
+  [
+   3726,
+   3731
+  ],
+  [
+   3736,
+   3736
+  ],
+  [
+   3744,
+   3744
+  ],
+  [
+   3752,
+   3753
+  ],
+  [
+   3756,
+   3756
+  ],
+  [
+   5901,
+   5901
+  ],
+  [
+   5919,
+   5919
+  ],
+  [
+   6264,
+   6264
+  ],
+  [
+   6988,
+   6988
+  ],
+  [
+   7305,
+   7306
+  ],
+  [
+   7312,
+   7354
+  ],
+  [
+   7357,
+   7359
+  ],
+  [
+   7418,
+   7418
+  ],
+  [
+   11311,
+   11311
+  ],
+  [
+   11359,
+   11359
+  ],
+  [
+   12590,
+   12591
+  ],
+  [
+   12731,
+   12735
+  ],
+  [
+   13312,
+   19903
+  ],
+  [
+   19968,
+   40959
+  ],
+  [
+   42927,
+   42927
+  ],
+  [
+   42936,
+   42957
+  ],
+  [
+   42960,
+   42961
+  ],
+  [
+   42963,
+   42963
+  ],
+  [
+   42965,
+   42972
+  ],
+  [
+   42994,
+   42998
+  ],
+  [
+   43262,
+   43262
+  ],
+  [
+   43878,
+   43881
+  ],
+  [
+   44032,
+   55203
+  ]
+ ],
+ "reordered_everywhere": [
+  "01EF",
+  "0386",
+  "0388",
+  "0389",
+  "038A",
+  "038C",
+  "038E",
+  "038F",
+  "0390",
+  "03AC",
+  "03AD",
+  "03AE",
+  "03AF",
+  "03B0",
+  "0400",
+  "0401",
+  "0403",
+  "040C",
+  "040D",
+  "040E",
+  "06C0",
+  "0A36"
+ ],
+ "locales": {
+  "aa_DJ": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "aa_ER": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "aa_ET": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "af_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "agr_PE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ak_GH": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "am_ET": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "anp_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ayc_PE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "az_AZ": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     199,
+     199
+    ],
+    [
+     214,
+     214
+    ],
+    [
+     220,
+     220
+    ],
+    [
+     231,
+     231
+    ],
+    [
+     246,
+     246
+    ],
+    [
+     252,
+     252
+    ],
+    [
+     286,
+     287
+    ],
+    [
+     304,
+     305
+    ],
+    [
+     350,
+     351
+    ]
+   ]
+  },
+  "bem_ZM": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ber_MA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     11573,
+     11574
+    ],
+    [
+     11614,
+     11614
+    ]
+   ]
+  },
+  "bg_BG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "bhb_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "bi_VU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "bs_BA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     262,
+     263
+    ],
+    [
+     268,
+     269
+    ],
+    [
+     272,
+     273
+    ],
+    [
+     352,
+     353
+    ],
+    [
+     381,
+     382
+    ],
+    [
+     452,
+     460
+    ]
+   ]
+  },
+  "byn_ER": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ce_RU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "chr_US": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "crh_RU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "cy_GB": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "de_AT": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "de_BE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "de_CH": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "de_DE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "de_IT": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "de_LI": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "de_LU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "dv_MV": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_AG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_AU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_BW": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_DK": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_GB": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_HK": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_IE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_IL": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_NG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_NZ": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_PH": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_SC": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_SE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_SG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_US": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_ZM": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "en_ZW": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "eo": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     264,
+     265
+    ],
+    [
+     284,
+     285
+    ],
+    [
+     292,
+     293
+    ],
+    [
+     308,
+     309
+    ],
+    [
+     348,
+     349
+    ],
+    [
+     364,
+     365
+    ]
+   ]
+  },
+  "eo_US": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     264,
+     265
+    ],
+    [
+     284,
+     285
+    ],
+    [
+     292,
+     293
+    ],
+    [
+     308,
+     309
+    ],
+    [
+     348,
+     349
+    ],
+    [
+     364,
+     365
+    ]
+   ]
+  },
+  "es_AR": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_BO": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_CL": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_CO": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_CR": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_CU": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_DO": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_EC": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_ES": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_GT": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_HN": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_MX": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_NI": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_PA": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_PE": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_PR": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_PY": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_SV": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_US": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_UY": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "es_VE": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "eu_ES": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "eu_FR": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ff_SN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "fil_PH": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "fr_BE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "fr_CH": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "fr_FR": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "fr_LU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "fy_DE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "fy_NL": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ga_IE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "gbm_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "gd_GB": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "gez_ER": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "gez_ET": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "gl_ES": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     209,
+     209
+    ],
+    [
+     241,
+     241
+    ]
+   ]
+  },
+  "gv_GB": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ha_NG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     385,
+     385
+    ],
+    [
+     394,
+     394
+    ],
+    [
+     408,
+     409
+    ],
+    [
+     435,
+     436
+    ],
+    [
+     595,
+     595
+    ],
+    [
+     599,
+     599
+    ]
+   ]
+  },
+  "he_IL": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "hif_FJ": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "hne_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "hr_HR": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     262,
+     263
+    ],
+    [
+     268,
+     269
+    ],
+    [
+     272,
+     273
+    ],
+    [
+     352,
+     353
+    ],
+    [
+     381,
+     382
+    ],
+    [
+     452,
+     460
+    ]
+   ]
+  },
+  "hsb_DE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     262,
+     263
+    ],
+    [
+     268,
+     269
+    ],
+    [
+     282,
+     283
+    ],
+    [
+     321,
+     322
+    ],
+    [
+     344,
+     345
+    ],
+    [
+     352,
+     353
+    ],
+    [
+     377,
+     378
+    ],
+    [
+     381,
+     382
+    ]
+   ]
+  },
+  "ht_HT": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "hy_AM": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ia_FR": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "id_ID": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ig_NG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     7748,
+     7749
+    ],
+    [
+     7882,
+     7885
+    ],
+    [
+     7908,
+     7909
+    ]
+   ]
+  },
+  "is_IS": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     193,
+     193
+    ],
+    [
+     196,
+     198
+    ],
+    [
+     201,
+     201
+    ],
+    [
+     205,
+     205
+    ],
+    [
+     208,
+     208
+    ],
+    [
+     211,
+     211
+    ],
+    [
+     214,
+     214
+    ],
+    [
+     216,
+     216
+    ],
+    [
+     218,
+     218
+    ],
+    [
+     221,
+     222
+    ],
+    [
+     225,
+     225
+    ],
+    [
+     228,
+     230
+    ],
+    [
+     233,
+     233
+    ],
+    [
+     237,
+     237
+    ],
+    [
+     240,
+     240
+    ],
+    [
+     243,
+     243
+    ],
+    [
+     246,
+     246
+    ],
+    [
+     248,
+     248
+    ],
+    [
+     250,
+     250
+    ],
+    [
+     253,
+     254
+    ],
+    [
+     272,
+     273
+    ]
+   ]
+  },
+  "it_CH": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "it_IT": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ks_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "kv_RU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "kw_GB": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "lb_LU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "lg_UG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "li_BE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "li_NL": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "lij_IT": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ln_CD": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     390,
+     390
+    ],
+    [
+     400,
+     400
+    ],
+    [
+     596,
+     596
+    ],
+    [
+     603,
+     603
+    ]
+   ]
+  },
+  "lv_LV": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     256,
+     257
+    ],
+    [
+     268,
+     269
+    ],
+    [
+     274,
+     275
+    ],
+    [
+     290,
+     291
+    ],
+    [
+     298,
+     299
+    ],
+    [
+     310,
+     311
+    ],
+    [
+     315,
+     316
+    ],
+    [
+     325,
+     326
+    ],
+    [
+     332,
+     333
+    ],
+    [
+     342,
+     343
+    ],
+    [
+     352,
+     353
+    ],
+    [
+     362,
+     363
+    ],
+    [
+     381,
+     382
+    ]
+   ]
+  },
+  "mag_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "mfe_MU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "mg_MG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "mhr_RU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "miq_NI": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "mjw_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "mk_MK": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "mn_MN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "mnw_MM": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ms_MY": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "mt_MT": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     266,
+     267
+    ],
+    [
+     288,
+     289
+    ],
+    [
+     294,
+     295
+    ],
+    [
+     379,
+     380
+    ]
+   ]
+  },
+  "nds_DE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "nds_NL": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "nhn_MX": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "niu_NU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "niu_NZ": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "nl_AW": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "nl_BE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "nl_NL": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "nr_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "nso_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "om_ET": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "om_KE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "os_RU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     198,
+     198
+    ],
+    [
+     230,
+     230
+    ],
+    [
+     1236,
+     1237
+    ]
+   ]
+  },
+  "pa_PK": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "pap_AW": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "pap_CW": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "pl_PL": {
+   "weighed": [
+    32,
+    160
+   ],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     211,
+     211
+    ],
+    [
+     243,
+     243
+    ],
+    [
+     260,
+     263
+    ],
+    [
+     280,
+     281
+    ],
+    [
+     321,
+     324
+    ],
+    [
+     346,
+     347
+    ],
+    [
+     377,
+     380
+    ]
+   ]
+  },
+  "pt_BR": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "pt_PT": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "quz_PE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "rif_MA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ro_RO": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     194,
+     194
+    ],
+    [
+     206,
+     206
+    ],
+    [
+     226,
+     226
+    ],
+    [
+     238,
+     238
+    ],
+    [
+     258,
+     259
+    ],
+    [
+     350,
+     351
+    ],
+    [
+     354,
+     355
+    ],
+    [
+     536,
+     539
+    ]
+   ]
+  },
+  "ru_RU": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ru_UA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "rw_RW": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "sat_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "scn_IT": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "sd_PK": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "sgs_LT": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "sid_ET": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "sm_WS": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "so_DJ": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "so_ET": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "so_KE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "so_SO": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "sq_AL": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     199,
+     199
+    ],
+    [
+     203,
+     203
+    ],
+    [
+     231,
+     231
+    ],
+    [
+     235,
+     235
+    ]
+   ]
+  },
+  "sq_MK": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     199,
+     199
+    ],
+    [
+     203,
+     203
+    ],
+    [
+     231,
+     231
+    ],
+    [
+     235,
+     235
+    ]
+   ]
+  },
+  "sr_ME": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     262,
+     263
+    ],
+    [
+     268,
+     269
+    ],
+    [
+     272,
+     273
+    ],
+    [
+     352,
+     353
+    ],
+    [
+     381,
+     382
+    ],
+    [
+     452,
+     460
+    ]
+   ]
+  },
+  "ss_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ssy_ER": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "st_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "su_ID": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "sw_KE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "sw_TZ": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ta_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ta_LK": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "tcy_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "the_NP": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ti_ER": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ti_ET": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "tig_ER": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "tk_TM": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     196,
+     196
+    ],
+    [
+     199,
+     199
+    ],
+    [
+     209,
+     209
+    ],
+    [
+     214,
+     214
+    ],
+    [
+     220,
+     221
+    ],
+    [
+     228,
+     228
+    ],
+    [
+     231,
+     231
+    ],
+    [
+     241,
+     241
+    ],
+    [
+     246,
+     246
+    ],
+    [
+     252,
+     253
+    ],
+    [
+     255,
+     255
+    ],
+    [
+     327,
+     328
+    ],
+    [
+     330,
+     331
+    ],
+    [
+     350,
+     351
+    ],
+    [
+     376,
+     376
+    ],
+    [
+     381,
+     382
+    ],
+    [
+     1025,
+     1025
+    ],
+    [
+     1105,
+     1105
+    ],
+    [
+     1174,
+     1175
+    ],
+    [
+     1186,
+     1187
+    ],
+    [
+     1198,
+     1199
+    ],
+    [
+     1240,
+     1241
+    ],
+    [
+     1256,
+     1257
+    ]
+   ]
+  },
+  "tn_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "to_TO": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "tok": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "tpi_PG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ts_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "unm_US": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ur_IN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ur_PK": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "uz_UZ": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "ve_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "wa_BE": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "wae_CH": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "wal_ET": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "wo_SN": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "xh_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "yo_NG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": [
+    [
+     7778,
+     7779
+    ],
+    [
+     7864,
+     7865
+    ],
+    [
+     7884,
+     7885
+    ]
+   ]
+  },
+  "yuw_PG": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "zgh_MA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  },
+  "zu_ZA": {
+   "weighed": [],
+   "other_weighed": [],
+   "no_fourth": []
+  }
+ }
+}

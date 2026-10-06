@@ -130,7 +130,7 @@ pub(super) fn excess_kurtosis(
 
 #[cfg(test)]
 mod tests {
-    use super::super::{Kind, moment_value};
+    use super::super::{Kind, operation_set::moment_value};
     use super::*;
 
     #[test]

@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Fastmash: fast command-line statistics</title>
-<meta name="description" content="Fastmash is a fast, drop-in implementation of the GNU datamash command language, written in Rust. Up to 4x faster on real jobs.">
+<title>Fastmash: fast statistics and table workflows</title>
+<meta name="description" content="Fast command-line statistics for text and quoted CSV. Datamash commands, weighted means, complete-record selection, table health and dataset comparison.">
 <meta property="og:site_name" content="Fastmash">
-<meta property="og:title" content="Fastmash is faster than GNU datamash">
-<meta property="og:description" content="Command-line statistics for delimited text, with the datamash commands you already know. Up to 4x faster.">
+<meta property="og:title" content="Fastmash: fast statistics and table workflows">
+<meta property="og:description" content="The datamash commands you know, plus quoted CSV, weighted means, record selection, table health and dataset comparison. Written in Rust.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://fastmash.io/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Fastmash: faster than GNU datamash, same commands.">
+<meta property="og:image:alt" content="Fastmash: Fast statistics. Smarter tables. Datamash commands, quoted CSV and weighted means. Check tables, select records and compare datasets.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0D1117">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'">
@@ -24,13 +24,15 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preload" href="fonts/source-code-pro-v11-all-charsets-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="landing.css">
+<noscript><link rel="stylesheet" href="landing-noscript.css"></noscript>
+<script src="landing.js" defer></script>
 <script type="application/ld+json">
 {
  "@context": "https://schema.org",
  "@type": "SoftwareApplication",
  "name": "Fastmash",
  "url": "https://fastmash.io/",
- "description": "Fast command-line statistics for delimited text: a Rust implementation of the GNU datamash command language, up to four times faster on real jobs.",
+ "description": "Fast command-line statistics and table workflows for delimited text and quoted CSV, with GNU datamash commands and portable numerical results.",
  "applicationCategory": "DeveloperApplication",
  "operatingSystem": "Linux",
  "softwareVersion": "@VERSION@",
@@ -40,7 +42,7 @@
  ],
  "codeRepository": "https://github.com/pederbe/fastmash",
  "downloadUrl": "https://github.com/pederbe/fastmash/releases",
- "installUrl": "https://fastmash.io/install.html",
+ "installUrl": "https://fastmash.io/install",
  "offers": {
   "@type": "Offer",
   "price": "0",
@@ -70,8 +72,9 @@
 </script>
 </head>
 <body>
+<a class="skip-link" href="#main-content">Skip to content</a>
 <header class="nav">
-  <a class="brand" href="./" aria-label="Fastmash home"><img class="brand-mark" src="favicon.svg" alt="" width="22" height="22">fastmash</a>
+  <a class="brand" href="./" aria-label="Fastmash home"><img class="brand-mark" src="favicon.svg" alt="" width="22" height="22">Fastmash</a>
   <nav aria-label="Main">
     <a href="introduction.html">Docs</a>
     <a href="benchmarks/index.html">Benchmarks</a>
@@ -79,12 +82,13 @@
   </nav>
 </header>
 
-<main>
+<main id="main-content" tabindex="-1">
   <section class="hero">
     <div class="hero-copy">
-      <p class="eyebrow">Command-line statistics for delimited text</p>
-      <h1>Fastmash is faster than GNU&nbsp;datamash<a class="star" href="#fine-print" aria-label="See the fine print">*</a></h1>
-      <p class="lede">The datamash commands you already know: sums, quantiles, grouping, crosstabs and 70 more operations. Written in Rust, up to <strong>4× faster</strong> on real jobs.</p>
+      <p class="eyebrow">Rust-powered statistics for text and CSV</p>
+      <h1>Fast statistics.<br><span class="hero-accent">Smarter tables.</span></h1>
+      <p class="lede">The datamash commands you already know, with quoted CSV, weighted means and complete-record selection. Inspect table health. Compare datasets. Get the same numbers on every supported machine.</p>
+      <p class="hero-proof">Over 70 operations and modes · <a href="#speed-title">4.2× on RefGene quartiles<span aria-hidden="true">*</span><span class="sr-only">, see benchmark details below</span></a></p>
       <div class="installer" id="install">
         <div class="install-tabs" role="tablist" aria-label="Ways to install">
           <button type="button" role="tab" id="tab-script" aria-controls="panel-script" aria-selected="true">Script</button>
@@ -95,75 +99,120 @@
         </div>
         <div class="install-panel" role="tabpanel" id="panel-script" aria-labelledby="tab-script">
           <div class="install">
-            <code id="cmd-script">curl -fsSL https://fastmash.io/install.sh | sh</code>
+            <code id="cmd-script" tabindex="0">curl -fsSL https://fastmash.io/install.sh | sh</code>
             <button type="button" class="copy" data-copy="cmd-script" aria-label="Copy the Script install command">Copy</button>
           </div>
           <p class="install-note">Installs the latest release into ~/.local/bin after checking its checksum.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-cargo" aria-labelledby="tab-cargo">
+        <div class="install-panel" role="tabpanel" id="panel-cargo" aria-labelledby="tab-cargo" hidden>
           <div class="install">
-            <code id="cmd-cargo">cargo install --locked fastmash</code>
+            <code id="cmd-cargo" tabindex="0">cargo install --locked fastmash</code>
             <button type="button" class="copy" data-copy="cmd-cargo" aria-label="Copy the Cargo install command">Copy</button>
           </div>
           <p class="install-note">Builds from source with your Rust toolchain.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-binstall" aria-labelledby="tab-binstall">
+        <div class="install-panel" role="tabpanel" id="panel-binstall" aria-labelledby="tab-binstall" hidden>
           <div class="install">
-            <code id="cmd-binstall">cargo binstall fastmash</code>
+            <code id="cmd-binstall" tabindex="0">cargo binstall fastmash</code>
             <button type="button" class="copy" data-copy="cmd-binstall" aria-label="Copy the cargo-binstall install command">Copy</button>
           </div>
           <p class="install-note">Downloads the prebuilt release binaries with cargo-binstall.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-deb" aria-labelledby="tab-deb">
+        <div class="install-panel" role="tabpanel" id="panel-deb" aria-labelledby="tab-deb" hidden>
           <div class="install">
-            <code id="cmd-deb">curl -LO https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash_@VERSION@_amd64.deb &amp;&amp; sudo apt install ./fastmash_@VERSION@_amd64.deb</code>
+            <code id="cmd-deb" tabindex="0">curl -LO https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash_@VERSION@_amd64.deb &amp;&amp; sudo apt install ./fastmash_@VERSION@_amd64.deb</code>
             <button type="button" class="copy" data-copy="cmd-deb" aria-label="Copy the Debian/Ubuntu install command">Copy</button>
           </div>
           <p class="install-note">The .deb package for Debian 10, Ubuntu 20.04 and newer.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-rpm" aria-labelledby="tab-rpm">
+        <div class="install-panel" role="tabpanel" id="panel-rpm" aria-labelledby="tab-rpm" hidden>
           <div class="install">
-            <code id="cmd-rpm">sudo dnf install https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash-@VERSION@-1.x86_64.rpm</code>
+            <code id="cmd-rpm" tabindex="0">sudo dnf install https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash-@VERSION@-1.x86_64.rpm</code>
             <button type="button" class="copy" data-copy="cmd-rpm" aria-label="Copy the Fedora/RHEL install command">Copy</button>
           </div>
           <p class="install-note">The .rpm package for Fedora, RHEL 8 and newer.</p>
         </div>
         <p class="install-alt">Linux x86-64 and WSL2 · <a href="install.html">more about installing</a></p>
       </div>
+      <p class="sr-only" id="copy-status" role="status" aria-live="polite"></p>
       <div class="actions">
         <a class="button primary" href="quick-start.html">Get started</a>
         <a class="button" href="benchmarks/index.html">See the benchmarks</a>
       </div>
     </div>
 
-    <figure class="terminal" aria-label="Example: grouped statistics with fastmash">
-      <div class="terminal-bar" aria-hidden="true"><span></span><span></span><span></span></div>
-<pre><code><span class="prompt">$</span> fastmash -H -s -g site median reading &lt; data.tsv
-<span class="out">GroupBy(site)	median(reading)
-east	4
-west	6</span>
-<span class="prompt">$</span> fastmash -s -g 1 q1 2 median 2 q3 2 &lt; genes.tsv
-<span class="out">chr1	1.5	3	6
-chr2	2	4	7.5</span>
+    <figure class="terminal" aria-label="Example: colored help and a quoted CSV summary with Fastmash">
+      <div class="terminal-bar"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span><small>fastmash · terminal</small></div>
+<pre tabindex="0"><code><span class="prompt">$</span> fastmash --help
+<strong>Operations:</strong>
+  <span class="cli-syntax">sum</span>       Sum the selected field
+  <span class="cli-syntax">mean</span>      Arithmetic mean of the selected field
+  <span class="cli-syntax">wmean</span>     Weighted mean of a VALUE:WEIGHT field pair
+  <span class="terminal-omission">… help excerpt …</span>
+
+<span class="prompt">$</span> fastmash --csv -H -s -g region \
+    --result-name=1:total sum revenue &lt; sales.csv
+GroupBy(region),total
+east,4
+"west,coast",8
 <span class="prompt">$</span> <span class="cursor" aria-hidden="true"></span></code></pre>
+      <figcaption>Readable help in color. Clean data for the next step in your pipeline.</figcaption>
     </figure>
+  </section>
+
+  <section class="workflows" aria-labelledby="workflows-title">
+    <div class="section-head">
+      <p class="eyebrow">From raw exports to useful answers</p>
+      <h2 id="workflows-title">More of your workflow, in one command</h2>
+      <p>Keep familiar field selectors and grouping. Add the tools that make daily table work easier.</p>
+    </div>
+    <div class="workflow-grid">
+      <article class="workflow-card">
+        <p class="workflow-index" aria-hidden="true">01 / REPORT</p>
+        <h3>CSV in. Named results out.</h3>
+        <p>Read quoted fields with commas and line breaks. Write CSV reports with stable column names, grouping and weighted means.</p>
+        <pre tabindex="0"><code>fastmash --csv -H -s -g region \
+  --result-name=1:average \
+  wmean price:units &lt; sales.csv</code></pre>
+        <a href="guide/csv-and-result-names.html">CSV and result names</a>
+      </article>
+      <article class="workflow-card">
+        <p class="workflow-index" aria-hidden="true">02 / INSPECT</p>
+        <h3>Understand your table.</h3>
+        <p>See widths, missing values and mixed types. Validate the rules you supply, or keep the highest and lowest complete records with stable ties.</p>
+        <pre tabindex="0"><code>fastmash --header-in health \
+  type price number \
+  nonmissing id validate &lt; sales.tsv</code></pre>
+        <a href="guide/table-health.html">Table health</a>
+        <a href="guide/top-n-records.html">Highest and lowest records</a>
+      </article>
+      <article class="workflow-card">
+        <p class="workflow-index" aria-hidden="true">03 / COMPARE</p>
+        <h3>See what changed.</h3>
+        <p>Align summaries from two datasets, even when headers move. Rank absolute or percentage changes, with added and removed keys still visible.</p>
+        <pre tabindex="0"><code>fastmash --csv -H -g region \
+  compare before.csv after.csv \
+  rank 1 percent limit 10 sum revenue</code></pre>
+        <a href="guide/dataset-comparison.html">Dataset comparison</a>
+      </article>
+    </div>
   </section>
 
   <section class="speed" aria-labelledby="speed-title">
     <div class="section-head">
-      <h2 id="speed-title">Up to four times faster</h2>
-      <p>Times faster than GNU datamash 1.9 on the core jobs, on two machines. Same data, same output, release binaries.</p>
+      <h2 id="speed-title">4.2× on RefGene quartiles</h2>
+      <p>Speed relative to GNU datamash 1.9 on selected core jobs. Two native Linux machines, the same data and output, exact release binaries.</p>
     </div>
-    <div class="chart">
+    <div class="chart" tabindex="0" role="region" aria-label="Benchmark chart">
 <!-- chart -->
     </div>
-    <p class="fine-print" id="fine-print">* In 0.1.0, except for sorting data far larger than memory. <a href="benchmarks/index.html">All results and the method</a></p>
+    <p class="fine-print" id="fine-print">* Six named host/job comparisons are slower: disk-spilling sorts, Intel many keys and Intel distinct-value geometric mean. Three further comparisons are inconclusive. <a href="benchmarks/index.html">All results and the method</a></p>
   </section>
 
   <section class="better" aria-labelledby="better-title">
     <div class="section-head">
       <h2 id="better-title">And better in other ways</h2>
-      <p>Where GNU datamash 1.9 guesses, crashes or depends on the machine, Fastmash doesn't.</p>
+      <p>Portable arithmetic, built-in locale data and clear handling of inputs that GNU datamash 1.9 cannot safely process.</p>
     </div>
     <div class="compare" role="table" aria-label="GNU datamash 1.9 compared with Fastmash">
       <div class="compare-row compare-head" role="row">
@@ -205,11 +254,11 @@ chr2	2	4	7.5</span>
 
   <section class="switch" aria-labelledby="switch-title">
     <div class="switch-copy">
-      <h2 id="switch-title">Switching is one word</h2>
-      <p>Same operations, options, field selectors, grouping, headers and output. Keep your scripts and change the program name.</p>
+      <h2 id="switch-title">Keep the commands you know</h2>
+      <p>GNU datamash's operations, options, field selectors, grouping and headers. Most scripts can switch by changing the program name; the migration guide covers the documented differences.</p>
       <a class="button accent-edge" href="guide/migrating.html">Migrating from datamash</a>
     </div>
-<pre class="diff" aria-label="Replacing datamash with fastmash in a script"><code><span class="del">- datamash -t, -s -g 1 mean 3 sstdev 3 &lt; sales.csv</span>
+<pre tabindex="0" class="diff" aria-label="Replacing datamash with fastmash in a script"><code><span class="del">- datamash -t, -s -g 1 mean 3 sstdev 3 &lt; sales.csv</span>
 <span class="add">+ fastmash -t, -s -g 1 mean 3 sstdev 3 &lt; sales.csv</span></code></pre>
   </section>
 </main>
@@ -221,8 +270,5 @@ chr2	2	4	7.5</span>
     <span class="profiles"><a href="https://github.com/pederbe" rel="me">GitHub</a> · <a href="https://www.linkedin.com/in/pederbergan/" rel="me">LinkedIn</a> · <a href="https://bsky.app/profile/pederbe.dev" rel="me">Bluesky</a></span></p>
   <p class="sibling">Also by Peder: <a href="https://udpstp.com/">udpstp</a>, network capacity testing</p>
 </footer>
-<p class="sr-only" id="copy-status" role="status" aria-live="polite"></p>
-
-<script src="landing.js"></script>
 </body>
 </html>

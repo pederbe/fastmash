@@ -391,7 +391,7 @@ fn cross_environment_corpus() {
     }
     for locale in ["en_US.UTF-8", "de_DE.UTF-8"] {
         for spill in [false, true] {
-            // Approved ICU ordering and raw identity ties, from the policy tests.
+            // Documented ICU ordering and raw identity ties, from the policy tests.
             check(
                 "language-order",
                 &args(&["-sg1", "collapse", "2"]),

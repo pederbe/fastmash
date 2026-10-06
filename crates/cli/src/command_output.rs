@@ -1,9 +1,9 @@
 //! Command output and explicit finalization for standard output.
+use super::buffered_stdout::{BufferedStdout, Completion};
 use super::{
-    Failure, Operation, failure, headers, linux, options, os_failure, records, standard_io,
+    Failure, OperationSet, failure, headers, linux, options, os_failure, records, standard_io,
     unsupported,
 };
-use headers::output::{Buffered, Completion};
 use std::{
     io::{self, IsTerminal, Write},
     marker::PhantomData,
@@ -11,29 +11,25 @@ use std::{
     rc::Rc,
 };
 
+/// Where a calculation writes: implemented by [`Results`].
 pub(super) trait CommandOutput {
-    fn cell(&mut self, _row: &[u8], _column: &[u8], _value: &[u8]) -> Result<(), Failure> {
-        unreachable!("crosstab uses buffered output")
-    }
-    fn end(&mut self, _options: &options::Options) -> Result<(), Failure> {
-        Ok(())
-    }
+    fn cell(&mut self, row: &[u8], column: &[u8], value: &[u8]) -> Result<(), Failure>;
+    fn end(&mut self, options: &options::Options) -> Result<(), Failure>;
     fn first(
         &mut self,
-        _record: &[u8],
-        _operations: &[Operation],
-        _keys: &[u64],
-    ) -> Result<(), Failure> {
-        Ok(())
-    }
-    fn key(&mut self, _bytes: &[u8], _separator: u8) {
-        unreachable!("grouping uses buffered output")
-    }
-    fn result(&mut self, _bytes: &[u8], _separator: u8) {
-        unreachable!("grouping uses buffered output")
-    }
+        record: &[u8],
+        operations: &OperationSet,
+        keys: &[u64],
+    ) -> Result<(), Failure>;
+    fn key(&mut self, bytes: &[u8], separator: u8);
+    fn first_decoded(
+        &mut self,
+        record: super::csv_input::View<'_>,
+        operations: &OperationSet,
+        keys: &[u64],
+    ) -> Result<(), Failure>;
+    fn result(&mut self, bytes: &[u8], separator: u8);
     fn row(&mut self, fields: &[Vec<u8>], separator: u8) -> Result<(), Failure>;
-    fn empty(&mut self) -> Result<(), Failure>;
 }
 
 pub(super) fn full_prefix(
@@ -49,76 +45,124 @@ pub(super) fn full_prefix(
     }
 }
 
-pub(super) fn warn_full(options: &options::Options, program: &[u8]) {
-    if options.full && !options.linewise {
-        // GNU's compatibility warning is not a fatal diagnostic. GNU prints its
-        // own name; Fastmash prints the invoked name, like other diagnostics.
-        let mut stderr = standard_io::Stderr;
-        let _ = stderr.write_all(program).and_then(|()| {
-            stderr.write_all(b": Using -f/--full with non-linewise operations is deprecated and will be disabled in a future release.\n")
-        });
-    }
-}
-
-pub(super) struct Plain<'a, W> {
-    pub writer: &'a mut W,
-    pub record_end: u8,
-}
-impl<W: Write> CommandOutput for Plain<'_, W> {
-    fn row(&mut self, fields: &[Vec<u8>], separator: u8) -> Result<(), Failure> {
-        let mut bytes = Vec::new();
-        let length = fields
-            .iter()
-            .try_fold(fields.len().max(1), |length, field| {
-                length.checked_add(field.len())
-            })
-            .ok_or_else(|| unsupported("output memory allocation failed"))?;
-        bytes
-            .try_reserve_exact(length)
-            .map_err(|_| unsupported("output memory allocation failed"))?;
-        for (at, field) in fields.iter().enumerate() {
-            if at != 0 {
-                bytes.push(separator);
-            }
-            bytes.extend_from_slice(field);
-        }
-        bytes.push(self.record_end);
-        records::write_output(self.writer, &bytes).map_err(|e| os_failure(&e, false))
-    }
-    fn empty(&mut self) -> Result<(), Failure> {
-        self.writer.flush().map_err(|e| os_failure(&e, false))
-    }
-}
-
-pub(super) struct Header<'a, W> {
-    pub buffer: Buffered<'a, W>,
+/// A calculation's output through [`BufferedStdout`]: the output header, named
+/// from the Input header or generated, then result rows, Full rows or a
+/// crosstab table.
+pub(super) struct Results<'a, W> {
+    pub buffer: BufferedStdout<'a, W>,
     table: Option<super::crosstab::Table>,
     input: records::Separator,
     output: u8,
+    csv: bool,
     record_end: u8,
     named: bool,
     enabled: bool,
     full: bool,
     vnlog: bool,
     profile: fastmash_conversion::profile::Profile,
+    result_names: &'a super::result_names::ResultNames,
 }
-impl<'a, W: Write> Header<'a, W> {
-    pub fn new(buffer: Buffered<'a, W>, options: &options::Options) -> Self {
+impl<'a, W: Write> Results<'a, W> {
+    pub fn new(buffer: BufferedStdout<'a, W>, options: &'a options::Options) -> Self {
         Self {
             buffer,
             table: options.crosstab.then(super::crosstab::Table::default),
             input: options.input,
             output: options.output,
+            csv: options.csv_out,
             record_end: options.record_end,
             named: options.header_in,
             enabled: options.header_out,
             full: options.full,
             vnlog: options.vnlog,
             profile: options.presentation.profile,
+            result_names: &options.result_names,
         }
     }
 }
-impl<W: Write> CommandOutput for Header<'_, W> {
+impl<W: Write> Results<'_, W> {
+    fn full_header<'r>(&mut self, fields: impl Iterator<Item = &'r [u8]>) {
+        for (index, bytes) in fields.enumerate() {
+            let generated = (!self.named).then(|| headers::generated(index as u64 + 1));
+            let label = generated
+                .as_ref()
+                .map_or_else(|| headers::label(bytes), |label| label.as_bytes());
+            if self.csv {
+                self.buffer.csv_field(label);
+            } else {
+                self.buffer.formatted(label);
+            }
+            self.buffer.emit(headers::Part::Separator(self.output));
+        }
+    }
+
+    /// The Output header of a sorted record that keeps only its selected
+    /// fields (never with `--full`, nor named from an Input header):
+    /// `field` looks each one up.
+    pub fn first_projected<'r>(
+        &mut self,
+        field: impl FnMut(u64) -> Result<&'r [u8], Failure>,
+        operations: &OperationSet,
+        keys: &[u64],
+    ) -> Result<(), Failure> {
+        if !self.enabled {
+            return Ok(());
+        }
+        debug_assert!(!self.full && !self.vnlog && !self.named);
+        self.selected(field, operations, keys)
+    }
+
+    /// The Output header's Grouping keys, unless `--full` printed the whole
+    /// record, then its requests.
+    fn selected<'r>(
+        &mut self,
+        mut field: impl FnMut(u64) -> Result<&'r [u8], Failure>,
+        operations: &OperationSet,
+        keys: &[u64],
+    ) -> Result<(), Failure> {
+        for &key in keys.iter().filter(|_| !self.full) {
+            let bytes = field(key)?;
+            if self.csv {
+                let generated = (!self.named).then(|| headers::generated(key));
+                let label = generated
+                    .as_ref()
+                    .map_or_else(|| headers::label(bytes), |label| label.as_bytes());
+                self.buffer.csv_parts(&[b"GroupBy(", label, b")"]);
+            } else if self.named {
+                self.buffer.group_header(headers::label(bytes));
+            } else {
+                self.buffer.group_header(headers::generated(key).as_bytes());
+            }
+            self.buffer.emit(headers::Part::Separator(self.output));
+        }
+        let mut requests = Vec::new();
+        super::command_memory::reserve(&mut requests, operations.len())?;
+        requests.extend(operations.requests());
+        if self.csv {
+            return headers::render_fields(
+                &requests,
+                field,
+                (b',', b'\n', self.profile),
+                self.named,
+                self.result_names,
+                |header, separator| {
+                    header.with_fragments(|fragments| self.buffer.csv_parts(fragments));
+                    self.buffer.emit(headers::Part::Separator(separator));
+                },
+            );
+        }
+        headers::render_requests(
+            &requests,
+            field,
+            (self.output, self.record_end, self.profile),
+            self.named,
+            self.result_names,
+            |part| self.buffer.emit(part),
+        )
+    }
+}
+
+impl<W: Write> CommandOutput for Results<'_, W> {
     fn cell(&mut self, row: &[u8], column: &[u8], value: &[u8]) -> Result<(), Failure> {
         self.table
             .as_mut()
@@ -134,7 +178,7 @@ impl<W: Write> CommandOutput for Header<'_, W> {
     fn first(
         &mut self,
         record: &[u8],
-        operations: &[Operation],
+        operations: &OperationSet,
         keys: &[u64],
     ) -> Result<(), Failure> {
         if !self.enabled {
@@ -144,65 +188,70 @@ impl<W: Write> CommandOutput for Header<'_, W> {
             self.buffer.formatted(b"# ");
         }
         if self.full {
-            for (index, span) in records::fields(record, self.input).enumerate() {
-                if self.named {
-                    let name = &record[span.start..span.start + span.length];
-                    let end = name.iter().position(|&b| b == 0).unwrap_or(name.len());
-                    self.buffer.formatted(&name[..end]);
-                } else {
-                    self.buffer
-                        .formatted(format!("field-{}", index + 1).as_bytes());
-                }
-                self.buffer.emit(headers::Part::Separator(self.output));
-            }
+            self.full_header(
+                records::fields(record, self.input)
+                    .map(|span| &record[span.start..span.start + span.length]),
+            );
         }
-        for &field in keys.iter().filter(|_| !self.full) {
-            let span = super::selected_field(record, field, 1, self.input)?;
-            let generated;
-            let name = if self.named {
-                let bytes = &record[span.start..span.start + span.length];
-                &bytes[..bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len())]
-            } else {
-                generated = format!("field-{field}");
-                generated.as_bytes()
-            };
-            self.buffer.group_header(name);
-            self.buffer.emit(headers::Part::Separator(self.output));
-        }
-        let mut requests = Vec::new();
-        super::command_memory::reserve(&mut requests, operations.len())?;
-        requests.extend(operations.iter().map(|op| (op.kind, op.selector)));
-        headers::render_selectors(
-            record,
-            &requests,
-            self.input,
-            (self.output, self.record_end, self.profile),
-            self.named,
-            1,
-            |part| self.buffer.emit(part),
-        )
+        // One pass over the record serves every key and request.
+        let mut index =
+            records::FieldIndex::selecting(keys.iter().copied().chain(operations.fields()));
+        let input = self.input;
+        let field = |field| {
+            super::indexed_field(record, &mut index, field, 1, input)
+                .map(|span| &record[span.start..span.start + span.length])
+        };
+        self.selected(field, operations, keys)
     }
     fn key(&mut self, bytes: &[u8], separator: u8) {
-        self.buffer.raw(bytes);
-        self.buffer.emit(headers::Part::Separator(separator));
+        if self.csv {
+            self.buffer.csv_field(bytes);
+            self.buffer.emit(headers::Part::Separator(b','));
+        } else {
+            self.buffer.raw(bytes);
+            self.buffer.emit(headers::Part::Separator(separator));
+        }
+    }
+    fn first_decoded(
+        &mut self,
+        record: super::csv_input::View<'_>,
+        operations: &OperationSet,
+        keys: &[u64],
+    ) -> Result<(), Failure> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.full {
+            self.full_header(record.fields());
+        }
+        self.selected(|field| record.field(field), operations, keys)
+            .map_err(|error| record.location.annotate(error))
     }
     fn result(&mut self, bytes: &[u8], separator: u8) {
-        self.buffer.formatted(bytes);
-        self.buffer.emit(headers::Part::Separator(separator));
+        if self.csv {
+            self.buffer.csv_field(bytes);
+            self.buffer
+                .emit(headers::Part::Separator(if separator == self.record_end {
+                    b'\n'
+                } else {
+                    b','
+                }));
+        } else {
+            self.buffer.formatted(bytes);
+            self.buffer.emit(headers::Part::Separator(separator));
+        }
     }
     fn row(&mut self, fields: &[Vec<u8>], separator: u8) -> Result<(), Failure> {
         for (at, field) in fields.iter().enumerate() {
-            self.buffer.formatted(field);
-            self.buffer
-                .emit(headers::Part::Separator(if at + 1 == fields.len() {
+            self.result(
+                field,
+                if at + 1 == fields.len() {
                     self.record_end
                 } else {
                     separator
-                }));
+                },
+            );
         }
-        Ok(())
-    }
-    fn empty(&mut self) -> Result<(), Failure> {
         Ok(())
     }
 }
@@ -228,7 +277,7 @@ fn completion_failure(done: Completion) -> Option<Failure> {
 }
 
 pub(super) fn complete<W: Write>(
-    mut buffer: Buffered<'_, W>,
+    mut buffer: BufferedStdout<'_, W>,
     result: Result<(), Failure>,
     close: impl FnOnce(&mut W) -> io::Result<()>,
     report: &mut impl FnMut(&Failure) -> bool,
@@ -241,11 +290,7 @@ pub(super) fn complete<W: Write>(
         diagnostics_ok = report(&error);
     }
     if let Some(error) = completion_failure(buffer.finish(close)) {
-        status = if status == 77 || error.status == 77 {
-            77
-        } else {
-            1
-        };
+        status = super::failure::combine(status, error.status);
         // Even failed stderr must not prevent stdout finalization or the second attempt.
         diagnostics_ok = report(&error) && diagnostics_ok;
     }
@@ -338,68 +383,39 @@ impl Drop for Stdout {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn plain_rows_preserve_empty_columns() {
-        use super::{CommandOutput, Plain};
-        for (fields, expected) in [
-            (vec![b"".as_slice()], b"\n".as_slice()),
-            (vec![b"", b""], b",\n"),
-            (vec![b"", b"x"], b",x\n"),
-            (vec![b"", b"", b"x"], b",,x\n"),
-            (vec![b"x", b"", b"y"], b"x,,y\n"),
-            (vec![b"x", b""], b"x,\n"),
-            (vec![b"x", b"y"], b"x,y\n"),
-        ] {
-            let mut bytes = Vec::new();
-            let fields: Vec<_> = fields.into_iter().map(<[u8]>::to_vec).collect();
-            assert!(
-                Plain {
-                    writer: &mut bytes,
-                    record_end: b'\n'
-                }
-                .row(&fields, b',')
-                .is_ok()
-            );
-            assert_eq!(bytes, expected);
-        }
-    }
-
-    #[test]
-    fn plain_rows_preserve_raw_bytes_short_writes_and_flush() {
-        use super::{CommandOutput, Plain};
-        struct Sink {
-            bytes: Vec<u8>,
-            flushes: usize,
-        }
-        impl std::io::Write for Sink {
-            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-                let count = bytes.len().min(2);
-                self.bytes.extend_from_slice(&bytes[..count]);
-                Ok(count)
-            }
-            fn flush(&mut self) -> std::io::Result<()> {
-                self.flushes += 1;
-                Ok(())
-            }
-        }
-        let mut sink = Sink {
-            bytes: Vec::new(),
-            flushes: 0,
+    fn result_rows_preserve_empty_columns_and_raw_bytes() {
+        use super::{BufferedStdout, CommandOutput, Results, completion_failure, options};
+        let options::Action::Calculate(options) =
+            options::parse(&["count".into(), "1".into()], b"fastmash", false)
+                .ok()
+                .unwrap()
+        else {
+            panic!("calculation")
         };
-        let fields = [b"".to_vec(), b"\0\xff".to_vec(), b"".to_vec()];
-        assert!(
-            Plain {
-                writer: &mut sink,
-                record_end: b'\n'
+        for (fields, separator, expected) in [
+            (vec![b"".as_slice()], b',', b"\n".as_slice()),
+            (vec![b"", b""], b',', b",\n"),
+            (vec![b"", b"x"], b',', b",x\n"),
+            (vec![b"", b"", b"x"], b',', b",,x\n"),
+            (vec![b"x", b"", b"y"], b',', b"x,,y\n"),
+            (vec![b"x", b""], b',', b"x,\n"),
+            (vec![b"x", b"y"], b',', b"x,y\n"),
+            (vec![b"", b"\0\xff", b""], 0, b"\0\0\xff\0\n"),
+        ] {
+            let fields: Vec<_> = fields.into_iter().map(<[u8]>::to_vec).collect();
+            for capacity in [1, 2, 4096] {
+                let mut bytes = Vec::new();
+                let buffer = BufferedStdout::new(&mut bytes, capacity, false).unwrap();
+                let mut output = Results::new(buffer, &options);
+                assert!(output.row(&fields, separator).is_ok());
+                assert!(completion_failure(output.buffer.finish(|_| Ok(()))).is_none());
+                assert_eq!(bytes, expected);
             }
-            .row(&fields, b'\0')
-            .is_ok()
-        );
-        assert_eq!(sink.bytes, b"\0\0\xff\0\n");
-        assert_eq!(sink.flushes, 1);
+        }
     }
 
     use super::*;
-    use headers::output::IoFailure;
+    use crate::buffered_stdout::IoFailure;
     use std::{cell::RefCell, rc::Rc};
 
     fn io_error(code: i32) -> IoFailure {
@@ -502,13 +518,17 @@ mod tests {
             (1, 5, true, 77),
             (77, 28, true, 77),
             (77, 28, false, 1),
+            // An Internal failure outranks an output Error or Refusal after it.
+            (70, 28, true, 70),
+            (70, 5, true, 70),
+            (70, 28, false, 1),
         ] {
             let events = Rc::new(RefCell::new(Vec::new()));
             let mut sink = Sink {
                 events: events.clone(),
                 code,
             };
-            let mut buffer = Buffered::new(&mut sink, 4096, false).unwrap();
+            let mut buffer = BufferedStdout::new(&mut sink, 4096, false).unwrap();
             buffer.formatted(b"pending");
             let status = complete(
                 buffer,
@@ -562,7 +582,7 @@ mod tests {
         }
         for close_fails in [false, true] {
             let mut sink = Sink(0);
-            let mut buffer = Buffered::new(&mut sink, 128, false).unwrap();
+            let mut buffer = BufferedStdout::new(&mut sink, 128, false).unwrap();
             for _ in 0..3 {
                 buffer.formatted(b"pending");
                 buffer.before_diagnostic();

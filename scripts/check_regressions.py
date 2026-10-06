@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Run the release regression cases against any fastmash build.
 
-Unlike check_cli_regressions.py, this does not build, pin or admit the binary:
-it checks behavior only, so contributors and CI can run it on any Linux host.
+This does not build, pin or qualify the binary: it checks behavior only, so
+contributors and CI can run it on any Linux host.
 It uses the retained invocation and comparison (regression_cases.py). By default it runs the
-newest fixture, tests/cli/cases-v2.jsonl.gz; --fixture selects another.
+newest fixture, tests/cli/cases-v3.jsonl.gz; --fixture selects another.
+The cases give their input through a pipe; --stdin-file gives it as a regular
+file instead, to the cases whose input is ordinary, with the same expectations,
+so that the routes only input from a file takes (hash grouping) are checked too.
+For a development build, --expected-version verifies its explicit CLI version
+in the documented successful version cases; all other frozen expectations
+remain unchanged, including version-option errors and transport failures.
 
 Requirements: Linux, Python 3.10+, /usr/bin/sort, an unblocked signal mask,
 and fastmash-sort-supervisor beside the binary. Run it serially: concurrent
@@ -24,7 +30,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import regression_cases  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / 'tests/cli/cases-v2.jsonl.gz'
+FIXTURE = ROOT / 'tests/cli/cases-v3.jsonl.gz'
+
+# These cases print the successful version action, including option precedence.
+# Required-value, sentinel and transport-failure cases retain frozen outcomes.
+VERSION_CASES = frozenset({
+    'version', 'version-locale', 'version-first', 'version-before-unknown',
+    'output-header-reference:version-precedence', 'header-aliases:alias-then-version',
+    'named-fields:version', 'whitespace:version', 'skip-comments:version',
+    'narm:version', 'count:version',
+})
 
 
 def load_fixture(path):
@@ -42,19 +57,28 @@ def load_fixture(path):
     return cases
 
 
-def expected(case):
+def expected(case, expected_version=None):
     """The case's expectation, with file-backed output resolved to bytes."""
     result = dict(case['expected'])
+    if expected_version is not None and case['id'] in VERSION_CASES:
+        result['stdout_hex'] = f'fastmash {expected_version}\n'.encode().hex()
     if 'stdout_file' in result:
         result['stdout_hex'] = (ROOT / result.pop('stdout_file')).read_bytes().hex()
     return result
 
 
-def matches(case, observed):
-    return regression_cases.matches(dict(case, expected=expected(case)), observed)
+def matches(case, observed, expected_version=None):
+    return regression_cases.matches(dict(case, expected=expected(case, expected_version)), observed)
 
 
 invoke = regression_cases.invoke
+
+
+def file_input(case):
+    """Whether the case's input can come from a regular file instead: ordinary
+    input and output, and no input held open."""
+    return (case['io'] == 'normal' and not case.get('observe_held')
+            and not case.get('hold_stdin'))
 
 
 def main():
@@ -65,11 +89,19 @@ def main():
     parser.add_argument('--match', default='', help='only run cases whose id contains this text')
     parser.add_argument('--keep-going', action='store_true',
                         help='run every case instead of stopping at the first mismatch')
+    parser.add_argument('--expected-version',
+                        help='verify this explicit version in successful version cases only; '
+                             'default: the frozen fixture expectation')
+    parser.add_argument('--stdin-file', action='store_true',
+                        help='give ordinary input as a regular file instead of a pipe; '
+                             'cases with other input transports are left out')
     args = parser.parse_args()
     binary = args.binary.resolve()
     if not binary.is_file() or not binary.with_name('fastmash-sort-supervisor').is_file():
         parser.exit(1, f'{binary} and fastmash-sort-supervisor beside it are required\n')
     cases = [case for case in load_fixture(args.fixture) if args.match in case['id']]
+    if args.stdin_file:
+        cases = [dict(case, io='file') for case in cases if file_input(case)]
     failed = []
     attempted = 0
     with tempfile.TemporaryDirectory(prefix='fastmash-regressions-') as directory:
@@ -77,7 +109,7 @@ def main():
             attempted += 1
             # Diagnostics print argv[0]; the v2 expectations use fastmash.
             observed = invoke({'name': 'fastmash', **case}, binary, Path(directory))
-            if matches(case, observed):
+            if matches(case, observed, args.expected_version):
                 continue
             failed.append(case["id"])
             # A supervisor can outlive a failed invocation; each owns a group.
@@ -86,7 +118,7 @@ def main():
             except (KeyError, ProcessLookupError):
                 pass
             print(f"FAIL {case['id']}: {' '.join(observed['argv'][1:])}")
-            for key, value in expected(case).items():
+            for key, value in expected(case, args.expected_version).items():
                 if observed.get(key) != value:
                     print(f'  {key}: expected {value!r}, observed {observed.get(key)!r}')
             if not args.keep_going:

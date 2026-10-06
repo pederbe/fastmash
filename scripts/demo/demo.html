@@ -1,74 +1,124 @@
 <!DOCTYPE html>
-<!-- The animated demo: the same command in GNU datamash and Fastmash, racing
-     at their measured speeds. scripts/demo/record.mjs renders it frame by
-     frame; the timings and output come from a real run (see TIMINGS). -->
+<!-- Install and help instructions followed by a replay of the measured RefGene job.
+     record.mjs supplies the benchmark data and renders deterministic frames. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<title>Fastmash: install, try, compare</title>
 <style>
 :root {
   --bg: #0d1117; --surface: #161b22; --line: #30363d; --fg: #e6edf3; --muted: #9fb0c3;
-  --teal: #2dd4bf; --amber: #fbbf24; --red: #f87171;
-  --mono: "DejaVu Sans Mono", monospace;
-  --sans: "DejaVu Sans", system-ui, sans-serif;
+  --teal: #2dd4bf; --amber: #fbbf24;
+  --mono: "Consolas", "DejaVu Sans Mono", monospace;
+  --sans: "Segoe UI", "DejaVu Sans", system-ui, sans-serif;
 }
 * { box-sizing: border-box; margin: 0; }
-html, body { width: 960px; height: 540px; background: var(--bg); overflow: hidden; }
-body { font-family: var(--sans); color: var(--fg); padding: 26px 30px; }
-.title { display: flex; justify-content: space-between; align-items: baseline; height: 40px; }
-.title h1 { font-size: 23px; font-weight: 700; letter-spacing: -0.01em; }
-.title h1 span { color: var(--amber); }
-.title .data { font: 500 14px/1 var(--mono); color: var(--muted); }
-.panes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 16px; }
-.pane { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; height: 322px; overflow: hidden; }
-.pane.fastmash { border-color: var(--amber); }
-.bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
-.bar .name { font: 600 15px/1 var(--sans); }
+html, body { width: 1280px; height: 720px; background: var(--bg); overflow: hidden; }
+body { font-family: var(--sans); color: var(--fg); padding: 36px 48px; }
+header { display: flex; justify-content: space-between; align-items: center; height: 62px; }
+.brand { display: flex; align-items: center; gap: 16px; font-size: 40px; font-weight: 700; letter-spacing: -.7px; }
+.brand svg { width: 60px; height: 60px; }
+.tagline { font-size: 25px; font-weight: 600; }
+.scene { position: absolute; left: 48px; right: 48px; top: 136px; }
+h1 { font-size: 39px; letter-spacing: -.7px; font-weight: 650; }
+.sub { margin-top: 9px; font-size: 24px; color: var(--muted); }
+.panes { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+.pane { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; height: 263px; overflow: hidden; }
+.pane.fastmash { border-color: var(--teal); }
+.bar { display: flex; justify-content: space-between; align-items: center; padding: 17px 22px; border-bottom: 1px solid var(--line); }
+.bar .name { font: 600 24px/1 var(--sans); }
 .pane.fastmash .bar .name { color: var(--teal); }
-.clock { font: 500 17px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.clock { font: 600 26px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .clock.done { color: var(--fg); }
 .pane.fastmash .clock.done { color: var(--teal); }
-pre { font: 500 13.5px/1.8 var(--mono); padding: 14px 16px; white-space: pre-wrap; word-break: break-all; }
+pre { font: 500 23px/1.6 var(--mono); padding: 22px; white-space: pre; tab-size: 5; }
 .prompt { color: var(--amber); }
 .prog { color: var(--fg); font-weight: 700; }
-.out { color: var(--teal); }
+.out { color: var(--fg); }
+.cli-heading { font-weight: 700; }
+.cli-token { color: #67e8f9; }
+.help-pane { margin-top: 24px; height: 330px; }
+.help-pane pre { font-size: 24px; line-height: 1.5; padding-top: 18px; }
 .dim { color: var(--muted); }
-.cursor { display: inline-block; width: 9px; height: 17px; background: var(--teal); vertical-align: -3px; }
-.footer { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; height: 48px; }
-.verdict { font-size: 24px; font-weight: 800; letter-spacing: -0.015em; white-space: nowrap; }
-.verdict .x { color: var(--amber); }
-.cta { white-space: nowrap; font: 500 14px/1 var(--mono); color: var(--fg); border: 1px solid var(--amber); border-radius: 10px; padding: 12px 16px; }
-.cta .prompt { margin-right: 8px; }
+.cursor { display: inline-block; width: 11px; height: 24px; background: var(--teal); vertical-align: -4px; }
+.progress { height: 4px; background: var(--line); }
+.progress div { height: 100%; width: 0; background: var(--amber); }
+.fastmash .progress div { background: var(--teal); }
+.install-pane { margin-top: 28px; height: 238px; }
+.install-pane pre { font-size: 27px; padding-top: 32px; }
+.install-note { margin-top: 28px; font-size: 24px; color: var(--muted); }
+.verdict { margin-top: 18px; font-size: 35px; font-weight: 750; letter-spacing: -.6px; }
+.verdict .x { color: var(--teal); }
+.caption { margin-top: 6px; font-size: 19px; color: var(--muted); }
+footer { position: absolute; left: 48px; right: 48px; bottom: 31px; padding-top: 17px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+.url { color: var(--teal); font-size: 28px; font-weight: 650; }
+.footer-label { font-size: 20px; color: var(--muted); }
 .hidden { visibility: hidden; }
 </style>
 </head>
 <body>
-<div class="title">
-  <h1>Same command. Same answer. <span>4× faster.</span></h1>
-  <div class="data">2.4 million gene records</div>
-</div>
-<div class="panes">
+<header>
+  <div class="brand"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#1c2330"/><rect x="5" y="18" width="5.5" height="9" rx="1.5" fill="#2dd4bf"/><rect x="13.25" y="12" width="5.5" height="15" rx="1.5" fill="#2dd4bf"/><rect x="21.5" y="5" width="5.5" height="22" rx="1.5" fill="#fbbf24"/></svg>Fastmash</div>
+  <div class="tagline">Same data. Less waiting.</div>
+</header>
+<section class="scene" id="install-scene" aria-label="Installation command">
+  <h1>Start with one command.</h1>
+  <div class="sub">Install Fastmash on Linux or WSL2.</div>
+  <div class="pane install-pane">
+    <div class="bar"><span class="name">Terminal</span></div>
+    <pre id="install-command"></pre>
+  </div>
+  <div class="install-note">Then try a command you already know.</div>
+</section>
+<section class="scene hidden" id="help-scene" aria-label="Colored help excerpt">
+  <h1>Readable help. Clean data.</h1>
+  <div class="sub">Bold headings and cyan syntax. Calculation results stay plain.</div>
+  <div class="pane help-pane">
+    <div class="bar"><span class="name">Fastmash help excerpt</span></div>
+    <pre><span class="prompt">$</span> <span class="prog">fastmash</span> --help
+
+<span class="cli-heading">Operations:</span>
+  <span class="cli-token">sum</span>       Sum the selected field
+  <span class="cli-token">mean</span>      Arithmetic mean of the selected field
+  <span class="cli-token">wmean</span>     Weighted mean of a VALUE:WEIGHT field pair</pre>
+  </div>
+</section>
+<section class="scene hidden" id="compare-scene" aria-label="Measured timing comparison">
+  <h1>One job. Two tools.</h1>
+  <div class="sub">Quartiles from 81,407 RefGene records · Intel laptop, native Linux.</div>
+  <div class="panes">
   <div class="pane datamash">
-    <div class="bar"><span class="name">GNU datamash 1.9</span><span class="clock" id="clock-d">0.00 s</span></div>
+    <div class="bar"><span class="name">GNU datamash</span><span class="clock" id="clock-d">0.0 ms</span></div>
+    <div class="progress"><div id="progress-d"></div></div>
     <pre id="term-d"></pre>
   </div>
   <div class="pane fastmash">
-    <div class="bar"><span class="name">fastmash</span><span class="clock" id="clock-f">0.00 s</span></div>
+    <div class="bar"><span class="name">Fastmash</span><span class="clock" id="clock-f">0.0 ms</span></div>
+    <div class="progress"><div id="progress-f"></div></div>
     <pre id="term-f"></pre>
   </div>
-</div>
-<div class="footer">
-  <div class="verdict hidden" id="verdict">Identical output, <span class="x">4.1× faster</span></div>
-  <div class="cta hidden" id="cta"><span class="prompt">$</span>curl -fsSL https://fastmash.io/install.sh | sh</div>
-</div>
+  </div>
+  <div class="verdict hidden" id="verdict">Same answer. <span class="x" id="speedup"></span> as fast.</div>
+  <div class="caption">Timing replay · slowed 20×</div>
+</section>
+<footer><span class="url">fastmash.io</span><span class="footer-label" id="footer-label">Install · Try · Compare</span></footer>
 <script>
-// Measured on the AMD desktop (WSL2), LC_ALL=C, 2,442,210 RefGene records
-// (the benchmark file repeated 30 times); median of three runs each.
-const TIMINGS = { datamash: 1.905, fastmash: 0.460 };
+(() => {
+const DATA = /* BENCHMARK_DATA */ null;
+if (!DATA) throw new Error('Render with scripts/demo/record.mjs');
+const TIMINGS = { datamash: DATA.gnu_ms / 1000, fastmash: DATA.fastmash_ms / 1000 };
+const PLAYBACK_SCALE = 20;
 const OUTPUT = '4\t8\t14\t10';
-const ARGS = ' q1 9 median 9 q3 9 iqr 9 < genes.tsv';
-const TYPE_START = 1.2, TYPE_SPEED = 26;       // seconds, characters per second
+const INSTALL = 'curl -fsSL https://fastmash.io/install.sh | sh';
+const ARGS = ' q1 9 median 9 \\\n    q3 9 iqr 9 < genes.tsv';
+const HELP_START = 5.5;
+const COMPARE_START = 12.5;
+const TYPE_START = COMPARE_START + 0.8, TYPE_SPEED = 25;
 const RUN_START = TYPE_START + ('fastmash' + ARGS).length / TYPE_SPEED + 0.6;
+const RUN_END = RUN_START + Math.max(...Object.values(TIMINGS)) * PLAYBACK_SCALE;
+const DURATION = 28;
+if (RUN_END + 5 > DURATION) throw new Error('Timing replay no longer fits; revise the storyboard');
+document.getElementById('speedup').textContent = (DATA.gnu_ms / DATA.fastmash_ms).toFixed(1) + '×';
 
 function escape(text) { return text.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
@@ -79,31 +129,49 @@ function pane(program, t) {
   const name = shown.slice(0, Math.min(shown.length, program.length));
   let text = '<span class="prompt">$</span> <span class="prog">' + escape(name) + '</span>' + escape(shown.slice(name.length));
   const running = t >= RUN_START;
-  const finished = running && t >= RUN_START + TIMINGS[program];
+  const finished = running && t >= RUN_START + TIMINGS[program] * PLAYBACK_SCALE;
   if (!running) text += '<span class="cursor"></span>';
   if (finished) {
-    text += '\n<span class="out">' + escape(OUTPUT) + '</span>';
-    text += '\n<span class="dim">real ' + TIMINGS[program].toFixed(2) + ' s</span>';
-    text += '\n<span class="prompt">$</span> <span class="cursor"></span>';
+    text += '\n\n<span class="out">' + escape(OUTPUT) + '</span>';
   }
-  const elapsed = running ? Math.min(t - RUN_START, TIMINGS[program]) : 0;
-  return { text, clock: elapsed.toFixed(2) + ' s', done: finished };
+  const elapsed = running ? Math.min((t - RUN_START) / PLAYBACK_SCALE, TIMINGS[program]) : 0;
+  return { text, clock: (elapsed * 1000).toFixed(1) + ' ms', done: finished,
+    progress: elapsed / TIMINGS[program] * 100 };
 }
 
 window.render = function (t) {
+  const compare = t >= COMPARE_START;
+  document.getElementById('install-scene').classList.toggle('hidden', t >= HELP_START);
+  document.getElementById('help-scene').classList.toggle('hidden', t < HELP_START || compare);
+  document.getElementById('compare-scene').classList.toggle('hidden', !compare);
+  const typed = Math.max(0, Math.min(INSTALL.length, Math.floor((t - 0.8) * 24)));
+  document.getElementById('install-command').innerHTML = '<span class="prompt">$</span> '
+    + escape(INSTALL.slice(0, typed)) + '<span class="cursor"></span>';
   for (const [program, id] of [['datamash', 'd'], ['fastmash', 'f']]) {
     const state = pane(program, t);
     document.getElementById('term-' + id).innerHTML = state.text;
     const clock = document.getElementById('clock-' + id);
     clock.textContent = state.clock;
     clock.classList.toggle('done', state.done);
+    document.getElementById('progress-' + id).style.width = state.progress + '%';
   }
-  const end = RUN_START + TIMINGS.datamash;
-  document.getElementById('verdict').classList.toggle('hidden', t < end + 0.5);
-  document.getElementById('cta').classList.toggle('hidden', t < end + 1.6);
+  document.getElementById('verdict').classList.toggle('hidden', t < RUN_END + 0.5);
+  document.getElementById('footer-label').textContent = compare ? 'Try it on your data.' : 'Install · Try · Compare';
 };
-window.DURATION = RUN_START + TIMINGS.datamash + 14;
+window.DURATION = DURATION;
+window.DEMO = { width: 1280, height: 720, helpStart: HELP_START, compareStart: COMPARE_START,
+  runStart: RUN_START, runEnd: RUN_END, timings: TIMINGS, output: OUTPUT,
+  install: INSTALL, args: ARGS, playbackScale: PLAYBACK_SCALE };
+window.play = function () {
+  const start = performance.now();
+  function frame(now) {
+    window.render(((now - start) / 1000) % DURATION);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+};
 window.render(0);
+})();
 </script>
 </body>
 </html>

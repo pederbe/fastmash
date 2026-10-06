@@ -1,4 +1,3 @@
-
 # Testing
 
 Fastmash's job is to give the same answers as GNU datamash, faster, and to give
@@ -21,12 +20,17 @@ All commands run from the repository root on Linux x86-64 or WSL2.
 ```sh
 cargo fmt --all --check                  # formatting
 cargo clippy --workspace --all-targets -- -D warnings   # lints
-cargo test --workspace                   # unit and integration tests
+cargo test --release --workspace         # unit and integration tests
+cargo build --release                    # the binaries the corpus runs
 python3 scripts/check_regressions.py --binary target/release/fastmash
+python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
 ```
 
-CI runs only when started manually, to preserve the limited Actions minutes.
-A change is ready for review when all four checks pass locally.
+Run the full suite with `--release`: memory-limit tests exercise the optimized
+CLI. Debug builds can exceed those limits before reaching the behavior under test.
+A change is ready for review when all of these checks pass locally. CI also runs
+on pushes and pull requests against `main` once the repository is public;
+private automatic runs skip their jobs, while manual runs remain available.
 
 ## Layers
 
@@ -58,15 +62,21 @@ The regression corpus is a set of more than 3,000 commands, each with its
 exact expected standard output, standard error and exit status. Expected
 results for compatible behavior were observed from GNU datamash 1.9, running
 each case twice, on the reference hosts. Cases where Fastmash intentionally
-differs record Fastmash's documented behavior instead, with the reason.
+differs record Fastmash's documented behavior instead; the
+[differences page](https://fastmash.io/guide/differences.html) gives the
+reasons.
 
 ```sh
+cargo build --release   # fastmash and fastmash-sort-supervisor, side by side
 python3 scripts/check_regressions.py --binary target/release/fastmash --keep-going
 python3 scripts/check_regressions.py --help
 ```
 
 A run stops at the first mismatch and prints the case, the expected bytes and
-the actual bytes.
+the actual bytes. The cases give their input through a pipe; `--stdin-file` runs
+those with ordinary input again with standard input as a regular file, against the same
+expectations. Both modes need coverage: hash grouping applies to eligible files
+and to eligible piped input in language locales, with different replay paths.
 
 ### Compatibility cases
 
@@ -115,10 +125,28 @@ margins and hardware.
 Under WSL, keep the checkout and `TMPDIR` on the Linux filesystem rather than a
 Windows drive: tests are much faster there.
 
+## Website checks
+
+The landing-page browser tests cover initial loading with a delayed script,
+installation tabs, clipboard fallback, reduced motion and access to every
+installation command without JavaScript. They use Puppeteer from the existing
+diagram tooling and its installed Chrome browser. For setup, see
+[the demo tooling](https://github.com/pederbe/fastmash/blob/main/scripts/demo/README.md).
+
+```sh
+python3 -m unittest discover -s scripts -p 'test_build_site.py'
+mdbook build docs
+env FASTMASH_DIAGRAMS=committed python3 scripts/build_site.py docs/book
+npm run test:landing
+```
+
+Use mdBook 0.5.4, as pinned by `scripts/build_site.sh`. Rebuild the book before
+running the site builder again, since the builder transforms the generated HTML.
+
 ## Continuous integration
 
 | Workflow | When | What |
 | --- | --- | --- |
-| `ci.yml` | Manual dispatch | Format, Clippy, tests, regression corpus on Ubuntu |
-| `docs.yml` | Manual dispatch | Builds the website and documentation and checks links; Cloudflare deploys separately |
-| `release.yml` | Manual dispatch on a version tag | Builds, tests and publishes release binaries |
+| `ci.yml` | Public pushes and pull requests against `main`, or manual dispatch | Format, Clippy, release-mode tests, regression corpus on Ubuntu |
+| `docs.yml` | Public pushes and pull requests against `main`, or manual dispatch | Builds the website and checks links |
+| `release.yml` | Manual dispatch on a version tag | Builds and tests release assets, then creates a draft release |

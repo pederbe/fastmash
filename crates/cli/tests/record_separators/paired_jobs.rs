@@ -43,7 +43,7 @@ fn cases() -> Vec<(Vec<OsString>, Vec<u8>)> {
             "1\n",
             "1e4933\t1\n",
         ] {
-            // Approved positive generated NaN is checked separately below.
+            // The documented positive generated NaN is checked separately below.
             if (op == "ppearson" && input == "1\t2\n")
                 || (["ppearson", "spearson"].contains(&op)
                     && input == "0x1p-16445\t1\n0x1p-16445\t2\n")

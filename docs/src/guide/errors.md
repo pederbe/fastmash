@@ -9,7 +9,9 @@
 | `77` | **Refusal**: Fastmash deliberately declined to produce a result, because a feature or locale is unsupported or a checked resource limit was reached |
 | `70` | **Internal failure**: Fastmash detected a violation of its numerical invariants. Please [report it](https://github.com/pederbe/fastmash/issues/new/choose) |
 
-If both an error and a refusal occur, the status is 77. A message containing
+When one failure follows another, such as a failure to write the output after
+an error, the status is the more serious one: 70 over 77 over 1. If a
+diagnostic itself cannot be written, the status is 1. A message containing
 "internal", or a process killed by `SIGABRT`, also indicates a bug: please
 report it.
 
@@ -20,6 +22,9 @@ fastmash: invalid numeric value in line 3 field 2: 'n/a'
 ```
 
 Some are followed by a `hint:` line suggesting a fix.
+In a terminal, the program prefix can appear in red; the message body keeps the
+default foreground. [Color controls](terminal-color.md) change presentation,
+never the exit status or calculation output.
 
 ## Always check the exit status
 
@@ -35,6 +40,12 @@ if ! fastmash -s -g 1 sum 2 < data.tsv > totals.tsv; then
   exit 1
 fi
 ```
+
+Dataset comparison completes both input scans and all calculations before
+writing its report, including the header. Output write failures can still leave
+partial bytes. Table health likewise completes inspection before report emission;
+`health ... validate` can emit a complete report and return 1 for declared
+violations. Advisory findings alone do not make validation fail.
 
 ## Why refusals exist
 
@@ -52,20 +63,53 @@ A refusal is not a claim that GNU datamash would reject the same input.
 ## Memory
 
 Fastmash has no fixed limits on record length, field count, number of
-operations or number of values. (The few fixed limits that remain are on the
-size of a single number and of `--format` strings; see
-[Numbers](output.md#limits).) Storage grows with the job and every
+operations or number of values. (The few fixed limits that remain are GNU
+datamash's own, on `--format` strings, names in a command and, in one narrow
+case, numeric fields; see [Numbers](output.md#limits).) Storage grows with the job and every
 allocation is checked; if memory runs out, Fastmash refuses with status 77
 where it can. The operating system may still stop a process that exhausts
-memory before Fastmash can report it.
+memory before Fastmash can report it. When it stops the system `sort` that
+some sorted jobs use (see [Large inputs](grouping.md#large-inputs)), the job
+fails with status 1, naming the signal before "read error (on close)" as GNU
+datamash does on Debian and Ubuntu:
+
+```text
+Killed
+fastmash: read error (on close)
+```
 
 What grows with the input:
 
 - Operations that need every value (quantiles, dispersion, paired statistics,
   `unique`, `collapse`) keep the values of the current group.
 - `rmdup`, `transpose` and `crosstab` keep their tables in memory.
+- Top-N selection keeps at most N candidates for the active group or dataset;
+  N limits record count, not bytes.
+- Dataset comparison keeps keys, per-key calculation state and required samples
+  in memory; these do not spill.
+- Table health keeps field counters, widths, header labels and bounded examples
+  in memory, with no fixed total-memory guarantee.
 - `-s` keeps a sort buffer, spilling to disk beyond the chunk target. Sorted
   numerical jobs keep the original records until they are processed.
+
+### Address-space limits
+
+Some systems limit a process's address space rather than its memory, for
+example `ulimit -v` or a batch scheduler's virtual-memory limit such as
+`h_vmem`. The C library's memory allocator (glibc `malloc`) gives each thread
+that allocates an arena of its own, which reserves 64 MiB of address space,
+more as it grows, and sorts in language locales run on up to eight threads.
+Under such a limit, Fastmash therefore keeps the allocator to one arena for
+each 512 MiB of the limit, from one (below 1 GiB) to eight. Threads that share
+an arena wait for each other, so a sort that would also fit without the cap
+can take somewhat longer. A number of arenas that `GLIBC_TUNABLES`
+(`glibc.malloc.arena_max`) or `MALLOC_ARENA_MAX` sets is used instead, higher
+or lower. If a sorted job still refuses under the limit:
+
+- `GLIBC_TUNABLES=glibc.malloc.arena_max=1` keeps the allocator to one arena
+  at a limit of 1 GiB or more too;
+- `OMP_NUM_THREADS=1` sorts on one thread (see
+  [Large inputs](grouping.md#large-inputs)).
 
 ## Disk
 
@@ -76,11 +120,12 @@ container's `/tmp` on Linux before 6.10, Fastmash creates private files with
 random names and removes their names at once, so they also disappear when
 Fastmash exits. Sorted jobs that use the system `sort` (see
 [Grouping and sorting](grouping.md#large-inputs)) write to a private
-directory in `TMPDIR`, which the sort supervisor removes when the job ends,
-even if Fastmash is interrupted. The supervisor creates it when the job
-starts, so for these jobs `TMPDIR` must be writable even when the input is
-small; otherwise the command stops with "sort temporary I/O error" (status 1). Only killing both processes at once, for
-example with `kill -9` on the whole process group, can leave it behind.
+directory in `TMPDIR`, which the sort supervisor creates when the job starts
+and removes when it ends, even if Fastmash is interrupted. Only killing both
+processes at once, for example with `kill -9` on the whole process group, can
+leave it behind. Where `TMPDIR` is not a writable directory, these jobs sort
+inside Fastmash instead. A sort that has to spill to disk without a usable
+`TMPDIR` stops with "sort temporary I/O error" (status 1).
 
 ## Interruption
 

@@ -36,14 +36,20 @@ switching is a matter of replacing `datamash` with `fastmash`.
 ## What to check
 
 **Locale settings.** Fastmash has the glibc 2.43 locale rules built in:
-numbers work in every UTF-8 glibc locale without an `@` modifier, and sorting in 194 language
-locales checked against glibc. Other locales make sorting (or, for
-`ps_AF`, numbers) exit with status 77, and GNU datamash falls back to `C`
+numbers work in `C`, `POSIX` and every glibc locale with a one-byte decimal
+separator, `@` modifier locales included, and sorting in `C`, `POSIX`,
+`C.UTF-8` and 194 language locales checked against glibc. A name glibc has no
+locale for behaves as `C`, as in GNU datamash. Commands that read or print
+numbers exit with status 77 in `ps_AF`, and in a character set other than
+UTF-8 whose thousands separator is not ASCII (such as `fr_FR` in Latin-1);
+sorted commands do outside the sorting locales. GNU datamash falls back to `C`
 where a locale is not installed, while Fastmash does not. Set
 `LC_ALL=C.UTF-8` (or `C`) in scripts. In language locales, Fastmash orders
-sorted keys using Unicode collation, which can place punctuation differently
-from GNU `sort`: for example, `a_1` sorts before `a-1`.
-[Locales](output.md#locales).
+sorted keys as GNU `sort` does under glibc, letters and digits by Unicode
+collation and punctuation, symbols and spaces by glibc's own table; keys that
+differ only in punctuation next to digits (`12-A` and `1-2A`), vulgar fractions
+such as `¼` and some letters from outside the language's alphabet can still
+sort differently. [Locales](output.md#locales).
 
 **Last digits of results.** Fastmash's portable arithmetic can differ from a
 local GNU build in the last printed digit of some results, or in the sign of
@@ -67,4 +73,8 @@ LC_ALL=C sort -s -t "$(printf '\t')" -k1,1 data.tsv | fastmash -g 1 sum 2
 ## Remember
 
 `-t,` splits on commas and does not parse quoted CSV, in both programs.
+Fastmash adds explicit `--csv-in`, `--csv-out` and `--csv` switches for
+[quoted CSV](csv-and-result-names.md); they leave existing separator commands
+unchanged. Result names, weighted mean, Top-N selection, dataset comparison and
+table health are also optional extensions.
 `spearson` is the sample Pearson correlation, in both programs.

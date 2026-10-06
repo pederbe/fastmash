@@ -164,7 +164,7 @@ impl Scanner {
         }
         // GNU checks for EOF before skipping whitespace, not afterwards.
         let Some(&first) = self.script.get(start) else {
-            return Err(failure(b"invalid operand ''\n".to_vec()));
+            return Err(quoted_error(b"invalid operand ", b"", self.utf8));
         };
         let punctuation = match first {
             b',' => Some(TokenKind::Comma),
@@ -281,20 +281,28 @@ impl Scanner {
         ))
     }
 
-    fn field(&mut self, kind: Kind, range_end: bool) -> Result<Field, Failure> {
-        let token = self.next();
-        let token = token?;
-        match token.kind {
+    fn decode_field(&self, token: Token) -> Result<Option<Field>, Failure> {
+        Ok(match token.kind {
             TokenKind::Integer(_) if self.named_numbers => {
-                Ok(Field::Name(decode_identifier(self.spelling(token))?))
+                Some(Field::Name(decode_identifier(self.spelling(token))?))
             }
-            TokenKind::Integer(n) if n > 0 => Ok(Field::Number(n as u64)),
-            TokenKind::Identifier => Ok(Field::Name(decode_identifier(self.spelling(token))?)),
+            TokenKind::Integer(n) if n > 0 => Some(Field::Number(n as u64)),
+            TokenKind::Identifier => Some(Field::Name(decode_identifier(self.spelling(token))?)),
+            _ => None,
+        })
+    }
+
+    fn field(&mut self, kind: Kind, range_end: bool) -> Result<Field, Failure> {
+        let token = self.next()?;
+        if let Some(field) = self.decode_field(token)? {
+            return Ok(field);
+        }
+        match token.kind {
             TokenKind::Integer(_) | TokenKind::Float(_) => {
                 let mut message = b"invalid field '".to_vec();
                 message.extend_from_slice(self.spelling(token));
                 message.extend_from_slice(
-                    format!("' for operation {}\n", quoted(name(kind), self.utf8)).as_bytes(),
+                    format!("' for operation {}\n", quoted(kind.name(), self.utf8)).as_bytes(),
                 );
                 Err(failure(message))
             }
@@ -311,63 +319,6 @@ impl Scanner {
     }
 }
 
-pub(super) fn name(kind: Kind) -> &'static str {
-    match kind {
-        Kind::Cut => "cut",
-        Kind::Rounding(kind) => kind.name(),
-        Kind::Getnum(_) => "getnum",
-        Kind::Bin(_) => "bin",
-        Kind::Strbin(_) => "strbin",
-        Kind::Base64 => "base64",
-        Kind::Debase64 => "debase64",
-        Kind::Checksum(algorithm) => algorithm.name(),
-        Kind::Path(kind) => kind.name(),
-        Kind::Count => "count",
-        Kind::Countunique => "countunique",
-        Kind::Unique => "unique",
-        Kind::Collapse => "collapse",
-        Kind::First => "first",
-        Kind::Last => "last",
-        Kind::Rand => "rand",
-        Kind::Min => "min",
-        Kind::Max => "max",
-        Kind::Absmin => "absmin",
-        Kind::Absmax => "absmax",
-        Kind::Range => "range",
-        Kind::Sum => "sum",
-        Kind::Mean => "mean",
-        Kind::Geomean => "geomean",
-        Kind::Harmmean => "harmmean",
-        Kind::Ms => "ms",
-        Kind::Rms => "rms",
-        Kind::Median => "median",
-        Kind::Mode => "mode",
-        Kind::Antimode => "antimode",
-        Kind::Q1 => "q1",
-        Kind::Q3 => "q3",
-        Kind::Iqr => "iqr",
-        Kind::Percentile(_) => "perc",
-        Kind::Trimmean(_) => "trimmean",
-        Kind::Pvar => "pvar",
-        Kind::Svar => "svar",
-        Kind::Pstdev => "pstdev",
-        Kind::Sstdev => "sstdev",
-        Kind::Madraw => "madraw",
-        Kind::Mad => "mad",
-        Kind::Pskew => "pskew",
-        Kind::Sskew => "sskew",
-        Kind::Pkurt => "pkurt",
-        Kind::Skurt => "skurt",
-        Kind::Jarque => "jarque",
-        Kind::Dpo => "dpo",
-        Kind::Pcov => "pcov",
-        Kind::Scov => "scov",
-        Kind::Ppearson => "ppearson",
-        Kind::Spearson => "spearson",
-        Kind::Dotprod => "dotprod",
-    }
-}
-
 /// `name` quoted like GNU's `quote()`: curly quotes under a UTF-8 `LC_CTYPE`.
 pub(super) fn quoted(name: &str, utf8: bool) -> String {
     let mut quoted = Vec::new();
@@ -376,14 +327,37 @@ pub(super) fn quoted(name: &str, utf8: bool) -> String {
 }
 
 fn operation_error(reason: &str, kind: Kind, utf8: bool) -> Failure {
-    failure(format!("{reason} for operation {}\n", quoted(name(kind), utf8)).into_bytes())
+    failure(format!("{reason} for operation {}\n", quoted(kind.name(), utf8)).into_bytes())
+}
+
+/// One health selector with the existing identifier and positional syntax.
+pub(super) fn single_field(
+    argument: &OsString,
+    named_numbers: bool,
+    profile: Profile,
+    utf8: bool,
+) -> Result<Field, Failure> {
+    let mut scanner = Scanner::from_args(std::slice::from_ref(argument), true)?;
+    scanner.named_numbers = named_numbers;
+    scanner.profile = profile;
+    scanner.utf8 = utf8;
+    let token = scanner.next()?;
+    let field = scanner
+        .decode_field(token)?
+        .ok_or_else(|| failure(b"health: invalid single-field selector\n".to_vec()))?;
+    if scanner.next()?.kind != TokenKind::End {
+        return Err(failure(
+            b"health: expected one field, without a list, range or pair\n".to_vec(),
+        ));
+    }
+    Ok(field)
 }
 
 fn pair_required(kind: Kind, utf8: bool) -> Failure {
     failure(
         format!(
             "operation {} requires field pairs\n",
-            quoted(name(kind), utf8)
+            quoted(kind.name(), utf8)
         )
         .into_bytes(),
     )
@@ -393,16 +367,9 @@ fn pair_forbidden(kind: Kind, utf8: bool) -> Failure {
     failure(
         format!(
             "operation {} cannot use pair of fields\n",
-            quoted(name(kind), utf8)
+            quoted(kind.name(), utf8)
         )
         .into_bytes(),
-    )
-}
-
-fn paired(kind: Kind) -> bool {
-    matches!(
-        kind,
-        Kind::Pcov | Kind::Scov | Kind::Ppearson | Kind::Spearson | Kind::Dotprod
     )
 }
 
@@ -416,105 +383,11 @@ fn parse_operations(scanner: &mut Scanner, grouped: bool) -> Result<Vec<Request>
     parse_operations_for_mode(scanner, grouped, "groupby")
 }
 
-/// Operations without a parameter, by name; `operation_kind` adds the rest.
-const PLAIN_OPERATIONS: &[(&[u8], Kind)] = &[
-    (b"cut", Kind::Cut),
-    (b"echo", Kind::Cut),
-    (b"base64", Kind::Base64),
-    (b"debase64", Kind::Debase64),
-    (b"count", Kind::Count),
-    (b"first", Kind::First),
-    (b"countunique", Kind::Countunique),
-    (b"unique", Kind::Unique),
-    (b"uniq", Kind::Unique),
-    (b"collapse", Kind::Collapse),
-    (b"last", Kind::Last),
-    (b"rand", Kind::Rand),
-    (b"min", Kind::Min),
-    (b"max", Kind::Max),
-    (b"absmin", Kind::Absmin),
-    (b"absmax", Kind::Absmax),
-    (b"range", Kind::Range),
-    (b"sum", Kind::Sum),
-    (b"mean", Kind::Mean),
-    (b"geomean", Kind::Geomean),
-    (b"harmmean", Kind::Harmmean),
-    (b"ms", Kind::Ms),
-    (b"rms", Kind::Rms),
-    (b"median", Kind::Median),
-    (b"mode", Kind::Mode),
-    (b"antimode", Kind::Antimode),
-    (b"q1", Kind::Q1),
-    (b"q3", Kind::Q3),
-    (b"iqr", Kind::Iqr),
-    (b"pvar", Kind::Pvar),
-    (b"svar", Kind::Svar),
-    (b"pstdev", Kind::Pstdev),
-    (b"sstdev", Kind::Sstdev),
-    (b"madraw", Kind::Madraw),
-    (b"mad", Kind::Mad),
-    (b"pskew", Kind::Pskew),
-    (b"sskew", Kind::Sskew),
-    (b"pkurt", Kind::Pkurt),
-    (b"skurt", Kind::Skurt),
-    (b"jarque", Kind::Jarque),
-    (b"dpo", Kind::Dpo),
-    (b"pcov", Kind::Pcov),
-    (b"scov", Kind::Scov),
-    (b"ppearson", Kind::Ppearson),
-    (b"spearson", Kind::Spearson),
-    (b"dotprod", Kind::Dotprod),
-];
-
-/// The operation named `spelling` (ASCII case-insensitive), with its default
-/// parameter; `None` for names that are not operations.
-fn operation_kind(spelling: &[u8]) -> Option<Kind> {
-    use super::line_numeric::Rounding;
-    if let Some((_, kind)) = PLAIN_OPERATIONS
-        .iter()
-        .find(|(name, _)| spelling.eq_ignore_ascii_case(name))
-    {
-        return Some(*kind);
-    }
-    if let Some(kind) = [
-        Rounding::Round,
-        Rounding::Floor,
-        Rounding::Ceil,
-        Rounding::Trunc,
-        Rounding::Frac,
-    ]
-    .into_iter()
-    .find(|kind| spelling.eq_ignore_ascii_case(kind.name().as_bytes()))
-    {
-        return Some(Kind::Rounding(kind));
-    }
-    if let Some(kind) = super::path_fields::Operation::from_name(spelling) {
-        return Some(Kind::Path(kind));
-    }
-    if let Some(algorithm) = super::checksum::Algorithm::from_name(spelling) {
-        return Some(Kind::Checksum(algorithm));
-    }
-    let is = |name: &[u8]| spelling.eq_ignore_ascii_case(name);
-    Some(if is(b"getnum") {
-        Kind::Getnum(super::line_numeric::Extraction::Positive)
-    } else if is(b"bin") {
-        Kind::Bin(super::numerics::Numerics::value80(super::integer(100)).raw())
-    } else if is(b"strbin") {
-        Kind::Strbin(std::num::NonZeroU64::new(10).unwrap())
-    } else if is(b"trimmean") {
-        Kind::Trimmean(super::ordered_statistics::Trim::zero())
-    } else if is(b"perc") {
-        Kind::Percentile(95)
-    } else {
-        return None;
-    })
-}
-
 fn invalid_parameter(scanner: &Scanner, token: Token, kind: Kind) -> Failure {
     let mut message = b"invalid parameter ".to_vec();
     message.extend_from_slice(scanner.spelling(token));
     message.extend_from_slice(
-        format!(" for operation {}\n", quoted(name(kind), scanner.utf8)).as_bytes(),
+        format!(" for operation {}\n", quoted(kind.name(), scanner.utf8)).as_bytes(),
     );
     failure(message)
 }
@@ -590,6 +463,26 @@ fn numeric_parameters(scanner: &mut Scanner, kind: Kind) -> Result<Vec<TokenKind
     Ok(parameters)
 }
 
+/// `:PARAMETER`s of an Operation that takes none. GNU parses them as it
+/// parses any parameter, refusing all but numbers at once, and refuses the
+/// numbers once the fields are parsed (op-parser.c `parse_operation_params`,
+/// `set_op_params`). Returns how many there are.
+fn refused_parameters(scanner: &mut Scanner, kind: Kind) -> Result<usize, Failure> {
+    let mut count = 0;
+    while scanner.peek()?.kind == TokenKind::Colon {
+        scanner.next()?;
+        let token = scanner.next()?;
+        match token.kind {
+            TokenKind::Integer(_) | TokenKind::Float(_) => count += 1,
+            TokenKind::Space | TokenKind::End => {
+                return Err(operation_error("missing parameter", kind, scanner.utf8));
+            }
+            _ => return Err(invalid_parameter(scanner, token, kind)),
+        }
+    }
+    Ok(count)
+}
+
 /// A selector and, for a numeric range, its inclusive end. Ranges stay
 /// compact until the whole list has passed its syntax checks.
 type SelectorSpan = (Selector, Option<u64>);
@@ -597,7 +490,7 @@ type SelectorSpan = (Selector, Option<u64>);
 fn selector_list(scanner: &mut Scanner, kind: Kind) -> Result<Vec<SelectorSpan>, Failure> {
     let mut selectors = Vec::new();
     loop {
-        if paired(kind) && scanner.peek()?.kind == TokenKind::Colon {
+        if kind.is_paired() && scanner.peek()?.kind == TokenKind::Colon {
             return Err(operation_error("invalid field pair", kind, scanner.utf8));
         }
         let start = scanner.field(kind, false)?;
@@ -626,7 +519,7 @@ fn selector_list(scanner: &mut Scanner, kind: Kind) -> Result<Vec<SelectorSpan>,
                     return Err(failure(
                         format!(
                             "field range for {} must be numeric\n",
-                            quoted(name(kind), scanner.utf8)
+                            quoted(kind.name(), scanner.utf8)
                         )
                         .into_bytes(),
                     ));
@@ -740,8 +633,8 @@ fn expand_requests(
 ) -> Result<(), Failure> {
     for (selector, _) in &selectors {
         match selector {
-            Selector::Single(_) if paired(kind) => return Err(pair_required(kind, utf8)),
-            Selector::Pair { .. } if !paired(kind) => return Err(pair_forbidden(kind, utf8)),
+            Selector::Single(_) if kind.is_paired() => return Err(pair_required(kind, utf8)),
+            Selector::Pair { .. } if !kind.is_paired() => return Err(pair_forbidden(kind, utf8)),
             _ => {}
         }
     }
@@ -787,7 +680,16 @@ fn parse_operations_for_mode(
         let token = scanner.next()?;
         let decoded = decode_identifier(scanner.spelling(token))?;
         let spelling = decoded.as_slice();
-        if (grouped && is_group(spelling))
+        if mode == "compare" {
+            if let Some(direction) = selection_direction(spelling) {
+                selection_command(scanner, direction, Vec::new())?;
+                return Err(unsupported("compare does not support Top-N selection"));
+            }
+            if spelling.eq_ignore_ascii_case(b"health") {
+                return Err(unsupported("compare does not support another mode"));
+            }
+        }
+        if ((grouped || mode == "compare") && is_group(spelling))
             || [
                 b"reverse".as_slice(),
                 b"nop",
@@ -801,6 +703,9 @@ fn parse_operations_for_mode(
             .iter()
             .any(|m| spelling.eq_ignore_ascii_case(m))
         {
+            if mode == "compare" {
+                return Err(unsupported("compare does not support another mode"));
+            }
             return Err(quoted_error(
                 b"conflicting operation ",
                 spelling,
@@ -810,8 +715,11 @@ fn parse_operations_for_mode(
         if token.kind != TokenKind::Identifier {
             return Err(quoted_error(b"invalid operation ", spelling, scanner.utf8));
         }
-        let Some(kind) = operation_kind(spelling) else {
+        let Some(kind) = Kind::from_spelling(spelling) else {
             if spelling.eq_ignore_ascii_case(b"transpose") {
+                if mode == "compare" {
+                    return Err(unsupported("compare does not support another mode"));
+                }
                 return Err(quoted_error(
                     b"conflicting operation ",
                     spelling,
@@ -830,7 +738,9 @@ fn parse_operations_for_mode(
             && requests
                 .first()
                 .map_or(kind.is_line(), |r| r.kind.is_line());
-        if (kind.is_line()) != expected_line || (grouped && kind.is_line()) {
+        // Comparison refuses unsupported families after every request's grammar
+        // is parsed, so a malformed Selector remains a command Error.
+        if mode != "compare" && ((kind.is_line()) != expected_line || (grouped && kind.is_line())) {
             let expected = if expected_line && !grouped {
                 "line"
             } else {
@@ -845,15 +755,15 @@ fn parse_operations_for_mode(
         scanner.keep_space = true;
         let line_parameters = line_parameters(scanner, kind)?;
         let parameters = numeric_parameters(scanner, kind)?;
-        match scanner.peek()?.kind {
-            TokenKind::Colon => return Err(unsupported("operation parameters are unsupported")),
-            TokenKind::Space => {
-                scanner.next()?;
-            }
-            _ => {}
+        let refused = refused_parameters(scanner, kind)?;
+        if scanner.peek()?.kind == TokenKind::Space {
+            scanner.next()?;
         }
         scanner.keep_space = false;
         let selectors = selector_list(scanner, kind)?;
+        if refused != 0 {
+            return Err(operation_error("too many parameters", kind, scanner.utf8));
+        }
         let kind = with_parameters(scanner, kind, &parameters, &line_parameters)?;
         expand_requests(&mut requests, kind, selectors, scanner.utf8)?;
     }
@@ -892,9 +802,46 @@ fn is_group(bytes: &[u8]) -> bool {
         .any(|name| bytes.eq_ignore_ascii_case(name))
 }
 
+fn selection_direction(bytes: &[u8]) -> Option<super::selection::Direction> {
+    if bytes.eq_ignore_ascii_case(b"top") {
+        Some(super::selection::Direction::Highest)
+    } else if bytes.eq_ignore_ascii_case(b"bottom") {
+        Some(super::selection::Direction::Lowest)
+    } else {
+        None
+    }
+}
+
+fn selected_direction(
+    scanner: &mut Scanner,
+) -> Result<Option<super::selection::Direction>, Failure> {
+    let token = scanner.peek()?;
+    if token.kind != TokenKind::Identifier {
+        return Ok(None);
+    }
+    Ok(selection_direction(&decode_identifier(
+        scanner.spelling(token),
+    )?))
+}
+
+/// Classify the selection Mode before refusing an unsupported option. Use the
+/// same escaped identifiers and positional Grouping syntax as Command parsing;
+/// the actual parser still diagnoses the count, Selector and extra operands.
+pub(super) fn requests_selection(args: &[OsString]) -> Result<bool, Failure> {
+    let mut scanner = Scanner::from_args(args, true)?;
+    let token = scanner.peek()?;
+    if token.kind == TokenKind::Identifier && is_group(&decode_identifier(scanner.spelling(token))?)
+    {
+        scanner.next()?;
+        group_fields(&mut scanner, "groupby")?;
+    }
+    Ok(selected_direction(&mut scanner)?.is_some())
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Mode {
     Aggregate,
+    Compare,
     Crosstab,
     Line,
     Reverse,
@@ -902,12 +849,16 @@ pub(super) enum Mode {
     Noop,
     Check { lines: u64, fields: u64 },
     Dedup,
+    Health,
+    Select(super::selection::Selection),
 }
 
 pub(super) struct Command {
     pub mode: Mode,
     pub keys: Vec<Field>,
     pub operations: Vec<Request>,
+    pub ranking: Option<Field>,
+    pub comparison: Option<super::comparison::Request>,
 }
 
 #[cfg(test)]
@@ -922,16 +873,43 @@ pub(super) fn command_for_format(
     profile: Profile,
     utf8: bool,
 ) -> Result<Command, Failure> {
-    if let Some(group) = group {
+    if args.first().is_some_and(|arg| arg.as_bytes() == b"compare") {
+        return comparison_command(args, group, named_numbers, profile, utf8);
+    }
+    if args.first().is_some_and(|arg| arg.as_bytes() == b"health") {
+        return Ok(Command {
+            mode: Mode::Health,
+            keys: Vec::new(),
+            operations: Vec::new(),
+            ranking: None,
+            comparison: None,
+        });
+    }
+    let grouped_keys = if let Some(group) = group {
         let mut scanner = Scanner::from_args(std::slice::from_ref(group), true)?;
         scanner.named_numbers = named_numbers;
         scanner.profile = profile;
         scanner.utf8 = utf8;
-        let keys = group_fields(&mut scanner, "groupby")?;
-        let mut scanner = Scanner::from_args(args, true)?;
-        scanner.named_numbers = named_numbers;
-        scanner.profile = profile;
-        scanner.utf8 = utf8;
+        Some(group_fields(&mut scanner, "groupby")?)
+    } else {
+        None
+    };
+    let mut scanner = if grouped_keys.is_some() {
+        Scanner::from_args(args, true)?
+    } else {
+        Scanner::new(args)?
+    };
+    scanner.named_numbers = named_numbers;
+    scanner.profile = profile;
+    scanner.utf8 = utf8;
+    let token = scanner.peek()?;
+    let decoded = decode_identifier(scanner.spelling(token))?;
+    let direction = selection_direction(&decoded);
+    if let Some(direction) = direction {
+        scanner.next()?;
+        return selection_command(&mut scanner, direction, grouped_keys.unwrap_or_default());
+    }
+    if let Some(keys) = grouped_keys {
         let operations = parse_operations(&mut scanner, true)?;
         if operations.is_empty() {
             return Err(unsupported("grouping requires at least one operation"));
@@ -940,14 +918,10 @@ pub(super) fn command_for_format(
             mode: Mode::Aggregate,
             keys,
             operations,
+            ranking: None,
+            comparison: None,
         });
     }
-    let mut scanner = Scanner::new(args)?;
-    scanner.named_numbers = named_numbers;
-    scanner.profile = profile;
-    scanner.utf8 = utf8;
-    let token = scanner.peek()?;
-    let decoded = decode_identifier(scanner.spelling(token))?;
     if decoded.eq_ignore_ascii_case(b"crosstab") || decoded.eq_ignore_ascii_case(b"ct") {
         scanner.next()?;
         let keys = group_fields(&mut scanner, "crosstab")?;
@@ -992,6 +966,8 @@ pub(super) fn command_for_format(
             mode: Mode::Crosstab,
             keys,
             operations,
+            ranking: None,
+            comparison: None,
         });
     }
     if decoded.eq_ignore_ascii_case(b"check") {
@@ -1000,6 +976,8 @@ pub(super) fn command_for_format(
             mode: check_options(&mut scanner)?,
             keys: Vec::new(),
             operations: Vec::new(),
+            ranking: None,
+            comparison: None,
         });
     }
     if decoded.eq_ignore_ascii_case(b"rmdup") || decoded.eq_ignore_ascii_case(b"dedup") {
@@ -1023,6 +1001,8 @@ pub(super) fn command_for_format(
             mode: Mode::Dedup,
             keys,
             operations: Vec::new(),
+            ranking: None,
+            comparison: None,
         });
     }
     let table_mode = if decoded.eq_ignore_ascii_case(b"reverse") {
@@ -1048,6 +1028,8 @@ pub(super) fn command_for_format(
             mode,
             keys: Vec::new(),
             operations: Vec::new(),
+            ranking: None,
+            comparison: None,
         });
     }
     if !is_group(&decoded) {
@@ -1060,10 +1042,16 @@ pub(super) fn command_for_format(
             },
             keys: Vec::new(),
             operations,
+            ranking: None,
+            comparison: None,
         });
     }
     scanner.next()?;
     let keys = group_fields(&mut scanner, "groupby")?;
+    if let Some(direction) = selected_direction(&mut scanner)? {
+        scanner.next()?;
+        return selection_command(&mut scanner, direction, keys);
+    }
     let operations = parse_operations(&mut scanner, true)?;
     if operations.is_empty() {
         return Err(failure(b"missing operation\n".to_vec()));
@@ -1072,6 +1060,170 @@ pub(super) fn command_for_format(
         mode: Mode::Aggregate,
         keys,
         operations,
+        ranking: None,
+        comparison: None,
+    })
+}
+
+fn comparison_command(
+    args: &[OsString],
+    group: Option<&OsString>,
+    named_numbers: bool,
+    profile: Profile,
+    utf8: bool,
+) -> Result<Command, Failure> {
+    let missing =
+        || failure(b"compare requires BEFORE AFTER and at least one operation\n".to_vec());
+    let before = args.get(1).ok_or_else(missing)?;
+    let after = args.get(2).ok_or_else(missing)?;
+    if before.as_bytes() == b"-" && after.as_bytes() == b"-" {
+        return Err(failure(
+            b"compare permits stdin on at most one side\n".to_vec(),
+        ));
+    }
+    let copy = |path: &OsString| -> Result<OsString, Failure> {
+        use std::os::unix::ffi::OsStringExt;
+        let mut bytes = Vec::new();
+        reserve(&mut bytes, path.as_bytes().len())?;
+        bytes.extend_from_slice(path.as_bytes());
+        Ok(OsString::from_vec(bytes))
+    };
+    let unsigned = |argument: Option<&OsString>| -> Result<u64, Failure> {
+        let bytes = argument
+            .ok_or_else(|| failure(b"missing comparison modifier value\n".to_vec()))?
+            .as_bytes();
+        if bytes.is_empty() || !bytes.iter().all(u8::is_ascii_digit) {
+            return Err(failure(
+                b"comparison modifiers require positive unsigned decimal integers\n".to_vec(),
+            ));
+        }
+        bytes
+            .iter()
+            .try_fold(0u64, |n, b| {
+                n.checked_mul(10)?.checked_add(u64::from(b - b'0'))
+            })
+            .filter(|n| *n != 0)
+            .ok_or_else(|| {
+                failure(b"comparison modifier value is zero or outside u64 range\n".to_vec())
+            })
+    };
+    let mut at = 3;
+    let ranking = if args.get(at).is_some_and(|arg| arg.as_bytes() == b"rank") {
+        at += 1;
+        let result = unsigned(args.get(at))?;
+        at += 1;
+        let percent = match args.get(at).map(|arg| arg.as_bytes()) {
+            Some(b"percent") => {
+                at += 1;
+                true
+            }
+            Some(b"absolute") => {
+                at += 1;
+                false
+            }
+            _ => false,
+        };
+        let limit = if args.get(at).is_some_and(|arg| arg.as_bytes() == b"limit") {
+            at += 1;
+            let limit = unsigned(args.get(at))?;
+            at += 1;
+            Some(limit)
+        } else {
+            None
+        };
+        Some(super::comparison::Ranking {
+            result: usize::try_from(result - 1).map_err(|_| {
+                failure(b"comparison rank result is outside addressable range\n".to_vec())
+            })?,
+            percent,
+            limit,
+        })
+    } else {
+        None
+    };
+    if at == args.len() {
+        return Err(missing());
+    }
+    let mut scanner = Scanner::from_args(&args[at..], false)?;
+    scanner.named_numbers = named_numbers;
+    scanner.profile = profile;
+    scanner.utf8 = utf8;
+    let operations = parse_operations_for_mode(&mut scanner, false, "compare")?;
+    if operations.is_empty() {
+        return Err(missing());
+    }
+    if ranking
+        .as_ref()
+        .is_some_and(|rank| rank.result >= operations.len())
+    {
+        return Err(failure(
+            b"comparison rank result exceeds the number of results\n".to_vec(),
+        ));
+    }
+    let keys = if let Some(group) = group {
+        let mut scanner = Scanner::from_args(std::slice::from_ref(group), true)?;
+        scanner.named_numbers = named_numbers;
+        scanner.profile = profile;
+        scanner.utf8 = utf8;
+        group_fields(&mut scanner, "groupby")?
+    } else {
+        Vec::new()
+    };
+    Ok(Command {
+        mode: Mode::Compare,
+        keys,
+        operations,
+        ranking: None,
+        comparison: Some(super::comparison::Request {
+            before: copy(before)?,
+            after: copy(after)?,
+            ranking,
+        }),
+    })
+}
+
+fn selection_command(
+    scanner: &mut Scanner,
+    direction: super::selection::Direction,
+    keys: Vec<Field>,
+) -> Result<Command, Failure> {
+    // The count has its own unsigned decimal contract, rather than the GNU
+    // scanner's signed field-integer or floating-parameter syntax.
+    let start = scanner.position;
+    let end = scanner.script[start..]
+        .iter()
+        .position(|byte| space(*byte))
+        .map_or(scanner.script.len(), |length| start + length);
+    let count = scanner.script[start..end]
+        .strip_prefix(b":")
+        .filter(|digits| !digits.is_empty())
+        .and_then(|digits| {
+            digits.iter().try_fold(0u64, |count, byte| {
+                byte.is_ascii_digit()
+                    .then_some(u64::from(byte.wrapping_sub(b'0')))
+                    .and_then(|digit| count.checked_mul(10)?.checked_add(digit))
+            })
+        })
+        .filter(|count| *count != 0)
+        .ok_or_else(|| {
+            failure(b"Top-N selection requires a count from 1 through 18446744073709551615, written as :N\n".to_vec())
+        })?;
+    scanner.position = end;
+    let field = scanner.next()?;
+    let ranking = scanner
+        .decode_field(field)?
+        .ok_or_else(|| failure(b"Top-N selection requires one ranking Field\n".to_vec()))?;
+    if scanner.next()?.kind != TokenKind::End {
+        return Err(failure(
+            b"Top-N selection requires exactly one single-field Selector and cannot mix with other Operations or Modes\n".to_vec(),
+        ));
+    }
+    Ok(Command {
+        mode: Mode::Select(super::selection::Selection { direction, count }),
+        keys,
+        operations: Vec::new(),
+        ranking: Some(ranking),
+        comparison: None,
     })
 }
 
@@ -1266,6 +1418,12 @@ mod tests {
         };
         for (parts, group, message) in [
             (&["sum"][..], None, "missing field for operation ‘sum’\n"),
+            (&["sum", "1", ""], None, "invalid operand ‘’\n"),
+            (
+                &["sum:1", "1"],
+                None,
+                "too many parameters for operation ‘sum’\n",
+            ),
             (
                 &["sum", "0"],
                 None,
@@ -1384,33 +1542,6 @@ mod tests {
     }
 
     #[test]
-    fn every_operation_name_parses_back_to_its_kind() {
-        let parameterised = ["round", "floor", "ceil", "trunc", "frac", "getnum", "bin"]
-            .into_iter()
-            .chain([
-                "strbin", "trimmean", "perc", "md5", "sha1", "sha256", "dirname",
-            ]);
-        let names = PLAIN_OPERATIONS
-            .iter()
-            .map(|(name, _)| std::str::from_utf8(name).unwrap())
-            .chain(parameterised);
-        for spelling in names {
-            let kind = operation_kind(spelling.as_bytes()).expect(spelling);
-            let canonical = name(kind);
-            let again = operation_kind(canonical.as_bytes()).unwrap();
-            assert_eq!(name(again), canonical, "{spelling}");
-            let upper = spelling.to_ascii_uppercase();
-            assert_eq!(operation_kind(upper.as_bytes()), Some(kind), "{spelling}");
-        }
-        for alias in ["echo", "uniq"] {
-            assert_ne!(name(operation_kind(alias.as_bytes()).unwrap()), alias);
-        }
-        for other in ["transpose", "groupby", "", "sums", "mea"] {
-            assert_eq!(operation_kind(other.as_bytes()), None, "{other}");
-        }
-    }
-
-    #[test]
     fn collapse_uses_existing_selector_expansion_and_canonical_name() {
         assert_eq!(
             parse(&args(&["CoLlApSe", "2,1-2,name"])).ok().unwrap(),
@@ -1451,6 +1582,44 @@ mod tests {
                 parse(&args(&parts)).ok().unwrap(),
                 expected.map(|(kind, field)| (kind, Field::Number(field)))
             );
+        }
+    }
+
+    /// Parameters of an Operation that takes none, as GNU datamash 1.9
+    /// reports them (observed with its executable; op-parser.c
+    /// `parse_operation_params`, `set_op_params`): anything but a number at
+    /// once, numbers once the fields are parsed, before their pairing.
+    #[test]
+    fn parameters_of_operations_that_take_none_fail_as_in_gnu() {
+        let too_many = |name: &str| format!("too many parameters for operation '{name}'\n");
+        for (parts, message) in [
+            (&["sum:1", "1"][..], too_many("sum")),
+            (&["sum:1.5", "1"], too_many("sum")),
+            (&["sum:1:2", "1"], too_many("sum")),
+            (&["sum:1", "x"], too_many("sum")),
+            (&["sum:1", "1:2"], too_many("sum")),
+            (&["pcov:1", "1:2"], too_many("pcov")),
+            (&["first:2", "1"], too_many("first")),
+            (&["rand:1", "1"], too_many("rand")),
+            (
+                &["sum:x", "1"],
+                "invalid parameter x for operation 'sum'\n".to_owned(),
+            ),
+            (
+                &["sum:-1", "1"],
+                "invalid parameter - for operation 'sum'\n".to_owned(),
+            ),
+            (
+                &["sum:", "1"],
+                "missing parameter for operation 'sum'\n".to_owned(),
+            ),
+            (&["sum:1"], "missing field for operation 'sum'\n".to_owned()),
+            (
+                &["countunique:1,2", "1"],
+                "missing field for operation 'countunique'\n".to_owned(),
+            ),
+        ] {
+            error(parts, 1, message.as_bytes());
         }
     }
 
@@ -1541,10 +1710,10 @@ mod tests {
             vec!["sum", "1e-50000"],
             vec!["sum", "+1"],
             vec![" "],
+            vec!["sum:1", "2"],
         ] {
             assert_eq!(parse(&args(&parts)).err().unwrap().status, 1);
         }
-        assert_eq!(parse(&args(&["sum:1", "2"])).err().unwrap().status, 77);
         let long = format!("{}sum 1", " ".repeat(20_000));
         assert!(parse(&args(&[&long])).is_ok());
         let selector = format!("{}1", "0".repeat(20_000));

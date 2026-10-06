@@ -31,13 +31,28 @@ You need Linux x86-64 (or WSL2), stable Rust, Python 3.10+ and GNU or uutils cor
 git clone https://github.com/pederbe/fastmash
 cd fastmash
 cargo build
-cargo test --workspace
+cargo test --release --workspace
 ./target/debug/fastmash --help
 ```
 
 Having GNU datamash 1.9 installed (`apt install datamash`, `pacman -S datamash`)
 makes it easy to compare behavior. Check `datamash --version`, because
 distributions ship different versions.
+
+## Development workflow
+
+All changes enter `main` through a pull request, including the maintainer's
+changes. For planned work, agree on the scope and acceptance criteria in a
+public issue before implementing it.
+
+The maintainer creates a `contrib/` branch in this repository. Other contributors
+create a branch in their fork. Open the pull request against `main` after the
+local checks below pass, and link the issue when there is one.
+
+The maintainer reviews and merges the pull request after the required CI checks
+pass. Keep the branch current with `main` so that the checks cover the changes
+being merged. Before closing an implementation ticket, update its acceptance
+checklist and check whether its parent issue is complete.
 
 ## Before you open a pull request
 
@@ -52,13 +67,23 @@ distributions ship different versions.
    ```sh
    cargo fmt --all --check
    cargo clippy --workspace --all-targets -- -D warnings
-   cargo test --workspace
+   cargo test --release --workspace
+   cargo build --release
+   python3 scripts/check_regressions.py --binary target/release/fastmash
+   python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
    ```
+
+   The last two commands run the regression corpus, with its input piped and
+   from a file, as CI does.
 
 5. Update documentation in the same pull request when user-visible behavior
    changes: the user guide under `docs/`, `--help` text, and `CHANGELOG.md`.
 
 ### Changes that need extra care
+
+The maintainer runs release qualification on the measurement hosts for each
+release. Pull requests run CI and the regression corpus; additional performance
+qualification on those hosts is needed for pull requests that change performance.
 
 - **Numerical output.** Anything that can change a printed number, however
   slightly, needs a new numerical profile version and independent verification.
@@ -78,7 +103,9 @@ distributions ship different versions.
 
 Write a short summary line in the imperative mood ("Add trimmean parameter
 validation", not "Added…"), followed by a blank line and an explanation of *why*
-when that is not obvious. Reference issues as `#123`.
+when that is not obvious. Reference public issues as `#123` in commits and
+discussions. Use full public issue links in source comments so their repository
+is explicit. CI checks tracked files for private references.
 
 ## Tools
 

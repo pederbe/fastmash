@@ -1,14 +1,33 @@
+.skip-link {
+  position: fixed; top: 1rem; left: 1rem; z-index: 1000;
+  padding: 0.7rem 1rem; border: 2px solid var(--links); border-radius: 6px;
+  background: var(--bg); color: var(--fg); font-weight: bold;
+  transform: translateY(calc(-100% - 2rem));
+}
+.skip-link:focus { transform: none; }
+.sidebar-contents-link { margin-inline: 10px; }
+html:not(.js) #mdbook-sidebar-toggle { display: none; }
+.content main a:not(.header) { text-decoration: underline; text-underline-offset: 0.15em; }
+/* Reserve inline-code spacing before mdBook adds its highlighting class. */
+.content :not(pre):not(.header) > code { display: inline; padding: 0.1em 0.3em; border-radius: 3px; }
+.menu-bar .right-buttons a {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px;
+}
+.chapter-fold-toggle:focus-visible { outline: 2px solid var(--links); outline-offset: 2px; }
+.chapter-link-wrapper > a { min-height: 24px; }
+
 .fastmash-footer {
   margin: 4rem 0 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--table-border-color);
   font-size: 0.875em;
   color: var(--sidebar-fg);
-  opacity: 0.8;
   text-align: center;
 }
 .fastmash-footer a { color: inherit; text-decoration: underline; }
-.fastmash-profiles { margin-left: 0.6em; font-size: 0.92em; opacity: 0.85; }
+.fastmash-profiles { margin-left: 0.6em; font-size: 0.92em; }
+.content code:focus-visible, .table-wrapper:focus-visible { outline: 2px solid var(--links); outline-offset: 3px; }
 
 /* Palette A (midnight teal): the docs' dark theme ("navy", the default)
    and matching accents for the light theme. */

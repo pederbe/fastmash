@@ -193,7 +193,7 @@ fn shared_parser_routes_reference() {
 }
 
 #[test]
-fn approved_nan_policy_and_unary_exceptions() {
+fn documented_nan_policy_and_unary_exceptions() {
     for (input, expected) in [
         ("nan(1)\n-nan(2)\n", "-nan\t-nan\n"),
         ("-nan(2)\nnan(2)\n", "nan\tnan\n"),

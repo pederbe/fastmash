@@ -1,5 +1,7 @@
 //! Sparse completed cells, independent of input grouping and dense output shape.
-use super::{Failure, headers::output::Buffered, options::Options, unsupported};
+use super::{
+    Failure, buffered_stdout::BufferedStdout, options::Options, random::TableState, unsupported,
+};
 use std::{collections::HashMap, io::Write};
 
 fn allocation() -> Failure {
@@ -30,12 +32,12 @@ fn copy(bytes: &[u8]) -> Result<Vec<u8>, Failure> {
     result.extend_from_slice(bytes);
     Ok(result)
 }
-fn label(bytes: &[u8]) -> &[u8] {
-    // Preserve GNU's C-string label identity, but not its lossy 511-byte cap.
-    &bytes[..bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len())]
-}
-fn intern(labels: &mut HashMap<Vec<u8>, usize>, bytes: &[u8]) -> Result<usize, Failure> {
-    let bytes = label(bytes);
+fn intern(
+    labels: &mut HashMap<Vec<u8>, usize, TableState>,
+    bytes: &[u8],
+) -> Result<usize, Failure> {
+    // GNU's C-string label identity, but not its lossy 511-byte cap.
+    let bytes = super::headers::label(bytes);
     if let Some(&id) = labels.get(bytes) {
         return Ok(id);
     }
@@ -46,7 +48,9 @@ fn intern(labels: &mut HashMap<Vec<u8>, usize>, bytes: &[u8]) -> Result<usize, F
     labels.insert(owned, id);
     Ok(id)
 }
-fn ordered(labels: &HashMap<Vec<u8>, usize>) -> Result<Vec<(&Vec<u8>, &usize)>, Failure> {
+fn ordered(
+    labels: &HashMap<Vec<u8>, usize, TableState>,
+) -> Result<Vec<(&Vec<u8>, &usize)>, Failure> {
     let mut order = Vec::new();
     allocation_point()?;
     order
@@ -59,9 +63,9 @@ fn ordered(labels: &HashMap<Vec<u8>, usize>) -> Result<Vec<(&Vec<u8>, &usize)>, 
 
 #[derive(Default)]
 pub(super) struct Table {
-    rows: HashMap<Vec<u8>, usize>,
-    columns: HashMap<Vec<u8>, usize>,
-    cells: HashMap<(usize, usize), Vec<u8>>,
+    rows: HashMap<Vec<u8>, usize, TableState>,
+    columns: HashMap<Vec<u8>, usize, TableState>,
+    cells: HashMap<(usize, usize), Vec<u8>, TableState>,
 }
 impl Table {
     pub fn insert(&mut self, row: &[u8], column: &[u8], value: &[u8]) -> Result<(), Failure> {
@@ -70,7 +74,7 @@ impl Table {
             intern(&mut self.columns, column)?,
         );
         if !self.cells.contains_key(&key) {
-            let value = copy(label(value))?;
+            let value = copy(super::headers::label(value))?;
             allocation_point()?;
             self.cells.try_reserve(1).map_err(|_| allocation())?;
             self.cells.insert(key, value);
@@ -79,7 +83,7 @@ impl Table {
     }
     pub fn write<W: Write>(
         &self,
-        output: &mut Buffered<'_, W>,
+        output: &mut BufferedStdout<'_, W>,
         options: &Options,
     ) -> Result<(), Failure> {
         // Prepare both orders before emitting anything. Never allocate rows * columns.
@@ -135,7 +139,7 @@ mod tests {
         for step in 0..2 {
             FAIL_AFTER.with(|b| b.set(Some(step)));
             let mut bytes = Vec::new();
-            let mut output = Buffered::new(&mut bytes, 1, false).unwrap();
+            let mut output = BufferedStdout::new(&mut bytes, 1, false).unwrap();
             assert_eq!(table.write(&mut output, &options).err().unwrap().status, 77);
             drop(output);
             assert!(bytes.is_empty());

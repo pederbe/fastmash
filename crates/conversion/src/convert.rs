@@ -244,6 +244,62 @@ pub fn finite(token: &FiniteToken<'_>) -> Result<Conversion, ConversionFailure> 
     round_ratio(&ratio, token.negative())
 }
 
+/// Whether the decimal of `digits` (most significant first, each below ten)
+/// times 10^`scale` is exactly `significand` times 2^`exponent`, in
+/// magnitude. For deciding whether a conversion was exact where a range
+/// error depends on it: `significand` times 2^`exponent` is a binary80 value
+/// (below 2^16384, and a multiple of 2^-16445), and `digits` are at most a
+/// long decimal's kept digits. Outside those bounds it is an error, not an
+/// answer.
+pub fn decimal_equals(
+    digits: &[u8],
+    scale: i64,
+    significand: u64,
+    exponent: i64,
+) -> Result<bool, Error> {
+    let Some(start) = digits.iter().position(|&d| d != 0) else {
+        return Ok(significand == 0);
+    };
+    if significand == 0 {
+        return Ok(false);
+    }
+    // Trailing zeros move into the scale.
+    let end = digits
+        .iter()
+        .rposition(|&d| d != 0)
+        .map_or(start, |at| at + 1);
+    let scale = scale
+        .checked_add(i64::try_from(digits.len() - end).map_err(|_| Error::InputCapacity)?)
+        .ok_or(Error::IntermediateCapacity)?;
+    let digits = &digits[start..end];
+    let twos = significand.trailing_zeros();
+    let odd = BigUint::from(significand >> twos);
+    let exponent = exponent
+        .checked_add(i64::from(twos))
+        .filter(|exponent| (-16445..16384).contains(exponent))
+        .ok_or(Error::IntermediateCapacity)?;
+    let coefficient = || BigUint::from_radix_be(digits, 10).ok_or(Error::InternalInvariant);
+    if exponent < 0 {
+        // An odd multiple of 2^-j is an odd multiple of 5^j over 10^j, whose
+        // last digit is 5: exactly j fraction digits.
+        if scale != exponent {
+            return Ok(false);
+        }
+        let power = u32::try_from(-exponent).map_err(|_| Error::PowerCapacity)?;
+        Ok(coefficient()? == integer::mul(&odd, &integer::power(5, power)?)?)
+    } else {
+        // An integer below 2^16384, so of at most 4,933 digits.
+        let length = i64::try_from(digits.len()).map_err(|_| Error::InputCapacity)?;
+        if scale < 0 || scale.saturating_add(length) > 4933 {
+            return Ok(false);
+        }
+        let power = u32::try_from(scale).map_err(|_| Error::PowerCapacity)?;
+        let decimal = integer::mul(&coefficient()?, &integer::power(10, power)?)?;
+        let shift = u32::try_from(exponent).map_err(|_| Error::ShiftCapacity)?;
+        Ok(decimal == integer::shl(&odd, shift)?)
+    }
+}
+
 pub fn round_ratio(ratio: &Ratio, negative: bool) -> Result<Conversion, ConversionFailure> {
     let mut partial = ConversionPartial::default();
     let result = (|| -> Result<Conversion, Error> {
@@ -340,4 +396,64 @@ pub fn integer_value(value: i64) -> Result<Value80, Error> {
         exponent | if value < 0 { 0x8000 } else { 0 },
         sig,
     ))?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decimal_equals;
+
+    /// `n` as a significand and a power of two, as binary80 holds it.
+    fn binary(n: u64) -> (u64, i64) {
+        let shift = n.leading_zeros();
+        (n << shift, -i64::from(shift))
+    }
+
+    #[test]
+    fn decimals_equal_binary_values_exactly_or_not_at_all() {
+        let half = (1u64 << 63, -64);
+        assert_eq!(decimal_equals(&[5], -1, half.0, half.1), Ok(true));
+        assert_eq!(decimal_equals(&[0, 5, 0, 0], -3, half.0, half.1), Ok(true));
+        assert_eq!(decimal_equals(&[2, 5], -2, 1 << 63, -65), Ok(true));
+        assert_eq!(decimal_equals(&[3], -1, half.0, half.1), Ok(false));
+        assert_eq!(decimal_equals(&[5, 1], -2, half.0, half.1), Ok(false));
+        let four_hundred = binary(400);
+        assert_eq!(
+            decimal_equals(&[4, 0, 0], 0, four_hundred.0, four_hundred.1),
+            Ok(true)
+        );
+        assert_eq!(
+            decimal_equals(&[4], 2, four_hundred.0, four_hundred.1),
+            Ok(true)
+        );
+        assert_eq!(
+            decimal_equals(&[4, 0, 1], 0, four_hundred.0, four_hundred.1),
+            Ok(false)
+        );
+        assert_eq!(
+            decimal_equals(&[4], -2, four_hundred.0, four_hundred.1),
+            Ok(false)
+        );
+        assert_eq!(decimal_equals(&[0, 0], -99, 0, -16445), Ok(true));
+        assert_eq!(decimal_equals(&[1], -99, 0, -16445), Ok(false));
+        assert_eq!(decimal_equals(&[0], 0, 1, -16445), Ok(false));
+        // The smallest subnormal, 2^-16445, has 16,445 fraction digits.
+        let mut digits = vec![1u8];
+        for _ in 0..16445 {
+            let mut carry = 0;
+            for digit in digits.iter_mut().rev() {
+                let next = *digit * 5 + carry;
+                *digit = next % 10;
+                carry = next / 10;
+            }
+            while carry != 0 {
+                digits.insert(0, carry % 10);
+                carry /= 10;
+            }
+        }
+        assert_eq!(decimal_equals(&digits, -16445, 1, -16445), Ok(true));
+        assert_eq!(decimal_equals(&digits, -16444, 1, -16445), Ok(false));
+        let last = digits.len() - 1;
+        digits[last] -= 1;
+        assert_eq!(decimal_equals(&digits, -16445, 1, -16445), Ok(false));
+    }
 }

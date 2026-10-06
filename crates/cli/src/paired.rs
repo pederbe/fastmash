@@ -90,7 +90,7 @@ impl PairSamples {
             return Err(failure(
                 format!(
                     "input error for operation {}: fields {left_field},{right_field} have different number of items\n",
-                    super::grammar::quoted(super::grammar::name(operation), utf8)
+                    super::grammar::quoted(operation.name(), utf8)
                 )
                 .into_bytes(),
             ));

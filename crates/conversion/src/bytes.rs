@@ -94,6 +94,24 @@ impl FiniteToken<'_> {
     pub fn exponent(&self) -> Exponent {
         self.exponent
     }
+    /// The exponent's value, however large, saturating at ±2^62.
+    pub fn exponent_saturating(&self) -> i64 {
+        match self.exponent {
+            Exponent::Finite(exponent) => i64::from(exponent),
+            Exponent::Greater { negative } => {
+                let magnitude =
+                    self.bytes[self.exponent_digits.clone()]
+                        .iter()
+                        .fold(0_i64, |magnitude, &b| {
+                            magnitude
+                                .saturating_mul(10)
+                                .saturating_add(i64::from(b - b'0'))
+                                .min(1 << 62)
+                        });
+                if negative { -magnitude } else { magnitude }
+            }
+        }
+    }
     pub fn fraction_digits(&self) -> usize {
         self.fraction.len()
     }

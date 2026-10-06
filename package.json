@@ -3,11 +3,16 @@
   "private": true,
   "description": "Build-time tools for the fastmash.io website (diagrams rendered to SVG). Not shipped to visitors.",
   "license": "MIT OR Apache-2.0",
+  "scripts": {
+    "test:landing": "node --test scripts/test_landing_page.mjs"
+  },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "12.0.0",
     "wrangler": "4.146.0"
   },
   "overrides": {
-    "lodash-es": "4.18.0"
+    "lodash-es": "4.18.1",
+    "undici": "7.29.1",
+    "katex": "0.18.2"
   }
 }

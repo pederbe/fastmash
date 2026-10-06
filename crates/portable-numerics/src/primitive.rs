@@ -27,8 +27,20 @@ impl Arena {
         self.primitive_value_scope(|scratch| multiply(scratch, left, right))
     }
 
+    /// The square root of a positive finite value. It needs no scratch
+    /// cells, so it leaves the arena as it is.
     pub(crate) fn sqrt_finite(&mut self, value: Value80) -> Result<Value80, NumericFailure> {
-        self.primitive_value_scope(|scratch| sqrt(scratch, value))
+        Value80::from_raw(sqrt(value)?).map_err(|_| NumericFailure::Invariant)
+    }
+
+    /// [`Arena::sqrt_finite`] by the bit-serial square root it replaced,
+    /// the reference its results are checked against.
+    #[cfg(test)]
+    pub(crate) fn bit_serial_sqrt_finite(
+        &mut self,
+        value: Value80,
+    ) -> Result<Value80, NumericFailure> {
+        self.primitive_value_scope(|scratch| bit_serial_sqrt(scratch, value))
     }
 }
 
@@ -411,7 +423,46 @@ fn round_bits(
     ))
 }
 
-fn sqrt(scratch: &mut PrimitiveCells<'_>, value: Value80) -> Result<Raw80, NumericFailure> {
+/// The square root of a positive finite `value`, rounded to nearest. The
+/// value is a radicand in [2^126, 2^128) times an even power of two, so the
+/// radicand's integer square root holds the 64 significand bits. A square
+/// root is never a tie: the root rounds up exactly when the remainder exceeds
+/// it, since `(r + 1/2)^2 = r^2 + r + 1/4` is never an integer.
+fn sqrt(value: Value80) -> Result<Raw80, NumericFailure> {
+    let (_, magnitude, quantum) = finite_parts(value);
+    let leading = magnitude.leading_zeros();
+    let normalized = magnitude
+        .checked_shl(leading)
+        .ok_or(NumericFailure::Invariant)?;
+    let normalized_q = quantum - leading as i32;
+    let (radicand, mut result_quantum) = if normalized_q & 1 == 0 {
+        (u128::from(normalized) << 64, normalized_q / 2 - 32)
+    } else {
+        (u128::from(normalized) << 63, (normalized_q - 1) / 2 - 31)
+    };
+    let root = radicand.isqrt();
+    let remainder = radicand - root * root;
+    let mut kept = u64::try_from(root).map_err(|_| NumericFailure::Invariant)?;
+    if remainder > root {
+        if kept == u64::MAX {
+            kept = 1_u64 << 63;
+            result_quantum += 1;
+        } else {
+            kept += 1;
+        }
+    }
+    let exponent = result_quantum + 16_446;
+    if !(1..0x7fff).contains(&exponent) || kept >> 63 == 0 {
+        return Err(NumericFailure::Invariant);
+    }
+    Ok(Raw80::new(exponent as u16, kept))
+}
+
+#[cfg(test)]
+fn bit_serial_sqrt(
+    scratch: &mut PrimitiveCells<'_>,
+    value: Value80,
+) -> Result<Raw80, NumericFailure> {
     let (_, magnitude, quantum) = finite_parts(value);
     let leading = magnitude.leading_zeros();
     let normalized = magnitude
@@ -473,6 +524,7 @@ fn sqrt(scratch: &mut PrimitiveCells<'_>, value: Value80) -> Result<Raw80, Numer
     Ok(Raw80::new(exponent as u16, kept))
 }
 
+#[cfg(test)]
 fn trial_limb(scratch: &PrimitiveCells<'_>, index: u8) -> Result<u64, NumericFailure> {
     let root_low = scratch.get(PrimitiveCell::V4)?;
     match index {
@@ -482,6 +534,7 @@ fn trial_limb(scratch: &PrimitiveCells<'_>, index: u8) -> Result<u64, NumericFai
     }
 }
 
+#[cfg(test)]
 fn compare_trial(scratch: &PrimitiveCells<'_>) -> Result<Ordering, NumericFailure> {
     for (index, remainder_cell) in [(1, PrimitiveCell::V7), (0, PrimitiveCell::V6)] {
         match scratch
@@ -495,6 +548,7 @@ fn compare_trial(scratch: &PrimitiveCells<'_>) -> Result<Ordering, NumericFailur
     Ok(Ordering::Equal)
 }
 
+#[cfg(test)]
 fn subtract_trial(scratch: &mut PrimitiveCells<'_>) -> Result<(), NumericFailure> {
     let mut borrow = false;
     for (index, remainder_cell) in [(0, PrimitiveCell::V6), (1, PrimitiveCell::V7)] {
@@ -511,6 +565,7 @@ fn subtract_trial(scratch: &mut PrimitiveCells<'_>) -> Result<(), NumericFailure
     Ok(())
 }
 
+#[cfg(test)]
 fn shift_pair_left(
     scratch: &mut PrimitiveCells<'_>,
     low_cell: PrimitiveCell,
@@ -526,6 +581,7 @@ fn shift_pair_left(
     scratch.set(high_cell, (high << count) | (low >> (64 - count)))
 }
 
+#[cfg(test)]
 fn radicand_bit(scratch: &PrimitiveCells<'_>, index: i32) -> Result<bool, NumericFailure> {
     if !(0..192).contains(&index) {
         return Ok(false);
@@ -538,4 +594,66 @@ fn radicand_bit(scratch: &PrimitiveCells<'_>, index: i32) -> Result<bool, Numeri
         (PrimitiveCell::V3, index - 128)
     };
     Ok(scratch.get(cell)? >> shift & 1 != 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The integer square root gives the bit-serial root's result for every
+    /// kind of positive finite value: subnormals, every exponent of either
+    /// parity, exact squares, the significand extremes and a million random
+    /// values.
+    #[test]
+    fn integer_square_root_matches_the_bit_serial_root() {
+        let mut arena = Arena::new().unwrap();
+        let mut checked = 0u32;
+        let mut check = |exponent: u16, significand: u64| {
+            let significand = if exponent == 0 {
+                significand >> 1
+            } else {
+                significand | 1 << 63
+            };
+            if significand == 0 {
+                return;
+            }
+            let value = Value80::from_raw(Raw80::new(exponent, significand)).unwrap();
+            let fast = arena.sqrt_finite(value).unwrap();
+            let reference = arena.bit_serial_sqrt_finite(value).unwrap();
+            assert!(
+                fast.same_bits(reference),
+                "{exponent:04x} {significand:016x}"
+            );
+            checked += 1;
+        };
+        let edges = [0, 1, 2, 3, u64::MAX, u64::MAX - 1, 1 << 62, (1 << 62) + 1];
+        for exponent in 0..0x7fff {
+            for significand in edges {
+                check(exponent, significand);
+            }
+        }
+        // Exact squares: j^2 at even quanta, 2i^2 at odd ones.
+        let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut random = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for _ in 0..20_000 {
+            let j = 3_037_000_500 + random() % (u64::from(u32::MAX) - 3_037_000_500);
+            let i = (1 << 31) + random() % 889_516_852;
+            for exponent in [0x3ffe, 0x3fff, 0x0001, 0x0002, 0x7ffd, 0x7ffe] {
+                check(exponent, j * j);
+                check(exponent, 2 * i * i);
+                check(exponent, j * j - 1);
+                check(exponent, j * j + 1);
+            }
+        }
+        for _ in 0..1_000_000 {
+            let exponent = (random() % 0x7fff) as u16;
+            check(exponent, random());
+        }
+        assert!(checked > 1_400_000, "{checked}");
+    }
 }

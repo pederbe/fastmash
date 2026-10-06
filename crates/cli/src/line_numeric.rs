@@ -131,7 +131,7 @@ pub(super) fn rounding(value: numerics::Value, kind: Rounding) -> Result<numeric
         })
         .value
     };
-    // Approved difference: only actual zero is normalized; negative NaN stays NaN.
+    // Documented difference: only actual zero is normalized; negative NaN stays NaN.
     admitted(if result.is_zero() {
         Extended::ZERO
     } else {

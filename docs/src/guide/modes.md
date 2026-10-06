@@ -3,8 +3,19 @@
 ## Per-row operations
 
 Per-row operations produce one output record for each input record. They can
-be combined with each other and with `cut`, but not with summary operations
-in the same command.
+be combined with each other, but not with summary operations in the same
+command.
+
+### Fields
+
+| Operation | Result |
+| --- | --- |
+| `cut FIELDS`, `echo FIELDS` | Print the selected fields of each record |
+
+```console
+$ printf 'a\tb\tc\n' | fastmash cut 3,1
+c	a
+```
 
 ### Numbers
 
@@ -47,13 +58,10 @@ Path operations work on the text alone; they don't touch the filesystem.
 
 | Mode | Effect |
 | --- | --- |
-| `cut FIELDS`, `echo FIELDS` | Print the selected fields of each record |
 | `reverse` | Reverse the order of fields in each record |
 | `noop`, `nop` | Read the input and print nothing (useful for validation); with `--full`, print each record |
 
 ```console
-$ printf 'a\tb\tc\n' | fastmash cut 3,1
-c	a
 $ printf 'a\tb\tc\n' | fastmash reverse
 c	b	a
 ```
@@ -65,6 +73,7 @@ c	b	a
 | `transpose` | Swap rows and columns |
 | `check [N lines] [N fields]` | Verify every record has the same number of fields, and optionally the expected counts |
 | `rmdup FIELD`, `dedup FIELD` | Keep the first record for each distinct value of one key field |
+| `health [CONTROLS]` | Inspect structural issues, missing values and lexical types, optionally validating supplied rules |
 
 ```console
 $ printf 'a\tb\n1\t2\n' | fastmash transpose
@@ -81,3 +90,25 @@ missing cells with the `--filler` text (default `N/A`).
 
 `check` prints a short confirmation and exits with status 0 when the table is
 consistent, or reports the first inconsistent record and exits with status 1.
+
+[Table health reports](table-health.md) inspect the complete accepted input,
+with readable or schema-version-1 TSV output and bounded examples. Inferred
+findings are advisory; `validate` fails only for violations of supplied type,
+presence or width rules. Health accepts ordinary text input, not quoted CSV.
+
+## Selecting complete records
+
+`top:N FIELD` and `bottom:N FIELD` keep the highest or lowest N records by one
+numeric field. They copy every field in rank order, with earlier input records
+winning ties. Add `-g` for a separate cutoff per group and `-s` for interleaved
+keys. Text and quoted CSV, headers and sorted spill are supported. See
+[Highest and lowest records](top-n-records.md).
+
+## Comparing two datasets
+
+`compare BEFORE AFTER OPERATION FIELDS` summarizes two raw datasets and reports
+before, after, signed difference and percentage for each result. `-g` aligns
+keys globally even when they are interleaved, and named fields bind independently
+to each input header. Optional ranking highlights the largest changes while
+keeping added, removed and unavailable keys visible. See
+[Dataset comparison](dataset-comparison.md) for report columns and limits.

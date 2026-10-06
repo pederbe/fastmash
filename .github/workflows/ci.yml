@@ -1,14 +1,18 @@
 name: CI
 
-# Actions minutes are limited: start checks explicitly with gh workflow run CI.
+# Automatic checks start once the repository is public.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
@@ -17,9 +21,14 @@ env:
 jobs:
   check:
     name: Format and lint
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Public reference check
+        run: |
+          python3 -B -m unittest discover -s scripts -p 'test_check_public_references.py'
+          python3 -B scripts/check_public_references.py
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           # Pinned like the release builder, so a new Rust release's lints do
@@ -32,23 +41,26 @@ jobs:
 
   test:
     name: Test
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - run: cargo test --workspace --locked
+      - run: cargo test --release --workspace --locked
       - run: cargo build --release --locked
       # The supervisor must sit beside the binary (built by the workspace build).
       - run: python3 scripts/check_regressions.py --binary target/release/fastmash
+      - run: python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
 
   msrv:
     name: Minimum supported Rust version
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: "1.88" # rust-version in crates/*/Cargo.toml
@@ -56,9 +68,10 @@ jobs:
 
   licenses:
     name: Dependency licenses and advisories
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Each published crate carries the licence texts; keep them identical.
       - name: Licence texts in every crate
         run: |

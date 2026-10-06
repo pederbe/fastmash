@@ -21,8 +21,10 @@ tools they use. [CONTRIBUTING.md](CONTRIBUTING.md) is the full guide.
 cargo build
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo test --release --workspace
+cargo build --release
 python3 scripts/check_regressions.py --binary target/release/fastmash
+python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
 ```
 
 Run the full set before declaring a change complete, and report any command
@@ -57,6 +59,14 @@ the Linux filesystem.
 10. **Tests accompany changes.** A bug fix adds a test that fails without it.
 
 ## Pull requests
+
+All changes enter `main` through a pull request. The maintainer uses a
+`contrib/` branch in this repository; contributors use a branch in their fork.
+Follow the development workflow in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Run the required local checks before opening a pull request. Leave review and
+merging to the maintainer once CI passes. Before closing a ticket, update its
+acceptance checklist and check whether its parent can close.
 
 Describe what changed, why, how it was tested, and any effect on output,
 exit statuses, performance or documentation. Keep each pull request to one concern.

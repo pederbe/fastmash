@@ -3,235 +3,23 @@ use super::*;
 use std::cell::RefCell;
 
 #[test]
-fn shared_conversion_matches_independent_operations_across_rows_and_resets() {
-    let opts = options(&[
-        "--narm", "ms", "1", "sum", "2", "sum", "1", "mean", "1", "median", "1", "q1", "1", "min",
-        "1", "max", "2", "pvar", "1", "svar", "1", "max", "1",
-    ]);
-    let mut shared = requests(&opts);
-    let mut independent = requests(&opts);
-    link_shared_fields(&mut shared);
-    let mut math = numerics::Numerics::new(false).unwrap();
-    for group in [
-        [b"2\t7".as_slice(), b"NA\t3", b"5\tNA"],
-        [b"NA\tNA".as_slice(), b"-3\t4", b"1\t2"],
-    ] {
-        for (line, row) in group.into_iter().enumerate() {
-            collect(row, &mut shared, line as u64 + 1, &opts, &mut math, None)
-                .ok()
-                .unwrap();
-            collect(
-                row,
-                &mut independent,
-                line as u64 + 1,
-                &opts,
-                &mut math,
-                None,
-            )
-            .ok()
-            .unwrap();
-            for index in 0..shared.len() {
-                assert_eq!(shared[index].count, independent[index].count);
-                // Compare results through the same summarization path, including
-                // sample/dispersion followers whose own storage intentionally stays empty.
-                let actual = summarize_at(
-                    &mut shared,
-                    index,
-                    &mut math,
-                    b',',
-                    &opts.presentation,
-                    false,
-                )
-                .ok()
-                .unwrap();
-                let expected = summarize_at(
-                    &mut independent,
-                    index,
-                    &mut math,
-                    b',',
-                    &opts.presentation,
-                    false,
-                )
-                .ok()
-                .unwrap();
-                assert_eq!(actual, expected);
-            }
-        }
-        for op in shared.iter_mut().chain(&mut independent) {
-            op.reset();
-        }
-    }
-}
-
-#[test]
-fn shared_conversion_preserves_interleaved_errors_and_partial_updates() {
-    for (args, input, message, counts) in [
-        (
-            vec!["sum", "1", "min", "3", "max", "2", "max", "1"],
-            b"2\tbad".as_slice(),
-            b"invalid input: field 3 requested, line 1 has only 2 fields\n".as_slice(),
-            vec![1, 0, 0, 0],
-        ),
-        (
-            vec!["sum", "1", "max", "2", "min", "3", "max", "1"],
-            b"2\tbad".as_slice(),
-            b"invalid numeric value in line 1 field 2: 'bad'\n".as_slice(),
-            vec![1, 0, 0, 0],
-        ),
-    ] {
-        let opts = options(&args);
-        let mut ops = requests(&opts);
-        link_shared_fields(&mut ops);
-        let mut math = numerics::Numerics::new(false).unwrap();
-        let error = collect(input, &mut ops, 1, &opts, &mut math, None)
-            .err()
-            .unwrap();
-        assert_eq!(error.message, message);
-        assert_eq!(ops.iter().map(|op| op.count).collect::<Vec<_>>(), counts);
-    }
-    let opts = options(&["sum", "1", "median", "1", "max", "1"]);
-    let mut ops = requests(&opts);
-    link_shared_fields(&mut ops);
-    let mut math = numerics::Numerics::new(false).unwrap();
-    samples::FAIL_GROWTH.with(|flag| flag.set(true));
-    let error = collect(b"2", &mut ops, 1, &opts, &mut math, None)
-        .err()
-        .unwrap();
-    assert_eq!(error.status, 77);
-    assert_eq!(ops[0].count, 1);
-    assert_eq!(ops[2].count, 0);
-}
-
-#[test]
-fn path_fields_use_fallible_text_storage_without_a_numerical_session() {
-    let opts = options(&[
-        "dirname", "1", "basename", "1", "extname", "1", "barename", "1",
-    ]);
-    let mut ops = requests(&opts);
-    let mut math = numerics::Numerics::new(false).unwrap();
-    ops[0].text.replace(b"old").unwrap();
-    ops[0].text.fail_next_growth();
-    let error = collect(
-        b"long-directory/file.tar.gz",
-        &mut ops,
-        1,
-        &opts,
-        &mut math,
-        None,
-    )
-    .err()
-    .unwrap();
-    assert_eq!(error.status, 77);
-    assert_eq!(ops[0].text.output(), Some(b"old".as_slice()));
-    collect(b"a/file.tar.gz", &mut ops, 1, &opts, &mut math, None)
-        .ok()
-        .unwrap();
-    assert!(!math.has_session());
-    assert_eq!(
-        ops.iter()
-            .map(|op| op.text.output().unwrap())
-            .collect::<Vec<_>>(),
-        [b"a".as_slice(), b"file.tar.gz", b"tar.gz", b"file"]
-    );
-}
-
-#[test]
-fn checksums_collect_without_a_numerical_session() {
-    let opts = options(&[
-        "md5", "1", "sha1", "1", "sha224", "1", "sha256", "1", "sha384", "1", "sha512", "1",
-    ]);
-    let mut ops = requests(&opts);
-    let mut math = numerics::Numerics::new(false).unwrap();
-    collect(b"a\0b", &mut ops, 1, &opts, &mut math, None)
-        .ok()
-        .unwrap();
-    assert!(!math.has_session());
-    assert_eq!(
-        ops.iter()
-            .map(|op| op.text.output().unwrap().len())
-            .collect::<Vec<_>>(),
-        [32, 40, 56, 64, 96, 128]
-    );
-}
-
-thread_local! {
-    static PARSED: RefCell<std::collections::VecDeque<Option<fastmash_numeric_contract::Value80>>> = RefCell::default();
-}
-pub(super) fn parsed_value(
-    value: fastmash_numeric_contract::Value80,
-) -> fastmash_numeric_contract::Value80 {
-    PARSED.with(|values| values.borrow_mut().pop_front().flatten().unwrap_or(value))
-}
-
-#[test]
-fn parsed_signaling_nan_stops_before_mutation_but_preserves_paired_left() {
-    let snan = fastmash_numeric_contract::Value80::from_raw(fastmash_numeric_contract::Raw80::new(
-        0x7fff,
-        0x8000_0000_0000_0001,
-    ))
-    .unwrap();
-    for kind in [
-        "sum", "median", "min", "absmin", "absmax", "range", "mode", "madraw", "mad",
-    ] {
-        let options = options(&[kind, "1"]);
-        let mut operations = requests(&options);
-        let mut arithmetic = numerics::Numerics::new(false).unwrap();
-        PARSED.with(|values| values.borrow_mut().push_back(Some(snan)));
-        let error = collect(b"1", &mut operations, 1, &options, &mut arithmetic, None)
-            .err()
-            .unwrap();
-        assert_eq!(
-            (error.status, error.message),
-            (70, b"internal numerical invariant failure\n".to_vec())
-        );
-        assert_eq!(operations[0].count, 0);
-        assert!(operations[0].samples.as_slice().is_empty());
-        assert!(
-            numerics::Numerics::value80(operations[0].value)
-                .same_bits(fastmash_numeric_contract::Value80::exact_u64(0))
-        );
-    }
-    let options = options(&["dotprod", "1:2"]);
-    let mut operations = requests(&options);
-    let mut arithmetic = numerics::Numerics::new(true).unwrap();
-    PARSED.with(|values| values.borrow_mut().extend([None, Some(snan)]));
-    let error = collect(b"1\t2", &mut operations, 1, &options, &mut arithmetic, None)
-        .err()
-        .unwrap();
-    assert_eq!(error.status, 70);
-    assert_eq!(
-        operations[0].pair_samples.as_ref().unwrap().lengths(),
-        (1, 0)
-    );
-}
-
-#[test]
 fn groups_and_prepared_sorted_stream_share_the_same_session() {
-    for sorted in [false, true] {
+    // A sorted stream whose Input header was not read before sorting reaches
+    // `calculate` as unsorted input does.
+    {
         let options = options(&["-g", "1", "sum", "2", "sum", "2", "median", "2"]);
-        let operations = requests(&options);
         let mut arithmetic = numerics::Numerics::new(true).unwrap();
         let identity = arithmetic.identity();
         let mut bytes = Vec::new();
-        let buffer = headers::output::Buffered::new(&mut bytes, 4096, false).unwrap();
-        let mut output = command_output::Header::new(buffer, &options);
-        let prepared = if sorted {
-            sorted_input::Header::Empty
-        } else {
-            sorted_input::Header::Unprepared
-        };
+        let buffer = buffered_stdout::BufferedStdout::new(&mut bytes, 4096, false).unwrap();
+        let mut output = command_output::Results::new(buffer, &options);
+        let prepared = None;
         assert!(
             calculate(
                 &mut &b"a\t1\na\t3\nb\t2\nb\t4\n"[..],
                 &mut output,
                 &options,
-                CalculationFields {
-                    program: b"fastmash",
-                    operations,
-                    names: &[],
-                    keys: vec![1],
-                    key_names: &[]
-                },
+                binding(&options),
                 &mut arithmetic,
                 None,
                 prepared
@@ -274,8 +62,8 @@ fn mixed_group_state_resets_after_missing_values_and_header_input() {
     let mut arithmetic = numerics::Numerics::new(true).unwrap();
     let identity = arithmetic.identity();
     let mut bytes = Vec::new();
-    let buffer = headers::output::Buffered::new(&mut bytes, 4096, false).unwrap();
-    let mut output = command_output::Header::new(buffer, &options);
+    let buffer = buffered_stdout::BufferedStdout::new(&mut bytes, 4096, false).unwrap();
+    let mut output = command_output::Results::new(buffer, &options);
     // Independent compaction gives [1, 5] dot [3, 7] = 38; rowwise removal gives 35.
     let input = b"group\tx\ty\tlabel\na\t1\tNA\tred\na\tNA\t3\tNA\na\t5\t7\tblue\nb\tNA\tNA\tNA\nb\t2\t4\tgreen\nc\tNA\tNA\tNA\n";
     assert!(
@@ -283,16 +71,10 @@ fn mixed_group_state_resets_after_missing_values_and_header_input() {
             &mut &input[..],
             &mut output,
             &options,
-            CalculationFields {
-                program: b"fastmash",
-                operations: requests(&options),
-                names: &[],
-                keys: vec![1],
-                key_names: &[],
-            },
+            binding(&options),
             &mut arithmetic,
             None,
-            sorted_input::Header::Unprepared,
+            None,
         )
         .is_ok()
     );
@@ -328,28 +110,22 @@ fn percentile_endpoint_selects_without_arithmetic() {
         let mut arithmetic = numerics::Numerics::new(false).unwrap();
         for (row, line) in input.lines().enumerate() {
             assert!(
-                collect(
-                    line.as_bytes(),
-                    &mut operations,
-                    row as u64 + 1,
-                    &options,
-                    &mut arithmetic,
-                    None
-                )
-                .is_ok()
+                operations
+                    .collect_line(
+                        line.as_bytes(),
+                        row as u64 + 1,
+                        &options,
+                        &mut arithmetic,
+                        None
+                    )
+                    .is_ok()
             );
         }
         assert_eq!(
-            summarize_at(
-                &mut operations,
-                0,
-                &mut arithmetic,
-                b',',
-                &Default::default(),
-                false
-            )
-            .ok()
-            .unwrap(),
+            operations
+                .result(0, &mut arithmetic, &options)
+                .ok()
+                .unwrap(),
             expected.as_bytes()
         );
     }
@@ -369,24 +145,18 @@ fn percentile_endpoint_resets_groups_and_renders_headers() {
     let mut arithmetic = numerics::Numerics::new(true).unwrap();
     let identity = arithmetic.identity();
     let mut bytes = Vec::new();
-    let buffer = headers::output::Buffered::new(&mut bytes, 4096, false).unwrap();
-    let mut output = command_output::Header::new(buffer, &options);
+    let buffer = buffered_stdout::BufferedStdout::new(&mut bytes, 4096, false).unwrap();
+    let mut output = command_output::Results::new(buffer, &options);
     let input = b"group\tvalue\na\t3\na\t1\nb\tNA\nb\tNA\nc\t-0\n";
     assert!(
         calculate(
             &mut &input[..],
             &mut output,
             &options,
-            CalculationFields {
-                program: b"fastmash",
-                operations: requests(&options),
-                names: &[],
-                keys: vec![1],
-                key_names: &[]
-            },
+            binding(&options),
             &mut arithmetic,
             None,
-            sorted_input::Header::Unprepared,
+            None,
         )
         .is_ok()
     );
@@ -401,120 +171,6 @@ fn percentile_endpoint_resets_groups_and_renders_headers() {
     );
 }
 
-#[test]
-fn arithmetic_failure_preserves_partial_rows_and_stdout_completion() {
-    // Log allocation failure must stop collection after earlier operations.
-    for grouped in [false, true] {
-        let options = if grouped {
-            options(&["-g", "1", "count", "2", "geomean", "2"])
-        } else {
-            options(&["count", "1", "dotprod", "1:2", "geomean", "1"])
-        };
-        let mut operations = requests(&options);
-        let mut arithmetic = numerics::Numerics::new(true)
-            .unwrap()
-            .with_mean_math(true)
-            .unwrap();
-        let tiny = fastmash_numeric_contract::Value80::from_raw(
-            fastmash_numeric_contract::Raw80::new(0, 1),
-        )
-        .unwrap();
-        PARSED.with(|values| values.borrow_mut().push_back(Some(tiny)));
-        let input = if grouped {
-            b"a\t1".as_slice()
-        } else {
-            b"1\t2".as_slice()
-        };
-        // Direct collection proves the first failed arithmetic operation stops later mutation.
-        if grouped {
-            mean_math::FAIL_ALLOCATION.with(|flag| flag.set(true));
-            let error = collect(input, &mut operations, 1, &options, &mut arithmetic, None)
-                .err()
-                .unwrap();
-            assert_eq!(error.status, 77);
-            assert_eq!(operations[0].count, 1);
-        } else {
-            // Pair mismatch happens during finalization after count output is pending.
-            PARSED.with(|values| values.borrow_mut().clear());
-            operations[1]
-                .pair_samples
-                .as_mut()
-                .unwrap()
-                .push_left(integer(1))
-                .unwrap();
-            operations[1]
-                .pair_samples
-                .as_mut()
-                .unwrap()
-                .push_right(integer(2))
-                .unwrap();
-            operations[1]
-                .pair_samples
-                .as_mut()
-                .unwrap()
-                .push_right(integer(3))
-                .unwrap();
-            operations[0].count = 1;
-            let mut bytes = Vec::new();
-            let buffer = headers::output::Buffered::new(&mut bytes, 4096, false).unwrap();
-            let mut output = command_output::Header::new(buffer, &options);
-            use command_output::CommandOutput;
-            let first = summarize_at(
-                &mut operations,
-                0,
-                &mut arithmetic,
-                b',',
-                &Default::default(),
-                false,
-            )
-            .ok()
-            .unwrap();
-            output.result(&first, b'\t');
-            let error = summarize_at(
-                &mut operations,
-                1,
-                &mut arithmetic,
-                b',',
-                &Default::default(),
-                false,
-            )
-            .err()
-            .unwrap();
-            let mut closed = false;
-            let status = command_output::complete(
-                output.buffer,
-                Err(error),
-                |_| {
-                    closed = true;
-                    Ok(())
-                },
-                &mut |_| true,
-            );
-            assert_eq!(status, 1);
-            assert!(closed);
-            assert_eq!(bytes, b"1\t");
-        }
-    }
-}
-
-#[test]
-fn paired_real_growth_failure_keeps_count_and_completed_left_side() {
-    let options = options(&["count", "1", "dotprod", "1:2"]);
-    let mut operations = requests(&options);
-    let pair = operations[1].pair_samples.as_mut().unwrap();
-    pair.push_left(integer(1)).unwrap();
-    pair.reset(); // Left retains capacity; right's next append must allocate.
-    samples::FAIL_GROWTH.with(|flag| flag.set(true));
-    let mut arithmetic = numerics::Numerics::new(false).unwrap();
-    let error = collect(b"1\t2", &mut operations, 1, &options, &mut arithmetic, None).unwrap_err();
-    assert_eq!(error.status, 77);
-    assert_eq!(operations[0].count, 1);
-    assert_eq!(
-        operations[1].pair_samples.as_ref().unwrap().lengths(),
-        (1, 0)
-    );
-}
-
 fn options(args: &[&str]) -> options::Options {
     let args: Vec<_> = args.iter().map(std::ffi::OsString::from).collect();
     let options::Action::Calculate(options) =
@@ -524,8 +180,8 @@ fn options(args: &[&str]) -> options::Options {
     };
     *options
 }
-fn requests(options: &options::Options) -> Vec<Operation> {
-    operations(
+fn requests(options: &options::Options) -> OperationSet {
+    OperationSet::new(
         grammar::command(&options.operands, options.group.as_ref())
             .ok()
             .unwrap()
@@ -548,6 +204,8 @@ fn sigpipe_policy_in_isolated_test_processes() {
     for case in [
         "blocked",
         "blocked-sorted",
+        "blocked-comparison",
+        "blocked-health",
         "help",
         "version",
         "grammar",
@@ -576,22 +234,64 @@ fn sigpipe_child() {
         return;
     };
     let old = fastmash_sort_process::linux::mask(None).unwrap();
-    if ["blocked", "blocked-sorted", "help", "version", "grammar"].contains(&case.as_str()) {
+    if [
+        "blocked",
+        "blocked-sorted",
+        "blocked-comparison",
+        "blocked-health",
+        "help",
+        "version",
+        "grammar",
+    ]
+    .contains(&case.as_str())
+    {
         fastmash_sort_process::linux::mask(Some(old | (1 << 12))).unwrap();
-        let args: Vec<std::ffi::OsString> = match case.as_str() {
-            "help" => vec!["--help".into()],
-            "version" => vec!["--version".into()],
-            "grammar" => vec!["not-an-operation".into(), "1".into()],
-            "blocked-sorted" => ["-s", "-g", "1", "count", "2"].map(Into::into).to_vec(),
-            _ => vec!["count".into(), "1".into()],
+        let spellings = match case.as_str() {
+            "help" => vec!["--help"],
+            "version" => vec!["--version"],
+            "grammar" => vec!["not-an-operation", "1"],
+            "blocked-sorted" => vec!["-s", "-g", "1", "count", "2"],
+            "blocked-comparison" => vec!["compare", "before", "after", "count", "1"],
+            "blocked-health" => vec!["health", "bogus"],
+            _ => vec!["count", "1"],
+        };
+        let args: Vec<std::ffi::OsString> = spellings.iter().map(Into::into).collect();
+        if case == "blocked-comparison" {
+            // Refuse the first Binding reservation if it runs before signals.
+            let prefix = command_test_support::scanning_reservations(&spellings);
+            command_memory::FAIL_RESERVATION.with(|slot| slot.set(Some(prefix)));
+        }
+        let mut input = command_test_support::Input {
+            bytes: b"1\n",
+            segment: 1,
+            error: Some(5),
+        };
+        let mut sources = command_test_support::Sources {
+            inputs: [
+                command_test_support::Input {
+                    bytes: b"before",
+                    segment: 1,
+                    error: Some(5),
+                },
+                command_test_support::Input {
+                    bytes: b"after",
+                    segment: 1,
+                    error: Some(5),
+                },
+            ],
+            closes: [None, None],
+            opened: 0,
+            completed: 0,
         };
         let mut bytes = Vec::new();
-        let result = run(
-            &mut &b"1\n"[..],
+        let result = run_with_sources(
+            (&mut input, &mut sources),
             &mut bytes,
             &args,
             b"fastmash",
             &mut |_| true,
+            &mut NoEntropy,
+            Environment::from_env(Default::default()),
         );
         match case.as_str() {
             "help" => {
@@ -615,6 +315,14 @@ fn sigpipe_child() {
                 assert_eq!(error.message, b"blocked SIGPIPE is unsupported\n");
                 assert!(bytes.is_empty());
             }
+        }
+        assert_eq!(input.bytes, b"1\n");
+        assert_eq!((sources.opened, sources.completed), (0, 0));
+        if case == "blocked-comparison" {
+            assert_eq!(
+                command_memory::FAIL_RESERVATION.with(|slot| slot.replace(None)),
+                Some(0)
+            );
         }
         std::process::exit(0);
     }
@@ -659,26 +367,19 @@ fn sigpipe_child() {
 #[test]
 fn grouped_partial_row_and_completed_rows_survive_later_failure() {
     let options = options(&["--narm", "-g", "1", "count", "2", "dotprod", "2:3"]);
-    let operations = requests(&options);
     let mut arithmetic = numerics::Numerics::new(true).unwrap();
     let identity = arithmetic.identity();
     let mut bytes = Vec::new();
-    let buffer = headers::output::Buffered::new(&mut bytes, 4096, false).unwrap();
-    let mut output = command_output::Header::new(buffer, &options);
+    let buffer = buffered_stdout::BufferedStdout::new(&mut bytes, 4096, false).unwrap();
+    let mut output = command_output::Results::new(buffer, &options);
     let result = calculate(
         &mut &b"a\t1\t2\na\t3\t4\nb\t5\t6\nb\t7\tNA\n"[..],
         &mut output,
         &options,
-        CalculationFields {
-            program: b"fastmash",
-            operations,
-            names: &[],
-            keys: vec![1],
-            key_names: &[],
-        },
+        binding(&options),
         &mut arithmetic,
         None,
-        sorted_input::Header::Unprepared,
+        None,
     );
     let error = result.err().unwrap();
     assert_eq!(error.status, 1);
@@ -726,7 +427,7 @@ fn command_setup_precedes_numerics_entropy_and_sort_admission() {
         let events = RefCell::new(Vec::new());
         let result = initialize_before_input(
             true,
-            &operations,
+            operations.needs(false).random,
             None,
             &mut NoEntropy,
             || {
@@ -747,7 +448,7 @@ fn command_setup_precedes_numerics_entropy_and_sort_admission() {
     }
     let result = initialize_before_input(
         true,
-        &operations,
+        operations.needs(false).random,
         None,
         &mut NoEntropy,
         || Err(unsupported("signal first")),
@@ -770,7 +471,7 @@ fn startup_keeps_one_value_for_empty_session_free_mixed_and_duplicate_requests()
             let needs = false;
             let (value, _) = initialize_before_input(
                 sorted,
-                &operations,
+                operations.needs(false).random,
                 Some(7),
                 &mut NoEntropy,
                 || {
@@ -801,7 +502,7 @@ fn startup_keeps_one_value_for_empty_session_free_mixed_and_duplicate_requests()
     }
     let (value, _) = initialize_before_input(
         false,
-        &[],
+        false,
         None,
         &mut NoEntropy,
         || Ok(()),
@@ -818,181 +519,82 @@ fn extrema_are_session_free_with_checked_values_and_mixed_routing() {
     for kind in ["min", "max", "absmin", "absmax", "range"] {
         let opts = options(&[kind, "1"]);
         let mut ops = requests(&opts);
-        assert!(projected_sort::supports(&ops));
+        assert_eq!(ops.native_sort(), operation_set::NativeSort::Original);
         let mut arithmetic = numerics::Numerics::new(false).unwrap();
         for (i, record) in [b"-3.25".as_slice(), b"2.5".as_slice()].iter().enumerate() {
-            assert!(collect(record, &mut ops, i as u64 + 1, &opts, &mut arithmetic, None).is_ok());
+            assert!(
+                ops.collect_line(record, i as u64 + 1, &opts, &mut arithmetic, None)
+                    .is_ok()
+            );
         }
         // A missing wider session would refuse if summarization still used it.
-        assert!(
-            summarize(
-                &mut ops[0],
-                &mut arithmetic,
-                b',',
-                &Default::default(),
-                false
-            )
-            .is_ok()
-        );
+        assert!(ops.result(0, &mut arithmetic, &opts).is_ok());
     }
 }
 
+/// Each Operation runs on exactly the numerics its Kind declares: with them
+/// every summary succeeds, and without any one of them it fails.
 #[test]
-fn dispersion_shares_only_original_order_samples_and_propagates_growth_failure() {
-    let opts = options(&[
-        "pvar", "1", "median", "1", "sstdev", "1", "svar", "1", "pvar", "2",
-    ]);
-    let mut ops = requests(&opts);
-    link_shared_fields(&mut ops);
-    assert_eq!(
-        ops.iter()
-            .map(|op| op.dispersion_source)
-            .collect::<Vec<_>>(),
-        [None, None, Some(0), Some(0), None]
-    );
-    let mut arithmetic = numerics::Numerics::with_requirements(false, true).unwrap();
-    samples::FAIL_GROWTH.with(|flag| flag.set(true));
-    let error = collect(b"2\t3", &mut ops, 1, &opts, &mut arithmetic, None)
-        .err()
-        .unwrap();
-    assert_eq!(error.status, 77);
-    assert_eq!(error.message, b"pvar sample memory allocation failed\n");
-    for op in &mut ops {
-        op.reset();
-    }
-    for (i, record) in [b"2\t3".as_slice(), b"0\t1", b"4\t5"].iter().enumerate() {
-        assert!(collect(record, &mut ops, i as u64 + 1, &opts, &mut arithmetic, None).is_ok());
-    }
-    let before = summarize_at(
-        &mut ops,
-        0,
-        &mut arithmetic,
-        b',',
-        &Default::default(),
-        false,
-    )
-    .ok()
-    .unwrap();
-    assert_eq!(
-        summarize_at(
-            &mut ops,
-            1,
-            &mut arithmetic,
-            b',',
-            &Default::default(),
-            false
-        )
-        .ok()
-        .unwrap(),
-        b"2"
-    );
-    assert_eq!(
-        summarize_at(
-            &mut ops,
-            0,
-            &mut arithmetic,
-            b',',
-            &Default::default(),
-            false
-        )
-        .ok()
-        .unwrap(),
-        before
-    );
-    assert_eq!(
-        summarize_at(
-            &mut ops,
-            2,
-            &mut arithmetic,
-            b',',
-            &Default::default(),
-            false
-        )
-        .ok()
-        .unwrap(),
-        b"2"
-    );
-    assert_eq!(
-        summarize_at(
-            &mut ops,
-            3,
-            &mut arithmetic,
-            b',',
-            &Default::default(),
-            false
-        )
-        .ok()
-        .unwrap(),
-        b"4"
-    );
-}
-
-#[test]
-fn moments_share_only_immutable_samples_and_propagate_growth_failure() {
-    let opts = options(&[
-        "pskew", "1", "median", "1", "skurt", "1", "mad", "1", "pkurt", "1", "sskew", "2",
-        "jarque", "1",
-    ]);
-    let mut ops = requests(&opts);
-    link_shared_fields(&mut ops);
-    assert_eq!(
-        ops.iter().map(|o| o.sample_source).collect::<Vec<_>>(),
-        [None, None, Some(0), None, Some(0), None, Some(0)]
-    );
-    let mut arithmetic = numerics::Numerics::with_requirements(true, true)
-        .ok()
-        .unwrap();
-    for i in 0..4 {
-        collect(
-            format!("{}\t{}", i, i + 1).as_bytes(),
-            &mut ops,
-            i + 1,
-            &opts,
-            &mut arithmetic,
-            None,
-        )
-        .ok()
-        .unwrap();
-    }
-    assert_eq!(ops[0].samples.as_slice().len(), 4);
-    assert!(ops[2].samples.as_slice().is_empty());
-    assert_eq!(ops[2].count, 4);
-    for op in &mut ops {
-        op.reset();
-    }
-    assert!(ops[0].samples.as_slice().is_empty());
-    let opts = options(&["count", "1", "pskew", "1", "skurt", "1"]);
-    let mut ops = requests(&opts);
-    link_shared_fields(&mut ops);
-    samples::FAIL_GROWTH.with(|flag| flag.set(true));
-    let error = collect(b"2", &mut ops, 1, &opts, &mut arithmetic, None)
-        .err()
-        .unwrap();
-    assert_eq!(error.status, 77);
-    assert_eq!(ops[0].count, 1);
-    assert!(ops[1].samples.as_slice().is_empty());
-    assert_eq!(ops[2].count, 0);
-}
-
-#[test]
-fn normality_owners_share_samples_and_report_injected_growth_failure() {
-    for op in ["jarque", "dpo"] {
-        let opts = options(&["count", "1", op, "1", "pskew", "1"]);
+fn every_operation_runs_on_exactly_its_declared_numeric_requirements() {
+    let records: [&[u8]; 4] = [b"3\t5", b"4\t1", b"2.5\t7", b"9\t2"];
+    let run = |args: &[&str], needs: numerics::Requirements| -> Result<(), Failure> {
+        let opts = options(args);
         let mut ops = requests(&opts);
-        link_shared_fields(&mut ops);
-        assert_eq!(ops[2].sample_source, Some(1));
-        let mut math = numerics::Numerics::with_requirements(false, true)
-            .unwrap()
-            .with_mean_math(true)
-            .unwrap();
-        samples::FAIL_GROWTH.with(|flag| flag.set(true));
-        let error = collect(b"2", &mut ops, 1, &opts, &mut math, None)
-            .err()
-            .unwrap();
-        assert_eq!(error.status, 77);
-        assert_eq!(ops[0].count, 1);
-        assert!(ops[1].samples.as_slice().is_empty());
-        assert_eq!(ops[2].count, 0);
-        assert!(!math.has_session());
+        let mut arithmetic = numerics::Numerics::with(needs).map_err(numeric_failure)?;
+        for (i, record) in records.iter().enumerate() {
+            ops.collect_line(record, i as u64 + 1, &opts, &mut arithmetic, None)?;
+        }
+        ops.result(0, &mut arithmetic, &opts).map(drop)
+    };
+    let mut names: Vec<String> = operation::PLAIN_OPERATIONS
+        .iter()
+        .map(|(name, _)| String::from_utf8(name.to_vec()).unwrap())
+        .collect();
+    names.extend(["percentile:90", "trimmean:0.2"].map(String::from));
+    let mut checked = 0;
+    for name in &names {
+        let field = if name.ends_with("cov") || name.ends_with("pearson") || name == "dotprod" {
+            "1:2"
+        } else {
+            "1"
+        };
+        let args = [name.as_str(), field];
+        // Line operations and rand are outside summaries.
+        let opts = options(&args);
+        let Some(kind) = grammar::command(&opts.operands, opts.group.as_ref())
+            .ok()
+            .and_then(|command| command.operations.first().map(|request| request.kind))
+        else {
+            continue;
+        };
+        if kind.is_line() || kind == Kind::Rand {
+            continue;
+        }
+        let needs = requests(&opts).needs(false).numerics;
+        assert!(run(&args, needs).is_ok(), "{name} with {needs:?}");
+        if needs.square_root {
+            let fewer = numerics::Requirements {
+                square_root: false,
+                ..needs
+            };
+            assert!(run(&args, fewer).is_err(), "{name} without square root");
+        }
+        if needs.mean_math {
+            let fewer = numerics::Requirements {
+                mean_math: false,
+                ..needs
+            };
+            assert!(run(&args, fewer).is_err(), "{name} without mean math");
+        }
+        checked += 1;
     }
+    assert!(checked >= 40, "{checked}");
+}
+fn binding(options: &options::Options) -> binding::Binding<'static> {
+    let command = grammar::command(&options.operands, options.group.as_ref())
+        .ok()
+        .unwrap();
+    binding::Binding::new(b"fastmash", command.operations, command.keys)
+        .ok()
+        .unwrap()
 }

@@ -1,7 +1,8 @@
 """Run one retained regression case against a fastmash binary and compare it.
 
-Shared by scripts/check_regressions.py and the lab's admission runner. Each
-case names the argv[0] to invoke (`name`); diagnostics print it.
+Used by scripts/check_regressions.py, and shared so that every runner invokes
+and compares cases the same way. Each case names the argv[0] to invoke
+(`name`); diagnostics print it.
 """
 import contextlib
 import os
@@ -58,6 +59,13 @@ def invoke(case, binary, directory, *, bounded=False):
             inp = os.open(str(directory), os.O_RDONLY | os.O_DIRECTORY)
             stack.callback(os.close, inp)
             data = None
+        if case['io'] == 'file':
+            # Standard input as a regular file, which input from a file takes
+            # (hash grouping, for one) and a pipe does not.
+            source = stack.enter_context(tempfile.TemporaryFile(dir=directory))
+            source.write(data)
+            source.seek(0)
+            inp, data = source, None
         if case['io'] == 'full':
             out = stack.enter_context(open('/dev/full', 'wb'))
         if case['io'] == 'closed-pipe':

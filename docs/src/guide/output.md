@@ -1,5 +1,11 @@
 # Numbers, output and locales
 
+Calculation results always contain plain data, including when terminal color
+is forced. Use [quoted CSV](csv-and-result-names.md) to encode complete output
+fields, and `--result-name=INDEX:NAME` with an output header to replace generated
+result labels. [Terminal color](terminal-color.md) covers human-readable help,
+health reports and failure prefixes.
+
 ## Reading numbers
 
 Numerical operations accept decimal numbers (`42`, `-3.5`, `1e-9`),
@@ -37,8 +43,11 @@ The `'` flag groups digits with the locale's thousands separator and grouping:
 
 ## Limits
 
-`--format` strings longer than 99 bytes are refused. Numbers and results
-have no fixed length limit.
+`--format` strings longer than 99 bytes are an error (status 1), as in GNU
+datamash. So are column and operation names in a command longer than 511
+bytes and, when the field delimiter could continue a number (`-t .`, `-t e` or
+a digit, for example), numeric fields longer than 511 bytes. Otherwise numbers
+and results have no fixed length limit.
 
 ## Precision
 
@@ -71,10 +80,15 @@ so it does not need locale data installed on the system.
 provides (such as `en_US.UTF-8`, `fr_FR.UTF-8`, `nb_NO.UTF-8` or
 `hi_IN.UTF-8`), numbers are read and printed with that locale's decimal
 separator, and the `'` format flag uses its thousands separator and grouping.
-The name needs a `.UTF-8` (or `.utf8`) codeset, unless glibc's default for
-it is UTF-8 (such as `hi_IN`), and no `@` modifier. The one
-glibc locale whose decimal separator is not a single byte, `ps_AF`,
-is not supported. Thousands separators are never accepted in input, as in GNU
+An `@` modifier glibc has a locale for, such as `sr_RS@latin` or `de_DE@euro`,
+uses that locale's rules, which can differ from its base's; glibc drops any
+other modifier, and so does Fastmash. A character set other than UTF-8 (a
+`.ISO-8859-1` codeset, or a name such as `de_DE` whose default is Latin-1)
+keeps the locale's rules where its separators are ASCII, and refuses numbers
+where they are not (`fr_FR`'s thousands separator is U+202F). A name glibc has
+no locale for, such as `xx_YY.UTF-8`, behaves as `C`, as in GNU datamash. The
+one glibc locale whose decimal separator is not a single byte, `ps_AF`, is not
+supported. Thousands separators are never accepted in input, as in GNU
 datamash.
 
 **Sorted keys.**
@@ -82,13 +96,15 @@ datamash.
 | Locale | Sorted key order |
 | --- | --- |
 | `C`, `POSIX`, `C.UTF-8` | Byte order |
-| 194 glibc locales in 123 languages, such as `en_US`, `de_DE`, `fr_FR`, `es_ES`, `it_IT`, `pt_BR`, `nl_NL`, `pl_PL`, `ro_RO`, `hr_HR`, `ru_RU` and `he_IL` | Alphabetical (Unicode collation), checked against glibc |
+| 194 glibc locales in 123 languages, such as `en_US`, `de_DE`, `fr_FR`, `es_ES`, `it_IT`, `pt_BR`, `nl_NL`, `pl_PL`, `ro_RO`, `hr_HR`, `ru_RU` and `he_IL` | Alphabetical, as GNU `sort` under glibc (Unicode collation for letters and digits, glibc's table for punctuation, symbols and spaces) |
 | Other locales, such as `cs_CZ`, `da_DK`, `el_GR`, `fi_FI`, `hu_HU`, `ja_JP`, `nb_NO`, `sv_SE`, `tr_TR`, `uk_UA` and the Chinese locales | Sorting is refused |
 
 A language locale is supported for sorting when Fastmash's order of its
 alphabet (its standard and auxiliary letters in the Unicode CLDR data, alone,
 in pairs and in each case, and digits) matches GNU `sort` under glibc exactly. `fastmash --help` lists the
-languages. Punctuation is ordered differently from GNU `sort`; see
+languages. Punctuation, symbols and spaces were checked the same way in every
+one of them and order as in GNU `sort`, except next to digits in some keys
+(`12-A` and `1-2A`) and for vulgar fractions such as `¼`; see
 [Differences](differences.md).
 
 Fastmash reads `LC_NUMERIC` (for numbers), `LC_COLLATE` (for sorting) and

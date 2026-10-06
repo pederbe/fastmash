@@ -65,6 +65,93 @@ mod tests {
     }
 
     #[test]
+    fn table_exp_agrees_with_arbitrary_precision_wherever_it_answers() {
+        agreement(200_000, 0x243f_6a88_85a3_08d3_1319_8a2e_0370_7344);
+    }
+
+    #[test]
+    fn table_exp_agrees_at_the_edges_of_its_domain() {
+        let mut math = Transcendentals::new().unwrap();
+        let mut inputs = Vec::new();
+        // |x| near 2^-40 (the kernel's lower edge), 2^14 (its upper edge), the
+        // smallest normal result (x near -11355.1) and the largest finite
+        // result (x near 11356.5), with neighbouring significands.
+        for (exponent, base) in [
+            (16343u16, 1u64 << 63),
+            (16342, u64::MAX),
+            (16396, u64::MAX),
+            (16396, 0xb162_0000_0000_0000),
+            (16396, 0xb172_0000_0000_0000),
+            (16396, 0xb16c_0000_0000_0000),
+        ] {
+            for delta in 0..512u64 {
+                for sign in [0u128, 1] {
+                    let significand = (base - delta * 0x1_0000_0000) | (1 << 63);
+                    inputs.push(
+                        (sign << 79) | (u128::from(exponent) << 64) | u128::from(significand),
+                    );
+                }
+            }
+        }
+        let mut certified = 0;
+        for bits in inputs {
+            let Some(fast) = super::super::guarded_exp::exp(bits) else {
+                continue;
+            };
+            certified += 1;
+            let input = Value80::from_raw(Raw80::try_from_bits(bits).unwrap()).unwrap();
+            if let Some(slow) = math.arbitrary_exp(input).unwrap() {
+                assert_eq!(Numerics::value80(slow).raw().to_bits(), fast, "{bits:020x}");
+            }
+        }
+        assert!(certified > 1000, "{certified}");
+    }
+
+    /// Numerical admission run: `FASTMASH_EXP_AGREEMENT=<count> cargo test
+    /// --release -- --ignored table_exp_admission`.
+    #[test]
+    #[ignore]
+    fn table_exp_admission() {
+        let count = std::env::var("FASTMASH_EXP_AGREEMENT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(20_000_000);
+        agreement(count, 0x9e37_79b9_7f4a_7c15_f39c_c060_5ced_c834);
+    }
+
+    fn agreement(count: u32, seed: u128) {
+        let mut math = Transcendentals::new().unwrap();
+        let (mut answered, mut total) = (0u32, 0u32);
+        let mut state = seed;
+        for _ in 0..count {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            // Exponents across the kernel 2^-40 <= |x| < 2^14 and a little beyond.
+            let exponent = 16383 - 44 + (state >> 100) as u16 % 60;
+            let significand = (state as u64) | (1 << 63);
+            let sign = (state >> 90) as u16 & 1;
+            let bits = (u128::from(sign << 15 | exponent) << 64) | u128::from(significand);
+            let Some(fast) = super::super::guarded_exp::exp(bits) else {
+                continue;
+            };
+            total += 1;
+            let input = Value80::from_raw(Raw80::try_from_bits(bits).unwrap()).unwrap();
+            let slow = math.arbitrary_exp(input).unwrap();
+            if let Some(slow) = slow {
+                assert_eq!(Numerics::value80(slow).raw().to_bits(), fast, "{bits:020x}");
+                answered += 1;
+            }
+        }
+        // The certificate settles nearly every rounding.
+        eprintln!("exp agreement: {count} inputs, {total} certified, {answered} compared");
+        assert!(
+            total > count / 4 * 3 && answered > count / 4 * 3,
+            "{total} {answered}"
+        );
+    }
+
+    #[test]
     fn exp_only_owner_does_not_initialize_log_work() {
         let mut math = Transcendentals::new().unwrap();
         math.exp(Numerics::promote_u64(1)).unwrap();
@@ -375,6 +462,17 @@ impl Transcendentals {
         if input.exponent() >= 16397 {
             return Ok(None);
         }
+        if let Some(bits) = super::guarded_exp::exp(input.raw().to_bits()) {
+            let raw = Raw80::try_from_bits(bits).map_err(|_| NumericFailure::Invariant)?;
+            return Numerics::admit(Value80::from_raw(raw).map_err(|_| NumericFailure::Invariant)?)
+                .map(Some);
+        }
+        self.arbitrary_exp(input)
+    }
+
+    /// exp in arbitrary precision, correctly rounded; `None` requests the
+    /// retained path. The table-driven path above must agree wherever it answers.
+    fn arbitrary_exp(&mut self, input: Value80) -> Result<Option<Value>, NumericFailure> {
         let source = exact_input(input);
         checked(&source)?;
         let result = source.exp(64, RoundingMode::ToEven, &mut self.constants);

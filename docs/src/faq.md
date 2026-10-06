@@ -15,31 +15,57 @@ Try it on your own data, and tell us about jobs where it is slower.
 
 ## Why does Fastmash refuse my locale?
 
-Fastmash has the number rules of every UTF-8 glibc locale (without an `@`
-modifier) built in, but sorts only in the language locales where its Unicode
-collation was checked to match glibc (194 of them, such as `fr_FR`, `es_ES`
-and `pl_PL`). In other locales, such as `cs_CZ` or `nb_NO`, it refuses to
-sort rather than order keys differently from GNU. It also refuses numbers in
-locales that aren't UTF-8 (a name without `.UTF-8` is accepted when glibc's
-default for it is UTF-8, such as `hi_IN`). Set `LC_COLLATE=C.UTF-8` (or
-`LC_ALL=C.UTF-8`) for byte ordering.
+Fastmash has the number rules of every glibc locale built in, `@` modifier
+locales included, but sorts only in the language locales where its Unicode
+collation was checked to order letters and digits as glibc does (194 of them,
+such as `fr_FR`, `es_ES` and `pl_PL`); punctuation and symbols follow glibc's
+own table there, with a few exceptions, such as some keys with punctuation
+next to digits (see [Differences](guide/differences.md)). In other locales, such as `cs_CZ` or `nb_NO`, it refuses to
+sort. It refuses numbers only where it cannot write a locale's separators:
+`ps_AF`, whose decimal separator is not one byte, and a character set other
+than UTF-8 when the thousands separator is not ASCII (such as `fr_FR` in
+Latin-1). A name glibc has no locale for behaves as `C`, as in GNU datamash.
+Set `LC_COLLATE=C.UTF-8` (or `LC_ALL=C.UTF-8`) for byte ordering.
 
 ## Can it read CSV files?
 
-It splits on any single byte, so `-t,` works for simple comma-separated data.
-It does not interpret quoted fields such as `"Smith, John"`, just like GNU
-datamash. Convert such files first, for example with
-[Miller](https://miller.readthedocs.io/) (`mlr --icsv --otsv cat`),
-[qsv](https://github.com/dathere/qsv) or
-[csvtk](https://bioinf.shenwei.me/csvtk/) (`csvtk csv2tab`). See
-[Compared with other tools](comparison.md).
+Yes. `--csv-in` reads strict quoted CSV, `--csv-out` encodes output fields, and
+`--csv` selects both. Quoted fields can contain commas, quotes and line breaks;
+format switches do not infer headers. Aggregates, per-row operations, Top-N
+selection and dataset comparison support CSV, including their supported grouped
+workflows. Table health and legacy table/field modes remain ordinary-text only.
+`-t,` still means literal comma splitting, as in GNU datamash. See
+[Quoted CSV and result names](guide/csv-and-result-names.md).
+
+## Can I check a table before calculating?
+
+`fastmash --header-in health < data.tsv` reports inconsistent widths, missing
+values, mixed lexical types and examples. Add known rules such as
+`type price number nonmissing id width 3 validate` to fail on declared
+violations. Inferred findings stay advisory. A versioned TSV report is available
+for scripts. See [Table health reports](guide/table-health.md).
+
+## Can I compare two exports with different column orders?
+
+Yes. With `-H`, named fields bind independently to each input header.
+`fastmash -H -g category compare before.tsv after.tsv sum revenue` reports each
+key's before, after, signed difference and percentage, including added and
+removed keys. Keys consolidate across each whole dataset; they need not be
+adjacent. See [Dataset comparison](guide/dataset-comparison.md).
+
+## Will terminal color change data in a pipeline?
+
+No. Only help, the program prefix on failures and readable health reports use
+color. Calculation results, CSV, health TSV and version output remain plain even
+with `--color=always`. Styling defaults to automatic terminal detection;
+`--no-color` disables it. See [Terminal color](guide/terminal-color.md).
 
 ## Why are there two executables?
 
-`fastmash-sort-supervisor` runs the system `sort` safely for the sorted jobs
-that Fastmash's own sorter doesn't handle yet (some statistics in the C
-locales). Keep it in the same
-directory as `fastmash`.
+`fastmash-sort-supervisor` runs the system `sort` safely for some sorted jobs
+in the C locales, where the system `sort` is faster on large input. Keep it in
+the same directory as `fastmash`: without it, those jobs sort inside Fastmash,
+with the same output.
 
 ## Why exit status 77?
 
@@ -57,8 +83,8 @@ every machine; GNU datamash's depend on the hardware and C library. See
 
 ## Does it work on macOS or Windows?
 
-On Windows, use WSL2. macOS on Apple Silicon and native Windows are planned;
-see the [roadmap](roadmap.md).
+On Windows, use WSL2. macOS on Apple Silicon is a later target; see the
+[roadmap](roadmap.md). Native Windows is outside the current product scope.
 
 ## How does Fastmash relate to GNU datamash?
 

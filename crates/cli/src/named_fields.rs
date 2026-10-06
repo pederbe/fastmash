@@ -23,23 +23,28 @@ pub(super) fn resolve(
 ) -> Result<Vec<(usize, Target, u64)>, Failure> {
     resolve_with(requests, record, delimiter, false)
 }
-pub(super) fn resolve_with(
+
+pub(super) fn resolve_decoded(
     requests: &[Named],
-    record: &[u8],
-    delimiter: records::Separator,
+    record: &super::csv_input::Record,
     utf8: bool,
+) -> Result<Vec<(usize, Target, u64)>, Failure> {
+    resolve_matching(requests, utf8, |name| {
+        record
+            .fields()
+            .position(|field| super::headers::label(field) == name)
+    })
+}
+
+fn resolve_matching(
+    requests: &[Named],
+    utf8: bool,
+    mut find: impl FnMut(&[u8]) -> Option<usize>,
 ) -> Result<Vec<(usize, Target, u64)>, Failure> {
     let mut resolved = Vec::new();
     super::command_memory::reserve(&mut resolved, requests.len())?;
     for request in requests {
-        let field = records::fields(record, delimiter).position(|span| {
-            let label = &record[span.start..span.start + span.length];
-            let end = label
-                .iter()
-                .position(|&byte| byte == 0)
-                .unwrap_or(label.len());
-            label[..end] == request.name
-        });
+        let field = find(&request.name);
         let Some(field) = field else {
             let mut message = b"column name ".to_vec();
             quote_with(&request.name, &mut message, utf8);
@@ -49,6 +54,19 @@ pub(super) fn resolve_with(
         resolved.push((request.operation, request.target, field as u64 + 1));
     }
     Ok(resolved)
+}
+
+pub(super) fn resolve_with(
+    requests: &[Named],
+    record: &[u8],
+    delimiter: records::Separator,
+    utf8: bool,
+) -> Result<Vec<(usize, Target, u64)>, Failure> {
+    resolve_matching(requests, utf8, |name| {
+        records::fields(record, delimiter).position(|span| {
+            super::headers::label(&record[span.start..span.start + span.length]) == name
+        })
+    })
 }
 
 /// GNU's locale quotation in the admitted C/POSIX locale, over raw bytes.

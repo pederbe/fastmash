@@ -1,6 +1,18 @@
 use super::*;
 
 pub(super) fn failing_input(binary: &OsStr, arguments: &[&str], full: bool) -> Output {
+    failing_input_with(binary, arguments, b"a\tb\nc\td\npartial", full, "C")
+}
+
+/// Runs `binary` on `input` from a terminal whose reads fail with EIO after it,
+/// discarding a final incomplete record.
+pub(super) fn failing_input_with(
+    binary: &OsStr,
+    arguments: &[&str],
+    input: &[u8],
+    full: bool,
+    locale: &str,
+) -> Output {
     use std::{io::Write, os::fd::FromRawFd};
     let mut master = -1;
     let mut slave = -1;
@@ -25,17 +37,18 @@ pub(super) fn failing_input(binary: &OsStr, arguments: &[&str], full: bool) -> O
         assert_eq!(libc::tcsetattr(slave, libc::TCSANOW, &term), 0);
     }
     // SAFETY: openpty returned two new descriptors that nothing else owns.
-    let input = unsafe { fs::File::from_raw_fd(master) };
+    let terminal = unsafe { fs::File::from_raw_fd(master) };
     // SAFETY: as above.
     let mut feed = unsafe { fs::File::from_raw_fd(slave) };
-    feed.write_all(b"a\tb\nc\td\npartial").unwrap();
+    feed.write_all(input).unwrap();
     drop(feed);
     Command::new(binary)
         .arg0("fastmash")
         .args(arguments)
         .env_clear()
-        .env("LC_ALL", "C")
-        .stdin(input)
+        .env("LC_ALL", locale)
+        .env("PATH", "/usr/bin:/bin")
+        .stdin(terminal)
         .stdout(if full {
             Stdio::from(
                 fs::OpenOptions::new()

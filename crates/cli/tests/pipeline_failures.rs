@@ -10,6 +10,8 @@ use std::{
 };
 
 const MODES: &[(&str, &[&str])] = &[
+    ("top", &["top:1", "2"]),
+    ("bottom", &["bottom:1", "2"]),
     ("plain", &["count", "1"]),
     ("cut", &["cut", "2,1"]),
     ("round", &["round", "2"]),
@@ -23,6 +25,20 @@ const MODES: &[(&str, &[&str])] = &[
     ("dedup", &["dedup", "1"]),
     ("noop", &["-f", "noop"]),
     ("header", &["--header-out", "count", "1"]),
+    (
+        "csv",
+        &[
+            "--csv-out",
+            "--header-out",
+            "--result-name=1:records,\"daily\"",
+            "count",
+            "1",
+        ],
+    ),
+    (
+        "result-name",
+        &["--header-out", "--result-name=1:records", "count", "1"],
+    ),
     ("group", &["-g", "1", "count", "1"]),
     ("native", &["-s", "-g", "1", "count", "1"]),
     ("external", &["-s", "-g", "1", "geomean", "2"]),
@@ -206,6 +222,8 @@ fn check(mode: &str, fault: &str, name: &str, output: &Output) {
         b"0 lines, 0 fields\n"
     } else if ordinary_output {
         match mode {
+            "top" => b"b\t2\n",
+            "bottom" => b"a\t1\n",
             "plain" => b"2\n",
             "round" | "bin" => b"1\n2\n",
             "getnum" | "strbin" => b"0\n0\n",
@@ -215,6 +233,8 @@ fn check(mode: &str, fault: &str, name: &str, output: &Output) {
             "noop" | "dedup" => b"a\t1\nb\t2\n",
             "check" => b"2 lines, 2 fields\n",
             "header" => b"count(field-1)\n2\n",
+            "result-name" => b"records\n2\n",
+            "csv" => b"\"records,\"\"daily\"\"\"\n2\n",
             "group" | "native" => b"a\t1\nb\t1\n",
             "external" => b"a\t1\nb\t2\n",
             "named" => b"GroupBy(key)\tgeomean(value)\na\t1\nb\t2\n",

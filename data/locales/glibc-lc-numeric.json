@@ -409,6 +409,13 @@
     3
    ]
   },
+  "be_BY@latin": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
   "bem_ZM": {
    "decimal_point": ".",
    "thousands_sep": ",",
@@ -502,6 +509,13 @@
     3
    ]
   },
+  "br_FR@euro": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
   "brx_IN": {
    "decimal_point": ".",
    "thousands_sep": ",",
@@ -531,6 +545,20 @@
    ]
   },
   "ca_ES": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ca_ES@euro": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "ca_ES@valencia": {
    "decimal_point": ",",
    "thousands_sep": ".",
    "grouping": [
@@ -635,7 +663,21 @@
     3
    ]
   },
+  "de_AT@euro": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
   "de_BE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "de_BE@euro": {
    "decimal_point": ",",
    "thousands_sep": ".",
    "grouping": [
@@ -650,6 +692,13 @@
    ]
   },
   "de_DE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "de_DE@euro": {
    "decimal_point": ",",
    "thousands_sep": ".",
    "grouping": [
@@ -671,6 +720,13 @@
    ]
   },
   "de_LU": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "de_LU@euro": {
    "decimal_point": ",",
    "thousands_sep": ".",
    "grouping": [
@@ -714,6 +770,13 @@
    ]
   },
   "el_GR": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    -1
+   ]
+  },
+  "el_GR@euro": {
    "decimal_point": ",",
    "thousands_sep": ".",
    "grouping": [
@@ -770,6 +833,13 @@
    ]
   },
   "en_IE": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "en_IE@euro": {
    "decimal_point": ".",
    "thousands_sep": ",",
    "grouping": [
@@ -939,6 +1009,13 @@
     3
    ]
   },
+  "es_ES@euro": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
   "es_GT": {
    "decimal_point": ".",
    "thousands_sep": ",",
@@ -1037,7 +1114,21 @@
     3
    ]
   },
+  "eu_ES@euro": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
   "eu_FR": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "eu_FR@euro": {
    "decimal_point": ",",
    "thousands_sep": " ",
    "grouping": [
@@ -1065,6 +1156,13 @@
     3
    ]
   },
+  "fi_FI@euro": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
   "fil_PH": {
    "decimal_point": ".",
    "thousands_sep": ",",
@@ -1080,6 +1178,13 @@
    ]
   },
   "fr_BE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "fr_BE@euro": {
    "decimal_point": ",",
    "thousands_sep": ".",
    "grouping": [
@@ -1107,7 +1212,21 @@
     3
    ]
   },
+  "fr_FR@euro": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
   "fr_LU": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "fr_LU@euro": {
    "decimal_point": ",",
    "thousands_sep": " ",
    "grouping": [
@@ -1142,6 +1261,13 @@
     3
    ]
   },
+  "ga_IE@euro": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
   "gbm_IN": {
    "decimal_point": ".",
    "thousands_sep": ",",
@@ -1163,6 +1289,13 @@
     -1
    ]
   },
+  "gez_ER@abegede": {
+   "decimal_point": ".",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
   "gez_ET": {
    "decimal_point": ".",
    "thousands_sep": ",",
@@ -1170,7 +1303,21 @@
     3
    ]
   },
+  "gez_ET@abegede": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
   "gl_ES": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
+  "gl_ES@euro": {
    "decimal_point": ",",
    "thousands_sep": "",
    "grouping": [
@@ -1317,6 +1464,13 @@
     3
    ]
   },
+  "it_IT@euro": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
   "iu_CA": {
    "decimal_point": ".",
    "thousands_sep": ",",
@@ -1388,6 +1542,13 @@
    ]
   },
   "ks_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ks_IN@devanagari": {
    "decimal_point": ".",
    "thousands_sep": ",",
    "grouping": [
@@ -1642,6 +1803,13 @@
     4
    ]
   },
+  "nan_TW@latin": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
   "nb_NO": {
    "decimal_point": ",",
    "thousands_sep": " ",
@@ -1705,7 +1873,21 @@
     3
    ]
   },
+  "nl_BE@euro": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
   "nl_NL": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "nl_NL@euro": {
    "decimal_point": ",",
    "thousands_sep": ".",
    "grouping": [
@@ -1825,6 +2007,13 @@
     -1
    ]
   },
+  "pt_PT@euro": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
   "quz_PE": {
    "decimal_point": ",",
    "thousands_sep": ".",
@@ -1910,6 +2099,13 @@
    ]
   },
   "sd_IN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "sd_IN@devanagari": {
    "decimal_point": ".",
    "thousands_sep": ",",
    "grouping": [
@@ -2043,6 +2239,13 @@
     -1
    ]
   },
+  "sr_RS@latin": {
+   "decimal_point": ",",
+   "thousands_sep": "",
+   "grouping": [
+    -1
+   ]
+  },
   "ss_ZA": {
    "decimal_point": ".",
    "thousands_sep": ",",
@@ -2072,6 +2275,13 @@
    ]
   },
   "sv_FI": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
+  "sv_FI@euro": {
    "decimal_point": ",",
    "thousands_sep": " ",
    "grouping": [
@@ -2256,7 +2466,21 @@
     3
    ]
   },
+  "tt_RU@iqtelif": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
   "ug_CN": {
+   "decimal_point": ".",
+   "thousands_sep": ",",
+   "grouping": [
+    3
+   ]
+  },
+  "ug_CN@latin": {
    "decimal_point": ".",
    "thousands_sep": ",",
    "grouping": [
@@ -2301,6 +2525,13 @@
     3
    ]
   },
+  "uz_UZ@cyrillic": {
+   "decimal_point": ",",
+   "thousands_sep": " ",
+   "grouping": [
+    3
+   ]
+  },
   "ve_ZA": {
    "decimal_point": ".",
    "thousands_sep": ",",
@@ -2316,6 +2547,13 @@
    ]
   },
   "wa_BE": {
+   "decimal_point": ",",
+   "thousands_sep": ".",
+   "grouping": [
+    3
+   ]
+  },
+  "wa_BE@euro": {
    "decimal_point": ",",
    "thousands_sep": ".",
    "grouping": [

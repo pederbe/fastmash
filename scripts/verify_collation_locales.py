@@ -5,6 +5,7 @@ usage:
   verify_collation_locales.py candidates GNU_SORT LOCPATH
   verify_collation_locales.py table [--variant N]
   verify_collation_locales.py verify N FASTMASH DATAMASH GNU_SORT LOCPATH [LOCALE...]
+  verify_collation_locales.py punctuation FASTMASH DATAMASH GNU_SORT LOCPATH
 
 `candidates` maps every locale of data/locales/glibc-lc-numeric.json to two
 candidate Unicode (BCP 47) collation locales, in order of preference: the same
@@ -28,9 +29,8 @@ variant; never commit it).
 programs with `-s -g 1 count 1` over word lists and
 compares the order of the output groups. GNU datamash sorts through GNU_SORT
 (`--sort-cmd`), so glibc's collation from LOCPATH is the reference. Words are
-letters and digits only: glibc and the shifted Unicode collator both ignore
-punctuation and spaces at the first levels, and their order is a documented
-difference. A locale is verified when:
+letters and digits only; punctuation, symbols and spaces are reported by
+`punctuation`, not a condition of verification. A locale is verified when:
 
 - its alphabet list orders exactly as GNU's: every standard and auxiliary
   exemplar letter and ASCII letter in both cases, alone, before and after a
@@ -50,6 +50,13 @@ difference. A locale is verified when:
 
 Output: data/locales/collation-verification.json, which keeps the results of
 each variant.
+
+`punctuation` checks the build FASTMASH of the committed table in each of its
+locales on punctuation, symbols and spaces (alone, around letters and digits,
+in pairs, and in key shapes such as signed numbers, strands and HGVS names)
+the same way, and reports the displaced words per locale in
+data/locales/collation-punctuation.json: the remaining differences, which the
+guide documents.
 """
 from bisect import bisect_left
 from concurrent.futures import ThreadPoolExecutor
@@ -62,6 +69,7 @@ import unicodedata
 
 CANDIDATES = Path('data/locales/collation-candidates.json')
 VERIFICATION = Path('data/locales/collation-verification.json')
+PUNCTUATION = Path('data/locales/collation-punctuation.json')
 TABLE = Path('crates/cli/src/collation_locales.rs')
 ICU = '78'
 ASCII = 'abcdefghijklmnopqrstuvwxyz'
@@ -215,6 +223,39 @@ def digit_words():
                    *('a' + d for d in digits), *(d + 'a' for d in digits), 'a', 'b', 'z'})
 
 
+SYMBOLS = ([chr(p) for p in range(0x21, 0x7f) if not chr(p).isalnum()]
+           + [chr(p) for p in range(0xa1, 0xc0) if p not in (0xaa, 0xad, 0xb2, 0xb3, 0xb9, 0xba)]
+           + ['×', '÷', '‐', '–', '—', '‘', '’', '“', '”', '„', '†', '‡', '•', '…', '‰', '′',
+              '″', '‹', '›', '€', '₹', '№', '™', '←', '→', '↑', '↓', '∀', '∂', '∑', '−', '√',
+              '∞', '≈', '≠', '≤', '≥', '■', '□', '●', '○', '★', '♀', '♂', '♪'])
+
+
+def punctuation_words():
+    """Punctuation and symbols alone, around letters and digits, in pairs, and
+    with spaces; key shapes such as strands, signed numbers and HGVS names."""
+    words = set()
+    for s in SYMBOLS:
+        words.update([s, s + 'a', 'a' + s, 'a' + s + 'b', s + '1', '1' + s + '2', 'A' + s,
+                      s + s, 'a' + s + s + 'b'])
+    ascii_symbols = [s for s in SYMBOLS if s < '\x7f']
+    words.update(s + t for s in ascii_symbols for t in ascii_symbols)
+    words.update(['a b', 'a  b', ' a', 'a ', 'ab', 'a b c', 'a-b c', 'a b-c', '-', '+', '.',
+                  '-1', '+1', '1', '-1.5', '1e-3', '-0', '+0', '0.5', '-.5', '1,5', '1.5',
+                  'c.123A>G', 'c.123A>T', 'c.12_13del', 'c.12-1G>A', 'c.12+1G>A',
+                  'p.Arg97Gly', 'p.(Arg97Gly)', 'p.Arg97*', 'chr1:123-456', 'chr1_123',
+                  'a-1', 'a_1', 'a.1', 'a1', 'A-1', 'A_1', 'b-1', 'b_1', 'x.y.z', 'x-y-z',
+                  'x_y_z', "o'neil", 'oneil', 'o-neil', 'O’Neil'])
+    # Punctuation on either side of letters without a fourth-level weight
+    # (Han, and letters locales add), no-break spaces beside punctuation, and
+    # digits, punctuation and letters together.
+    words.update(['（中', '中（', '中国（北京）', '中国北京（）', '-中a_', '中-a-', '–ča', 'č–a',
+                  '-ča_', 'č-a-', '-ła_', 'ł-a-', '’áb', 'á’b', '-ña_', 'ñ-a-',
+                  'a -b', 'a- b', 'Cia Ltda', 'Cia. Ltda', 'ul .Dluga',
+                  'ul. Dluga', '12 A', '12-A', '12A', '1-2A', 'file1.txt', 'File1.txt',
+                  'file(1).txt', 'c.1-21G>A', 'c.121G>A', 'c.12+1G>A', 'c.12-1G>A'])
+    return sorted(words)
+
+
 def block_words(block):
     chars = [chr(p) for low, high in BLOCKS[block] for p in range(low, high + 1) if word_char(chr(p))]
     words = with_filler(chars, chars[0])
@@ -317,6 +358,32 @@ def verify(variant, fastmash, datamash, gnu_sort, locpath, *chosen):
           f'locales verified overall')
 
 
+def punctuation(fastmash, datamash, gnu_sort, locpath):
+    names = [name for name, entry in
+             sorted(json.load(open(VERIFICATION, encoding='utf-8'))['locales'].items())
+             if entry['tag']]
+    words = punctuation_words()
+    tools = (fastmash, datamash, gnu_sort, locpath)
+
+    def one(name):
+        fast, gnu = orders(*tools, name + '.UTF-8', words)
+        if fast is None:
+            return name, {'error': gnu}
+        moved = sorted(displaced(fast, gnu))
+        return name, {'displaced': len(moved), 'words': moved[:40]}
+
+    with ThreadPoolExecutor(8) as pool:
+        report = dict(pool.map(one, names))
+    PUNCTUATION.write_text(json.dumps({'words': len(words), 'locales': report}, indent=1,
+                                      ensure_ascii=False) + '\n', encoding='utf-8')
+    counts = {}
+    for result in report.values():
+        key = result.get('displaced', 'error')
+        counts[key] = counts.get(key, 0) + 1
+    print(f'{len(report)} locales, {len(words)} words; locales by displaced words: '
+          + ', '.join(f'{k}: {v}' for k, v in sorted(counts.items(), key=str)))
+
+
 if __name__ == '__main__':
     command, args = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else (None, [])
     if command == 'candidates' and len(args) == 2:
@@ -325,5 +392,7 @@ if __name__ == '__main__':
         write_table(int(args[args.index('--variant') + 1]) if '--variant' in args else None)
     elif command == 'verify' and len(args) >= 5:
         verify(*args)
+    elif command == 'punctuation' and len(args) == 4:
+        punctuation(*args)
     else:
         sys.exit(__doc__)

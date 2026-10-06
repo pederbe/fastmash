@@ -1,3 +1,6 @@
+//! Checks of how paired Operations share work inside the Operation set:
+//! which followers reuse an earlier pair's samples, and reuse of an earlier
+//! parse of the same field. The sharing is internal, so these are white-box.
 use super::*;
 
 #[test]
@@ -7,10 +10,10 @@ fn paired_followers_share_only_identical_ordered_selectors_and_reset() {
     )
     .ok()
     .unwrap();
-    let (mut ops, _) = operations(requests).ok().unwrap();
-    link_shared_fields(&mut ops);
-    assert_eq!(ops[2].sample_source, Some(0));
-    assert_eq!(ops[3].sample_source, None);
+    let (mut set, _) = OperationSet::new(requests).ok().unwrap();
+    set.bind([]).ok().unwrap();
+    assert_eq!(set.plans[2].sample_source, Some(0));
+    assert_eq!(set.plans[3].sample_source, None);
     let options::Action::Calculate(options) = options::parse(
         &["--narm".into(), "pcov".into(), "1:2".into()],
         b"fastmash",
@@ -22,52 +25,25 @@ fn paired_followers_share_only_identical_ordered_selectors_and_reset() {
     };
     let mut arithmetic = numerics::Numerics::new(false).unwrap();
     for (line, record) in [b"NA\t1".as_slice(), b"2\tNA", b"4\t5"].iter().enumerate() {
-        collect(
-            record,
-            &mut ops,
-            line as u64 + 1,
-            &options,
-            &mut arithmetic,
-            None,
-        )
-        .ok()
-        .unwrap();
+        set.collect_line(record, line as u64 + 1, &options, &mut arithmetic, None)
+            .ok()
+            .unwrap();
     }
-    assert_eq!(ops[0].pair_samples.as_ref().unwrap().lengths(), (2, 2));
-    assert_eq!(ops[2].pair_samples.as_ref().unwrap().capacities(), (0, 0));
+    assert_eq!(set.states[0].kept().pair_samples.lengths(), (2, 2));
+    assert_eq!(set.states[2].kept().pair_samples.capacities(), (0, 0));
     assert_eq!(
-        summarize_at(
-            &mut ops,
-            2,
-            &mut arithmetic,
-            b',',
-            &options.presentation,
-            false
-        )
-        .ok()
-        .unwrap(),
+        set.result(2, &mut arithmetic, &options).ok().unwrap(),
         b"22"
     );
-    for op in &mut ops {
-        op.reset();
-    }
-    collect(b"3\t7", &mut ops, 1, &options, &mut arithmetic, None)
+    set.reset();
+    set.collect_line(b"3\t7", 1, &options, &mut arithmetic, None)
         .ok()
         .unwrap();
     assert_eq!(
-        summarize_at(
-            &mut ops,
-            2,
-            &mut arithmetic,
-            b',',
-            &options.presentation,
-            false
-        )
-        .ok()
-        .unwrap(),
+        set.result(2, &mut arithmetic, &options).ok().unwrap(),
         b"21"
     );
-    assert_eq!(ops[0].pair_samples.as_ref().unwrap().lengths(), (1, 1));
+    assert_eq!(set.states[0].kept().pair_samples.lengths(), (1, 1));
 }
 
 #[test]
@@ -76,8 +52,8 @@ fn pairs_reuse_an_earlier_parse_of_the_same_field() {
         let requests = grammar::parse(&words.iter().map(|w| (*w).into()).collect::<Vec<_>>())
             .ok()
             .unwrap();
-        let (mut ops, _) = operations(requests).ok().unwrap();
-        link_shared_fields(&mut ops);
+        let (mut set, _) = OperationSet::new(requests).ok().unwrap();
+        set.bind([]).ok().unwrap();
         let options::Action::Calculate(options) = options::parse(
             &["--narm".into(), "count".into(), "1".into()],
             b"fastmash",
@@ -89,31 +65,13 @@ fn pairs_reuse_an_earlier_parse_of_the_same_field() {
         };
         let mut arithmetic = numerics::Numerics::new(false).unwrap();
         for (line, record) in records.iter().enumerate() {
-            collect(
-                record,
-                &mut ops,
-                line as u64 + 1,
-                &options,
-                &mut arithmetic,
-                None,
-            )
-            .ok()
-            .unwrap();
-        }
-        let links: Vec<_> = ops.iter().map(|op| op.pair_conversion).collect();
-        let results: Vec<_> = (0..ops.len())
-            .map(|at| {
-                summarize_at(
-                    &mut ops,
-                    at,
-                    &mut arithmetic,
-                    b',',
-                    &options.presentation,
-                    false,
-                )
+            set.collect_line(record, line as u64 + 1, &options, &mut arithmetic, None)
                 .ok()
-                .unwrap()
-            })
+                .unwrap();
+        }
+        let links: Vec<_> = set.plans.iter().map(|op| op.pair_conversion).collect();
+        let results: Vec<_> = (0..set.len())
+            .map(|at| set.result(at, &mut arithmetic, &options).ok().unwrap())
             .collect();
         (links, results)
     };
