@@ -1,5 +1,9 @@
 """Preserve frozen results while adapting native fault observations."""
 import copy
+import os
+import stat
+import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -85,6 +89,70 @@ class NativeExpectations(unittest.TestCase):
         self.assertTrue(all(case['io'] == 'normal' for case in applicable))
         self.assertTrue(all(case['io'] != 'normal' or case.get('observe_held')
                             or case.get('hold_stdin') for case in excluded))
+
+    def test_native_full_stdout_is_the_observed_regular_capture(self):
+        case = dict(self.by_id['output-header-lifecycle:header-4087-1-full'],
+                    name='transport-probe', input_hex='', args=['-c',
+                        'import os; info = os.fstat(1); '
+                        'os.write(1, f"{info.st_dev}:{info.st_ino}".encode())'])
+        real_popen = regression_cases.subprocess.Popen
+        identities = []
+        def launch(*args, **kwargs):
+            descriptor = kwargs['stdout'].fileno()
+            info = os.fstat(descriptor)
+            self.assertTrue(stat.S_ISREG(info.st_mode))
+            self.assertEqual(info.st_blksize, 4096)
+            self.assertFalse(os.isatty(descriptor))
+            identities.append(f'{info.st_dev}:{info.st_ino}'.encode())
+            return real_popen(*args, **kwargs)
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(regression_cases.sys, 'platform', 'darwin'), \
+                mock.patch.object(regression_cases.cli_streams, 'native_full_environment',
+                                  side_effect=lambda binary, env: dict(env)) as calibrate, \
+                mock.patch.object(regression_cases.subprocess, 'Popen', side_effect=launch):
+            observed = regression_cases.invoke(case, sys.executable, directory)
+        self.assertEqual(observed['returncode'], 0)
+        self.assertEqual(bytes.fromhex(observed['stdout_hex']), identities[0])
+        self.assertEqual(observed['stderr_hex'], '')
+        self.assertEqual(observed['destination'], {'isatty': False, 'block_size': 4096})
+        calibrate.assert_called_once()
+        # An inactive fault must leave actual output visible instead of discarding it.
+        self.assertFalse(regression_cases.matches(case, dict(observed, returncode=1,
+            stderr_hex=case['expected']['stderr_hex'])))
+
+    def test_native_full_preconditions_fail_before_calibration_or_launch(self):
+        case = dict(self.by_id['output-header-lifecycle:header-4087-1-full'], name='fastmash')
+        for mode, block_size, terminal, flags in (
+                (stat.S_IFREG, 8192, False, os.O_RDWR),
+                (stat.S_IFREG, 0, False, os.O_RDWR),
+                (stat.S_IFCHR, 4096, False, os.O_RDWR),
+                (stat.S_IFREG, 4096, True, os.O_RDWR),
+                (stat.S_IFREG, 4096, False, os.O_RDONLY)):
+            with self.subTest(mode=mode, block_size=block_size, terminal=terminal, flags=flags), \
+                    tempfile.TemporaryDirectory() as directory, \
+                    mock.patch.object(regression_cases.sys, 'platform', 'darwin'), \
+                    mock.patch.object(regression_cases.os, 'fstat',
+                                      return_value=mock.Mock(st_mode=mode, st_blksize=block_size)), \
+                    mock.patch.object(regression_cases.os, 'isatty', return_value=terminal), \
+                    mock.patch.object(regression_cases.cli_streams.fcntl, 'fcntl',
+                                      return_value=flags), \
+                    mock.patch.object(regression_cases.cli_streams, 'native_full_environment') as calibrate, \
+                    mock.patch.object(regression_cases.subprocess, 'Popen') as launch:
+                with self.assertRaises(ValueError):
+                    regression_cases.invoke(case, sys.executable, directory)
+                calibrate.assert_not_called()
+                launch.assert_not_called()
+
+    def test_bounded_native_full_transport_stays_rejected(self):
+        case = dict(self.by_id['output-header-lifecycle:header-4087-1-full'], name='fastmash')
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(regression_cases.sys, 'platform', 'darwin'), \
+                mock.patch.object(regression_cases.cli_streams, 'native_full_environment') as calibrate, \
+                mock.patch.object(regression_cases.subprocess, 'Popen') as launch:
+            with self.assertRaisesRegex(ValueError, 'Linux transports'):
+                regression_cases.invoke(case, sys.executable, directory, bounded=True)
+            calibrate.assert_not_called()
+            launch.assert_not_called()
 
 
 if __name__ == '__main__':

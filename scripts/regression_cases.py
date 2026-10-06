@@ -55,6 +55,7 @@ def invoke(case, binary, directory, *, bounded=False):
                         or fcntl.fcntl(descriptor, fcntl.F_GETFL) & os.O_ACCMODE == os.O_RDONLY):
                     raise ValueError('Bounded capture preconditions failed')
         inp, out = subprocess.PIPE, stdout_file
+        destination = None
         data = bytes.fromhex(case['input_hex'])
         if case['io'] == 'directory':
             inp = os.open(str(directory), os.O_RDONLY | os.O_DIRECTORY)
@@ -71,8 +72,15 @@ def invoke(case, binary, directory, *, bounded=False):
             if sys.platform == 'darwin':
                 if bounded:
                     raise ValueError('Bounded release qualification uses Linux transports')
+                descriptor = stdout_file.fileno()
+                cli_streams.admit_capture(descriptor)
+                destination = dict(isatty=os.isatty(descriptor),
+                                   block_size=os.fstat(descriptor).st_blksize)
+                # Keep the frozen Linux full-device output buffer boundary.
+                if destination['block_size'] != 4096:
+                    raise ValueError('Native full-output capture requires a 4096-byte block size: '
+                                     f'{destination!r}')
                 env = cli_streams.native_full_environment(binary, env)
-                out = stack.enter_context(open('/dev/null', 'wb'))
             else:
                 out = stack.enter_context(open('/dev/full', 'wb'))
         if case['io'] == 'closed-pipe':
@@ -126,13 +134,16 @@ def invoke(case, binary, directory, *, bounded=False):
         stderr_file.seek(0)
         stdout = stdout_file.read(CAP + 1)
         stderr = stderr_file.read(CAP + 1)
-        return dict(argv=[os.fsdecode(a) for a in argv], executable=str(binary), env=env,
+        observed = dict(argv=[os.fsdecode(a) for a in argv], executable=str(binary), env=env,
             process_group=process.pid,
             returncode=process.returncode, timed_out=timed_out,
             overflow=(len(stdout) >= cap or len(stderr) >= cap) if bounded else
                      (len(stdout) > CAP or len(stderr) > CAP),
             cleanup_confirmed=cleanup_confirmed,
             stdout_hex=stdout.hex(), stderr_hex=stderr.hex())
+        if destination is not None:
+            observed['destination'] = destination
+        return observed
 
 
 def normalize_sort_name(stderr_hex):
