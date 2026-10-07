@@ -86,11 +86,10 @@ fn sorted_vnlog_rmdup_reads_its_second_header_from_the_sorted_records() {
 }
 
 #[test]
-fn full_warning_follows_the_sorters_error_without_an_input_header() {
-    // With no Input header before sorting, GNU reads it again from the sort
-    // pipe and only then warns (datamash.c process_file), so sort's error
-    // for the unresolved name comes first on Linux. On macOS the native route
-    // diagnoses the missing Input header before the full warning.
+fn missing_headers_keep_native_and_external_full_warning_order() {
+    // Native sorting diagnoses the missing Input header before entering the
+    // data phase, so it emits no full warning. Linux's external route still
+    // reads the header from the sort pipe and warns after sort's error.
     for operation in ["count", "rms"] {
         for input in [b"".as_slice(), b"#c\n"] {
             let output = run(
@@ -99,7 +98,7 @@ fn full_warning_follows_the_sorters_error_without_an_input_header() {
                 input,
             );
             #[cfg(target_os = "linux")]
-            {
+            if operation == "rms" {
                 // Older GNU sort includes its absolute program name, as in the corpus.
                 let mut stderr = if output.stderr.starts_with(b"/usr/bin/sort: ") {
                     b"/usr/bin/".to_vec()
@@ -112,8 +111,8 @@ fn full_warning_follows_the_sorters_error_without_an_input_header() {
                 stderr.extend_from_slice(WARNING);
                 stderr.extend_from_slice(b"fastmash: read error (on close)\n");
                 assert_result(&output, 1, b"", &stderr);
+                continue;
             }
-            #[cfg(target_os = "macos")]
             assert_result(
                 &output,
                 1,

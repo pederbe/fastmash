@@ -81,6 +81,19 @@ impl Fixture {
         command
     }
 
+    fn close_stdout(command: &mut Command) {
+        // SAFETY: close is async-signal-safe and changes only the child's
+        // standard output after Command installs its pipe.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::close(1) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+
     fn invoke(&self, command: &mut Command, input: &[u8], file: bool) -> Output {
         if file {
             let path = self.root.0.join("input");
@@ -469,16 +482,7 @@ fn native_missing_header_reports_input_failures_without_external_sort() {
                             fixture.command(&["-CH", "-s", "-g", "key", operation, "value"], "1");
                         command.env("LC_ALL", locale);
                         if closed_stdout {
-                            // SAFETY: close is async-signal-safe and changes only the
-                            // child's standard output after Command installs its pipe.
-                            unsafe {
-                                command.pre_exec(|| {
-                                    if libc::close(1) != 0 {
-                                        return Err(std::io::Error::last_os_error());
-                                    }
-                                    Ok(())
-                                });
-                            }
+                            Fixture::close_stdout(&mut command);
                         }
                         let output = fixture.invoke(&mut command, input, file);
                         assert_eq!(output.status.code(), Some(1), "{output:?}");
@@ -534,16 +538,7 @@ fn native_sorted_rmdup_missing_header_reports_input_failures_without_external_so
                     let mut command = fixture.command(&["-sCH", "rmdup", "key"], "1");
                     command.env("LC_ALL", locale);
                     if closed_stdout {
-                        // SAFETY: close is async-signal-safe and changes only the
-                        // child's standard output after Command installs its pipe.
-                        unsafe {
-                            command.pre_exec(|| {
-                                if libc::close(1) != 0 {
-                                    return Err(std::io::Error::last_os_error());
-                                }
-                                Ok(())
-                            });
-                        }
+                        Fixture::close_stdout(&mut command);
                     }
                     let output = fixture.invoke(&mut command, input, file);
                     assert_eq!(output.status.code(), Some(1), "{output:?}");
