@@ -20,6 +20,12 @@ numerical profile version that introduced it.
 
 - Keep the website's installation panel stable during loading and defer its
   script, while retaining every installation command without JavaScript.
+- Keep documentation code examples readable in light mode without JavaScript.
+
+### Changed
+
+- Give the documentation clearer headings and navigation, distinct example,
+  table and diagram panels, and a card layout for the existing starting links.
 
 ## [0.1.0] - 2026-10-06
 
