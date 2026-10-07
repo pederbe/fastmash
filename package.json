@@ -4,7 +4,8 @@
   "description": "Build-time tools for the fastmash.io website (diagrams rendered to SVG). Not shipped to visitors.",
   "license": "MIT OR Apache-2.0",
   "scripts": {
-    "test:landing": "node --test scripts/test_landing_page.mjs"
+    "test:landing": "node --test scripts/test_landing_page.mjs",
+    "test:docs": "node --test scripts/test_docs.mjs"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "12.0.0",
