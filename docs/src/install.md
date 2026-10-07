@@ -69,6 +69,25 @@ cargo binstall fastmash
 These commands install published versions. Version 0.1.0 does not contain
 the native macOS development changes.
 
+## Homebrew on Linux
+
+With [Homebrew](https://docs.brew.sh/Homebrew-on-Linux) on Linux x86-64:
+
+```sh
+brew install pederbe/tap/fastmash
+```
+
+The [maintainer's tap](https://github.com/pederbe/homebrew-tap) builds the
+published source with its locked Rust dependencies. It installs both programs
+and their licenses and notices. Rust and Python are build dependencies;
+these source builds do not carry the performance qualification of the
+downloadable binaries.
+
+Run `brew test pederbe/tap/fastmash` to check the installation. The test includes
+the optional system-sort route and needs Linux 5.11 or later with coreutils
+at `/usr/bin/sort`. Older kernels can use Fastmash's built-in sorting.
+Remove the package with `brew uninstall pederbe/tap/fastmash`.
+
 ## Native macOS development archive
 
 For Apple Silicon with macOS 15 or later, the native development workflow

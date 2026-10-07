@@ -12,6 +12,10 @@ numerical profile version that introduced it.
 
 ### Added
 
+- Homebrew installation on Linux x86-64 through `pederbe/tap/fastmash`,
+  with both executables, license notices and installed system-sort checks.
+  Source recipes for Nix and Fedora are also prepared; their repository
+  admission remains pending.
 - Native Apple Silicon macOS development builds targeting macOS 15 and later,
   with built-in sorting and disk spill, native command checks on macOS 15 and
   26, and a checksummed CI archive. Published 0.1.0 artifacts remain Linux-only.
