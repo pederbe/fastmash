@@ -74,7 +74,9 @@
   --sidebar-active: var(--fm-teal);
   --inline-code-color: var(--fm-amber);
 }
-.navy pre, .navy code.hljs { background: #10171f; }
+/* Without JavaScript, mdBook follows the system palette despite the navy class. */
+html:not(.js) { color-scheme: var(--color-scheme); }
+.navy:where(.js) pre, .navy:where(.js) code.hljs { background: #10171f; }
 
 .skip-link {
   position: fixed; top: 1rem; left: 1rem; z-index: 1000;

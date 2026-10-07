@@ -20,6 +20,7 @@ numerical profile version that introduced it.
 
 - Keep the website's installation panel stable during loading and defer its
   script, while retaining every installation command without JavaScript.
+- Keep documentation code examples readable in light mode without JavaScript.
 
 ### Changed
 

@@ -168,6 +168,25 @@ for (const scheme of ['light', 'dark']) {
       assert.equal(await page.$$eval('#get-started + ul a', links => links.length), 7);
       assert.equal(await page.$eval('main a:not(.header)', link => getComputedStyle(link).color),
         scheme === 'dark' ? 'rgb(45, 212, 191)' : 'rgb(15, 118, 110)');
+      const contrast = await page.$eval('pre > code', code => {
+        function luminance(color) {
+          const channels = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => {
+            const channel = value / 255;
+            return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+          });
+          return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+        }
+        const foreground = getComputedStyle(code).color;
+        let surface = code;
+        while (getComputedStyle(surface).backgroundColor === 'rgba(0, 0, 0, 0)') {
+          surface = surface.parentElement;
+        }
+        const background = getComputedStyle(surface).backgroundColor;
+        const values = [luminance(foreground), luminance(background)].sort((a, b) => a - b);
+        return { foreground, background, ratio: (values[1] + 0.05) / (values[0] + 0.05) };
+      });
+      assert.ok(contrast.ratio >= 4.5, `unreadable ${scheme} code example: ${JSON.stringify(contrast)}`);
+      assert.equal(await page.$eval('html', html => getComputedStyle(html).colorScheme), scheme);
       await page.goto(origin + '/contributing/architecture');
       assert.ok(await page.$$eval(`.diagram-${scheme}`, images => images.length > 0 && images.every(image =>
         getComputedStyle(image).display === 'block')));
