@@ -97,15 +97,6 @@ impl Sorting {
         Ok(sorting)
     }
 
-    /// Standard input whose Input header the process already looked for
-    /// itself and did not find; `header_errno` is the errno of a failed read.
-    pub(super) fn read(_: Cleared, header_errno: Option<i32>) -> Self {
-        Self {
-            header: None,
-            header_errno,
-        }
-    }
-
     /// The Input header read before sorting, which binds named fields.
     pub(super) fn header(&self) -> Option<&[u8]> {
         self.header.as_deref()

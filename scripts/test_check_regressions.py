@@ -30,24 +30,32 @@ class NativeExpectations(unittest.TestCase):
                 self.assertEqual(expected['returncode'], frozen['returncode'], case['id'])
             self.assertEqual(case, original)
 
-    def test_linux_expectations_and_unknown_native_diagnostics_are_exact(self):
+    def test_unchanged_expectations_and_unknown_native_diagnostics_are_exact(self):
         for case in self.cases:
             frozen = runner.expected(case, platform='linux')
             if case['id'] not in runner.NATIVE_SORT_DIAGNOSTICS:
                 self.assertEqual(runner.expected(case, platform='darwin').get('stderr_hex'),
                                  frozen.get('stderr_hex'), case['id'])
-            if 'stdout_file' not in case['expected']:
+            if ('stdout_file' not in case['expected']
+                    and case['id'] not in runner.NATIVE_SORT_DIAGNOSTICS):
                 self.assertEqual(frozen, case['expected'])
         unknown = copy.deepcopy(self.by_id['sorting/header-empty'])
         unknown['id'] = 'a-new-sort-diagnostic'
-        self.assertEqual(runner.expected(unknown, platform='darwin'), unknown['expected'])
+        for platform in ('linux', 'darwin'):
+            self.assertEqual(runner.expected(unknown, platform=platform), unknown['expected'])
 
     def test_native_missing_header_is_an_exact_diagnostic(self):
         for name in runner.NATIVE_SORT_DIAGNOSTICS:
-            expected = runner.expected(self.by_id[name], platform='darwin')
-            self.assertEqual(bytes.fromhex(expected['stderr_hex']),
-                             b'fastmash: missing input header for named grouping key\n')
-            self.assertEqual(expected['returncode'], 1)
+            case = self.by_id[name]
+            for platform in ('linux', 'darwin'):
+                expected = runner.expected(case, platform=platform)
+                self.assertEqual(bytes.fromhex(expected['stderr_hex']),
+                                 b'fastmash: missing input header for named grouping key\n')
+                self.assertEqual(expected['returncode'], 1)
+                self.assertEqual(expected['stdout_hex'], case['expected']['stdout_hex'])
+                self.assertNotEqual(expected['stderr_hex'], case['expected']['stderr_hex'])
+                self.assertEqual(runner.native_dispositions(case, platform=platform),
+                    ['native missing-header diagnostic replaces Linux system-sort stderr'])
 
     def test_held_group_prefix_uses_fixture_bytes_and_native_metadata(self):
         case = self.by_id['grouping-reference-r2:held-flush-pipe']

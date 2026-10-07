@@ -28,6 +28,11 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Native sorted calculations and sorted `rmdup` on Linux and macOS report
+  missing named-key input headers and read failures themselves, without
+  starting the system `sort` or Sort supervisor. Missing headers now use the
+  native diagnostic on Linux; read errors take precedence, while a command
+  containing `wmean` still succeeds without output at clean empty input.
 - Give the documentation clearer headings and navigation, distinct example,
   table and diagram panels, and a card layout for the existing starting links.
 

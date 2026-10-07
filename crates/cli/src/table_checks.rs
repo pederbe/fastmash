@@ -220,11 +220,11 @@ fn native_dedup<W: Write>(
         resolve(&mut key, header, options)
     })? && matches!(key, Field::Name(_))
     {
-        // No rows can be ordered. Preserve the existing fixed-C sorter's
-        // unresolved-key diagnostic, not host collation.
-        let errno = intake.read_error().and_then(std::io::Error::raw_os_error);
-        let sorting = sorted_input::Sorting::read(sorted_input::admit(&options.locale)?, errno);
-        return sorting.start(&[0], options)?.run(|_, _| Ok(()));
+        // An input failure takes precedence over an unresolved named key.
+        intake.finish()?;
+        return Err(failure(
+            b"missing input header for named grouping key\n".to_vec(),
+        ));
     }
     let Field::Number(number) = key else {
         return Err(unsupported("internal dedup name unresolved"));

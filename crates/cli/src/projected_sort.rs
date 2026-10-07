@@ -4,8 +4,6 @@ use super::{
     intake::{self, Intake},
     *,
 };
-#[cfg(target_os = "linux")]
-use std::io;
 use std::{cmp::Ordering, io::BufRead};
 #[path = "projected_batch.rs"]
 mod batch;
@@ -1106,39 +1104,18 @@ fn calculate_records<W: Write, S: spill::Codec>(
     }
     // Weighted mean has no calculation domain before the first data Record,
     // even when a requested header never arrives. Only clean EOF can use the
-    // ordinary empty pipeline; failed reads retain the established sort path.
+    // ordinary empty pipeline; failed reads retain their intake diagnostic.
     if intake.header(reader, &mut bytes, |header| binding.header(header, options))? {
         output.first(&bytes, &binding.operations, &binding.keys)?;
     } else if options.header_in
         && binding.unresolved_keys()
         && !(binding.operations.has_weighted_mean() && intake.read_error().is_none())
     {
-        #[cfg(target_os = "macos")]
-        {
-            // Native commands cannot delegate unresolved keys to the Linux
-            // Sort supervisor. A failed read retains its intake diagnostic.
-            intake.finish()?;
-            return Err(failure(
-                b"missing input header for named grouping key\n".to_vec(),
-            ));
-        }
-        #[cfg(target_os = "linux")]
-        {
-            // GNU sorts even without an Input header, then reads it again from
-            // the sort pipe and warns about --full only then (datamash.c
-            // process_file). With unresolved named keys, the installed sorter
-            // owns the resulting error.
-            let errno = intake.read_error().and_then(io::Error::raw_os_error);
-            let sorting = sorted_input::Sorting::read(sorted_input::admit(&options.locale)?, errno);
-            return sorting.start(&binding.keys, options)?.run(|reader, _| {
-                let mut sorted =
-                    Intake::new(options, intake::Header::First).warn_full(options, binding.program);
-                sorted
-                    .header(reader, &mut bytes, |_| Ok(()))
-                    .and_then(|_| sorted.next(reader, &mut bytes).map(|_| ()))
-                    .and_then(|()| output.end(options))
-            });
-        }
+        // An input failure takes precedence over an unresolved named key.
+        intake.finish()?;
+        return Err(failure(
+            b"missing input header for named grouping key\n".to_vec(),
+        ));
     }
     let binding::Binding {
         mut operations,
@@ -1326,6 +1303,117 @@ fn calculate_records<W: Write, S: spill::Codec>(
 #[cfg(test)]
 mod compact_tests {
     use super::*;
+
+    #[test]
+    fn native_named_key_failures_finalize_output_and_preserve_read_error_priority() {
+        use crate::command_test_support::{Input, Output, command_in};
+
+        struct Closing(Output, Option<i32>);
+        impl Write for Closing {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.0.write(bytes)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        impl command_output::Transport for Closing {
+            fn buffering(&self) -> (usize, bool) {
+                (1, false)
+            }
+            fn close(&mut self) -> io::Result<()> {
+                self.0.closed = true;
+                self.1
+                    .map_or(Ok(()), |code| Err(io::Error::from_raw_os_error(code)))
+            }
+        }
+
+        for locale in ["C", "en_US.UTF-8"] {
+            for requests in [
+                &["-gkey", "sum", "value"][..],
+                &["-gkey", "wmean", "value:weight"],
+                &["-gkey", "wmean", "value:weight", "dotprod", "value:weight"],
+                &["rmdup", "key"],
+            ] {
+                // C-locale rmdup still has an external route in this slice;
+                // the standalone executable checks its native fallback.
+                if locale == "C" && requests[0] == "rmdup" {
+                    continue;
+                }
+                let weighted = requests.contains(&"wmean");
+                for bytes in [b"".as_slice(), b"#skip\n ;skip\n"] {
+                    for read_error in [None, Some(5), Some(9), Some(21)] {
+                        for close_error in [None, Some(9), Some(28), Some(5)] {
+                            let mut input = Input {
+                                bytes,
+                                segment: 1,
+                                error: read_error,
+                            };
+                            let mut output = Closing(
+                                Output {
+                                    bytes: Vec::new(),
+                                    error: None,
+                                    closed: false,
+                                },
+                                close_error,
+                            );
+                            let mut args = vec!["-sCH"];
+                            args.extend_from_slice(requests);
+                            let environment = Environment {
+                                locale: locale::Policy::resolve(|key| {
+                                    (key == "LC_ALL").then(|| locale.into())
+                                }),
+                                posixly_correct: false,
+                                grouping: Some("sort".into()),
+                                sort_memory: Some("1".into()),
+                                pipe_grouping: None,
+                                terminal: Default::default(),
+                            };
+                            let (status, diagnostics) =
+                                command_in(&mut input, &mut output, &args, environment);
+                            let mut expected = Vec::new();
+                            match read_error {
+                                Some(5) => {
+                                    expected.push(b"read error: Input/output error\n".to_vec())
+                                }
+                                Some(9) => {
+                                    expected.push(b"read error: Bad file descriptor\n".to_vec())
+                                }
+                                Some(21) => expected.push(b"read error: Is a directory\n".to_vec()),
+                                None if !weighted => expected.push(
+                                    b"missing input header for named grouping key\n".to_vec(),
+                                ),
+                                _ => {}
+                            }
+                            match close_error {
+                                Some(28) => expected
+                                    .push(b"write error: No space left on device\n".to_vec()),
+                                Some(5) => {
+                                    expected.push(b"unsupported output I/O error\n".to_vec())
+                                }
+                                _ => {}
+                            }
+                            assert_eq!(
+                                diagnostics, expected,
+                                "{locale}, {args:?}, read {read_error:?}, close {close_error:?}"
+                            );
+                            assert_eq!(
+                                status,
+                                if close_error == Some(5) {
+                                    77
+                                } else {
+                                    i32::from(!expected.is_empty())
+                                }
+                            );
+                            assert!(output.0.bytes.is_empty());
+                            assert!(output.0.closed);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn calculation_options() -> Box<options::Options> {
         let options::Action::Calculate(options) =
             options::parse(&["count".into(), "1".into()], b"fastmash", false)

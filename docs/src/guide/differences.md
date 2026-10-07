@@ -82,9 +82,13 @@ Fastmash reports the read error with status 1; and `--help` or `--version` into 
 77 rather than by `SIGPIPE`. Scripts should rely on exit statuses, not the
 exact text of error messages.
 
-On macOS, a sorted Command with a named Grouping key and no Input header
+With native sorting on Linux and macOS, a Command with a named Grouping key
+or sorted `rmdup` key and no Input header
 reports `fastmash: missing input header for named grouping key` and exits with
-status 1. Linux retains the diagnostic from its external Sort route for that
-case. A failed input read still reports the read error and exits with status
-1; the missing-header diagnostic does not hide it. OS-owned diagnostic wording
-is checked separately from Portable results.
+status 1, including when comment-only input leaves no header. These failure
+paths need neither the system `sort` nor the Sort supervisor. The Linux external
+Sort route retains its system-sort diagnostic. A failed input read still reports
+the read error and exits with status 1; the missing-header diagnostic does not
+hide it. A Command containing `wmean` still succeeds without output when no
+Input header arrives at clean EOF. OS-owned diagnostic wording is checked
+separately from Portable results.
