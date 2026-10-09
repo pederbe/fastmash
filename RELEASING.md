@@ -90,8 +90,10 @@ release is being tagged.
    release is available, then update published platform text and metadata.
    The homepage test in `scripts/test_build_site.py` records the published version;
    update its expected release when publishing.
-9. **Packages.** Update any existing distribution packages when the release
-   is available. Additional distribution channels, including conda-forge,
+9. **Packages.** Approve the Package repository workflow, which adds the
+   published `.deb` and `.rpm` to the signed apt and dnf repository at
+   `packages.fastmash.io` ([packaging/repository](packaging/repository/README.md)).
+   Update any existing distribution packages when the release is available. Additional distribution channels, including conda-forge,
    follow the first release; they are not required to launch it.
 10. **Announce** the headline: a Discussions announcement, and the social
     accounts. A release with a measured improvement links its benchmark.
