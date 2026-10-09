@@ -29,6 +29,10 @@ python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-fi
 
 Run the full suite with `--release`: memory-limit tests exercise the optimized
 CLI. Debug builds can exceed those limits before reaching the behavior under test.
+Installer tests exercise both Linux and macOS archive layouts, so Linux test
+environments also need `shasum` on `PATH`. On Arch-based systems, it is supplied
+at `/usr/bin/core_perl/shasum`; add that directory to the test environment's
+`PATH` if needed.
 A change is ready for review when all of these checks pass locally. CI also runs
 on pushes and pull requests against `main` once the repository is public;
 private automatic runs skip their jobs, while manual runs remain available.

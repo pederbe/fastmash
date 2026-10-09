@@ -16,11 +16,10 @@ numerical profile version that introduced it.
   with both executables, license notices and installed system-sort checks.
   Source recipes for Nix and Fedora are also prepared; their repository
   admission remains pending.
-- Native Apple Silicon macOS release candidates targeting macOS 15 and later,
-  with built-in sorting and disk spill, native command checks on macOS 15 and
-  26, reproducible executable builds and checksummed archives with provenance.
-  Release delivery verifies the same archive before and after draft upload on
-  both native versions. Published 0.1.0 artifacts remain Linux-only.
+- Native Apple Silicon macOS 15 and later, with built-in sorting and disk spill.
+  Release archives include license notices, checksums and build provenance.
+  Installation and command checks run against the same archive on macOS 15
+  and 26 before and after release upload.
 
 ### Fixed
 
