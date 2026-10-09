@@ -10,7 +10,7 @@ It is written for contributors and for anyone evaluating the project. The
 | | |
 | --- | --- |
 | Language | Rust (edition 2024), five product crates |
-| Platform | Linux x86-64 with glibc; Windows through WSL2; native Apple Silicon macOS 15+ in development |
+| Platform | Linux x86-64 with glibc; Windows through WSL2; native Apple Silicon macOS 15+ in the 0.2.0 candidate |
 | Interface | GNU datamash 1.9 command language, with explicit CSV, health, selection, weighted mean and comparison extensions |
 | Numbers | 80-bit extended precision, implemented in software |
 | Sorting | In-memory sort with disk spill; the system `sort` for some routes |
@@ -19,7 +19,7 @@ It is written for contributors and for anyone evaluating the project. The
 
 ## Design principles
 
-The published 0.1.0 artifacts remain Linux-only. Native macOS development
+The published 0.1.0 artifacts remain Linux-only. Native macOS candidate
 uses the built-in Sort route and private unlinked Spill storage, without a
 Sort supervisor. [ADR 0010: Native Apple Silicon macOS](https://fastmash.io/adr/0010-native-apple-silicon.html)
 sets its platform scope and the native artifact acceptance boundary.

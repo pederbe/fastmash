@@ -52,8 +52,11 @@ jobs:
       - run: cargo test --release --workspace --locked
       - run: cargo build --release --locked
       # The supervisor must sit beside the binary (built by the workspace build).
-      - run: python3 scripts/check_regressions.py --binary target/release/fastmash
-      - run: python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
+      - name: Regression corpus
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
+          python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version "$version"
+          python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version "$version" --stdin-file
 
   msrv:
     name: Minimum supported Rust version

@@ -530,7 +530,15 @@ fn native_archive_installs_and_runs_outside_the_checkout() {
         String::from_utf8(source.stdout).unwrap().trim()
     )));
     assert!(provenance.contains("MACOSX_DEPLOYMENT_TARGET=15.0\n"));
-    assert!(provenance.contains("artifact_kind=development-test\n"));
+    let kind = fs::read_to_string(archives.join("archive-kind.txt")).unwrap();
+    let expected_kind =
+        std::env::var("FASTMASH_ARCHIVE_KIND").unwrap_or_else(|_| "development-test".to_owned());
+    assert_eq!(kind.trim(), expected_kind);
+    assert!(provenance.contains(&format!("artifact_kind={expected_kind}\n")));
+    if expected_kind == "release-candidate" {
+        assert_eq!(version, env!("CARGO_PKG_VERSION"));
+        assert!(provenance.contains("clean_builds=2\n"));
+    }
     assert!(provenance.contains("target=aarch64-apple-darwin\n"));
     assert!(!unpacked.join("fastmash-sort-supervisor").exists());
     for notice in ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"] {

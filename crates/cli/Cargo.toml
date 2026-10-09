@@ -1,6 +1,6 @@
 [package]
 name = "fastmash"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Fast command-line statistics on text data, compatible with GNU datamash"
 license = "MIT OR Apache-2.0"
@@ -27,10 +27,10 @@ name = "fastmash-sort-supervisor"
 path = "src/bin/fastmash-sort-supervisor.rs"
 
 [dependencies]
-fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.1.0" }
-fastmash-conversion = { path = "../conversion", version = "=0.1.0" }
-fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.1.0" }
-fastmash-sort-process = { path = "../sort-process", version = "=0.1.0" }
+fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.2.0" }
+fastmash-conversion = { path = "../conversion", version = "=0.2.0" }
+fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.2.0" }
+fastmash-sort-process = { path = "../sort-process", version = "=0.2.0" }
 rustc_apfloat = "=0.2.3"
 libc = "=0.2.189"
 memchr = "=2.8.3"

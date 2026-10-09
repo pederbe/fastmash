@@ -4,8 +4,11 @@ use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Output, Stdio};
 
+#[path = "support/executable.rs"]
+mod executable;
+
 fn run(variables: &[(&str, &str)], args: &[&str], input: &[u8]) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_fastmash"))
+    let mut child = Command::new(executable::fastmash())
         .arg0("fastmash")
         .args(args)
         .env_clear()

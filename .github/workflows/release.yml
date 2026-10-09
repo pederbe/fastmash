@@ -9,6 +9,15 @@ permissions:
   attestations: write
 
 jobs:
+  macos:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    uses: ./.github/workflows/macos.yml
+    permissions:
+      contents: read
+      attestations: read
+    with:
+      release-archive: true
+
   build:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     runs-on: ubuntu-24.04
@@ -48,8 +57,15 @@ jobs:
           sha256sum -c "$GITHUB_WORKSPACE/release/qualified.sha256"
       - name: Test
         run: |
-          python3 scripts/check_regressions.py --binary out/target/release/fastmash
-          python3 scripts/check_regressions.py --binary out/target/release/fastmash --stdin-file
+          version="${GITHUB_REF_NAME#v}"
+          python3 scripts/check_regressions.py --binary out/target/release/fastmash --expected-version "$version"
+          python3 scripts/check_regressions.py --binary out/target/release/fastmash --expected-version "$version" --stdin-file
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: "1.98.1"
+      - name: Workspace and exact release command checks
+        run: |
+          FASTMASH_TEST_BINARY="$PWD/out/target/release/fastmash" cargo test --release --workspace --locked
       - name: Package
         run: |
           name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
@@ -58,6 +74,14 @@ jobs:
              out/THIRD-PARTY-LICENSES.md README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$name/"
           tar -czf "$name.tar.gz" "$name"
           sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+      - name: Test the archive
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
+          installed="$RUNNER_TEMP/archive-installed"
+          mkdir "$installed"
+          tar -xzf "$name.tar.gz" -C "$installed"
+          bash release/check-installed.sh "$version" "$installed/$name" release/qualified.sha256
       # .deb and .rpm of the same bytes; release/package.sh checks that.
       - name: Linux packages
         run: |
@@ -72,21 +96,65 @@ jobs:
           done
       - name: Test the packages
         run: |
-          printf '1\t2\n3\t4\n' > sample.tsv
-          docker run --rm --network=none -v "$PWD:/w:ro" debian:12-slim bash -c \
-            'dpkg -i /w/fastmash_*_amd64.deb && fastmash sum 1 mean 2 < /w/sample.tsv && dpkg -r fastmash'
-          docker run --rm --network=none -v "$PWD:/w:ro" almalinux:8-minimal bash -c \
-            'rpm -i /w/fastmash-*.x86_64.rpm && fastmash sum 1 mean 2 < /w/sample.tsv && rpm -e fastmash'
+          version="${GITHUB_REF_NAME#v}"
+          docker run --rm --network=none -v "$PWD:/w:ro" -e VERSION="$version" debian:12-slim bash -c \
+            'set -euo pipefail; dpkg -i /w/fastmash_*_amd64.deb; bash /w/release/check-installed.sh "$VERSION" /usr/bin /w/release/qualified.sha256; dpkg -r fastmash; test ! -e /usr/bin/fastmash; test ! -e /usr/bin/fastmash-sort-supervisor'
+          docker run --rm --network=none -v "$PWD:/w:ro" -e VERSION="$version" almalinux:8-minimal bash -c \
+            'set -euo pipefail; rpm -i /w/fastmash-*.x86_64.rpm; bash /w/release/check-installed.sh "$VERSION" /usr/bin /w/release/qualified.sha256; rpm -e fastmash; test ! -e /usr/bin/fastmash; test ! -e /usr/bin/fastmash-sort-supervisor'
+      - name: Retain qualified Linux assets and notes
+        run: |
+          mkdir release-assets
+          cp fastmash-*.tar.gz fastmash_*.deb fastmash-*.rpm fastmash-*.sha256 fastmash_*.sha256 release-assets/
+          cp "$RUNNER_TEMP/notes.md" release-assets/notes.md
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-release
+          path: release-assets/
+          if-no-files-found: error
+
+  draft:
+    needs: [build, macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: linux-release
+          path: assets
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: macos-archive
+          path: macos
+      - name: Stage the frozen macOS archive
+        env:
+          EXPECTED_SHA256: ${{ needs.macos.outputs.archive-sha256 }}
+        run: |
+          test -n "$EXPECTED_SHA256"
+          digest=$(sha256sum macos/*.tar.gz)
+          test "${digest%% *}" = "$EXPECTED_SHA256"
+          (cd macos && sha256sum -c ./*.tar.gz.sha256)
+          cp macos/*.tar.gz macos/*.tar.gz.sha256 assets/
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            fastmash-*.tar.gz
-            fastmash_*.deb
-            fastmash-*.rpm
-      - name: Publish release
+            assets/fastmash-*.tar.gz
+            assets/fastmash_*.deb
+            assets/fastmash-*.rpm
+      - name: Create the draft release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" fastmash-*.tar.gz fastmash_*.deb fastmash-*.rpm \
-            fastmash-*.sha256 fastmash_*.sha256 \
-            --title "Fastmash ${GITHUB_REF_NAME#v}" --notes-file "$RUNNER_TEMP/notes.md" --draft
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" assets/fastmash-*.tar.gz assets/fastmash_*.deb assets/fastmash-*.rpm \
+            assets/fastmash-*.sha256 assets/fastmash_*.sha256 \
+            --verify-tag --title "Fastmash ${GITHUB_REF_NAME#v}" --notes-file assets/notes.md --draft
+
+  delivered-macos:
+    needs: [draft, macos]
+    uses: ./.github/workflows/macos-install.yml
+    permissions:
+      contents: write
+      attestations: read
+    with:
+      source: release
+      tag: ${{ github.ref_name }}
+      release-archive: true
+      archive-sha256: ${{ needs.macos.outputs.archive-sha256 }}
