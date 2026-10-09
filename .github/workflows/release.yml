@@ -143,7 +143,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" assets/fastmash-*.tar.gz assets/fastmash_*.deb assets/fastmash-*.rpm \
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" assets/fastmash-*.tar.gz assets/fastmash_*.deb assets/fastmash-*.rpm \
             assets/fastmash-*.sha256 assets/fastmash_*.sha256 \
             --verify-tag --title "Fastmash ${GITHUB_REF_NAME#v}" --notes-file assets/notes.md --draft
 
@@ -151,7 +151,7 @@ jobs:
     needs: [draft, macos]
     uses: ./.github/workflows/macos-install.yml
     permissions:
-      contents: read
+      contents: write
       attestations: read
     with:
       source: release
