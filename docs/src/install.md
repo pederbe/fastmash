@@ -1,7 +1,7 @@
 # Install
 
-Fastmash runs on **Linux x86-64** and on **Windows through WSL2**. macOS on
-Apple Silicon is under development for 0.2.0. The published 0.1.0 release
+Fastmash runs on **Linux x86-64** and on **Windows through WSL2**.
+Apple Silicon macOS 15 and later is available in the 0.2.0 release candidate. The published 0.1.0 release
 has Linux artifacts only. It installs next to GNU datamash
 without changing it. Native Windows is outside the current product scope.
 
@@ -12,7 +12,7 @@ curl -fsSL https://fastmash.io/install.sh | sh
 ```
 
 The [script](https://fastmash.io/install.sh) downloads the latest release,
-checks its checksum and installs `fastmash` and `fastmash-sort-supervisor`
+checks its checksum and installs `fastmash` and, on Linux, `fastmash-sort-supervisor`
 into `~/.local/bin`. Set `FASTMASH_INSTALL_DIR` to install elsewhere, or
 `FASTMASH_VERSION` for a specific release.
 
@@ -90,11 +90,11 @@ Remove the package with `brew uninstall pederbe/tap/fastmash`.
 
 ## Native macOS development archive
 
-For Apple Silicon with macOS 15 or later, the native development workflow
-builds one archive with a macOS 15 deployment target and tests those same bytes
+For Apple Silicon with macOS 15 or later, the native workflow builds an
+archive with a macOS 15 deployment target and tests those same bytes
 on macOS 15 and 26. It contains `fastmash`, licenses and build provenance;
-there is no macOS Sort supervisor. These CI artifacts are development builds,
-not a published macOS release, and expire according to the run's retention.
+there is no macOS Sort supervisor. These CI artifacts are development builds or release candidates,
+with the kind recorded in their provenance. They are not published releases, and expire according to the run's retention.
 
 Choose a successful [native macOS workflow run](https://github.com/pederbe/fastmash/actions/workflows/macos.yml)
 and download its `macos-archive` artifact. With the GitHub CLI, use
@@ -123,9 +123,24 @@ printf '1\n2\n' | ~/.local/bin/fastmash sum 1
 EOF
 ```
 
-The final command prints `3`. The archive label includes the source revision
-and a `macos-test` suffix; `--version` reports the source's current package
-version. The provenance labels the artifact as a development test build.
+The final command prints `3`. Ordinary development archives include the source
+revision and a `macos-test` suffix. Release candidates use the final archive
+name, such as `fastmash-v0.2.0-aarch64-apple-darwin.tar.gz`, after two clean
+builds produce identical executables. Both kinds report the source's package
+version through `--version`. Confirm `artifact_kind` and `source_revision`
+in the provenance, plus successful installation checks on both baselines.
+
+Once 0.2.0 is published, the same documented block can install the release
+archive. Download its `.tar.gz` and `.tar.gz.sha256` from the releases page,
+write `0.2.0` into `archive-version.txt`, and verify its attestation first:
+
+```sh
+gh attestation verify fastmash-v0.2.0-aarch64-apple-darwin.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
+```
+
+The Release workflow installs both the candidate archive and the draft's
+uploaded archive on macOS 15 and 26. It verifies the same frozen archive hash,
+provenance, installed executable hash, command checks and both corpus modes.
 
 For a future published macOS archive, the quick installer selects
 `aarch64-apple-darwin` automatically and checks its SHA-256 file using the

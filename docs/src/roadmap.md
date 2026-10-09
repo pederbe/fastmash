@@ -8,9 +8,11 @@ way to influence them.
 ## 0.2.0: macOS on Apple Silicon
 
 Native Apple Silicon macOS support is the main feature planned for 0.2.0.
-Work begins after the 0.1.0 release, with native builds and tests in GitHub CI,
-installation support and the same portable numerical results. Linux remains
-supported. macOS support will be advertised once the port is validated.
+The candidate has native builds, complete command and numerical checks,
+and archive installation on macOS 15 and 26. Release delivery builds twice,
+checks one frozen archive on both versions, and repeats installation against
+the draft's uploaded bytes. Linux remains supported. Published downloads
+remain at 0.1.0 until 0.2.0 qualification and publication are complete.
 
 ## Other planned work
 

@@ -1,6 +1,6 @@
 [package]
 name = "fastmash-conversion"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Binary80 decimal conversion and formatting for fastmash"
 license = "MIT OR Apache-2.0"
@@ -13,7 +13,7 @@ autobins = false
 path = "src/lib.rs"
 
 [dependencies]
-fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.1.0" }
+fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.2.0" }
 num-bigint = { version = "=0.5.1", default-features = false }
 num-integer = { version = "=0.1.47", default-features = false, features = ["i128"] }
 num-traits = { version = "=0.2.19", default-features = false, features = ["i128"] }

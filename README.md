@@ -54,7 +54,7 @@ west	8	4
 ## Install
 
 Fastmash runs on Linux x86-64 (glibc) and on Windows through WSL2.
-The published 0.1.0 archives cover those platforms. Development builds add
+The published 0.1.0 archives cover those platforms. The 0.2.0 release candidate adds
 Apple Silicon macOS 15 and later; the [native archive instructions](docs/src/install.md#native-macos-development-archive)
 describe how to obtain and verify the CI artifact before a macOS release is available.
 
@@ -121,9 +121,9 @@ results, CSV, health TSV and version output always keep plain data bytes.
 
 Fastmash is at **0.1**, a preview release: usable today on Linux x86-64 and
 WSL2, with the differences above. Before 1.0, minor releases may still change
-behavior; every change is listed in the [changelog](CHANGELOG.md). Native Apple
-Silicon macOS support is under development for 0.2.0, with checks on macOS 15
-and 26. Windows users run the Linux version through WSL2;
+behavior; every change is listed in the [changelog](CHANGELOG.md). The 0.2.0 candidate adds native Apple
+Silicon macOS 15 and later, checked on macOS 15 and 26. Its release delivery
+requires the native archive checks described in [RELEASING.md](RELEASING.md). Windows users run the Linux version through WSL2;
 native Windows is outside the current product scope.
 See the [roadmap](https://fastmash.io/roadmap.html).
 

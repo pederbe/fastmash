@@ -58,9 +58,10 @@ release is being tagged.
    with the [acceptance rules](https://fastmash.io/benchmarks/method.html)
    fixed before measuring. A slowdown beyond the limits needs a published
    justification or a fix.
-5. **Record the bytes.** Put the qualified `fastmash` and
+5. **Record the Linux bytes.** Put the qualified `fastmash` and
    `fastmash-sort-supervisor` checksums in `release/qualified.sha256`. The
-   release workflow refuses to publish any other bytes.
+   release workflow refuses to publish any other Linux bytes. The macOS archive
+   is frozen and qualified within the native workflow run as described below.
 6. **Update the published results** when the numbers changed:
    - `docs/src/benchmarks/core-jobs.tsv` and the chart, with
      `scripts/benchmark_chart.py results` and `svg`;
@@ -85,7 +86,10 @@ release is being tagged.
    `fastmash-numeric-contract`, `fastmash-conversion`,
    `fastmash-portable-numerics`, `fastmash-sort-process`, `fastmash`.
    The website deploys from `main`; check that the install page and landing
-   page show the new version.
+   page show the new version. Update `site/release-version.txt` only after the
+   release is available, then update published platform text and metadata.
+   The homepage test in `scripts/test_build_site.py` records the published version;
+   update its expected release when publishing.
 9. **Packages.** Update any existing distribution packages when the release
    is available. Additional distribution channels, including conda-forge,
    follow the first release; they are not required to launch it.
@@ -219,59 +223,77 @@ Publish the release and crates only with the maintainer's explicit approval,
 then follow checklist steps 8–10 as authorized. Creating a draft does not authorize
 publication, additional package submissions or announcements.
 
-## Adding macOS support in 0.2.0
+## Native macOS release delivery
 
-Native Apple Silicon macOS support is the main feature planned for 0.2.0.
-The published 0.1.0 release has Linux artifacts only; its qualified files
-and the Linux release recipe remain unchanged.
+Apple Silicon macOS 15 or later is the main addition in the 0.2.0 candidate.
+The published 0.1.0 release and its qualified Linux files remain unchanged.
+Intel macOS is outside this scope. See [ADR 0011: Qualify and deliver the same
+native archive](docs/src/adr/0011-native-release-delivery.md).
 
-Use native GitHub-hosted macOS builds and tests against the public repository's
-development source. Native checks run on macOS 15 and 26. The build check is:
+### Qualify a candidate before tagging
+
+The Native macOS workflow still checks the complete applicable workspace on
+macOS 15 and 26. Its ordinary runs build a development archive. To exercise
+the release layout and double-build check without creating a tag or draft:
 
 ```sh
-MACOSX_DEPLOYMENT_TARGET=15.0 cargo build --release --locked --bin fastmash --target aarch64-apple-darwin
+gh workflow run macos.yml --ref contrib/macos-release-delivery -f release-archive=true
 ```
 
-Record the source revision, macOS version, target, Rust toolchain and build
-logs. Keep Linux build and behavior checks passing throughout the port, and
-preserve the Numerical profile. [ADR 0010: Native Apple Silicon macOS](docs/src/adr/0010-native-apple-silicon.md)
-sets the development platform boundary. Intel macOS is outside this scope.
+Use the actual candidate branch in place of that example. Record the source
+revision and successful workflow run. The pinned compiler builds twice into
+separate empty target trees with `MACOSX_DEPLOYMENT_TARGET=15.0` and remapped
+paths; the native builder refuses differing executable bytes. It packages one
+executable, target-specific notices, `binary.sha256` and build provenance.
+The candidate uses the final `fastmash-vX.Y.Z-aarch64-apple-darwin.tar.gz` name,
+with `artifact_kind=release-candidate` recorded in its provenance.
 
-`release/macos-archive.sh OUTPUT_DIRECTORY` builds one checksummed development
-archive with a macOS 15 deployment target and records compiler, source,
-flags, binary identity and deployment metadata. Its label includes
-`macos-test` and the source revision; it is a downloadable CI artifact,
-not a release asset. Both native baselines install those same bytes outside
-the checkout through the installer, then run installed-command checks and the
-applicable frozen corpus. The workflow retains native installation and
-downloaded-file security observations without changing security policy.
-Representative GNU comparisons record exact binaries, fixture identities,
-repeated samples and output eligibility on each hosted runner.
+The archive job freezes its SHA-256. Both native baselines download and verify
+that hash, install outside the checkout through the documented method and
+shell installer, check the installed executable hash and version, and run the
+applicable command tests and both frozen corpus input modes. Sorting, actual
+Spill, signals and temporary-file cleanup stay covered. Representative hosted
+GNU comparisons remain scoped to those runners and workloads.
 
-The current tag-only release workflow continues to publish Linux assets only.
-Before a macOS release, extend that explicitly authorized workflow to build,
-qualify and attest the native archive, and decide its frozen-checksum process.
-Do not treat a development CI artifact as a qualified release or modify
-`release/qualified.sha256` to hold it.
+A successful branch run is candidate evidence, not a release or permission to
+publish. Complete Linux qualification and update `release/qualified.sha256`
+for the exact final candidate through checklist steps 1–5 before tagging.
+Keep the Numerical profile unchanged unless the numerical-change rules apply.
 
-Before releasing 0.2.0 with macOS support, complete these checks:
+### Deliver through the Release workflow
 
-- Run the applicable numerical and command checks, including sorting,
-  temporary-file cleanup and signal handling, on native macOS. Test startup
-  and representative commands through the documented installation method.
-  Keep the tested macOS version and architecture explicit.
-- Provide working installation instructions. If distributing a macOS archive,
-  include it in the release workflow, with checksums, provenance and an
-  installation check of the delivered artifact. Describe source-build support
-  explicitly if that is the validated delivery method.
-- Update `site/index.html` (installation text and `operatingSystem` metadata),
-  the README, and the installation, requirements, comparison, FAQ and roadmap
-  pages. Update `docs/descriptions.json`, the platform text generated by
-  `scripts/build_site.py` for `llms.txt`, and release notes. Supersede the
-  platform ADR when support changes. Keep the existing benchmark claims
-  scoped to their measured Linux hosts.
-- Rebuild and preview the site, check its links and macOS installation steps,
-  and verify the deployed pages before announcing the release.
+On the qualified tag, the manually dispatched Release workflow calls the same
+native build and installation workflows. Linux's committed checksum gate and
+archive/package checks remain required. Only after both platforms pass does
+it stage the same macOS archive, attest both platform archives and Linux
+packages, and create a draft release.
 
-For later releases, apply the same checks when adding or changing a supported
-platform, and keep platform claims aligned with the delivered release.
+The workflow then downloads the draft's uploaded macOS archive on macOS 15
+and 26, verifies the release-workflow attestation and the frozen archive hash,
+and repeats documented installation, installed executable checks, applicable
+command tests and both corpus input modes. Those checks use the delivered
+bytes; rebuilding a source executable cannot substitute for them. Evidence
+from candidate and delivered installations has separate artifact names.
+A failure leaves the draft unpublished. Review the complete successful run
+and all assets before authorizing publication.
+
+The macOS checksum is frozen per workflow run rather than stored in the Linux
+manifest. Two clean builds establish within-run executable reproducibility;
+hosted SDK updates do not imply that a later run can rebuild the same bytes.
+The archive's checksum, embedded executable manifest, source/compiler/build
+provenance and GitHub attestation bind the tested bytes to their delivery.
+Never substitute a development CI archive or rewrite 0.1.0 evidence.
+
+### Publish accurate platform claims
+
+After publication, update `site/release-version.txt`, the homepage's installation
+text and `operatingSystem` metadata, README, installation, requirements,
+comparison, FAQ and roadmap pages, `docs/descriptions.json` and the platform
+text emitted into `llms.txt`. Remove the candidate qualifications only when the
+release is available. Keep the existing benchmark claims scoped to their
+measured Linux 0.1.0 binaries.
+
+Rebuild and preview the site, check links and the published macOS installation
+steps, and verify deployed pages before announcing the release. The terminal
+download route is tested without altering macOS security policy. Apple
+notarization and browser-quarantine behavior are not promised by these checks.

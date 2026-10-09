@@ -89,6 +89,14 @@ def version():
     return re.search(r'^version = "([^"]+)"', manifest, re.M).group(1)
 
 
+def published_version():
+    """Release used by public download links, independent of candidate source."""
+    value = (ROOT / 'site' / 'release-version.txt').read_text(encoding='utf-8').strip()
+    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', value):
+        sys.exit('site/release-version.txt must name a published release')
+    return value
+
+
 def chapters():
     """(section, title, path) for each chapter in SUMMARY.md, in order."""
     section = 'Docs'
@@ -123,7 +131,7 @@ def landing(book):
     chart = (SRC / 'benchmarks' / 'core-jobs.svg').read_text(encoding='utf-8')
     if page.count('<!-- chart -->') != 1:
         sys.exit('site/index.html must contain exactly one <!-- chart --> marker')
-    page = page.replace('<!-- chart -->', chart.strip()).replace('@VERSION@', version())
+    page = page.replace('<!-- chart -->', chart.strip()).replace('@VERSION@', published_version())
     (book / 'index.html').write_text(page, encoding='utf-8')
     for name in ('landing.css', 'landing-noscript.css', 'landing.js', 'demo.gif'):
         shutil.copyfile(ROOT / 'site' / name, book / name)
@@ -301,8 +309,9 @@ def llms_txt(book):
         '> GNU datamash commands, portable results, weighted means, complete-record',
         '> selection, table health and dataset comparison.',
         '',
-        f'Version {version()}. Linux x86-64 and WSL2. Install:',
+        f'Published version {published_version()}: Linux x86-64 and WSL2. Install:',
         '`curl -fsSL https://fastmash.io/install.sh | sh`, or `cargo install --locked fastmash`.',
+        f'Source candidate {version()} adds Apple Silicon macOS 15 or later; see the installation guide.',
         'Commands, options and output follow GNU datamash 1.9; the differences page',
         'lists every intentional difference. Created by Peder Bergan (https://pederbe.dev).',
     ]

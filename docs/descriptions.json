@@ -1,6 +1,6 @@
 {
   "introduction.md": "Meet Fastmash: fast command-line statistics for text and quoted CSV, portable results, record selection, table health and dataset comparison.",
-  "install.md": "Install published Linux and WSL2 versions of Fastmash, or verify an Apple Silicon macOS development archive from native CI.",
+  "install.md": "Install published Fastmash on Linux and WSL2, or verify the native Apple Silicon 0.2.0 candidate and its archive provenance.",
   "quick-start.md": "Learn Fastmash through practical examples of statistics, grouping, quoted CSV, result names, weighted means and complete-record selection.",
   "guide/migrating.md": "Move a GNU datamash workflow to Fastmash: what stays the same, how to switch safely and which compatibility differences to check.",
   "comparison.md": "Compare Fastmash with GNU datamash, Miller, qsv and csvtk, including command languages, input formats, statistics and supported platforms.",
@@ -12,11 +12,11 @@
   "guide/output.md": "Understand Fastmash's number parsing, portable arithmetic, output formatting, locale rules and handling of missing or special numeric values.",
   "guide/errors.md": "Understand Fastmash diagnostics, exit statuses, explicit refusals and resource requirements when a command cannot complete.",
   "guide/differences.md": "Check the documented differences between Fastmash and GNU datamash 1.9, including numerical results, locales, errors and unsupported cases.",
-  "requirements.md": "Check Fastmash's released Linux requirements and native Apple Silicon macOS development scope, sorting and source-build requirements.",
+  "requirements.md": "Check Linux requirements and the Apple Silicon macOS 15 or later candidate, including sorting and temporary storage.",
   "benchmarks/index.md": "See Fastmash 0.1.0 benchmark results against GNU datamash on real and synthetic data, including speed improvements and remaining slower cases.",
   "benchmarks/method.md": "Read how Fastmash benchmarks are measured, checked and compared, with workload definitions, hardware details and complete result tables.",
   "faq.md": "Answers to common Fastmash questions about datamash compatibility, performance, supported systems, input formats and portable results.",
-  "roadmap.md": "See Fastmash's planned Apple Silicon macOS support for 0.2.0 and further performance, sorting, locale, packaging and table-workflow improvements.",
+  "roadmap.md": "See the Apple Silicon macOS 0.2.0 candidate and remaining sorting, performance and packaging work.",
   "contributing/index.md": "Help improve Fastmash by reporting compatibility differences, testing real data, sharing benchmarks, improving documentation or contributing code.",
   "contributing/architecture.md": "Explore Fastmash's Rust crates, command pipeline, numeric boundaries, grouping and sorting design, and the principles behind them.",
   "contributing/testing.md": "Build and test Fastmash with formatting, linting, unit tests, the regression corpus and checks for numerical or performance changes.",
@@ -38,5 +38,6 @@
   "guide/top-n-records.md": "Select the highest or lowest complete records with stable input-order ties, explicit headers, text or CSV and a cutoff per group.",
   "guide/dataset-comparison.md": "Compare numerical summaries from two datasets, align complete keys and independently named headers, and rank absolute or percentage changes.",
   "guide/table-health.md": "Inspect Fastmash table health, review inferred findings, validate supplied type, presence and width rules, and read versioned TSV reports.",
-  "guide/terminal-color.md": "Control Fastmash terminal styling for help, failure prefixes and readable health reports, with automatic detection and color suppression."
+  "guide/terminal-color.md": "Control Fastmash terminal styling for help, failure prefixes and readable health reports, with automatic detection and color suppression.",
+  "adr/0011-native-release-delivery.md": "Why native release delivery reuses the same reproducible archive through qualification, draft upload and installation."
 }

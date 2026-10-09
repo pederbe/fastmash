@@ -8,12 +8,13 @@ Most Linux systems from 2018 onward need nothing beyond the
 | Requirement | Why |
 | --- | --- |
 | Linux x86-64, glibc 2.28 or later (RHEL 8, Debian 10, Ubuntu 20.04 and newer) | Supported platform for the prebuilt binaries |
-| Linux x86-64 with glibc (`x86_64-unknown-linux-gnu`) | Building from source; musl and other targets are refused at compile time |
+| Linux x86-64 with glibc (`x86_64-unknown-linux-gnu`) | Building Linux source; musl and other Linux targets are refused at compile time |
+| Apple Silicon macOS 15 or later (`aarch64-apple-darwin`) | Native 0.2.0 candidate, checked on macOS 15 and 26 |
 | `/proc` mounted | Needed for the system `sort` route below; without it, those jobs sort in process, and output is written in 8 KiB blocks, even to a terminal |
 | A writable `TMPDIR` (default `/tmp`) | Temporary data for large sorted jobs |
 
-The published 0.1.0 artifacts remain Linux-only. Native development builds
-also admit **Apple Silicon macOS 15 or later** (`aarch64-apple-darwin`), with
+The published 0.1.0 artifacts remain Linux-only. The 0.2.0 candidate
+also supports **Apple Silicon macOS 15 or later** (`aarch64-apple-darwin`), with
 native checks on macOS 15 and 26. Intel macOS, older macOS versions and native
 Windows are outside the scope. See the [development archive instructions](install.md#native-macos-development-archive).
 
@@ -55,7 +56,7 @@ steps, and a GitHub build provenance attestation:
 gh attestation verify fastmash-v0.1.0-x86_64-unknown-linux-gnu.tar.gz --repo pederbe/fastmash
 ```
 
-The published [benchmarks](benchmarks/index.md) measure these exact binaries.
+The published [benchmarks](benchmarks/index.md) measure the qualified Linux 0.1.0 binaries. Hosted macOS checks do not extend those speed claims to macOS.
 
 ## Building from source
 
