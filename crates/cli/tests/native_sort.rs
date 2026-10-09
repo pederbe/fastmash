@@ -81,6 +81,19 @@ impl Fixture {
         command
     }
 
+    fn close_stdout(command: &mut Command) {
+        // SAFETY: close is async-signal-safe and changes only the child's
+        // standard output after Command installs its pipe.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::close(1) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+
     fn invoke(&self, command: &mut Command, input: &[u8], file: bool) -> Output {
         if file {
             let path = self.root.0.join("input");
@@ -457,51 +470,88 @@ fn interrupting_established_text_and_csv_spill_leaves_no_named_files() {
     }
 }
 
-#[cfg(target_os = "macos")]
 #[test]
 fn native_missing_header_reports_input_failures_without_external_sort() {
     let fixture = Fixture::new("native-missing-header");
-    for file in [false, true] {
-        for operation in ["sum", "geomean"] {
-            for closed_stdout in [false, true] {
-                let mut command =
-                    fixture.command(&["-H", "-s", "-g", "key", operation, "value"], "1");
-                if closed_stdout {
-                    // SAFETY: close is async-signal-safe and changes only the
-                    // child's standard output after Command installs its pipe.
-                    unsafe {
-                        command.pre_exec(|| {
-                            if libc::close(1) != 0 {
-                                return Err(std::io::Error::last_os_error());
-                            }
-                            Ok(())
-                        });
+    for locale in ["C", "C.UTF-8", "en_US.UTF-8", "de_DE.UTF-8"] {
+        for file in [false, true] {
+            for input in [b"".as_slice(), b"#skip\n ;skip\n"] {
+                for operation in ["sum", "geomean"] {
+                    for closed_stdout in [false, true] {
+                        let mut command =
+                            fixture.command(&["-CH", "-s", "-g", "key", operation, "value"], "1");
+                        command.env("LC_ALL", locale);
+                        if closed_stdout {
+                            Fixture::close_stdout(&mut command);
+                        }
+                        let output = fixture.invoke(&mut command, input, file);
+                        assert_eq!(output.status.code(), Some(1), "{output:?}");
+                        assert!(output.stdout.is_empty());
+                        assert_eq!(
+                            output.stderr,
+                            b"fastmash: missing input header for named grouping key\n"
+                        );
                     }
                 }
-                let output = fixture.invoke(&mut command, b"", file);
-                assert_eq!(output.status.code(), Some(1), "{output:?}");
-                assert!(output.stdout.is_empty());
-                assert_eq!(
-                    output.stderr,
-                    b"fastmash: missing input header for named grouping key\n"
-                );
+                for requests in [
+                    vec!["wmean", "value:weight"],
+                    vec!["wmean", "value:weight", "dotprod", "value:weight"],
+                ] {
+                    let mut args = vec!["-CH", "-s", "-g", "key"];
+                    args.extend_from_slice(&requests);
+                    let mut command = fixture.command(&args, "1");
+                    command.env("LC_ALL", locale);
+                    let output = fixture.invoke(&mut command, input, file);
+                    assert!(output.status.success(), "{output:?}");
+                    assert!(output.stdout.is_empty());
+                    assert!(output.stderr.is_empty());
+                }
             }
         }
         for requests in [
+            vec!["sum", "value"],
+            vec!["geomean", "value"],
             vec!["wmean", "value:weight"],
             vec!["wmean", "value:weight", "dotprod", "value:weight"],
         ] {
             let mut args = vec!["-H", "-s", "-g", "key"];
             args.extend_from_slice(&requests);
             let mut command = fixture.command(&args, "1");
-            let output = fixture.invoke(&mut command, b"", file);
-            assert!(output.status.success(), "{output:?}");
+            command.env("LC_ALL", locale);
+            command.stdin(File::open(&fixture.root.0).unwrap());
+            let output = command.output().unwrap();
+            assert_eq!(output.status.code(), Some(1), "{output:?}");
             assert!(output.stdout.is_empty());
-            assert!(output.stderr.is_empty());
+            assert_eq!(output.stderr, b"fastmash: read error: Is a directory\n");
         }
     }
-    for operation in ["sum", "geomean"] {
-        let mut command = fixture.command(&["-H", "-s", "-g", "key", operation, "value"], "1");
+    fixture.clean();
+}
+
+#[test]
+fn native_sorted_rmdup_missing_header_reports_input_failures_without_external_sort() {
+    let fixture = Fixture::new("native-rmdup-missing-header");
+    for locale in ["C", "C.UTF-8", "en_US.UTF-8", "de_DE.UTF-8"] {
+        for file in [false, true] {
+            for input in [b"".as_slice(), b"#skip\n ;skip\n"] {
+                for closed_stdout in [false, true] {
+                    let mut command = fixture.command(&["-sCH", "rmdup", "key"], "1");
+                    command.env("LC_ALL", locale);
+                    if closed_stdout {
+                        Fixture::close_stdout(&mut command);
+                    }
+                    let output = fixture.invoke(&mut command, input, file);
+                    assert_eq!(output.status.code(), Some(1), "{output:?}");
+                    assert!(output.stdout.is_empty());
+                    assert_eq!(
+                        output.stderr,
+                        b"fastmash: missing input header for named grouping key\n"
+                    );
+                }
+            }
+        }
+        let mut command = fixture.command(&["-sH", "rmdup", "key"], "1");
+        command.env("LC_ALL", locale);
         command.stdin(File::open(&fixture.root.0).unwrap());
         let output = command.output().unwrap();
         assert_eq!(output.status.code(), Some(1), "{output:?}");

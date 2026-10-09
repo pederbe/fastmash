@@ -377,7 +377,9 @@ Runtime and numerical limits:
   sm so sq sr ss ssy st su sw ta tcy the ti tig tk tn to tok tpi ts unm ur uz ve
   wa wae wal wo xh yo yuw zgh zu, except az_IR, ber_DZ, crh_UA, en_CA, fr_CA,
   pa_IN, sd_IN and sr_RS.
-  Empty unresolved named sort keys retain the fixed-C external sort diagnostic.
+  Native sorting reports a missing input header for unresolved named grouping
+  or rmdup keys (status 1); read errors take precedence. A command containing
+  wmean still succeeds without output when its input header ends at clean EOF.
   With no keys, -s is a no-op. Locale differences are on the differences page.
   -i preserves original output spelling and stable sort ties. It does not fold
   column names or rmdup keys; with rmdup, it only changes requested sort order.

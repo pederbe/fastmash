@@ -45,8 +45,9 @@ VERSION_CASES = frozenset({
     'narm:version', 'count:version',
 })
 
-# These two frozen Linux diagnostics come from its external sort process.
-# The native route diagnoses the same missing header itself, with status 1.
+# These two frozen diagnostics came from Linux's external sort process.
+# Native sorting now diagnoses the missing header itself on every platform,
+# preserving standard output and status 1.
 NATIVE_SORT_DIAGNOSTICS = frozenset({
     'sorting/header-empty', 'sorting/header-only-comments',
 })
@@ -85,9 +86,9 @@ def expected(case, expected_version=None, *, platform=None, destination=None):
         result['stdout_hex'] = f'fastmash {expected_version}\n'.encode().hex()
     if 'stdout_file' in result:
         result['stdout_hex'] = (ROOT / result.pop('stdout_file')).read_bytes().hex()
+    if case['id'] in NATIVE_SORT_DIAGNOSTICS:
+        result['stderr_hex'] = b'fastmash: missing input header for named grouping key\n'.hex()
     if (platform or sys.platform) == 'darwin':
-        if case['id'] in NATIVE_SORT_DIAGNOSTICS:
-            result['stderr_hex'] = b'fastmash: missing input header for named grouping key\n'.hex()
         if case['id'] in NATIVE_BUFFER_OBSERVATIONS and destination is not None:
             size = destination.get('block_size')
             if destination.get('isatty') is not False or type(size) is not int or size < 0:
@@ -116,11 +117,13 @@ def matches(case, observed, expected_version=None):
         destination=observed.get('destination'))), observed)
 
 
-def native_dispositions(case):
+def native_dispositions(case, *, platform=None):
     """Per-case mechanisms or native expectations, without dropping a case."""
     result = []
     if case['id'] in NATIVE_SORT_DIAGNOSTICS:
         result.append('native missing-header diagnostic replaces Linux system-sort stderr')
+    if (platform or sys.platform) != 'darwin':
+        return result
     if case['id'] in NATIVE_BUFFER_OBSERVATIONS:
         result.append('held prefix uses native destination block size; completed stdout and status frozen')
     if case['io'] == 'full':
@@ -185,8 +188,7 @@ def main():
                 'full_output_calibration': calibration, 'selected_cases': len(cases),
                 'transport_dispositions': excluded,
                 'native_dispositions': [{'id': case['id'], 'reasons': native_dispositions(case)}
-                                        for case in cases if sys.platform == 'darwin'
-                                        and native_dispositions(case)]}
+                                        for case in cases if native_dispositions(case)]}
     if args.evidence_dir:
         args.evidence_dir.mkdir(parents=True, exist_ok=True)
         (args.evidence_dir / 'identity.json').write_text(json.dumps(evidence, indent=2) + '\n')
@@ -198,8 +200,7 @@ def main():
             # Diagnostics print argv[0]; the v2 expectations use fastmash.
             observed = invoke({'name': 'fastmash', **case}, binary, Path(directory))
             passed = matches(case, observed, args.expected_version)
-            if args.evidence_dir and ((sys.platform == 'darwin' and native_dispositions(case))
-                                      or not passed):
+            if args.evidence_dir and (native_dispositions(case) or not passed):
                 with (args.evidence_dir / 'observations.jsonl').open('a') as output:
                     output.write(json.dumps({'id': case['id'], 'passed': passed, 'observed': observed,
                         'expected': expected(case, args.expected_version,

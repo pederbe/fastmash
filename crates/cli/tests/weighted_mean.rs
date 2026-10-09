@@ -731,8 +731,8 @@ fn sorted_named_empty_completion_keeps_header_errors_and_legacy_commands() {
             assert!(output.stdout.is_empty());
             assert!(String::from_utf8_lossy(&output.stderr).contains("header"));
         }
-        // Linux retains the system-sort empty-input error; macOS diagnoses the
-        // missing Input header directly.
+        // These Operations use native sorting on both platforms, including
+        // its self-contained missing Input header diagnostic.
         for operation in ["sum", "mean"] {
             let output = invoke_in(
                 &["-H", "-s", "-g", "key", operation, "value"],
@@ -742,9 +742,6 @@ fn sorted_named_empty_completion_keeps_header_errors_and_legacy_commands() {
             );
             assert_eq!(output.status.code(), Some(1), "{output:?}");
             assert!(output.stdout.is_empty());
-            #[cfg(target_os = "linux")]
-            assert!(String::from_utf8_lossy(&output.stderr).contains("field number is zero"));
-            #[cfg(target_os = "macos")]
             assert_eq!(
                 output.stderr, b"fastmash: missing input header for named grouping key\n",
                 "{output:?}"
