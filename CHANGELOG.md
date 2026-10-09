@@ -10,6 +10,8 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-09
+
 ### Added
 
 - Homebrew installation on Linux x86-64 through `pederbe/tap/fastmash`,
