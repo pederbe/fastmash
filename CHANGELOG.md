@@ -10,7 +10,7 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-10-09
+## [0.2.0] - 2026-10-12
 
 ### Added
 
