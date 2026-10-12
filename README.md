@@ -8,7 +8,9 @@
 <p align="center">
   <a href="https://github.com/pederbe/fastmash/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/pederbe/fastmash/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/pederbe/fastmash/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/pederbe/fastmash"></a>
-  <a href="#license"><img alt="MIT OR Apache-2.0 license" src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue"></a>
+  <a href="https://github.com/pederbe/fastmash/blob/main/LICENSE-MIT"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue"></a>
+  or
+  <a href="https://github.com/pederbe/fastmash/blob/main/LICENSE-APACHE"><img alt="Apache 2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
 </p>
 
 <p align="center">
@@ -104,18 +106,6 @@ Found a bug or have a workload to share?
 [contributing guide](https://github.com/pederbe/fastmash/blob/main/CONTRIBUTING.md).
 Report vulnerabilities through the
 [security policy](https://github.com/pederbe/fastmash/blob/main/SECURITY.md).
-
-## License
-
-Licensed under [MIT](https://github.com/pederbe/fastmash/blob/main/LICENSE-MIT) or
-[Apache 2.0](https://github.com/pederbe/fastmash/blob/main/LICENSE-APACHE).
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in Fastmash by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
-
-Fastmash is an independent implementation and is not affiliated with the GNU
-Project. It contains no GNU datamash code.
 
 ---
 
