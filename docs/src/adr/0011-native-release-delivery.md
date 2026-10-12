@@ -2,9 +2,8 @@
 
 Status: accepted for 0.2.0 release delivery. Supersedes the development-only
 archive boundary in [ADR 0010: Native Apple Silicon macOS](0010-native-apple-silicon.md).
-Published 0.1.0 support remains Linux-only until 0.2.0 is published. At that
-point this also supersedes the Linux-only scope of [ADR 0007: Linux x86-64
-first](0007-linux-first.md).
+With the publication of 0.2.0, this also supersedes the Linux-only scope of
+[ADR 0007: Linux x86-64 first](0007-linux-first.md).
 
 ## Decision
 

@@ -1,9 +1,11 @@
 # Homebrew formula
 
-`fastmash.rb` builds the published 0.1.0 source on Linux x86-64 with the
-locked Cargo dependencies. It installs `fastmash` and its Sort supervisor
-together, plus both project licenses and the generated dependency licenses,
-copyright and notice texts. Python and Rust are build dependencies only.
+`fastmash.rb` builds the published 0.2.0 source on Linux x86-64 and
+Apple Silicon macOS 15 or later with the locked Cargo dependencies.
+Linux installs `fastmash` and its Sort supervisor together; macOS installs
+only `fastmash`. Both include the project licenses and generated dependency
+licenses, copyright and notice texts for their target. Python and Rust are
+build dependencies only.
 The source-built programs carry no performance claim from the release binaries.
 
 The formula is published in the [maintainer's tap](https://github.com/pederbe/homebrew-tap):
@@ -16,12 +18,12 @@ Homebrew's
 [acceptance policy](https://docs.brew.sh/Package-Acceptance-Policy) includes
 repository age and public-interest requirements for `homebrew/core`.
 Review those requirements before proposing a core submission.
-The Linux restriction follows the published release's platform scope.
 
 ## Build and check
 
-Use Homebrew's supported Linux prefix, `/home/linuxbrew/.linuxbrew`, with
-the normal [Linux build prerequisites](https://docs.brew.sh/Homebrew-on-Linux).
+Use Homebrew's supported prefix: `/home/linuxbrew/.linuxbrew` on Linux with
+the normal [Linux build prerequisites](https://docs.brew.sh/Homebrew-on-Linux),
+or `/opt/homebrew` on Apple Silicon macOS 15 or later.
 Create a local test tap with `brew tap-new OWNER/fastmash-test`, then copy
 `fastmash.rb` into its `Formula/` directory. Substitute your GitHub username
 for `OWNER` in these commands:
@@ -34,15 +36,17 @@ brew style OWNER/fastmash-test/fastmash
 brew uninstall OWNER/fastmash-test/fastmash
 ```
 
-The test requires nonempty licenses and notices, the exact version,
-arithmetic and a transcendental result, and a paired operation with an exact
-`system sort` trace. A correct result from fallback sorting cannot pass it.
-Testing this optional route requires Linux 5.11 or later and GNU or uutils
-coreutils at `/usr/bin/sort`. Older kernels can install Fastmash and use its
-built-in sorting, but cannot pass this route check.
+On both platforms the test requires nonempty licenses and notices, the exact
+version, arithmetic and a transcendental result, and a paired operation.
+On Linux it requires the Sort supervisor and an exact `system sort` trace;
+a correct result from fallback sorting cannot pass it. Testing this optional
+route requires Linux 5.11 or later and GNU or uutils coreutils at `/usr/bin/sort`.
+Older kernels can install Fastmash and use its built-in sorting, but cannot
+pass this route check. On macOS the test requires a `native sort` trace and
+confirms that no Sort supervisor is installed.
 
-After removal, confirm that `fastmash` and `fastmash-sort-supervisor` are
-absent from the prefix's `bin/` and that the formula's Cellar directory is gone.
+After removal, confirm that `fastmash` and, on Linux, `fastmash-sort-supervisor`
+are absent from the prefix's `bin/` and that the formula's Cellar directory is gone.
 
 ## Maintenance
 

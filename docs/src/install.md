@@ -1,8 +1,7 @@
 # Install
 
-Fastmash runs on **Linux x86-64** and on **Windows through WSL2**.
-Apple Silicon macOS 15 and later is available in the 0.2.0 release candidate. The published 0.1.0 release
-has Linux artifacts only. It installs next to GNU datamash
+Fastmash 0.2.0 runs on **Linux x86-64**, **Windows through WSL2** and
+**Apple Silicon macOS 15 and later**. It installs next to GNU datamash
 without changing it. Native Windows is outside the current product scope.
 
 ## Quick install
@@ -26,88 +25,111 @@ stronger check that the archive was built by this project's release workflow,
 download it by hand and verify its GitHub build attestation:
 
 ```sh
-gh attestation verify fastmash-v0.1.0-x86_64-unknown-linux-gnu.tar.gz --repo pederbe/fastmash
+gh attestation verify fastmash-v0.2.0-x86_64-unknown-linux-gnu.tar.gz --repo pederbe/fastmash
 ```
 
 ## Prebuilt binary, by hand
 
-Download a release from the
+On Linux or WSL2, download a release from the
 [releases page](https://github.com/pederbe/fastmash/releases), check it and
-copy the two programs into a directory on your `PATH`:
+copy the two programs into a directory on your `PATH`. Run this block in Bash;
+invoke `bash` first if using Fish. It stops if a download or checksum fails:
 
-```sh
-version=0.1.0
+```bash
+bash -eu <<'EOF'
+version=0.2.0
 name=fastmash-v$version-x86_64-unknown-linux-gnu
-curl -LO https://github.com/pederbe/fastmash/releases/download/v$version/$name.tar.gz
-curl -LO https://github.com/pederbe/fastmash/releases/download/v$version/$name.tar.gz.sha256
+curl -fLO https://github.com/pederbe/fastmash/releases/download/v$version/$name.tar.gz
+curl -fLO https://github.com/pederbe/fastmash/releases/download/v$version/$name.tar.gz.sha256
 sha256sum -c $name.tar.gz.sha256
 tar -xzf $name.tar.gz
 mkdir -p ~/.local/bin
 cp $name/fastmash $name/fastmash-sort-supervisor ~/.local/bin/
+EOF
 ```
 
-Replace `0.1.0` with the release you want, and keep `fastmash` and
+Replace `0.2.0` with the release you want, and keep `fastmash` and
 `fastmash-sort-supervisor` from the same release in the same directory. If the
 supervisor is missing, some large sorted jobs are slower; if it comes from
 another release, the sorted jobs that use it stop with a message saying so.
 
 ## With Cargo
 
-If you have a [Rust toolchain](https://rustup.rs):
+If you have a [Rust toolchain](https://rustup.rs), on Linux or WSL2:
 
 ```sh
 cargo install --locked fastmash
 ```
 
-With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), Cargo
-downloads the prebuilt release binaries instead of compiling:
+On Apple Silicon macOS 15 or later, select its single executable:
+
+```sh
+cargo install --locked --bin fastmash fastmash
+```
+
+With [cargo-binstall](https://github.com/cargo-bins/cargo-binstall), download
+the prebuilt release binaries instead of compiling. On Linux or WSL2:
 
 ```sh
 cargo binstall fastmash
 ```
 
-These commands install published versions. Version 0.1.0 does not contain
-the native macOS development changes.
+On Apple Silicon macOS 15 or later:
 
-## Homebrew on Linux
+```sh
+cargo binstall --bin fastmash fastmash
+```
 
-With [Homebrew](https://docs.brew.sh/Homebrew-on-Linux) on Linux x86-64:
+## Homebrew
+
+With [Homebrew](https://brew.sh) on Linux x86-64 or Apple Silicon macOS 15
+or later:
 
 ```sh
 brew install pederbe/tap/fastmash
 ```
 
 The [maintainer's tap](https://github.com/pederbe/homebrew-tap) builds the
-published source with its locked Rust dependencies. It installs both programs
-and their licenses and notices. Rust and Python are build dependencies;
+published 0.2.0 source with its locked Rust dependencies. On Linux it installs
+both programs; on macOS it installs only `fastmash`. Both include their
+licenses and notices. Rust and Python are build dependencies;
 these source builds do not carry the performance qualification of the
 downloadable binaries.
 
-Run `brew test pederbe/tap/fastmash` to check the installation. The test includes
-the optional system-sort route and needs Linux 5.11 or later with coreutils
-at `/usr/bin/sort`. Older kernels can use Fastmash's built-in sorting.
+Run `brew test pederbe/tap/fastmash` to check the installation. On Linux the
+test includes the optional system-sort route and needs Linux 5.11 or later
+with GNU or uutils coreutils at `/usr/bin/sort`. Older kernels can use
+Fastmash's built-in sorting. On macOS the test checks built-in sorting and
+confirms that no Sort supervisor is installed.
 Remove the package with `brew uninstall pederbe/tap/fastmash`.
 
-## Native macOS development archive
+## Native macOS archive
 
-For Apple Silicon with macOS 15 or later, the native workflow builds an
-archive with a macOS 15 deployment target and tests those same bytes
-on macOS 15 and 26. It contains `fastmash`, licenses and build provenance;
-there is no macOS Sort supervisor. These CI artifacts are development builds or release candidates,
-with the kind recorded in their provenance. They are not published releases, and expire according to the run's retention.
+For Apple Silicon with macOS 15 or later, the published archive contains
+`fastmash`, licenses and build provenance. It uses built-in sorting with Spill
+and has no Sort supervisor. The same archive is checked on macOS 15 and 26.
 
-Choose a successful [native macOS workflow run](https://github.com/pederbe/fastmash/actions/workflows/macos.yml)
-and download its `macos-archive` artifact. With the GitHub CLI, use
-`gh run download RUN_ID --repo pederbe/fastmash --name macos-archive` in an
-empty directory. Replace `RUN_ID` with that run's identifier. Confirm the
-run's source revision and native installation results before using its build.
+The quick installer selects `aarch64-apple-darwin` automatically. To download
+the 0.2.0 archive by hand:
+
+```sh
+curl -fLO https://github.com/pederbe/fastmash/releases/download/v0.2.0/fastmash-v0.2.0-aarch64-apple-darwin.tar.gz
+curl -fLO https://github.com/pederbe/fastmash/releases/download/v0.2.0/fastmash-v0.2.0-aarch64-apple-darwin.tar.gz.sha256
+```
+
+For a stronger check before installation, verify its GitHub build attestation:
+
+```sh
+gh attestation verify fastmash-v0.2.0-aarch64-apple-darwin.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
+```
 
 Run this block in Bash; invoke `bash` first if using Fish. It stops on a
-failed checksum before changing an existing installation:
+failed checksum before changing an existing installation. It defaults to 0.2.0;
+set `FASTMASH_VERSION` to install a different downloaded archive version:
 
 ```bash
 bash -eu <<'EOF'
-version=$(cat archive-version.txt)
+version=${FASTMASH_VERSION:-0.2.0}
 name=fastmash-v$version-aarch64-apple-darwin
 shasum -a 256 -c "$name.tar.gz.sha256"
 tar -xzf "$name.tar.gz"
@@ -123,29 +145,10 @@ printf '1\n2\n' | ~/.local/bin/fastmash sum 1
 EOF
 ```
 
-The final command prints `3`. Ordinary development archives include the source
-revision and a `macos-test` suffix. Release candidates use the final archive
-name, such as `fastmash-v0.2.0-aarch64-apple-darwin.tar.gz`, after two clean
-builds produce identical executables. Both kinds report the source's package
-version through `--version`. Confirm `artifact_kind` and `source_revision`
-in the provenance, plus successful installation checks on both baselines.
-
-Once 0.2.0 is published, the same documented block can install the release
-archive. Download its `.tar.gz` and `.tar.gz.sha256` from the releases page,
-write `0.2.0` into `archive-version.txt`, and verify its attestation first:
-
-```sh
-gh attestation verify fastmash-v0.2.0-aarch64-apple-darwin.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
-```
-
-The Release workflow installs both the candidate archive and the draft's
-uploaded archive on macOS 15 and 26. It verifies the same frozen archive hash,
-provenance, installed executable hash, command checks and both corpus modes.
-
-For a future published macOS archive, the quick installer selects
-`aarch64-apple-darwin` automatically and checks its SHA-256 file using the
-native checksum tool. The current release's quick-install URL cannot yet
-deliver a macOS archive.
+The final command prints `3`. The archive checksum, embedded executable hash
+and build provenance identify the delivered bytes. The release's installed
+command checks and both regression corpus modes cover those same bytes on
+macOS 15 and 26.
 
 The archive is not Apple-notarized. Native CI records extended attributes,
 code-signing metadata and the assessment result for a terminal download,
@@ -156,8 +159,8 @@ these terminal checks. A checksum checks bytes, not Apple approval.
 ## Debian and Ubuntu
 
 ```sh
-curl -LO https://github.com/pederbe/fastmash/releases/download/v0.1.0/fastmash_0.1.0_amd64.deb
-sudo apt install ./fastmash_0.1.0_amd64.deb
+curl -fLO https://github.com/pederbe/fastmash/releases/download/v0.2.0/fastmash_0.2.0_amd64.deb
+sudo apt install ./fastmash_0.2.0_amd64.deb
 ```
 
 For Debian 10, Ubuntu 20.04 and newer. Remove it with `sudo apt remove fastmash`.
@@ -165,7 +168,7 @@ For Debian 10, Ubuntu 20.04 and newer. Remove it with `sudo apt remove fastmash`
 ## Fedora, RHEL and similar
 
 ```sh
-sudo dnf install https://github.com/pederbe/fastmash/releases/download/v0.1.0/fastmash-0.1.0-1.x86_64.rpm
+sudo dnf install https://github.com/pederbe/fastmash/releases/download/v0.2.0/fastmash-0.2.0-1.x86_64.rpm
 ```
 
 For Fedora, RHEL 8 and newer. Remove it with `sudo dnf remove fastmash`.

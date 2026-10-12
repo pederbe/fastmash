@@ -10,7 +10,7 @@ static page in site/. This:
   writes for its first chapter, which stays available as introduction.html),
   inlines the generated benchmark chart (docs/src/benchmarks/core-jobs.svg)
   where the page says `<!-- chart -->`, fills `@VERSION@` with the fastmash
-  package version (crates/cli/Cargo.toml), and copies its CSS and script;
+  published release version (site/release-version.txt), and copies its CSS and script;
 - copies install.sh, served at https://fastmash.io/install.sh;
 - writes a Markdown copy of every docs page next to its HTML (guide/output.md
   beside guide/output.html), with mdBook includes resolved, and links it from
@@ -309,9 +309,10 @@ def llms_txt(book):
         '> GNU datamash commands, portable results, weighted means, complete-record',
         '> selection, table health and dataset comparison.',
         '',
-        f'Published version {published_version()}: Linux x86-64 and WSL2. Install:',
-        '`curl -fsSL https://fastmash.io/install.sh | sh`, or `cargo install --locked fastmash`.',
-        f'Source candidate {version()} adds Apple Silicon macOS 15 or later; see the installation guide.',
+        f'Published version {published_version()}: Linux x86-64, WSL2 and Apple Silicon macOS 15 or later. Install:',
+        '`curl -fsSL https://fastmash.io/install.sh | sh`, or `cargo install --locked fastmash` on Linux.',
+        'On macOS, use `cargo install --locked --bin fastmash fastmash`.',
+        'The published benchmarks measure Linux 0.1.0 binaries; macOS speed is not covered.',
         'Commands, options and output follow GNU datamash 1.9; the differences page',
         'lists every intentional difference. Created by Peder Bergan (https://pederbe.dev).',
     ]
