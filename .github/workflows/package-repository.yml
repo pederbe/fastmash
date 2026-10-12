@@ -123,28 +123,22 @@ jobs:
           fi
           bash release/test-package-repository.sh "$RUNNER_TEMP/repository" "$version" \
             "$RUNNER_TEMP/qualified.sha256" ${previous:+"$previous"}
-      # Packages and hash-named dnf metadata first, then each index in the
-      # order clients follow references, signatures last, so a client reading
-      # during the upload never finds a file that its index does not match.
+      # Publish all immutable references before advancing InRelease and the
+      # dnf mirrorlist. Clients already reading the old generation keep working.
       - name: Upload
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_ENDPOINT_URL_S3: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          cd "$RUNNER_TEMP/repository"
-          aws s3 sync --only-show-errors . "s3://$BUCKET" \
-            --exclude 'apt/dists/*' --exclude 'rpm/repodata/repomd.xml*' --exclude 'fastmash.*' \
-            --cache-control 'public, max-age=31536000, immutable'
-          for path in fastmash.asc fastmash.gpg fastmash.repo \
-              apt/dists/stable/main/binary-amd64/Packages apt/dists/stable/main/binary-amd64/Packages.gz \
-              apt/dists/stable/Release apt/dists/stable/Release.gpg apt/dists/stable/InRelease \
-              rpm/repodata/repomd.xml rpm/repodata/repomd.xml.asc; do
-            aws s3 cp --only-show-errors "$path" "s3://$BUCKET/$path" --cache-control 'no-cache'
-          done
+          bash release/publish-package-repository.sh "$RUNNER_TEMP/repository" "$BUCKET"
       - name: Check the published repository
         run: |
           cd "$RUNNER_TEMP/repository"
-          for path in apt/dists/stable/InRelease rpm/repodata/repomd.xml rpm/repodata/repomd.xml.asc fastmash.asc; do
+          snapshot=$(cat rpm/mirrorlist)
+          snapshot=${snapshot#https://packages.fastmash.io/}
+          snapshot=${snapshot%/}
+          for path in apt/dists/stable/InRelease rpm/mirrorlist \
+              "$snapshot/repodata/repomd.xml" "$snapshot/repodata/repomd.xml.asc" fastmash.asc; do
             curl --proto '=https' -fsSL "https://packages.fastmash.io/$path" | cmp - "$path"
           done

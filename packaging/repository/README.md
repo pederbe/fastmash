@@ -24,8 +24,9 @@ packages, checks their SHA-256 files and their build attestations from
    containers with signature checks on, runs `release/check-installed.sh`
    against the tag's qualified checksums and removes it. When the version is
    the newest, it installs the previous version first and upgrades;
-4. uploads the packages followed by the metadata, and compares the published
-   metadata with what it signed.
+4. runs `release/publish-package-repository.sh` to upload packages, apt By-Hash
+   indexes and complete dnf snapshots before advancing the signed apt index
+   and dnf mirrorlist, then compares the published metadata with what it signed.
 
 It starts on its own when a release is published, if the tagged commit
 contains the workflow. Otherwise, run it from `main` with the tag:
@@ -40,13 +41,28 @@ each dispatch after the previous run has finished.
 fastmash.asc, fastmash.gpg   release signing key, armored and binary
 fastmash.repo                dnf repository definition
 apt/dists/stable/            InRelease, Release, Release.gpg, main/binary-amd64/Packages
+apt/dists/stable/main/binary-amd64/by-hash/   retained SHA256 and SHA512 indexes
 apt/pool/main/f/fastmash/    every published .deb
 rpm/                         every published .rpm, signed
-rpm/repodata/                metadata, with repomd.xml.asc
+rpm/snapshots/<sha256>/repodata/   permanent metadata, with repomd.xml.asc
+rpm/mirrorlist               URL of the current dnf snapshot
 ```
 
-Package files are cached as immutable. Metadata, keys and `fastmash.repo` are
-served with `Cache-Control: no-cache`.
+Package files, apt By-Hash indexes and dnf snapshots are cached as immutable.
+The current apt metadata, dnf mirrorlist, keys and `fastmash.repo` are served
+with `Cache-Control: no-cache`.
+
+APT advertises `Acquire-By-Hash: yes`, so clients fetch the exact index named
+by the checksum in their signed `InRelease`. DNF reads a mirrorlist containing
+one snapshot URL, then fetches that snapshot's index and signature. Its package
+paths point back to the shared RPM pool. Earlier indexes and snapshots remain
+available for clients already using them. An interrupted upload can leave apt
+and dnf showing different release versions, but each remains consistent.
+
+If publication fails, repeat the workflow for the same tag. Existing packages
+and snapshots remain available, and advancing either current index is safe once
+all its references have been uploaded. Do not prune old indexes or snapshots
+as part of publication.
 
 ## One-time setup
 
@@ -108,6 +124,21 @@ GPG_PASSPHRASE=... bash release/package-repository.sh /tmp/repository test-key.a
 git show v0.1.0:release/qualified.sha256 > /tmp/qualified.sha256
 bash release/test-package-repository.sh /tmp/repository 0.1.0 /tmp/qualified.sha256
 ```
+
+Publication regression checks use small fixture packages and a throwaway key.
+They need the repository tools above, Rust, Docker and the Debian 12 and
+AlmaLinux 8 container images:
+
+```sh
+bash release/package-publication-fixtures.sh /tmp/publication-fixtures
+bash release/test-package-publication.sh /tmp/publication-fixtures/old /tmp/publication-fixtures/new
+```
+
+The test runs the real upload script against local storage over HTTP. It checks
+both package managers after every object write and publishes the next generation
+between requests from an active client. The dedicated package-repository checks
+workflow runs these tests for changes to the publication tooling, without R2
+credentials. Set `CONTAINER_ENGINE=podman` to use Podman for either test script.
 
 ## For users
 

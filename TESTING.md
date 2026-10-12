@@ -297,3 +297,4 @@ running the site builder again, since the builder transforms the generated HTML.
 | `macos.yml` | Public pushes and pull requests against `main` with application or tooling changes, or manual dispatch | Complete native source checks on macOS 15/26, one development archive, both installations, installed command/corpus checks and scoped hosted GNU observations |
 | `docs.yml` | Public pushes and pull requests against `main`, or manual dispatch | Builds the website and checks links |
 | `release.yml` | Manual dispatch on a version tag | Builds and tests release assets, then creates a draft release |
+| `package-repository-checks.yml` | Public pushes and pull requests changing package-repository tooling, or manual dispatch | Checks shell and Rust tooling, then apt/dnf clients across interrupted and interleaved uploads using signed fixture packages |

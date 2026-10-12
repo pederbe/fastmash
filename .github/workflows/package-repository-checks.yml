@@ -1,0 +1,61 @@
+name: Package repository checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/package-repository*.yml'
+      - 'release/package-repository.sh'
+      - 'release/publish-package-repository.sh'
+      - 'release/package-publication-fixtures.sh'
+      - 'release/test-package-publication.sh'
+      - 'release/test-package-repository.sh'
+      - 'release/publication-test-server/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/package-repository*.yml'
+      - 'release/package-repository.sh'
+      - 'release/publish-package-repository.sh'
+      - 'release/package-publication-fixtures.sh'
+      - 'release/test-package-publication.sh'
+      - 'release/test-package-repository.sh'
+      - 'release/publication-test-server/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-repository-checks-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  publication:
+    name: Package publication consistency
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: '1.98.1'
+          components: rustfmt, clippy
+      - name: Install repository tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -qy --no-install-recommends apt-utils createrepo-c rpm gnupg2 file shellcheck
+      - name: Check tooling
+        run: |
+          shellcheck release/package-repository.sh release/publish-package-repository.sh \
+            release/package-publication-fixtures.sh release/test-package-publication.sh release/test-package-repository.sh
+          cargo fmt --manifest-path release/publication-test-server/Cargo.toml --check
+          cargo clippy --manifest-path release/publication-test-server/Cargo.toml --target-dir target --locked -- -D warnings
+      - name: Check interrupted and interleaved publication
+        run: |
+          work=$(mktemp -d)
+          trap 'rm -rf "$work"' EXIT
+          bash release/package-publication-fixtures.sh "$work"
+          bash release/test-package-publication.sh "$work/old" "$work/new"
