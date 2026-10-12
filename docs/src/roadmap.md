@@ -5,14 +5,11 @@ Fastmash's direction, roughly in order. Plans change as we learn from users;
 [discussions](https://github.com/pederbe/fastmash/discussions) are the best
 way to influence them.
 
-## 0.2.0: macOS on Apple Silicon
+## Available in 0.2.0: macOS on Apple Silicon
 
-Native Apple Silicon macOS support is the main feature planned for 0.2.0.
-The candidate has native builds, complete command and numerical checks,
-and archive installation on macOS 15 and 26. Release delivery builds twice,
-checks one frozen archive on both versions, and repeats installation against
-the draft's uploaded bytes. Linux remains supported. Published downloads
-remain at 0.1.0 until 0.2.0 qualification and publication are complete.
+Fastmash 0.2.0 adds native Apple Silicon macOS 15 and later alongside Linux
+x86-64 and WSL2. Its published archive is checked on macOS 15 and 26,
+including command behavior, numerical results and archive installation.
 
 ## Other planned work
 
@@ -23,7 +20,7 @@ remain at 0.1.0 until 0.2.0 qualification and publication are complete.
 - **Native sorting everywhere**, retiring the external `sort` route that some
   sorted jobs in the `C` locales still use where the system supports it.
 - **Broader locale support.**
-- **Packaging** in distribution repositories, conda-forge and Homebrew on Linux.
+- **Packaging** in distribution repositories and conda-forge.
 
 ## Later
 

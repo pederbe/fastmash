@@ -15,16 +15,17 @@ flowchart LR
 
 ## Quick start
 
-All commands run from the repository root on Linux x86-64 or WSL2. The native
-Apple Silicon development gate described below runs on macOS 15 and 26.
+These checks cover application changes. Documentation-only changes use the
+[website checks](#website-checks). Run from the repository root on Linux x86-64
+or WSL2. The native Apple Silicon development gate below runs on macOS 15 and 26.
 
 ```sh
 cargo fmt --all --check                  # formatting
 cargo clippy --workspace --all-targets -- -D warnings   # lints
 cargo test --release --workspace         # unit and integration tests
 cargo build --release                    # the binaries the corpus runs
-python3 scripts/check_regressions.py --binary target/release/fastmash
-python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
+python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version 0.2.0
+python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version 0.2.0 --stdin-file
 ```
 
 Run the full suite with `--release`: memory-limit tests exercise the optimized
@@ -82,7 +83,7 @@ reasons.
 
 ```sh
 cargo build --release   # fastmash and fastmash-sort-supervisor, side by side
-python3 scripts/check_regressions.py --binary target/release/fastmash --keep-going
+python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version 0.2.0 --keep-going
 python3 scripts/check_regressions.py --help
 ```
 
@@ -92,6 +93,8 @@ those with ordinary input again with standard input as a regular file, against t
 expectations. Both modes need coverage: hash grouping applies to eligible files
 and to eligible piped input in language locales, with different replay paths.
 The frozen fixture and its provenance record stay byte-identical across platforms.
+For a development version, pass `--expected-version VERSION`, using the version
+in `crates/cli/Cargo.toml`.
 On macOS, the runner requires no supervisor and uses the native fault transports
 below. `--evidence-dir` retains the executable and fixture hashes, per-case
 dispositions, native observations and mismatches. Regular-file mode records the
@@ -259,17 +262,28 @@ not native runtime evidence, release qualification or a performance claim.
 
 ## Website checks
 
+Changes confined to `docs/` and Markdown files need the website build, local
+link check and public-reference check:
+
+```sh
+python3 -B scripts/check_public_references.py
+bash scripts/build_site.sh
+lychee --offline --no-progress --fallback-extensions html --index-files index.html --root-dir docs/book docs/book
+```
+
+Set `MDBOOK` to an installed mdBook 0.5.4 to reuse it.
+
 The landing-page browser tests cover initial loading with a delayed script,
 installation tabs, clipboard fallback, reduced motion and access to every
 installation command without JavaScript. They use Puppeteer from the existing
 diagram tooling and its installed Chrome browser. For setup, see
 [the demo tooling](https://github.com/pederbe/fastmash/blob/main/scripts/demo/README.md).
 
+For changes to website code, also run the browser checks:
+
 ```sh
-python3 -m unittest discover -s scripts -p 'test_build_site.py'
-mdbook build docs
-env FASTMASH_DIAGRAMS=committed python3 scripts/build_site.py docs/book
 npm run test:landing
+npm run test:docs
 ```
 
 Use mdBook 0.5.4, as pinned by `scripts/build_site.sh`. Rebuild the book before
@@ -279,7 +293,7 @@ running the site builder again, since the builder transforms the generated HTML.
 
 | Workflow | When | What |
 | --- | --- | --- |
-| `ci.yml` | Public pushes and pull requests against `main`, or manual dispatch | Format, Clippy, release-mode tests, regression corpus on Ubuntu |
-| `macos.yml` | Public pushes and pull requests against `main`, or manual dispatch | Complete native source checks on macOS 15/26, one development archive, both installations, installed command/corpus checks and scoped hosted GNU observations |
+| `ci.yml` | Public pushes and pull requests against `main` with application or tooling changes, or manual dispatch | Format, Clippy, release-mode tests, regression corpus on Ubuntu. Required jobs skip documentation-only changes |
+| `macos.yml` | Public pushes and pull requests against `main` with application or tooling changes, or manual dispatch | Complete native source checks on macOS 15/26, one development archive, both installations, installed command/corpus checks and scoped hosted GNU observations |
 | `docs.yml` | Public pushes and pull requests against `main`, or manual dispatch | Builds the website and checks links |
 | `release.yml` | Manual dispatch on a version tag | Builds and tests release assets, then creates a draft release |

@@ -34,10 +34,10 @@ west	8	4
 
 ## Why Fastmash
 
-- **Fast.** On representative real-world jobs Fastmash runs up to four times
-  faster than GNU datamash 1.9, for example quantiles on genome annotations and
-  grouped summaries per gene. Every release publishes its full results, including the jobs
-  where GNU datamash is still faster: see the [benchmarks](https://fastmash.io/benchmarks/).
+- **Fast.** On the published Linux 0.1.0 benchmarks, Fastmash runs up to four
+  times faster than GNU datamash 1.9, for example quantiles on genome annotations
+  and grouped summaries per gene. The full results include the jobs where GNU
+  datamash is still faster: see the [benchmarks](https://fastmash.io/benchmarks/).
 - **The datamash commands you already use.** Over 70 operations and modes,
   datamash's options and field selectors, grouping, headers, `crosstab`,
   `transpose` and more.
@@ -53,10 +53,9 @@ west	8	4
 
 ## Install
 
-Fastmash runs on Linux x86-64 (glibc) and on Windows through WSL2.
-The published 0.1.0 archives cover those platforms. The 0.2.0 release candidate adds
-Apple Silicon macOS 15 and later; the [native archive instructions](docs/src/install.md#native-macos-development-archive)
-describe how to obtain and verify the CI artifact before a macOS release is available.
+Fastmash 0.2.0 runs on Linux x86-64 (glibc), Windows through WSL2 and
+Apple Silicon macOS 15 and later. Published archives are available for Linux
+and macOS. The macOS archive uses built-in sorting and installs only `fastmash`.
 
 Download a prebuilt binary from the
 [releases page](https://github.com/pederbe/fastmash/releases), or build it with Cargo:
@@ -64,6 +63,9 @@ Download a prebuilt binary from the
 ```sh
 cargo install --locked fastmash
 ```
+
+On macOS, use `cargo install --locked --bin fastmash fastmash` to select
+the native executable.
 
 See the [installation guide](https://fastmash.io/install.html) for
 requirements, verification and removal. Installing Fastmash does not replace or
@@ -119,12 +121,12 @@ results, CSV, health TSV and version output always keep plain data bytes.
 
 ## Status
 
-Fastmash is at **0.1**, a preview release: usable today on Linux x86-64 and
-WSL2, with the differences above. Before 1.0, minor releases may still change
-behavior; every change is listed in the [changelog](CHANGELOG.md). The 0.2.0 candidate adds native Apple
-Silicon macOS 15 and later, checked on macOS 15 and 26. Its release delivery
-requires the native archive checks described in [RELEASING.md](RELEASING.md). Windows users run the Linux version through WSL2;
-native Windows is outside the current product scope.
+Fastmash is at **0.2.0**, a preview release: usable today on Linux x86-64,
+WSL2 and Apple Silicon macOS 15 and later, with the differences above.
+The macOS archive is checked on macOS 15 and 26 and is not Apple-notarized.
+Before 1.0, minor releases may still change behavior; every change is listed
+in the [changelog](CHANGELOG.md). Windows users run the Linux version through
+WSL2; native Windows is outside the current product scope.
 See the [roadmap](https://fastmash.io/roadmap.html).
 
 ## Documentation

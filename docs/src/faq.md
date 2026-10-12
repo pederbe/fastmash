@@ -9,8 +9,8 @@ settings and numerical last digits, and keep `datamash` installed while you comp
 
 ## Is it always faster?
 
-Not yet. Fastmash is faster on many common jobs and slower on some others,
-and each release publishes both in the [benchmarks](benchmarks/index.md).
+Not yet. The published Linux 0.1.0 [benchmarks](benchmarks/index.md) show
+Fastmash faster on many common jobs and slower on some others.
 Try it on your own data, and tell us about jobs where it is slower.
 
 ## Why does Fastmash refuse my locale?
@@ -62,10 +62,11 @@ with `--color=always`. Styling defaults to automatic terminal detection;
 
 ## Why are there two executables?
 
-`fastmash-sort-supervisor` runs the system `sort` safely for some sorted jobs
+On Linux, `fastmash-sort-supervisor` runs the system `sort` safely for some sorted jobs
 in the C locales, where the system `sort` is faster on large input. Keep it in
 the same directory as `fastmash`: without it, those jobs sort inside Fastmash,
-with the same output.
+with the same output. The macOS archive contains only `fastmash` and always
+uses built-in sorting.
 
 ## Why exit status 77?
 
@@ -83,9 +84,9 @@ every machine; GNU datamash's depend on the hardware and C library. See
 
 ## Does it work on macOS or Windows?
 
-On Windows, use WSL2. The 0.2.0 candidate supports Apple Silicon macOS 15
-and later, checked natively on macOS 15 and 26. Published 0.1.0 downloads
-remain Linux-only; see the [native archive instructions](install.md#native-macos-development-archive).
+On Windows, use WSL2. Fastmash 0.2.0 also supports Apple Silicon macOS 15
+and later, with the published archive checked natively on macOS 15 and 26.
+See the [native archive instructions](install.md#native-macos-archive).
 Intel macOS and native Windows are outside the current product scope.
 
 ## How does Fastmash relate to GNU datamash?

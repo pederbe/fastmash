@@ -17,7 +17,7 @@ own documentation (checked September 2026); tell us if something has changed.
 | Quoted CSV fields | Yes, in supported calculation, selection and comparison modes | No | Yes | Yes | Yes |
 | Grouped statistics | Yes | Yes | Yes (`stats1 -g`) | Through `pivotp` or `sqlp` | Yes (`summary -g`) |
 | Joins, filters, reshaping | No | No | Yes | Yes | Yes |
-| Platforms | Linux x86-64; Apple Silicon macOS 15+ in 0.2.0 candidate | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
+| Platforms | Linux x86-64, WSL2, Apple Silicon macOS 15+ | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
 
 ## GNU datamash
 
@@ -26,7 +26,7 @@ everywhere and is packaged by every Linux distribution, conda-forge and
 Homebrew.
 
 **Choose Fastmash when** you run datamash commands on Linux and want them
-faster (up to 4 times on the published [benchmarks](benchmarks/index.md)),
+faster (up to 4 times on the published Linux 0.1.0 [benchmarks](benchmarks/index.md)),
 want the same digits on every machine, or want clear errors where datamash
 1.9 aborts or reads past its data. Your commands don't change; the
 [differences](guide/differences.md) are listed on one page.
