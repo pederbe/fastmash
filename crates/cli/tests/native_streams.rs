@@ -195,10 +195,36 @@ fn blocked_sigpipe_refuses_and_unrelated_masks_allow_ordinary_commands() {
 #[test]
 fn ordinary_broken_pipes_restore_sigpipe_even_when_inherited_ignored() {
     for ignored in [false, true] {
-        let (reader, writer) = std::io::pipe().unwrap();
-        drop(reader);
         let mut command = command(&["count", "1"]);
-        command.stdout(writer);
+        command.stdout(Stdio::null());
+        // Create the pipe after fork so concurrent test children cannot retain
+        // its reader before their own exec and make the write succeed.
+        // SAFETY: the callback uses only async-signal-safe libc operations and
+        // stack-local storage. Command has installed open standard streams,
+        // so the new descriptors are distinct from stdout and belong only to
+        // this child. Both are closed after duplicating the writer onto stdout.
+        unsafe {
+            command.pre_exec(|| {
+                let mut pipe = [-1; 2];
+                if libc::pipe(pipe.as_mut_ptr()) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if libc::close(pipe[0]) != 0 {
+                    let error = std::io::Error::last_os_error();
+                    libc::close(pipe[1]);
+                    return Err(error);
+                }
+                if libc::dup2(pipe[1], libc::STDOUT_FILENO) < 0 {
+                    let error = std::io::Error::last_os_error();
+                    libc::close(pipe[1]);
+                    return Err(error);
+                }
+                if libc::close(pipe[1]) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
         signal_mask(
             &mut command,
             libc::SIGTERM,
