@@ -1,11 +1,13 @@
 # Signed apt and dnf repository
 
-This directory prepares the release `.deb` and `.rpm` packages for a signed
+This directory prepares the release `.deb` and `.rpm` packages for the signed
 apt repository (Debian, Ubuntu) and a signed dnf repository (RHEL, AlmaLinux,
-Fedora) at `packages.fastmash.io`. The repository is not yet published.
-Complete setup and verify the first publication before adding it to the
-installation guide. Once available, users who add it receive new versions
-through `apt upgrade` and `dnf upgrade`, with signature verification enabled.
+Fedora) at `packages.fastmash.io`. The repository serves versions 0.1.0 and 0.2.0.
+Public-domain installation, upgrade and removal are verified on Debian 12,
+Ubuntu 24.04 and AlmaLinux 8 with signature checks enabled and installed programs
+matching each release's qualified checksums. Users who add it receive new
+versions through `apt upgrade` and `dnf upgrade`. See the
+[installation guide](../../docs/src/install.md) for setup.
 
 The [Package repository workflow](../../.github/workflows/package-repository.yml)
 publishes it after a release is published. It downloads that release's
@@ -142,8 +144,8 @@ credentials. Set `CONTAINER_ENGINE=podman` to use Podman for either test script.
 
 ## For users
 
-Add to the installation guide once the repository is live and checked. After
-verifying the key fingerprint:
+The [installation guide](../../docs/src/install.md) gives the verified setup
+and key fingerprint. After verifying that fingerprint:
 
 ```sh
 # Debian and Ubuntu

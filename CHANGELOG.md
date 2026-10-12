@@ -10,6 +10,12 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+### Added
+
+- Signed apt and dnf repositories at `packages.fastmash.io`, with package-manager
+  updates on Linux x86-64. Installation, upgrade from 0.1.0 to 0.2.0 and removal
+  are verified on Debian 12, Ubuntu 24.04 and AlmaLinux 8.
+
 ### Fixed
 
 - Prepare apt and dnf repository updates without replacing metadata that

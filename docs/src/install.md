@@ -108,6 +108,36 @@ The final command prints `3`.
 
 ## Debian and Ubuntu
 
+The signed apt repository provides updates through apt on Linux x86-64. Install
+the tools needed to download and inspect its key:
+
+```sh
+sudo apt install ca-certificates curl gnupg
+curl -fsSLo fastmash.gpg https://packages.fastmash.io/fastmash.gpg
+gpg --show-keys --fingerprint fastmash.gpg
+```
+
+Check that the key fingerprint is:
+
+```text
+76C1 7E23 B7D3 F8FD ED36 D31A 7BAC 7AF6 644B D290
+```
+
+Then add the repository and install Fastmash:
+
+```sh
+sudo install -m 644 fastmash.gpg /usr/share/keyrings/fastmash.gpg
+echo "deb [arch=amd64 signed-by=/usr/share/keyrings/fastmash.gpg] https://packages.fastmash.io/apt stable main" |
+  sudo tee /etc/apt/sources.list.d/fastmash.list
+sudo apt update
+sudo apt install fastmash
+```
+
+Later versions arrive through `sudo apt update` and `sudo apt upgrade`.
+The key is trusted only for this repository. Both 0.1.0 and 0.2.0 remain available.
+
+To install a single release without adding the repository:
+
 ```sh
 curl -fLO https://github.com/pederbe/fastmash/releases/download/v0.2.0/fastmash_0.2.0_amd64.deb
 sudo apt install ./fastmash_0.2.0_amd64.deb
@@ -116,6 +146,21 @@ sudo apt install ./fastmash_0.2.0_amd64.deb
 For Debian 10, Ubuntu 20.04 and newer. Remove it with `sudo apt remove fastmash`.
 
 ## Fedora, RHEL and similar
+
+The signed dnf repository provides updates on Linux x86-64, with package and
+repository signature checks enabled:
+
+```sh
+sudo curl -fsSLo /etc/yum.repos.d/fastmash.repo https://packages.fastmash.io/fastmash.repo
+sudo dnf install fastmash
+```
+
+dnf asks to trust the signing key on first use. Before confirming, check that
+its fingerprint is `76C1 7E23 B7D3 F8FD ED36 D31A 7BAC 7AF6 644B D290`,
+the same key used by the apt repository above. Update with
+`sudo dnf upgrade fastmash`. Both 0.1.0 and 0.2.0 remain available.
+
+To install a single release without adding the repository:
 
 ```sh
 sudo dnf install https://github.com/pederbe/fastmash/releases/download/v0.2.0/fastmash-0.2.0-1.x86_64.rpm
