@@ -24,6 +24,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Public reference check
+        run: |
+          python3 -B -m unittest discover -s scripts -p 'test_check_public_references.py'
+          python3 -B scripts/check_public_references.py
       # The deploy build: pinned mdBook, committed diagram renders (a missing
       # or unused render fails), landing page and install.sh at the root.
       - run: bash scripts/build_site.sh

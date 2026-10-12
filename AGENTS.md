@@ -17,19 +17,11 @@ tools they use. [CONTRIBUTING.md](CONTRIBUTING.md) is the full guide.
 
 ## Commands
 
-```sh
-cargo build
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --release --workspace
-cargo build --release
-python3 scripts/check_regressions.py --binary target/release/fastmash
-python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
-```
-
-Run the full set before declaring a change complete, and report any command
-you could not run. Tests need Linux; on Windows, use WSL2 with the checkout on
-the Linux filesystem.
+For documentation-only changes (`docs/**` and Markdown files), run the
+[website checks](TESTING.md#website-checks). Application changes run the
+[application checks](TESTING.md#quick-start). Changes to build or CI tooling
+need checks of the affected tooling and workflow filters. Report any check
+you could not run. On Windows, use WSL2 with the checkout on the Linux filesystem.
 
 ## Rules
 

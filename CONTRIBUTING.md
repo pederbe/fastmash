@@ -65,19 +65,10 @@ checklist and check whether its parent issue is complete.
 2. Keep each pull request to one change. Separate refactoring from behavior changes.
 3. Add tests. Bug fixes need a test that fails without the fix. Behavior
    changes need regression cases. See [TESTING.md](TESTING.md).
-4. Run the checks:
-
-   ```sh
-   cargo fmt --all --check
-   cargo clippy --workspace --all-targets -- -D warnings
-   cargo test --release --workspace
-   cargo build --release
-   python3 scripts/check_regressions.py --binary target/release/fastmash
-   python3 scripts/check_regressions.py --binary target/release/fastmash --stdin-file
-   ```
-
-   The last two commands run the regression corpus, with its input piped and
-   from a file, as CI does.
+4. Run the checks for what changed. Documentation uses the
+   [website checks](TESTING.md#website-checks), application code uses the
+   [application checks](TESTING.md#quick-start), and build or CI tooling needs
+   checks of the affected tooling and workflow filters.
 
 5. Update documentation in the same pull request when user-visible behavior
    changes: the user guide under `docs/`, `--help` text, and `CHANGELOG.md`.

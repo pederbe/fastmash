@@ -49,12 +49,24 @@ install locale data. See [Numbers, output and locales](guide/output.md#locales).
 
 ## Verifying a release archive
 
-Every release archive has a `.sha256` checksum file, checked by the install
-steps, and a GitHub build provenance attestation:
+The installer checks the archive's SHA-256 checksum. To verify which GitHub
+workflow built it, download the archive from the
+[releases page](https://github.com/pederbe/fastmash/releases) and use the
+[GitHub CLI](https://cli.github.com):
+
+Linux:
 
 ```sh
 gh attestation verify fastmash-v0.2.0-x86_64-unknown-linux-gnu.tar.gz --repo pederbe/fastmash
 ```
+
+macOS:
+
+```sh
+gh attestation verify fastmash-v0.2.0-aarch64-apple-darwin.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
+```
+
+The macOS archive is not Apple-notarized.
 
 The published [benchmarks](benchmarks/index.md) measure the qualified Linux 0.1.0 binaries. Hosted macOS checks do not extend those speed claims to macOS.
 
