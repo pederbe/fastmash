@@ -10,6 +10,12 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+### Fixed
+
+- Prepare apt and dnf repository updates without replacing metadata that
+  clients are still reading, using retained apt By-Hash indexes and signed
+  dnf snapshots.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

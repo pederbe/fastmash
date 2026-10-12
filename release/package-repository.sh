@@ -106,7 +106,9 @@ while IFS= read -r -d '' file; do
             "fastmash ${BASH_REMATCH[1]} x86_64" ||
             { echo "$name does not match its header" >&2; exit 1; }
         rpm_signed "$file" || { echo "$name is not signed by the release key" >&2; exit 1; }
-    elif [[ ! $name =~ ^(apt/dists|rpm/repodata)/ ]] &&
+    elif [[ ! $name =~ ^apt/dists/ ]] &&
+        [[ ! $name =~ ^rpm/snapshots/[a-f0-9]{64}/repodata/ ]] &&
+        [[ $name != rpm/mirrorlist ]] &&
         [[ ! $name =~ ^fastmash\.(asc|gpg|repo)$ ]]; then
         echo "unexpected file in the repository: $name" >&2
         exit 1
@@ -120,6 +122,21 @@ dists=$apt/dists/stable
 mkdir -p "$dists/main/binary-amd64"
 (cd "$apt" && apt-ftparchive packages pool) > "$dists/main/binary-amd64/Packages"
 gzip -9nkf "$dists/main/binary-amd64/Packages"
+# Old signed InRelease files must still find their exact indexes after an
+# update. Keep both strong hash forms that the supported apt clients can use.
+for algorithm in SHA256 SHA512; do
+    hash_directory=$dists/main/binary-amd64/by-hash/$algorithm
+    mkdir -p "$hash_directory"
+    for index in Packages Packages.gz; do
+        file=$dists/main/binary-amd64/$index
+        digest=$("${algorithm,,}sum" < "$file" | cut -d' ' -f1)
+        if [ -e "$hash_directory/$digest" ]; then
+            cmp "$file" "$hash_directory/$digest"
+        else
+            cp "$file" "$hash_directory/$digest"
+        fi
+    done
+done
 rm -f "$dists/Release" "$dists/InRelease" "$dists/Release.gpg"
 apt-ftparchive \
     -o APT::FTPArchive::Release::Origin=Fastmash \
@@ -128,16 +145,39 @@ apt-ftparchive \
     -o APT::FTPArchive::Release::Codename=stable \
     -o APT::FTPArchive::Release::Architectures=amd64 \
     -o APT::FTPArchive::Release::Components=main \
+    -o APT::FTPArchive::Release::Acquire-By-Hash=yes \
     -o "APT::FTPArchive::Release::Description=Fastmash release packages" \
     release "$dists" > "$work/Release"
 mv "$work/Release" "$dists/Release"
 sign --clearsign --output "$dists/InRelease" "$dists/Release"
 sign --armor --detach-sign --output "$dists/Release.gpg" "$dists/Release"
 
-# dnf: repomd.xml.asc signs the metadata index.
-createrepo_c --quiet --update "$repository/rpm"
-sign --armor --detach-sign --output "$repository/rpm/repodata/repomd.xml.asc" \
-    "$repository/rpm/repodata/repomd.xml"
+# dnf: a mirrorlist selects a complete, permanent metadata snapshot, so the
+# index and its detached signature always come from the same generation.
+# Package paths go back to the shared rpm pool, without copying the packages.
+mkdir "$work/rpm"
+createrepo_c --quiet --location-prefix '../../' --outputdir "$work/rpm" "$repository/rpm"
+sign --armor --detach-sign --output "$work/rpm/repodata/repomd.xml.asc" \
+    "$work/rpm/repodata/repomd.xml"
+generation=$(sha256sum < "$work/rpm/repodata/repomd.xml" | cut -d' ' -f1)
+snapshot=$repository/rpm/snapshots/$generation
+if [ -d "$snapshot" ]; then
+    # An interrupted upload can leave only part of this snapshot in storage.
+    # Fill missing files, and reuse an existing signature for identical metadata.
+    mkdir -p "$snapshot/repodata"
+    for file in "$work/rpm/repodata/"*; do
+        name=$(basename "$file")
+        if [ -e "$snapshot/repodata/$name" ]; then
+            [ "$name" = repomd.xml.asc ] || cmp "$file" "$snapshot/repodata/$name"
+        else
+            cp "$file" "$snapshot/repodata/$name"
+        fi
+    done
+else
+    mkdir -p "$(dirname "$snapshot")"
+    mv "$work/rpm" "$snapshot"
+fi
+printf 'https://packages.fastmash.io/rpm/snapshots/%s/\n' "$generation" > "$repository/rpm/mirrorlist"
 
 # The public key in both forms, and the dnf repository definition.
 cp "$public_key" "$repository/fastmash.asc"
@@ -145,7 +185,7 @@ gpg --batch --yes --dearmor --output "$repository/fastmash.gpg" "$public_key"
 cat > "$repository/fastmash.repo" <<'EOF'
 [fastmash]
 name=Fastmash
-baseurl=https://packages.fastmash.io/rpm
+mirrorlist=https://packages.fastmash.io/rpm/mirrorlist
 enabled=1
 gpgcheck=1
 repo_gpgcheck=1
@@ -155,6 +195,6 @@ EOF
 # Check the signatures as a client would, with only the published key.
 gpgv --keyring "$repository/fastmash.gpg" "$dists/InRelease" 2>/dev/null
 gpgv --keyring "$repository/fastmash.gpg" "$dists/Release.gpg" "$dists/Release" 2>/dev/null
-gpgv --keyring "$repository/fastmash.gpg" "$repository/rpm/repodata/repomd.xml.asc" \
-    "$repository/rpm/repodata/repomd.xml" 2>/dev/null
+gpgv --keyring "$repository/fastmash.gpg" "$snapshot/repodata/repomd.xml.asc" \
+    "$snapshot/repodata/repomd.xml" 2>/dev/null
 echo "$repository: $(find "$pool" -name '*.deb' | wc -l) .deb and $(find "$repository/rpm" -maxdepth 1 -name '*.rpm' | wc -l) .rpm, signed by $fingerprint"

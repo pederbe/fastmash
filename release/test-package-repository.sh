@@ -11,6 +11,7 @@
 # and then runs a normal upgrade, which must arrive at VERSION; without it,
 # VERSION is installed directly. Needs docker.
 set -euo pipefail
+engine=${CONTAINER_ENGINE:-docker}
 
 repository=$(realpath "$1") version=$2 qualified=$(realpath "$3") previous=${4:-}
 here=$(dirname "$(realpath "$0")")
@@ -29,7 +30,8 @@ test ! -e /usr/bin/fastmash-sort-supervisor
 EOF
 
 apt_test() { # IMAGE
-    docker run --rm --network=none -v "$repository:/repo:ro" -v "$release:/release:ro" \
+    # shellcheck disable=SC2016 # Variables expand inside the container.
+    "$engine" run --rm --network=none -v "$repository:/repo:ro" -v "$release:/release:ro" \
         -e VERSION="$version" -e PREVIOUS="$previous" "$1" bash -c '
 set -euo pipefail
 rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*
@@ -49,11 +51,13 @@ remove() { apt-get -qy remove fastmash; }
 }
 
 dnf_test() { # IMAGE
-    docker run --rm --network=none -v "$repository:/repo:ro" -v "$release:/release:ro" \
+    # shellcheck disable=SC2016 # Variables expand inside the container.
+    "$engine" run --rm --network=none -v "$repository:/repo:ro" -v "$release:/release:ro" \
         -e VERSION="$version" -e PREVIOUS="$previous" "$1" bash -c '
 set -euo pipefail
 rm -f /etc/yum.repos.d/*
-sed -e "s|https://packages.fastmash.io/rpm|file:///repo/rpm|" \
+sed "s|https://packages.fastmash.io/rpm|file:///repo/rpm|" /repo/rpm/mirrorlist > /tmp/fastmash-mirrorlist
+sed -e "s|https://packages.fastmash.io/rpm/mirrorlist|file:///tmp/fastmash-mirrorlist|" \
     -e "s|https://packages.fastmash.io/fastmash.asc|file:///repo/fastmash.asc|" \
     /repo/fastmash.repo > /etc/yum.repos.d/fastmash.repo
 if [ -n "$PREVIOUS" ]; then
@@ -70,5 +74,5 @@ remove() { dnf -qy remove fastmash; }
 
 apt_test debian:12-slim
 apt_test ubuntu:24.04
-dnf_test almalinux:8
+dnf_test "${DNF_TEST_IMAGE:-almalinux:8}"
 echo "repository installs of $version${previous:+ (upgraded from $previous)} passed"
