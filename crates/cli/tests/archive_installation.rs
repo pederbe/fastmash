@@ -24,7 +24,13 @@ use temp_dir::TempDir;
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
 fn documented_instructions() -> &'static str {
-    include_str!("../../../docs/src/install.md")
+    let (_, native_section) = include_str!("../../../docs/src/install.md")
+        .split_once("## Native macOS archive\n")
+        .expect("native macOS archive installation section");
+    native_section
+        .split("\n## ")
+        .next()
+        .unwrap()
         .split("```bash\n")
         .nth(1)
         .unwrap()
@@ -395,11 +401,70 @@ fn unsupported_native_target_or_old_macos_preserves_the_installation() {
 }
 
 #[test]
+fn documented_macos_method_installs_a_verified_archive_with_an_explicit_version() {
+    let root = TempDir::new("documented-macos-install");
+    let version = "0.2.0-documentation-test";
+    let name = format!("fastmash-v{version}-aarch64-apple-darwin");
+    let stage = root.0.join(&name);
+    fs::create_dir(&stage).unwrap();
+    let executable = b"#!/bin/sh\nprintf '3\\n'\n";
+    script(
+        &stage.join("fastmash"),
+        std::str::from_utf8(executable).unwrap(),
+    );
+    fs::write(
+        stage.join("binary.sha256"),
+        format!("{}  fastmash\n", digest(executable)),
+    )
+    .unwrap();
+    fs::write(stage.join("build-provenance.txt"), b"fixture provenance\n").unwrap();
+    let archive = root.0.join(format!("{name}.tar.gz"));
+    let status = Command::new("tar")
+        .args(["-czf"])
+        .arg(&archive)
+        .arg("-C")
+        .arg(&root.0)
+        .arg(&name)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    fs::write(
+        root.0.join(format!("{name}.tar.gz.sha256")),
+        format!("{}  {name}.tar.gz\n", digest(&fs::read(archive).unwrap())),
+    )
+    .unwrap();
+    let path = fixture_path(&root.0, "Darwin", "arm64", "15.7");
+    // The manual method uses an already downloaded archive, without curl or
+    // GNU checksum tools. Selecting Linux instructions must fail here.
+    fs::remove_file(path.join("curl")).unwrap();
+    for tool in ["bash", "cat"] {
+        symlink(real_tool(tool), path.join(tool)).unwrap();
+    }
+    let output = Command::new("/bin/bash")
+        .args(["-c", documented_instructions()])
+        .current_dir(&root.0)
+        .env_clear()
+        .env("HOME", &root.0)
+        .env("PATH", &path)
+        .env("FASTMASH_VERSION", version)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout.ends_with(b"3\n"), "{output:?}");
+    let installed = root.0.join(".local/bin");
+    assert_eq!(fs::read(installed.join("fastmash")).unwrap(), executable);
+    assert_eq!(fs::read_dir(installed).unwrap().count(), 1);
+}
+
+#[test]
 fn documented_archive_or_binary_checksum_failure_preserves_the_installation() {
     let root = TempDir::new("documented-macos-checksum");
     let version = "0.2.0-macos-test";
     let (name, archive) = fixture_archive(&root.0, version, "aarch64-apple-darwin", false);
-    fs::write(root.0.join("archive-version.txt"), format!("{version}\n")).unwrap();
+    let path = fixture_path(&root.0, "Darwin", "arm64", "15.7");
+    for tool in ["bash", "cat"] {
+        symlink(real_tool(tool), path.join(tool)).unwrap();
+    }
     let dir = root.0.join(".local/bin");
     fs::create_dir(root.0.join(".local")).unwrap();
     previous_installation(&dir);
@@ -416,7 +481,8 @@ fn documented_archive_or_binary_checksum_failure_preserves_the_installation() {
             .current_dir(&root.0)
             .env_clear()
             .env("HOME", &root.0)
-            .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+            .env("PATH", &path)
+            .env("FASTMASH_VERSION", version)
             .output()
             .unwrap();
         assert!(!output.status.success(), "{output:?}");
@@ -481,7 +547,6 @@ fn native_archive_installs_and_runs_outside_the_checkout() {
     // Execute the exact manual installation block published in the guide.
     // Its HOME and working directory are private and outside the checkout.
     let instructions = documented_instructions();
-    fs::write(root.0.join("archive-version.txt"), format!("{version}\n")).unwrap();
     for (file, contents) in &files {
         fs::write(root.0.join(file), contents).unwrap();
     }
@@ -493,6 +558,7 @@ fn native_archive_installs_and_runs_outside_the_checkout() {
             .env("HOME", &root.0)
             .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
             .env("LC_ALL", "C")
+            .env("FASTMASH_VERSION", version)
             .output()
             .unwrap()
     };

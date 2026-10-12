@@ -34,7 +34,7 @@
  "url": "https://fastmash.io/",
  "description": "Fast command-line statistics and table workflows for delimited text and quoted CSV, with GNU datamash commands and portable numerical results.",
  "applicationCategory": "DeveloperApplication",
- "operatingSystem": "Linux",
+ "operatingSystem": "Linux x86-64, Windows through WSL2, Apple Silicon macOS 15 or later",
  "softwareVersion": "@VERSION@",
  "license": [
   "https://spdx.org/licenses/MIT.html",
@@ -109,14 +109,14 @@
             <code id="cmd-cargo" tabindex="0">cargo install --locked fastmash</code>
             <button type="button" class="copy" data-copy="cmd-cargo" aria-label="Copy the Cargo install command">Copy</button>
           </div>
-          <p class="install-note">Builds from source with your Rust toolchain.</p>
+          <p class="install-note">Builds from source with your Rust toolchain. On macOS, add --bin fastmash.</p>
         </div>
         <div class="install-panel" role="tabpanel" id="panel-binstall" aria-labelledby="tab-binstall" hidden>
           <div class="install">
             <code id="cmd-binstall" tabindex="0">cargo binstall fastmash</code>
             <button type="button" class="copy" data-copy="cmd-binstall" aria-label="Copy the cargo-binstall install command">Copy</button>
           </div>
-          <p class="install-note">Downloads the prebuilt release binaries with cargo-binstall.</p>
+          <p class="install-note">Downloads the prebuilt release binaries. On macOS, add --bin fastmash.</p>
         </div>
         <div class="install-panel" role="tabpanel" id="panel-deb" aria-labelledby="tab-deb" hidden>
           <div class="install">
@@ -132,7 +132,7 @@
           </div>
           <p class="install-note">The .rpm package for Fedora, RHEL 8 and newer.</p>
         </div>
-        <p class="install-alt">Linux x86-64 and WSL2 · Apple Silicon macOS in the 0.2.0 candidate · <a href="install.html">installation details</a></p>
+        <p class="install-alt">Linux x86-64 and WSL2 · Apple Silicon macOS 15+ · <a href="install.html">installation details</a></p>
       </div>
       <p class="sr-only" id="copy-status" role="status" aria-live="polite"></p>
       <div class="actions">
