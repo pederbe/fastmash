@@ -225,8 +225,8 @@ publication, additional package submissions or announcements.
 
 ## Native macOS release delivery
 
-Apple Silicon macOS 15 or later is the main addition in the 0.2.0 candidate.
-The published 0.1.0 release and its qualified Linux files remain unchanged.
+Apple Silicon macOS 15 or later is the main addition in the published 0.2.0 release.
+The 0.1.0 release and its qualified Linux files remain unchanged.
 Intel macOS is outside this scope. See [ADR 0011: Qualify and deliver the same
 native archive](docs/src/adr/0011-native-release-delivery.md).
 
