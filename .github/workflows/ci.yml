@@ -85,6 +85,33 @@ jobs:
           python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version "$version"
           python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version "$version" --stdin-file
 
+  profiling:
+    name: Static profiling on ${{ matrix.os }}
+    needs: changes
+    if: >-
+      !cancelled() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (!github.event.repository.private && needs.changes.outputs.application != 'false'))
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: "1.98.1"
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - run: cargo clippy -p fastmash --all-targets --features hotpath-alloc --locked -- -D warnings
+      - run: cargo test --profile profiling -p fastmash --features hotpath-alloc --test profiling --locked
+      - run: cargo build --profile profiling -p fastmash --features hotpath-alloc --bin fastmash --example profile-jobs --locked
+      - name: Capture static Representative jobs
+        shell: bash
+        run: target/profiling/examples/profile-jobs "$RUNNER_TEMP/fastmash-profiling"
+      - run: cargo check -p fastmash --all-targets --all-features --locked
+
   msrv:
     name: Minimum supported Rust version
     needs: changes

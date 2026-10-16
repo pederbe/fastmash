@@ -36,6 +36,7 @@ fn corrupt() -> Failure {
     io_error("invalid run")
 }
 
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn temporary() -> Result<File, Failure> {
     let file = fastmash_sort_process::anonymous_file().map_err(io_error)?;
     if std::env::var_os("FASTMASH_SORT_TRACE").is_some() {
@@ -1391,6 +1392,7 @@ impl<S: Codec> Finished<S> {
     /// views, merged with the runs. The final level and the folded smaller
     /// levels stream to the consumer, with at most `MERGE_INPUTS` decoded
     /// heads; the chunk joins the first merge from memory, never as a run.
+    #[cfg_attr(feature = "hotpath", hotpath::measure(impl_type = "Finished<S>"))]
     pub(super) fn emit<'a>(
         &'a mut self,
         mut consume: impl FnMut(Record<Mixed<'a, S>>) -> Result<(), Failure>,

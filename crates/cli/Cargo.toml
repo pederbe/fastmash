@@ -27,6 +27,8 @@ name = "fastmash-sort-supervisor"
 path = "src/bin/fastmash-sort-supervisor.rs"
 
 [dependencies]
+# Optional diagnostics only. Ordinary builds do not compile or link hotpath.
+hotpath = { version = "=0.28.6", optional = true, default-features = false }
 fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.2.0" }
 fastmash-conversion = { path = "../conversion", version = "=0.2.0" }
 fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.2.0" }
@@ -43,6 +45,12 @@ base64 = { version = "=0.23.1", default-features = false }
 md-5 = { version = "=0.11.0", default-features = false }
 sha1 = { version = "=0.11.0", default-features = false }
 sha2 = { version = "=0.11.0", default-features = false }
+
+[features]
+default = []
+hotpath = ["dep:hotpath", "hotpath/hotpath"]
+hotpath-alloc = ["hotpath", "hotpath/hotpath-alloc"]
+hotpath-cpu = ["hotpath", "hotpath/hotpath-cpu"]
 
 [dev-dependencies]
 # Independent byte-reader check for canonical CSV output, not the input parser.

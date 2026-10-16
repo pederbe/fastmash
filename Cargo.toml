@@ -24,3 +24,8 @@ lto = false
 # Typical jobs run a median 2% faster (up to 6%) with one codegen unit;
 # clean builds take about 45% longer.
 codegen-units = 1
+
+# Diagnostic symbols without changing the ordinary release profile.
+[profile.profiling]
+inherits = "release"
+debug = true
