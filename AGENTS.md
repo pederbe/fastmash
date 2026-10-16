@@ -17,6 +17,10 @@ tools they use. [CONTRIBUTING.md](CONTRIBUTING.md) is the full guide.
 
 ## Commands
 
+For performance diagnosis or profiling setup, read [PROFILING.md](PROFILING.md)
+before building or capturing a report. It defines the shared profiling workflow
+and keeps diagnostic captures separate from acceptance measurements.
+
 For documentation-only changes (`docs/**` and Markdown files), run the
 [website checks](TESTING.md#website-checks). Application changes run the
 [application checks](TESTING.md#quick-start). Changes to build or CI tooling

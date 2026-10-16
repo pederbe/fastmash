@@ -555,6 +555,7 @@ impl Sorting {
     }
 }
 
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(crate) fn calculate(
     reader: &mut (impl BufRead + ?Sized),
     output: &mut impl CommandOutput,

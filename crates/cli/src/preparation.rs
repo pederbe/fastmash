@@ -299,6 +299,7 @@ impl<'o> Table<'o> {
 }
 
 /// Completes the existing pre-startup checks without acquiring any transport.
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn prepare<'o, 'p>(
     options: &'o mut Options,
     command: super::grammar::Command,

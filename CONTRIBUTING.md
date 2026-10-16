@@ -103,6 +103,8 @@ is explicit. CI checks tracked files for private references.
 
 ## Tools
 
+For local performance diagnosis, use [the profiling workflow](PROFILING.md).
+
 [AGENTS.md](AGENTS.md) summarizes the project's rules in the form coding tools
 read. Whatever tools you use, you are responsible for every line you submit:
 review it, test it and be able to explain it.

@@ -80,6 +80,8 @@ mod preparation;
 #[cfg(test)]
 mod preparation_tests;
 mod presentation;
+#[cfg(feature = "hotpath")]
+mod profiling;
 mod projected_sort;
 mod random;
 mod records;
@@ -345,6 +347,7 @@ fn run_with_sources(
 
 /// Dispatches the same scanned Command for process and controlled transports.
 /// The process resolves diagnostic styling before consuming a failed action.
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 fn run_scanned_with_sources(
     input: (
         &mut impl replay::Rewind,
@@ -617,6 +620,18 @@ const INPUT_BUFFER: usize = 128 << 10;
 
 #[cfg_attr(test, allow(dead_code))]
 fn run_process() {
+    #[cfg(feature = "hotpath")]
+    let profiling = match profiling::start() {
+        Ok(guard) => guard,
+        Err(message) => {
+            let reported = writeln!(standard_io::Stderr, "fastmash: {message}").is_ok();
+            std::process::exit(if reported && standard_io::finish_stderr() {
+                77
+            } else {
+                1
+            });
+        }
+    };
     let terminal = terminal_style::Detection::from_env();
     let args = match options::collect_args(std::env::args_os()) {
         Ok(args) => args,
@@ -628,6 +643,8 @@ fn run_process() {
             );
             let _ = failure::write_prefix(&mut stderr, b"fastmash", style);
             let _ = stderr.write_all(reported(&error));
+            #[cfg(feature = "hotpath")]
+            drop(profiling);
             std::process::exit(error.status);
         }
     };
@@ -678,6 +695,8 @@ fn run_process() {
         status = 1;
     }
     if status != 0 {
+        #[cfg(feature = "hotpath")]
+        drop(profiling);
         std::process::exit(status);
     }
 }

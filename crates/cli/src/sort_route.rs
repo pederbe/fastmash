@@ -116,6 +116,7 @@ pub(super) fn native(language: bool, covered: bool, available: impl FnOnce() -> 
 /// (`sorted_input::admit`), which the startup order gives before input is
 /// read.
 #[allow(clippy::too_many_arguments)]
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn run(
     route: Route,
     reader: &mut impl replay::Rewind,

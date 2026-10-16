@@ -967,6 +967,7 @@ fn generated_header<W: Write, S: Storage>(
 /// wrote the Groups, or `None` when it gave up, having set standard input
 /// back to where it started and written nothing, so that the sort runs as if
 /// it had not.
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn group_by_hash(
     reader: &mut impl replay::Rewind,
     transport: &mut impl command_output::Transport,
@@ -1023,6 +1024,7 @@ pub(super) fn group_by_hash(
 /// `packed` ([`packed`]), and runs the Command over the sorted records. The
 /// sort's memory leaves room for what the reader still holds (`unread`).
 #[allow(clippy::too_many_arguments)]
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn run(
     reader: &mut impl BufRead,
     transport: &mut impl command_output::Transport,
