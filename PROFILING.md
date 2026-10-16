@@ -4,6 +4,7 @@ Use hotpath-rs for local diagnosis of startup, decimal calculations, Grouping
 and Spill. Ordinary builds have no profiling dependency or instrumentation.
 The optional dependency is pinned to MIT-licensed hotpath 0.28.6. Its transitive
 dependencies are checked by the repository's `cargo deny check licenses` policy.
+CPU report decoding also brings in the permissive Zlib-licensed `zlib-rs`.
 
 The integration follows upstream [setup](https://hotpath.rs/),
 [static profiling modes](https://hotpath.rs/profiling_modes),

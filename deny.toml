@@ -13,6 +13,7 @@ allow = [
     "Apache-2.0 WITH LLVM-exception", # rustc_apfloat
     "Unicode-3.0",                    # ICU4X collation data
     "Unlicense",                      # memchr (dual-licensed with MIT)
+    "Zlib",                           # zlib-rs decodes optional CPU captures
 ]
 confidence-threshold = 0.93
 
