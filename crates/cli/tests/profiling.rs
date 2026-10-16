@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 #![cfg(feature = "hotpath")]
 
-use std::{fs, process::Command};
+use std::{fs, os::unix::process::CommandExt, process::Command};
 
 #[path = "support/executable.rs"]
 mod executable;
@@ -34,6 +34,7 @@ fn static_reports_preserve_success_error_and_refusal_streams() {
         let report = directory.0.join(format!("report-{index}.json"));
         let mut command = Command::new(executable::fastmash());
         let output = command
+            .arg0("fastmash")
             .env_clear()
             .env("LC_ALL", "C")
             .env(
@@ -79,6 +80,7 @@ fn static_capture_requires_an_isolated_new_report_and_no_listener() {
         ),
     ] {
         let output = Command::new(executable::fastmash())
+            .arg0("fastmash")
             .env_clear()
             .env("LC_ALL", "C")
             .env("HOTPATH_OUTPUT_PATH", path)
@@ -98,6 +100,7 @@ fn static_capture_requires_an_isolated_new_report_and_no_listener() {
 #[test]
 fn profiling_configuration_failure_preserves_failed_diagnostic_status() {
     let output = Command::new(executable::fastmash())
+        .arg0("fastmash")
         .env_clear()
         .env("LC_ALL", "C")
         .env("HOTPATH_OUTPUT_PATH", "/unused-report")

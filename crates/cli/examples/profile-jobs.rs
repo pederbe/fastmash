@@ -6,6 +6,7 @@ use std::{
     error::Error,
     fs::{self, File},
     io::Write,
+    os::unix::process::CommandExt,
     path::Path,
     process::Command,
 };
@@ -80,6 +81,7 @@ fn capture(root: &Path, binary: &Path, job: Job) -> Result<(), Box<dyn Error>> {
     let spill = job.name == "spill";
     let mut command = Command::new(binary);
     command
+        .arg0("fastmash")
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
         .env("LC_ALL", "C")
