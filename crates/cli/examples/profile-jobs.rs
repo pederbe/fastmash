@@ -156,11 +156,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("example must be in the Cargo examples directory")?
         .join("fastmash");
     let mut identity = File::create(root.join("identity.txt"))?;
+    writeln!(identity, "binary={}", binary.display())?;
+    write!(identity, "sha256=")?;
+    for byte in Sha256::digest(fs::read(&binary)?) {
+        write!(identity, "{byte:02x}")?;
+    }
     writeln!(
         identity,
-        "binary={}\nsha256={:x}\nmode=shared diagnostics\nfeatures: timing={} allocation={} cpu={}",
-        binary.display(),
-        Sha256::digest(fs::read(&binary)?),
+        "\nmode=shared diagnostics\nfeatures: timing={} allocation={} cpu={}",
         cfg!(feature = "hotpath"),
         cfg!(feature = "hotpath-alloc"),
         cfg!(feature = "hotpath-cpu")
