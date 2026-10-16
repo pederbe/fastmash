@@ -34,8 +34,9 @@ uses a one-byte sort-memory target and verifies that private Spill runs were
 opened. This target forces a route for diagnosis, and is not a realistic
 performance comparison.
 
-The decimal job sums ten million `0.1` Records. It runs long enough for a CPU
-sampler to attach before the Command finishes.
+The decimal job sums ten million `0.125` Records. Each value is one eighth, so
+the independently known exact result is `1250000`. The larger workload gives
+the CPU sampler more time to attach before the Command finishes.
 
 Use `--features hotpath` instead for timing without allocation tracking.
 For a single job, add its name after the destination, for example `decimal`
