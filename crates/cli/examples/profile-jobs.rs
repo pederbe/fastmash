@@ -34,8 +34,8 @@ fn jobs() -> Vec<Job> {
         Job {
             name: "decimal",
             args: &["sum", "1"],
-            input: b"0.1\n".repeat(1_000_000),
-            stdout: b"100000\n",
+            input: b"0.1\n".repeat(10_000_000),
+            stdout: b"1000000\n",
             stderr: b"",
             status: 0,
         },

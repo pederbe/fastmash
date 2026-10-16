@@ -111,6 +111,39 @@ jobs:
         shell: bash
         run: target/profiling/examples/profile-jobs "$RUNNER_TEMP/fastmash-profiling"
       - run: cargo check -p fastmash --all-targets --all-features --locked
+      - name: Prepare CPU sampling on the disposable Linux runner
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          curl -fsSL --proto '=https' -o "$RUNNER_TEMP/samply.tar.xz" https://github.com/mstange/samply/releases/download/samply-v0.13.1/samply-x86_64-unknown-linux-gnu.tar.xz
+          printf '61875daad67888798690dea3cb2748279df6ac299c5c6a857d67eed7642473d9  %s\n' "$RUNNER_TEMP/samply.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/samply.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/samply-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
+          cargo install hotpath --version 0.28.6 --bin hotpath-samply --no-default-features --locked
+          sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.yama.ptrace_scope=0 kernel.kptr_restrict=0
+      - name: Capture attributed CPU samples
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cargo build --profile profiling -p fastmash --features hotpath-cpu --bin fastmash --example profile-jobs --locked
+          setsid -w target/profiling/examples/profile-jobs "$RUNNER_TEMP/fastmash-cpu" decimal
+          jq -e '.functions_cpu.attributed_samples > 0' "$RUNNER_TEMP/fastmash-cpu/decimal.json"
+      - name: Retain diagnostic reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: profiling-${{ matrix.os }}
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/fastmash-profiling/*.json
+            ${{ runner.temp }}/fastmash-profiling/*.command
+            ${{ runner.temp }}/fastmash-profiling/*.status
+            ${{ runner.temp }}/fastmash-profiling/identity.txt
+            ${{ runner.temp }}/fastmash-cpu/*.json
+            ${{ runner.temp }}/fastmash-cpu/*.command
+            ${{ runner.temp }}/fastmash-cpu/*.status
+            ${{ runner.temp }}/fastmash-cpu/identity.txt
+            /tmp/hotpath/**/hp.json.gz
 
   msrv:
     name: Minimum supported Rust version

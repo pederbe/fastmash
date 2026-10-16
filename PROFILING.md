@@ -34,6 +34,9 @@ uses a one-byte sort-memory target and verifies that private Spill runs were
 opened. This target forces a route for diagnosis, and is not a realistic
 performance comparison.
 
+The decimal job sums ten million `0.1` Records. It runs long enough for a CPU
+sampler to attach before the Command finishes.
+
 Use `--features hotpath` instead for timing without allocation tracking.
 For a single job, add its name after the destination, for example `decimal`
 or `spill`. The other names are `small`, `grouping`, `error` and `refusal`.
@@ -104,6 +107,11 @@ Profiling-enabled tests cover the command boundary. Ordinary release workspace
 tests and the frozen corpus remain the numerical and compatibility evidence.
 Native macOS runtime checks require an actual supported Mac. A cross-target
 compile is useful build coverage and cannot replace them.
+
+The static profiling CI matrix covers Linux and macOS 15/26. Its disposable
+Linux runner also captures attributed CPU samples with pinned sampling tools.
+Only that runner relaxes its perf and ptrace settings. Reports are retained as
+CI artifacts for seven days. Desktop settings are configured separately.
 
 All captures above are shared diagnostics. Retain source revision and patch,
 binary hash, compiler and build flags, dataset and command, host identity,
