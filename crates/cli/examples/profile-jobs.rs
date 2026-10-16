@@ -121,7 +121,7 @@ fn capture(root: &Path, binary: &Path, job: Job) -> Result<(), Box<dyn Error>> {
         return Err(format!("{} did not produce a Command report", job.name).into());
     }
     // This function is called only when a real private Spill run is opened.
-    if spill && !contents.contains("projected_spill::temporary") {
+    if spill && !contents.contains("projected_sort::spill::temporary") {
         return Err("Spill job did not open a private run".into());
     }
     println!(
