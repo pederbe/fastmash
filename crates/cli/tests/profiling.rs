@@ -93,3 +93,19 @@ fn static_capture_requires_an_isolated_new_report_and_no_listener() {
     assert_eq!(fs::read(existing).unwrap(), b"preserve existing data");
     assert!(!directory.0.join("unused").exists());
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn profiling_configuration_failure_preserves_failed_diagnostic_status() {
+    let output = Command::new(executable::fastmash())
+        .env_clear()
+        .env("LC_ALL", "C")
+        .env("HOTPATH_OUTPUT_PATH", "/unused-report")
+        .env("HOTPATH_METRICS_SERVER_OFF", "0")
+        .args(["sum", "1"])
+        .stderr(fs::File::options().write(true).open("/dev/full").unwrap())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+}

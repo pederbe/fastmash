@@ -624,8 +624,12 @@ fn run_process() {
     let profiling = match profiling::start() {
         Ok(guard) => guard,
         Err(message) => {
-            let _ = writeln!(standard_io::Stderr, "fastmash: {message}");
-            std::process::exit(77);
+            let reported = writeln!(standard_io::Stderr, "fastmash: {message}").is_ok();
+            std::process::exit(if reported && standard_io::finish_stderr() {
+                77
+            } else {
+                1
+            });
         }
     };
     let terminal = terminal_style::Detection::from_env();
