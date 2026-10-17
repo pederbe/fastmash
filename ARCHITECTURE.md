@@ -87,9 +87,11 @@ gate retains the stream and fault transports described in the
 
 The unpublished `fastmash-locale-tools` crate in `crates/locale-tools/` is also a
 development tool outside the product dependency graph. It owns native numeric
-locale queries, JSON and Rust table generation, pure comparison plans and stderr
-byte normalization. Comparison execution and full reference parity remain pending,
-so the Python tools stay in use.
+locale queries, JSON and Rust table generation, collation-table projection and
+numeric comparison plans. Its Unix comparison executor runs bounded external
+commands and retains their exact streams and statuses in a private evidence
+directory. Full reference and transport parity remain pending, so the Python
+tools stay in use.
 
 ## How a command runs
 

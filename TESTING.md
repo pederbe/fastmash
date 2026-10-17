@@ -55,19 +55,41 @@ cargo test -p fastmash-portable-numerics   # one crate
 cargo test -p fastmash grammar             # tests whose names match "grammar"
 ```
 
-For deterministic numeric locale tooling checks, run:
+For locale tooling checks, run:
 
 ```sh
 cargo test --release -p fastmash-locale-tools
 ```
 
-Portable fixtures cover generation, comparison plans and stderr byte
-normalization. Linux/glibc also exercises the generator with the installed
-POSIX locale and an invalid locale. Keep `scripts/generate_numeric_locales.py`
-and `scripts/compare_numeric_locales.py` for reference work until full parity is
-established. The Rust emitter's header names its actual
+Portable fixtures cover numeric generation, comparison plans, stderr byte
+normalization and collation-table projection. Unix tests exercise comparison
+execution and both command interfaces with fixed local fixtures. Linux/glibc
+also exercises the numeric generator with the installed POSIX locale and an
+invalid locale. Keep the Python locale tools for reference work until full
+reference and transport parity is established. The numeric emitter's header names
+its actual
 `fastmash-generate-numeric-locales` command. This provenance-only difference from
 legacy emission leaves the table body and data unchanged.
+
+The numeric comparator accepts explicit candidate and reference executables,
+locale data and locale names. Each run retains raw evidence in a new directory.
+Check its options with:
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-compare-numeric-locales -- --help
+```
+
+To project the retained collation verification data into a new Rust file, run:
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-generate-collation-table -- \
+  data/locales/collation-verification.json /tmp/fastmash-collation.rs
+```
+
+The output must not already exist. `--variant N` selects each locale's candidate
+at the signed index `N` from `data/locales/collation-candidates.json` instead. Negative
+indices count from the end of each locale's list. This command projects supplied
+data without probing a native collator or updating a product table.
 
 ### Integration tests
 

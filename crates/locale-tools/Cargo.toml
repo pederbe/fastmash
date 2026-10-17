@@ -5,7 +5,13 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 publish = false
-description = "Development generation of Fastmash numeric locale tables"
+description = "Development generation and comparison of Fastmash locale tables"
+
+[[bin]]
+name = "locale-tools-fixture"
+path = "tests/support/executor-fixture.rs"
+test = false
+bench = false
 
 [dependencies]
 serde = { version = "=1.0.229", features = ["derive"] }
