@@ -85,6 +85,12 @@ and records exact results and explicit transport deferrals. The complete corpus
 gate retains the stream and fault transports described in the
 [testing guide](https://fastmash.io/contributing/testing.html).
 
+The unpublished `fastmash-locale-tools` crate in `crates/locale-tools/` is also a
+development tool outside the product dependency graph. It owns native numeric
+locale queries, JSON and Rust table generation, pure comparison plans and stderr
+byte normalization. Comparison execution and full reference parity remain pending,
+so the Python tools stay in use.
+
 ## How a command runs
 
 ```mermaid

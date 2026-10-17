@@ -1,0 +1,19 @@
+[package]
+name = "fastmash-locale-tools"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Development generation of Fastmash numeric locale tables"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+
+[dev-dependencies]
+# Compile emitted tables against the real safe Profile constructor and getters.
+fastmash-conversion = { path = "../conversion", version = "=0.2.0" }
+
+[lints]
+workspace = true

@@ -55,6 +55,20 @@ cargo test -p fastmash-portable-numerics   # one crate
 cargo test -p fastmash grammar             # tests whose names match "grammar"
 ```
 
+For deterministic numeric locale tooling checks, run:
+
+```sh
+cargo test --release -p fastmash-locale-tools
+```
+
+Portable fixtures cover generation, comparison plans and stderr byte
+normalization. Linux/glibc also exercises the generator with the installed
+POSIX locale and an invalid locale. Keep `scripts/generate_numeric_locales.py`
+and `scripts/compare_numeric_locales.py` for reference work until full parity is
+established. The Rust emitter's header names its actual
+`fastmash-generate-numeric-locales` command. This provenance-only difference from
+legacy emission leaves the table body and data unchanged.
+
 ### Integration tests
 
 `crates/cli/tests/` runs the compiled `fastmash` binary as a user would:
