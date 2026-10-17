@@ -1,7 +1,5 @@
 use crate::NumericFailure;
 use fastmash_numeric_contract::{Raw80, Value80};
-use std::alloc::{Layout, alloc, dealloc};
-use std::ptr::NonNull;
 
 pub(crate) const ARENA_BYTES: usize = 131_072;
 const ARENA_CELLS: usize = ARENA_BYTES / size_of::<u64>();
@@ -62,7 +60,7 @@ impl Desc {
 }
 
 pub(crate) struct Arena {
-    pointer: NonNull<u64>,
+    cells: Vec<u64>,
 }
 
 #[derive(Clone, Copy)]
@@ -108,34 +106,24 @@ impl PrimitiveCells<'_> {
 
 impl Arena {
     pub(crate) fn new() -> Result<Self, NumericFailure> {
-        Self::new_with(|| {
-            // SAFETY: the layout is nonzero and has u64 alignment. Null is
-            // handled by the caller and no reference is formed here.
-            unsafe { alloc(Self::layout()) }
-        })
+        Self::new_with(ARENA_CELLS)
     }
 
-    fn new_with(allocate: impl FnOnce() -> *mut u8) -> Result<Self, NumericFailure> {
-        let pointer = NonNull::new(allocate().cast::<u64>()).ok_or(NumericFailure::Allocation)?;
-        let arena = Self { pointer };
-        // SAFETY: the successful allocation has exactly ARENA_CELLS u64 cells.
-        unsafe { arena.pointer.as_ptr().write_bytes(0, ARENA_CELLS) };
-        Ok(arena)
-    }
-
-    const fn layout() -> Layout {
-        // SAFETY: both values are nonzero powers/multiples accepted by Layout.
-        unsafe { Layout::from_size_align_unchecked(ARENA_BYTES, align_of::<u64>()) }
+    fn new_with(cell_count: usize) -> Result<Self, NumericFailure> {
+        let mut cells = Vec::new();
+        cells
+            .try_reserve_exact(cell_count)
+            .map_err(|_| NumericFailure::Allocation)?;
+        cells.resize(cell_count, 0);
+        Ok(Self { cells })
     }
 
     fn cells(&self) -> &[u64] {
-        // SAFETY: pointer owns a live ARENA_CELLS allocation for self's life.
-        unsafe { std::slice::from_raw_parts(self.pointer.as_ptr(), ARENA_CELLS) }
+        &self.cells
     }
 
     fn cells_mut(&mut self) -> &mut [u64] {
-        // SAFETY: &mut self gives exclusive access to the live allocation.
-        unsafe { std::slice::from_raw_parts_mut(self.pointer.as_ptr(), ARENA_CELLS) }
+        &mut self.cells
     }
 
     fn slot9_offset(slot: Slot9) -> Result<usize, NumericFailure> {
@@ -422,7 +410,7 @@ impl Arena {
 
     #[cfg(test)]
     pub(crate) fn allocation_failure() -> Result<Self, NumericFailure> {
-        Self::new_with(std::ptr::null_mut)
+        Self::new_with(usize::MAX)
     }
 
     #[cfg(test)]
@@ -447,12 +435,5 @@ impl Arena {
             scratch.set(PrimitiveCell::V7, 1)?;
             Err(NumericFailure::Invariant)
         })
-    }
-}
-
-impl Drop for Arena {
-    fn drop(&mut self) {
-        // SAFETY: this is the matching layout and unique pointer from new_with.
-        unsafe { dealloc(self.pointer.as_ptr().cast::<u8>(), Self::layout()) };
     }
 }
