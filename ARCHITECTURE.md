@@ -345,11 +345,9 @@ end the process with `SIGABRT`; all of them are bugs.
 
 - **`unsafe` code** is limited to operating-system interfaces (Linux system
   calls for standard streams, process supervision and temporary files),
-  an x86-64 cache prefetch hint when a sorted
-  chunk is read, which never dereferences its address, a glibc `mallopt` call
-  at startup that caps malloc arenas under an address-space limit, and
-  unchecked slicing of a sort run file's read buffer, whose bounds are kept
-  as a documented invariant (checked slicing cost 4% on a spilling job). The
+  and a glibc `mallopt` call at startup that caps malloc arenas under an
+  address-space limit. Sort run files use checked buffer access. Record arena
+  cache hints use a safe dependency API on x86-64. The
   conversion, numeric-contract and portable-numerics crates forbid `unsafe` entirely.
   Decimal parsing uses safe integer division. Every other crate
   denies unsafe operations inside `unsafe fn` without an explicit block and

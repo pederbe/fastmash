@@ -3,6 +3,7 @@ members = [
     "crates/cli",
     "crates/conversion",
     "crates/corpus-driver",
+    "crates/license-notices",
     "crates/numeric-contract",
     "crates/portable-numerics",
     "crates/sort-process",

@@ -193,6 +193,7 @@ dependencies = [
  "icu_locale_core",
  "libc",
  "md-5",
+ "mem_prefetch",
  "memchr",
  "num-bigint",
  "rustc_apfloat",
@@ -219,6 +220,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "fastmash-license-notices"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -534,6 +542,15 @@ checksum = "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
 dependencies = [
  "cfg-if",
  "digest",
+]
+
+[[package]]
+name = "mem_prefetch"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "918a2264f0e941af33c41c8e79200cccf87470e71315faaff94b65d0481afa85"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]

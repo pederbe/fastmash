@@ -15,6 +15,8 @@
 //! key ascend by the gap between their lines, and a new key jumps either way.
 //! The zigzag delta is smaller than the plain sequence whenever keys repeat
 //! within a run, and at most one byte larger when they do not.
+#![cfg_attr(not(test), forbid(unsafe_code))]
+
 use super::batch::Projected;
 #[cfg(test)]
 use super::storage::Build;
@@ -361,10 +363,7 @@ pub(super) struct RunReader<R: Read> {
     /// initialized bytes.
     buffer: Vec<u8>,
     /// The unread bytes are `buffer[at..end]`. Every method keeps
-    /// `at <= end <= buffer.len()`, so the unread bytes are sliced without
-    /// bounds checks, as `BufReader` slices them: a record's decoding reads
-    /// them several times, and the checks cost a few percent of a spilling
-    /// sort.
+    /// `at <= end <= buffer.len()`.
     at: usize,
     end: usize,
 }
@@ -397,11 +396,7 @@ impl<R: Read> RunReader<R> {
     /// The unread bytes.
     #[inline]
     fn unread(&self) -> &[u8] {
-        // SAFETY: `at <= end <= buffer.len()`, which every method keeps: `new`
-        // and `refill` start from 0, `refill` bounds `end` by the length,
-        // `consume` bounds `at` by `end`, and `read_exact` advances `at` by
-        // at most the unread length.
-        unsafe { self.buffer.get_unchecked(self.at..self.end) }
+        &self.buffer[self.at..self.end]
     }
     /// `Read`'s own loop over `read`, as `BufReader` falls back to when the
     /// buffer holds too few bytes.
@@ -617,8 +612,7 @@ fn merge<S: Codec>(runs: Vec<File>, shape: Shape, buffer: usize) -> Result<File,
 // format above; the chunk still in memory reaches the merge and the consumer
 // as views, so no record is copied or allocated on its own.
 
-/// Records prefetched ahead of the one being read: sorted entries visit the
-/// arena out of order.
+/// Records prefetched ahead of the current one in the sorted arena order.
 const PREFETCH: usize = 16;
 /// Chunks below this many entries sort by comparison instead of by radix.
 const RADIX_MIN: usize = 256;
@@ -734,26 +728,18 @@ fn arena_record(arena: &[u8], offset: usize, shape: Shape) -> (u64, u64, View<'_
     (index, fields, view)
 }
 
-/// Starts loading the record at `offset` (and the next cache line) into
-/// cache: the sorted order visits the arena out of order (reading six million
-/// short records in sorted order took 146 ms with it and 303 ms without, in a
-/// micro-benchmark).
+/// Requests cache hints for two present cache lines of an upcoming record.
 #[inline(always)]
 #[cfg(target_arch = "x86_64")]
 fn prefetch(arena: &[u8], offset: usize) {
-    use std::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
-    let pointer = arena.as_ptr().wrapping_add(offset).cast::<i8>();
-    // SAFETY: `_mm_prefetch` needs SSE, which every x86-64 processor has. The
-    // pointer may pass the arena's end (wrapping arithmetic keeps that
-    // defined), but a prefetch never dereferences it and cannot fault.
-    unsafe {
-        _mm_prefetch::<_MM_HINT_T0>(pointer);
-        _mm_prefetch::<_MM_HINT_T0>(pointer.wrapping_add(64));
+    if let Some(byte) = arena.get(offset) {
+        mem_prefetch::prefetch_read_data::<u8, 3>(byte);
+    }
+    if let Some(byte) = offset.checked_add(64).and_then(|at| arena.get(at)) {
+        mem_prefetch::prefetch_read_data::<u8, 3>(byte);
     }
 }
 
-// Correctness does not depend on this x86 cache hint. Native ARM tuning needs
-// measurements before adopting an alternative.
 #[inline(always)]
 #[cfg(not(target_arch = "x86_64"))]
 fn prefetch(_: &[u8], _: usize) {}
@@ -865,8 +851,6 @@ fn round(
         compare_group(arena, group, shape);
         return;
     }
-    // After the first round the members are in key order, which visits the
-    // arena out of order.
     words.extend(group.iter().enumerate().map(|(at, entry)| {
         if let Some(ahead) = group.get(at + PREFETCH) {
             prefetch(arena, ahead.offset());
@@ -1597,6 +1581,33 @@ mod tests {
         reader.seek(io::SeekFrom::Start(0)).unwrap();
         reader.read_exact(&mut first).unwrap();
         assert_eq!(&first, b"ab");
+    }
+    #[test]
+    fn buffered_bytes_precede_real_read_errors_as_in_bufreader() {
+        let source = || {
+            let unreadable = std::fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/null")
+                .unwrap();
+            b"abcde".as_slice().chain(unreadable)
+        };
+        fn observe(mut reader: impl BufRead) -> (io::ErrorKind, Option<i32>) {
+            assert_eq!(reader.fill_buf().unwrap(), b"abcde");
+            let mut first = [0; 2];
+            reader.read_exact(&mut first).unwrap();
+            assert_eq!(&first, b"ab");
+            let mut rest = [0xff; 5];
+            let error = reader.read_exact(&mut rest).unwrap_err();
+            assert_eq!(&rest, b"cde\xff\xff");
+            assert_eq!(error.raw_os_error(), Some(libc::EBADF));
+            let refill_error = reader.fill_buf().unwrap_err();
+            assert_eq!(refill_error.raw_os_error(), error.raw_os_error());
+            (error.kind(), error.raw_os_error())
+        }
+        assert_eq!(
+            observe(RunReader::new(8, source()).ok().unwrap()),
+            observe(BufReader::with_capacity(8, source()))
+        );
     }
     fn record<S: Codec + Build>(sequence: u64) -> Record<S> {
         let bytes = [(sequence % 3) as u8, b'\t', b'v', 0, 0xff, sequence as u8];

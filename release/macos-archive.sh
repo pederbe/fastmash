@@ -63,7 +63,7 @@ deployment=$(xcrun vtool -show-build "$stage/fastmash")
 printf '%s\n' "$deployment" | grep -Eq '^[[:space:]]*minos 15\.0(\.0)?$' ||
     { echo 'the binary does not record the macOS 15 deployment target' >&2; exit 1; }
 cp README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$stage/"
-python3 scripts/third_party_licenses.py --target "$target" > "$stage/THIRD-PARTY-LICENSES.md"
+cargo run --locked --release -p fastmash-license-notices -- --target "$target" > "$stage/THIRD-PARTY-LICENSES.md"
 (
     cd "$stage"
     shasum -a 256 fastmash > binary.sha256

@@ -46,6 +46,9 @@ md-5 = { version = "=0.11.0", default-features = false }
 sha1 = { version = "=0.11.0", default-features = false }
 sha2 = { version = "=0.11.0", default-features = false }
 
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+mem_prefetch = { version = "=0.1.1", default-features = false }
+
 [features]
 default = []
 hotpath = ["dep:hotpath", "hotpath/hotpath"]
