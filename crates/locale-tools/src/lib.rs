@@ -5,6 +5,7 @@
 #[cfg(unix)]
 mod capture;
 pub mod collation;
+pub mod collation_plan;
 pub mod comparison;
 #[cfg(unix)]
 pub mod executor;
