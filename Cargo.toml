@@ -2,12 +2,16 @@
 members = [
     "crates/cli",
     "crates/conversion",
+    "crates/corpus-driver",
     "crates/numeric-contract",
     "crates/portable-numerics",
     "crates/sort-process",
 ]
 default-members = ["crates/cli"]
 resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
 
 [profile.dev]
 opt-level = 0

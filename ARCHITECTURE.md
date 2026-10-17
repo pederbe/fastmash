@@ -77,6 +77,14 @@ graph TD
 | `fastmash-numeric-contract` | `crates/numeric-contract` | The 80-bit extended-precision value type and its classification. `no_std`, no `unsafe` code, no dependencies |
 | `fastmash-sort-process` | `crates/sort-process` | The `fastmash-sort-supervisor` executable and the protocol the program uses to control it |
 
+The unpublished `fastmash-corpus-driver` crate in `crates/corpus-driver/` is a
+development tool outside the product dependency graph. Its `fastmash-corpus`
+executable verifies frozen ordinary Command cases against a selected executable.
+It uses safe process-group and resource-limit APIs to bound each invocation,
+and records exact results and explicit transport deferrals. The complete corpus
+gate retains the stream and fault transports described in the
+[testing guide](https://fastmash.io/contributing/testing.html).
+
 ## How a command runs
 
 ```mermaid

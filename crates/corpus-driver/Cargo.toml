@@ -1,0 +1,33 @@
+[package]
+name = "fastmash-corpus-driver"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Development driver for ordinary frozen Fastmash commands"
+default-run = "fastmash-corpus"
+
+[[bin]]
+name = "fastmash-corpus"
+path = "src/main.rs"
+
+# A Rust executable with deliberately incorrect and stalled behavior for the
+# driver's command-boundary tests. It is never included in product archives.
+[[bin]]
+name = "fastmash-corpus-test-command"
+path = "tests/support/command.rs"
+test = false
+bench = false
+
+[dependencies]
+flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+sha2 = { version = "=0.11.0", default-features = false }
+# Safe Unix signal-mask, session, resource-limit and whole-group cancellation
+# APIs keep the existing harness process contract without first-party unsafe.
+nix = { version = "=0.31.3", default-features = false, features = ["signal", "resource", "fs"] }
+
+[lints]
+workspace = true

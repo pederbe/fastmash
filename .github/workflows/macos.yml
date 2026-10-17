@@ -115,6 +115,8 @@ jobs:
           version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
           python3 -B scripts/check_regressions.py --binary "$binary" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/corpus-pipe" 2>&1 | tee "$EVIDENCE/corpus-pipe.log"
           python3 -B scripts/check_regressions.py --binary "$binary" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/corpus-file" 2>&1 | tee "$EVIDENCE/corpus-file.log"
+          target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/ordinary-pipe" 2>&1 | tee "$EVIDENCE/ordinary-pipe.log"
+          target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/ordinary-file" 2>&1 | tee "$EVIDENCE/ordinary-file.log"
       - name: Retain native command evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
