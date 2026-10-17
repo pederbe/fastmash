@@ -1,16 +1,15 @@
 //! Native directory and glibc query boundary for the development generator.
 
+use crate::capture::{Budget, Captured, capture};
 use crate::{Reference, Result, collect, parse_numeric};
 use serde_json::json;
 use std::ffi::OsString;
-use std::fs::{self, DirBuilder, OpenOptions};
-use std::io;
+use std::fs::{self, DirBuilder};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::process::Command;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const USAGE: &str = "Usage: fastmash-generate-numeric-locales [--ldd PATH] [--locale PATH] [--uname PATH] [--] LOCPATH OUT_JSON OUT_RS";
 const QUERY_LIMIT: Duration = Duration::from_secs(30);
@@ -193,12 +192,6 @@ struct Queries<'a> {
     limit: Duration,
 }
 
-struct Captured {
-    status: ExitStatus,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-}
-
 impl Queries<'_> {
     fn run(&mut self, program: &Path, args: &[&str], locale: &str) -> Result<Captured> {
         self.next += 1;
@@ -219,68 +212,14 @@ impl Queries<'_> {
                 "limit_milliseconds": self.limit.as_millis(),
             }))?,
         )?;
-        let capture = |name| {
-            OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(0o600)
-                .open(directory.join(name))
-        };
-        let stdout = capture("stdout")?;
-        let stderr = capture("stderr")?;
-        let started = Instant::now();
-        let spawned = Command::new(program)
+        let mut command = Command::new(program);
+        command
             .args(args)
             .env_clear()
             .env("PATH", FIXED_PATH)
             .env("LC_ALL", locale)
-            .env("LOCPATH", self.locpath)
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(stdout))
-            .stderr(Stdio::from(stderr))
-            .spawn();
-        let mut child = match spawned {
-            Ok(child) => child,
-            Err(error) => {
-                fs::write(
-                    directory.join("wait.json"),
-                    serde_json::to_vec_pretty(&json!({
-                        "spawn_error": error.to_string(), "pid": null,
-                        "raw_status": null, "exit_code": null, "signal": null,
-                        "reaped": false, "timed_out": false,
-                        "kill_error": null, "wait_error": null,
-                    }))?,
-                )?;
-                return Err(error.into());
-            }
-        };
-        let pid = child.id();
-        let waited = wait_bounded(&mut child, started, self.limit);
-        fs::write(
-            directory.join("wait.json"),
-            serde_json::to_vec_pretty(&json!({
-                "pid": pid,
-                "raw_status": waited.status.map(ExitStatusExt::into_raw),
-                "exit_code": waited.status.and_then(|status| status.code()),
-                "signal": waited.status.and_then(|status| status.signal()),
-                "reaped": waited.status.is_some(),
-                "timed_out": waited.timed_out,
-                "kill_error": waited.kill_error,
-                "wait_error": waited.wait_error,
-            }))?,
-        )?;
-        if waited.timed_out || waited.wait_error.is_some() || waited.status.is_none() {
-            return Err(format!(
-                "native query did not complete cleanly (reaped: {})",
-                waited.status.is_some()
-            )
-            .into());
-        }
-        Ok(Captured {
-            status: waited.status.ok_or("native query has no terminal status")?,
-            stdout: fs::read(directory.join("stdout"))?,
-            stderr: fs::read(directory.join("stderr"))?,
-        })
+            .env("LOCPATH", self.locpath);
+        capture(&mut command, None, &directory, Budget::query(self.limit))
     }
 }
 
@@ -294,56 +233,11 @@ fn clean_text(reply: &Captured) -> Result<&str> {
     Ok(std::str::from_utf8(&reply.stdout)?)
 }
 
-struct Waited {
-    status: Option<ExitStatus>,
-    timed_out: bool,
-    kill_error: Option<String>,
-    wait_error: Option<String>,
-}
-
-fn wait_bounded(child: &mut Child, started: Instant, limit: Duration) -> Waited {
-    let reserve = Duration::from_secs(1).min(limit / 4);
-    let cancel_after = limit - reserve;
-    let mut result = Waited {
-        status: None,
-        timed_out: false,
-        kill_error: None,
-        wait_error: None,
-    };
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                result.status = Some(status);
-                result.timed_out |= started.elapsed() >= limit;
-                return result;
-            }
-            Ok(None) => {}
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-            Err(error) => {
-                // Ownership is uncertain. Never signal a possibly reaped PID.
-                result.wait_error = Some(error.to_string());
-                return result;
-            }
-        }
-        let elapsed = started.elapsed();
-        if !result.timed_out && elapsed >= cancel_after {
-            result.timed_out = true;
-            if let Err(error) = child.kill() {
-                result.kill_error = Some(error.to_string());
-            }
-        }
-        if elapsed >= limit {
-            result.wait_error =
-                Some("direct-child cleanup did not finish within its reserve".into());
-            return result;
-        }
-        std::thread::sleep(Duration::from_millis(2));
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::ExitStatus;
 
     #[test]
     fn arguments_keep_paths_as_data_and_select_tools() {

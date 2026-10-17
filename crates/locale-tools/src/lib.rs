@@ -1,8 +1,13 @@
 #![forbid(unsafe_code)]
 
-//! Deterministic numeric locale generation, separate from native queries.
+//! Deterministic locale table generation, separate from native queries.
 
+#[cfg(unix)]
+mod capture;
+pub mod collation;
 pub mod comparison;
+#[cfg(unix)]
+pub mod executor;
 #[cfg(unix)]
 pub mod native;
 
