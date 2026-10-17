@@ -1,6 +1,6 @@
 use crate::{Error, Result};
 use flate2::read::MultiGzDecoder;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::ffi::OsString;
@@ -37,7 +37,7 @@ pub struct Case {
     pub observe_held: serde_json::Value,
     #[serde(default)]
     pub hold_stdin: bool,
-    pub args: Option<Vec<String>>,
+    pub args: Option<Vec<Argument>>,
     pub args_hex: Option<Vec<String>>,
     pub input_hex: String,
     pub locale: String,
@@ -63,6 +63,50 @@ pub struct Expected {
     pub returncode: i32,
     pub stdout_hex: String,
     pub stderr_hex: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct Argument(Vec<u8>);
+
+impl<'de> Deserialize<'de> for Argument {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        struct ArgumentVisitor;
+        impl de::Visitor<'_> for ArgumentVisitor {
+            type Value = Argument;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a command argument with Python surrogateescape bytes")
+            }
+            fn visit_bytes<E: de::Error>(
+                self,
+                value: &[u8],
+            ) -> std::result::Result<Self::Value, E> {
+                // serde_json's byte-string reader preserves lone UTF-16
+                // surrogates as WTF-8. Python's Unix filesystem encoder maps
+                // only U+DC80..U+DCFF back to their original raw byte.
+                let mut bytes = Vec::new();
+                let mut start = 0;
+                let mut at = 0;
+                while at + 2 < value.len() {
+                    if value[at] == 0xed
+                        && matches!(value[at + 1], 0xb2 | 0xb3)
+                        && (0x80..=0xbf).contains(&value[at + 2])
+                    {
+                        std::str::from_utf8(&value[start..at]).map_err(E::custom)?;
+                        bytes.extend_from_slice(&value[start..at]);
+                        bytes.push(((value[at + 1] & 3) << 6) | (value[at + 2] & 63));
+                        at += 3;
+                        start = at;
+                    } else {
+                        at += 1;
+                    }
+                }
+                std::str::from_utf8(&value[start..]).map_err(E::custom)?;
+                bytes.extend_from_slice(&value[start..]);
+                Ok(Argument(bytes))
+            }
+        }
+        deserializer.deserialize_bytes(ArgumentVisitor)
+    }
 }
 
 #[derive(Deserialize)]
@@ -138,7 +182,10 @@ impl Case {
                 .iter()
                 .map(|s| decode(s).map(OsString::from_vec))
                 .collect(),
-            (None, Some(args)) => Ok(args.iter().map(OsString::from).collect()),
+            (None, Some(args)) => Ok(args
+                .iter()
+                .map(|arg| OsString::from_vec(arg.0.clone()))
+                .collect()),
             (None, None) => Err(Error::message(format!("{} has no arguments", self.id))),
         }
     }
@@ -279,6 +326,29 @@ mod tests {
         for case in ordinary {
             case.arguments().unwrap();
             decode(&case.input_hex).unwrap();
+        }
+        use std::os::unix::ffi::OsStrExt;
+        let high_byte = fixture
+            .cases
+            .iter()
+            .find(|case| case.id == "collapse/high-byte-delimiter")
+            .unwrap();
+        assert_eq!(high_byte.arguments().unwrap()[0].as_bytes(), b"-c\xff");
+    }
+
+    #[test]
+    fn argument_strings_preserve_unicode_and_only_python_surrogateescape_bytes() {
+        for (json, bytes) in [
+            (r#""-c\udcff""#, b"-c\xff".as_slice()),
+            (r#""\udc80\udcff""#, b"\x80\xff".as_slice()),
+            (r#""\ud801\udc00""#, "\u{10400}".as_bytes()),
+            (r#""\\udcff""#, b"\\udcff".as_slice()),
+            (r#""\u03b1""#, "α".as_bytes()),
+        ] {
+            assert_eq!(serde_json::from_str::<Argument>(json).unwrap().0, bytes);
+        }
+        for json in [r#""\udc7f""#, r#""\ud800""#, r#""\udd00""#] {
+            assert!(serde_json::from_str::<Argument>(json).is_err());
         }
     }
 
