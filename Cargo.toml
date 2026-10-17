@@ -4,6 +4,7 @@ members = [
     "crates/conversion",
     "crates/corpus-driver",
     "crates/license-notices",
+    "crates/locale-tools",
     "crates/numeric-contract",
     "crates/portable-numerics",
     "crates/sort-process",
