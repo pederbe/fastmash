@@ -3,7 +3,9 @@ use crate::{Error, Result};
 use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::sys::resource::{Resource, setrlimit};
-use nix::sys::signal::{SigSet, Signal, kill, killpg};
+#[cfg(not(target_os = "linux"))]
+use nix::sys::signal::SigSet;
+use nix::sys::signal::{Signal, kill, killpg};
 use nix::unistd::{Pid, setsid};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -51,12 +53,39 @@ impl Observed {
 }
 
 pub fn require_unblocked_signals() -> Result<()> {
-    if SigSet::thread_get_mask()?.iter().next().is_some() {
+    // Nix's Signal iterator omits Linux real-time signals. The actual kernel
+    // thread mask preserves the existing all-signals admission requirement.
+    #[cfg(target_os = "linux")]
+    let blocked = linux_mask_blocked(&fs::read_to_string("/proc/thread-self/status").map_err(
+        |error| {
+            Error::message(format!(
+                "cannot read inherited signal mask from /proc/thread-self/status: {error}"
+            ))
+        },
+    )?)?;
+    #[cfg(not(target_os = "linux"))]
+    let blocked = SigSet::thread_get_mask()?.iter().next().is_some();
+    if blocked {
         return Err(Error::message(
             "run from a shell with an unblocked signal mask",
         ));
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn linux_mask_blocked(status: &str) -> Result<bool> {
+    let value = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigBlk:"))
+        .ok_or_else(|| Error::message("kernel thread status has no SigBlk signal mask"))?
+        .trim();
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(Error::message(
+            "kernel thread status has an invalid SigBlk signal mask",
+        ));
+    }
+    Ok(value.bytes().any(|byte| byte != b'0'))
 }
 
 // Run this only in the fresh internal launcher, before creating threads. Doing
@@ -333,5 +362,26 @@ mod tests {
             .unwrap(),
             b"sort: bad\nx/usr/bin/sort: raw\nsort: last"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn kernel_signal_mask_includes_real_time_bits_and_rejects_unknown_facts() {
+        assert!(
+            !linux_mask_blocked("Name:\tcommand\nSigBlk:\t0000000000000000\nSigIgn:\t1\n").unwrap()
+        );
+        assert!(linux_mask_blocked("SigBlk:\t0000000200000000\n").unwrap());
+        assert!(linux_mask_blocked("SigBlk:\t8000000000000000\n").unwrap());
+        assert!(linux_mask_blocked("SigBlk:\t000000000000000A\n").unwrap());
+        for invalid in [
+            "",
+            "SigIgn:\t1\n",
+            "SigBlk:\n",
+            "SigBlk: xyz\n",
+            "SigBlk: 0x0\n",
+            "SigBlk: 00 00\n",
+        ] {
+            assert!(linux_mask_blocked(invalid).is_err(), "{invalid:?}");
+        }
     }
 }

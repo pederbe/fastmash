@@ -318,6 +318,25 @@ fn a_blocked_inherited_signal_mask_is_rejected_before_command_launch() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("unblocked signal mask"));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn a_real_time_only_inherited_mask_is_rejected_before_command_launch() {
+    use nix::sys::signal::{SigSet, Signal};
+    let run = TestRun::new(&[case("ordinary", "echo", b"", b"", b"", 0)]);
+    let old = SigSet::thread_get_mask().unwrap();
+    // sigfillset includes real-time signals. Removing every Nix enum signal
+    // leaves precisely the Linux mask class that its iterator cannot observe.
+    let mut realtime = SigSet::all();
+    for signal in Signal::iterator() {
+        realtime.remove(signal);
+    }
+    realtime.thread_set_mask().unwrap();
+    let output = run.run(&[]);
+    old.thread_set_mask().unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("unblocked signal mask"));
+}
+
 #[test]
 fn changing_fixture_identity_during_execution_invalidates_the_run() {
     let run = TestRun::new(&[]);

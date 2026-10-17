@@ -8,6 +8,13 @@ environment, the eight-second execution deadline and the 524,288-byte output
 guard. Each invocation owns a process group that is cancelled on completion or
 failure.
 
+Linux admission reads the current thread's kernel `SigBlk` mask, including
+real-time signals, from `/proc/thread-self/status`. macOS uses the native signal
+mask API. Both require an unblocked inherited mask. The kernel
+[thread identity](https://man7.org/linux/man-pages/man5/proc_thread-self.5.html)
+and [blocked-signal mask](https://docs.kernel.org/filesystems/proc.html)
+documentation define the Linux observation.
+
 ```sh
 cargo build --release -p fastmash-corpus-driver --bin fastmash-corpus
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --evidence-dir /tmp/ordinary-pipe
