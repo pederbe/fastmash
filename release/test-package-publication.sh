@@ -19,52 +19,16 @@ mkdir "$work/bin" "$work/live"
 export PUBLICATION_LIVE=$work/live PUBLICATION_COUNT=$work/count
 export PATH="$work/bin:$PATH"
 export PUBLICATION_SOURCE=$new PUBLICATION_UPLOADER=$here/publish-package-repository.sh
-# This adapter implements only the s3 sync/cp operations used by the uploader.
-# Each object becomes visible through a rename, and interruption can follow any
-# write. Package-manager requests still go through a real HTTP server.
-cat > "$work/bin/aws" <<'EOF'
-#!/bin/bash
-set -euo pipefail
-test "$1" = s3
-operation=$2
-shift 2
-excludes=() positional=()
-while [ $# -gt 0 ]; do
-    case $1 in
-    --only-show-errors) shift ;;
-    --cache-control) shift 2 ;;
-    --exclude) excludes+=("$2"); shift 2 ;;
-    *) positional+=("$1"); shift ;;
-    esac
-done
-write_object() {
-    local source=$1 path=$2 pattern count
-    for pattern in "${excludes[@]}"; do [[ $path == $pattern ]] && return 0; done
-    if [ "$operation" = sync ] && cmp -s "$source" "$PUBLICATION_LIVE/$path"; then return 0; fi
-    mkdir -p "$(dirname "$PUBLICATION_LIVE/$path")"
-    cp "$source" "$PUBLICATION_LIVE/$path.pending"
-    mv "$PUBLICATION_LIVE/$path.pending" "$PUBLICATION_LIVE/$path"
-    count=$(cat "$PUBLICATION_COUNT")
-    printf '%s\n' "$((count + 1))" > "$PUBLICATION_COUNT"
-    if [ "${PUBLICATION_STOP_AFTER:-0}" = "$((count + 1))" ]; then exit 75; fi
-}
-test "${positional[1]#s3://test-bucket}" != "${positional[1]}"
-if [ "$operation" = sync ]; then
-    while IFS= read -r -d '' path; do write_object "$path" "${path#./}"; done < <(find . -type f -print0 | sort -z)
-elif [ "$operation" = cp ]; then
-    write_object "${positional[0]}" "${positional[1]#s3://test-bucket/}"
-else
-    exit 1
-fi
-EOF
-chmod +x "$work/bin/aws"
 cat > "$work/action" <<'EOF'
 #!/bin/bash
 set -euo pipefail
 bash "$PUBLICATION_UPLOADER" "$PUBLICATION_SOURCE" test-bucket
 EOF
 target=${CARGO_TARGET_DIR:-$here/../target}
-cargo build --quiet --locked --manifest-path "$here/publication-test-server/Cargo.toml" --target-dir "$target"
+cargo build --quiet --locked --manifest-path "$here/publication-test-server/Cargo.toml" --target-dir "$target" --bins
+# The local adapter atomically exposes each object and can stop after any write.
+# Package-manager requests still go through the existing HTTP fixture server.
+cp "$target/debug/fastmash-publication-test-storage" "$work/bin/aws"
 mkfifo "$work/ready"
 "$target/debug/fastmash-publication-test-server" \
     "$work/live" "$work/ready" "$work/trigger" "$work/action" 2> "$work/server.log" &
