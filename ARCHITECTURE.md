@@ -73,7 +73,7 @@ graph TD
 | --- | --- | --- |
 | `fastmash` | `crates/cli` | The program: options, command grammar, records and fields, grouping, sorting, every operation, output and exit status |
 | `fastmash-conversion` | `crates/conversion` | Reading numbers from bytes and printing them, missing-value detection, locale number conventions. No `unsafe` code |
-| `fastmash-portable-numerics` | `crates/portable-numerics` | Software 80-bit arithmetic for the numerical rules, including fallback `log` and `exp` |
+| `fastmash-portable-numerics` | `crates/portable-numerics` | Software 80-bit arithmetic for the numerical rules, including fallback `log` and `exp`. No `unsafe` code |
 | `fastmash-numeric-contract` | `crates/numeric-contract` | The 80-bit extended-precision value type and its classification. `no_std`, no `unsafe` code, no dependencies |
 | `fastmash-sort-process` | `crates/sort-process` | The `fastmash-sort-supervisor` executable and the protocol the program uses to control it |
 
@@ -336,15 +336,14 @@ end the process with `SIGABRT`; all of them are bugs.
 ## Safety
 
 - **`unsafe` code** is limited to operating-system interfaces (Linux system
-  calls for standard streams, process supervision and temporary files), one
-  fixed-size arena allocation in the numerics crate, one x86-64 `div`
-  instruction for 128-by-64-bit division in decimal parsing, guarded by an
-  assertion of its precondition, an x86-64 cache prefetch hint when a sorted
+  calls for standard streams, process supervision and temporary files),
+  an x86-64 cache prefetch hint when a sorted
   chunk is read, which never dereferences its address, a glibc `mallopt` call
   at startup that caps malloc arenas under an address-space limit, and
   unchecked slicing of a sort run file's read buffer, whose bounds are kept
   as a documented invariant (checked slicing cost 4% on a spilling job). The
-  conversion and numeric-contract crates forbid `unsafe` entirely. Every other crate
+  conversion, numeric-contract and portable-numerics crates forbid `unsafe` entirely.
+  Decimal parsing uses safe integer division. Every other crate
   denies unsafe operations inside `unsafe fn` without an explicit block and
   warns on any `unsafe` block without a `// SAFETY:` comment, which CI treats
   as an error.

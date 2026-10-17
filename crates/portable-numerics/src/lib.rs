@@ -4,8 +4,7 @@
 //! public surface is the numerical seam; the fixed-limb substrate and
 //! certificate machine are internal.
 
-#![deny(unsafe_op_in_unsafe_fn)]
-#![warn(clippy::undocumented_unsafe_blocks)]
+#![forbid(unsafe_code)]
 
 mod arena;
 mod dyadic;

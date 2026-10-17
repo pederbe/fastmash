@@ -25,6 +25,11 @@ numerical profile version that introduced it.
   clients are still reading, using retained apt By-Hash indexes and signed
   dnf snapshots.
 
+### Changed
+
+- Use checked Rust storage for numerical workspaces and safe integer division
+  for decimal parsing, preserving the `portable-binary80-v3` Numerical profile.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added
