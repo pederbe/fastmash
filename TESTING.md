@@ -63,7 +63,8 @@ cargo test --release -p fastmash-locale-tools
 
 Portable fixtures cover numeric generation, comparison plans, stderr byte
 normalization, collation-table projection, fixed digit and punctuation word lists,
-and output-order comparison. Unix tests exercise comparison
+output-order comparison and punctuation reports. The retained punctuation report
+is reproduced byte for byte, including all historical differences. Unix tests exercise comparison
 execution and both command interfaces with fixed local fixtures. Linux/glibc
 also exercises the numeric generator with the installed POSIX locale and an
 invalid locale. Keep the Python locale tools for reference work until full
