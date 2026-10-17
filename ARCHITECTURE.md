@@ -363,6 +363,10 @@ end the process with `SIGABRT`; all of them are bugs.
   warns on any `unsafe` block without a `// SAFETY:` comment, which CI treats
   as an error.
 - **Overflow checks stay on** in release builds, and panics abort.
+- **Native entropy** uses safe dependency interfaces to `getrandom` on Linux
+  and `getentropy` on macOS. Invocation seeds and private temporary names fail
+  when required entropy is unavailable. Hash grouping keeps its existing fixed
+  fallback when an internal table seed is unavailable.
 - **No network, no shell.** Fastmash never makes network connections and never
   passes input to a shell. The only child processes are the sort
   supervisor and the system `sort` it starts, with a fixed argument list.

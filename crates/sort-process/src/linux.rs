@@ -1,6 +1,10 @@
 //! Linux x86-64 process primitives. No application code runs after fork.
 //! Internal to Fastmash's executables; not a stable API. Functions that act
 //! on a descriptor borrow it, so they cannot outlive its owner.
+use rustix::{
+    io::Errno,
+    rand::{GetRandomFlags, getrandom},
+};
 use std::ffi::CString;
 use std::io;
 use std::marker::PhantomData;
@@ -285,21 +289,11 @@ pub fn read_signal(fd: &OwnedFd) -> io::Result<Option<i32>> {
 pub fn random(bytes: &mut [u8]) -> io::Result<()> {
     let mut at = 0;
     while at < bytes.len() {
-        match call(
-            318,
-            [
-                bytes[at..].as_mut_ptr() as usize,
-                bytes.len() - at,
-                0,
-                0,
-                0,
-                0,
-            ],
-        ) {
+        match getrandom(&mut bytes[at..], GetRandomFlags::empty()) {
             Ok(0) => return Err(io::Error::other("empty random read")),
             Ok(n) => at += n,
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
+            Err(Errno::INTR) => {}
+            Err(e) => return Err(e.into()),
         }
     }
     Ok(())
