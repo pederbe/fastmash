@@ -29,6 +29,8 @@ numerical profile version that introduced it.
 
 - Use checked Rust storage for numerical workspaces and safe integer division
   for decimal parsing, preserving the `portable-binary80-v3` Numerical profile.
+- Read sorted Records and Spill buffers through checked Rust slices without
+  prefetch intrinsics.
 
 ## [0.2.0] - 2026-10-12
 
