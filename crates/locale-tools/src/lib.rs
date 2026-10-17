@@ -7,6 +7,7 @@ mod capture;
 pub mod collation;
 pub mod collation_plan;
 pub mod collation_punctuation;
+pub mod collation_verification;
 pub mod comparison;
 #[cfg(unix)]
 pub mod executor;
