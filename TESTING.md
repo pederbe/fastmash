@@ -23,9 +23,11 @@ or WSL2. The native Apple Silicon development gate below runs on macOS 15 and 26
 cargo fmt --all --check                  # formatting
 cargo clippy --workspace --all-targets -- -D warnings   # lints
 cargo test --release --workspace         # unit and integration tests
-cargo build --release                    # the binaries the corpus runs
+cargo build --release --workspace        # the binaries the corpus runs
 python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version 0.2.0
 python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version 0.2.0 --stdin-file
+target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0
+target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --stdin-file
 ```
 
 Run the full suite with `--release`: memory-limit tests exercise the optimized
@@ -93,6 +95,12 @@ those with ordinary input again with standard input as a regular file, against t
 expectations. Both modes need coverage: hash grouping applies to eligible files
 and to eligible piped input in language locales, with different replay paths.
 The frozen fixture and its provenance record stay byte-identical across platforms.
+The unpublished Rust driver in `crates/corpus-driver/` executes the 2,857 ordinary
+cases in both modes and explicitly records the other 280 cases as deferred
+transports. Keep both complete Python runs alongside it until the stream and
+fault transports have migrated. Its `--keep-going` and `--evidence-dir` options
+retain every case's disposition and outcome for comparison with the existing
+driver. CI retains both drivers' evidence on Linux and native macOS 15 and 26.
 For a development version, pass `--expected-version VERSION`, using the version
 in `crates/cli/Cargo.toml`.
 On macOS, the runner requires no supervisor and uses the native fault transports
