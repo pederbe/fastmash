@@ -1,0 +1,96 @@
+name: Native mechanism probes
+
+on:
+  push:
+    branches: [research/native-stream-spawn]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  MACOSX_DEPLOYMENT_TARGET: "15.0"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  probes:
+    name: Native probes on ${{ matrix.os }} with Rust ${{ matrix.rust }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+        rust: ["1.88.0", "1.98.1"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Record native inputs
+        run: |
+          export EVIDENCE="$RUNNER_TEMP/native-mechanisms"
+          printf 'EVIDENCE=%s\n' "$EVIDENCE" >> "$GITHUB_ENV"
+          mkdir "$EVIDENCE"
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" = "${{ matrix.os == 'macos-15' && '15' || '26' }}"
+          test "$(rustc -Vv | sed -n 's/^host: //p')" = aarch64-apple-darwin
+          {
+            git rev-parse HEAD
+            git status --porcelain
+            uname -a
+            sw_vers
+            rustc -Vv
+            cargo -V
+          } > "$EVIDENCE/identity.txt"
+          shasum -a 256 Cargo.toml Cargo.lock crates/*/Cargo.toml crates/corpus-driver/examples/native-{stream,signal}-spawn.rs > "$EVIDENCE/inputs.sha256"
+      - name: Build actual command and safe probes
+        timeout-minutes: 10
+        run: |
+          cargo build --release --locked -p fastmash --bin fastmash > "$EVIDENCE/product-build.log" 2>&1
+          cargo build --release --locked -p fastmash-corpus-driver --example native-stream-spawn --example native-signal-spawn > "$EVIDENCE/probe-build.log" 2>&1
+          shasum -a 256 target/release/fastmash target/release/examples/native-{stream,signal}-spawn > "$EVIDENCE/binaries.sha256"
+      - name: Compare retained native transports
+        timeout-minutes: 3
+        run: |
+          for case in closed_standard_stream_combinations_keep_their_original_failure wrong_access_stream_combinations_keep_their_original_failure blocked_sigpipe_refuses_and_unrelated_masks_allow_ordinary_commands ordinary_broken_pipes_restore_sigpipe_even_when_inherited_ignored; do
+            result=0
+            cargo test --release --locked -p fastmash --test native_streams "$case" -- --exact > "$EVIDENCE/legacy-$case.log" 2>&1 || result=$?
+            printf '%s\n' "$result" > "$EVIDENCE/legacy-$case.exit"
+            test "$result" = 0
+            grep -q '^running 1 test$' "$EVIDENCE/legacy-$case.log"
+            grep -q 'test result: ok\. 1 passed; 0 failed;' "$EVIDENCE/legacy-$case.log"
+          done
+      - name: Run stream matrix
+        timeout-minutes: 2
+        run: |
+          result=0
+          target/release/examples/native-stream-spawn "$PWD/target/release/fastmash" "$EVIDENCE/streams" > "$EVIDENCE/streams.log" 2>&1 || result=$?
+          printf '%s\n' "$result" > "$EVIDENCE/streams.exit"
+          test "$result" = 0
+      - name: Run signal matrix
+        timeout-minutes: 2
+        run: |
+          result=0
+          target/release/examples/native-signal-spawn "$PWD/target/release/fastmash" "$EVIDENCE/signals" > "$EVIDENCE/signals.log" 2>&1 || result=$?
+          printf '%s\n' "$result" > "$EVIDENCE/signals.exit"
+          test "$result" = 0
+      - name: Verify unchanged inputs and binaries
+        run: |
+          shasum -a 256 -c "$EVIDENCE/inputs.sha256"
+          shasum -a 256 -c "$EVIDENCE/binaries.sha256"
+      - name: Retain native evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-mechanisms-${{ matrix.os }}-${{ matrix.rust }}
+          path: ${{ runner.temp }}/native-mechanisms
+          if-no-files-found: error
+          retention-days: 7
