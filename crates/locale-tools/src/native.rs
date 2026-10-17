@@ -344,7 +344,6 @@ fn wait_bounded(child: &mut Child, started: Instant, limit: Duration) -> Waited 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::ffi::OsStringExt;
 
     #[test]
     fn arguments_keep_paths_as_data_and_select_tools() {
@@ -398,6 +397,15 @@ mod tests {
         expected.push("directory-link".into());
         expected.sort();
         assert_eq!(found, expected);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn non_utf8_directory_names_are_rejected() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let root = private_directory("fastmash-locale-non-utf8-test").unwrap();
         let invalid = root.join(OsString::from_vec(vec![b'x', 0xff]));
         fs::create_dir(invalid).unwrap();
         assert!(directories(&root).is_err());
