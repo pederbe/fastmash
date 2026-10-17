@@ -2,6 +2,7 @@
 
 //! Deterministic numeric locale generation, separate from native queries.
 
+pub mod comparison;
 #[cfg(unix)]
 pub mod native;
 
