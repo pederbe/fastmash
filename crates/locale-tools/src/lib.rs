@@ -2,6 +2,9 @@
 
 //! Deterministic numeric locale generation, separate from native queries.
 
+#[cfg(unix)]
+pub mod native;
+
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Deserialize, Serialize, Serializer};
 use std::error::Error;
