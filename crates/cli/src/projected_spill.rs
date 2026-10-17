@@ -612,6 +612,8 @@ fn merge<S: Codec>(runs: Vec<File>, shape: Shape, buffer: usize) -> Result<File,
 // format above; the chunk still in memory reaches the merge and the consumer
 // as views, so no record is copied or allocated on its own.
 
+/// Records prefetched ahead of the current one in the sorted arena order.
+const PREFETCH: usize = 16;
 /// Chunks below this many entries sort by comparison instead of by radix.
 const RADIX_MIN: usize = 256;
 /// Key groups below this many entries are ordered by comparing their keys.
@@ -726,6 +728,22 @@ fn arena_record(arena: &[u8], offset: usize, shape: Shape) -> (u64, u64, View<'_
     (index, fields, view)
 }
 
+/// Requests cache hints for two present cache lines of an upcoming record.
+#[inline(always)]
+#[cfg(target_arch = "x86_64")]
+fn prefetch(arena: &[u8], offset: usize) {
+    if let Some(byte) = arena.get(offset) {
+        mem_prefetch::prefetch_read_data::<u8, 3>(byte);
+    }
+    if let Some(byte) = offset.checked_add(64).and_then(|at| arena.get(at)) {
+        mem_prefetch::prefetch_read_data::<u8, 3>(byte);
+    }
+}
+
+#[inline(always)]
+#[cfg(not(target_arch = "x86_64"))]
+fn prefetch(_: &[u8], _: usize) {}
+
 /// The eight key bytes of record `entry` at `offset` into key `key`, as a
 /// sort word, with a length digit: the bytes left in the key when that is at
 /// most eight, else `LONG_KEY`.
@@ -833,11 +851,12 @@ fn round(
         compare_group(arena, group, shape);
         return;
     }
-    words.extend(
-        group
-            .iter()
-            .map(|entry| word(arena, entry, shape, key, offset)),
-    );
+    words.extend(group.iter().enumerate().map(|(at, entry)| {
+        if let Some(ahead) = group.get(at + PREFETCH) {
+            prefetch(arena, ahead.offset());
+        }
+        word(arena, entry, shape, key, offset)
+    }));
     // The group itself is the radix scratch; the sorted words replace its
     // entries (they hold the same offsets).
     if words.len() >= RADIX_MIN {
@@ -1270,7 +1289,10 @@ impl<S: Codec> Sorter<S> {
         self.sort();
         let mut output = Encoder::run(self.buffer)?;
         let (arena, entries) = (&self.arena, &self.entries);
-        for entry in entries {
+        for (at, entry) in entries.iter().enumerate() {
+            if let Some(ahead) = entries.get(at + PREFETCH) {
+                prefetch(arena, ahead.offset());
+            }
             #[cfg(test)]
             CHUNK_RECORDS.with(|count| count.set(count.get() + 1));
             let (index, fields, view) = arena_record(arena, entry.offset(), shape);
@@ -1434,6 +1456,9 @@ impl<'a> Tail<'a> {
     #[inline]
     fn next<S: Storage>(&mut self) -> Option<Record<Mixed<'a, S>>> {
         let entry = self.entries.get(self.at)?;
+        if let Some(ahead) = self.entries.get(self.at + PREFETCH) {
+            prefetch(self.arena, ahead.offset());
+        }
         self.at += 1;
         let (index, fields, view) = arena_record(self.arena, entry.offset(), self.shape);
         Some(Record {

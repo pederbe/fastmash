@@ -49,7 +49,7 @@ jobs:
           mkdir out
           docker run --rm -v "$PWD:/source:ro" -v "$PWD/out:/out" \
             -e CARGO_TARGET_DIR=/out/target fastmash-release-builder bash -c \
-            'bash /source/release/build.sh && CARGO_HOME=/tmp/cargo python3 /source/scripts/third_party_licenses.py > /out/THIRD-PARTY-LICENSES.md'
+            'bash /source/release/build.sh && CARGO_HOME=/tmp/cargo cargo run --locked --release -p fastmash-license-notices --manifest-path /source/Cargo.toml > /out/THIRD-PARTY-LICENSES.md'
       # Refuse to publish bytes that were not the ones measured.
       - name: Check the qualified checksums
         run: |
