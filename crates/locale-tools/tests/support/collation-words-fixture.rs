@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 
 #[cfg(unix)]
-fn observe() -> Result<(), Box<dyn std::error::Error>> {
+fn observe() -> Result<u8, Box<dyn std::error::Error>> {
     use serde::Deserialize;
     use serde_json::json;
+    use std::collections::BTreeMap;
     use std::ffi::OsString;
     use std::fs::{self, OpenOptions};
     use std::io::{Read, Write};
@@ -11,8 +12,17 @@ fn observe() -> Result<(), Box<dyn std::error::Error>> {
     use std::path::{Path, PathBuf};
 
     #[derive(Deserialize)]
+    struct Reply {
+        stderr: Vec<u8>,
+        status: u8,
+    }
+
+    #[derive(Deserialize)]
     struct Config {
         observations: Vec<u8>,
+        // Only alphabet and digit ordinals can override a role's stderr/status.
+        #[serde(default)]
+        replies: BTreeMap<String, [Option<Reply>; 2]>,
     }
 
     fn write_new(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -44,6 +54,11 @@ fn observe() -> Result<(), Box<dyn std::error::Error>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
         Err(error) => return Err(error.into()),
     };
+    let reply = config
+        .replies
+        .get(role)
+        .and_then(|replies| replies.get(index))
+        .and_then(Option::as_ref);
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input)?;
     let mut output = Vec::new();
@@ -58,7 +73,7 @@ fn observe() -> Result<(), Box<dyn std::error::Error>> {
         .map(|(key, value)| (key.as_bytes().to_vec(), value.as_bytes().to_vec()))
         .collect();
     environment.sort();
-    let receipt = serde_json::to_vec_pretty(&json!({
+    let mut receipt = json!({
         "role": role,
         "index": index,
         "arguments": arguments,
@@ -66,22 +81,39 @@ fn observe() -> Result<(), Box<dyn std::error::Error>> {
         "working_directory": std::env::current_dir()?.as_os_str().as_bytes(),
         "input_bytes": input.len(),
         "stdout_bytes": output.len(),
-    }))?;
+    });
+    if let Some(reply) = reply {
+        receipt["configured_reply"] = json!({
+            "stderr_bytes": reply.stderr.len(),
+            "status": reply.status,
+        });
+    }
     let prefix = format!("{role}-{index:02}");
     write_new(&directory.join(format!("{prefix}.stdin")), &input)?;
     write_new(&directory.join(format!("{prefix}.stdout")), &output)?;
-    write_new(&directory.join(format!("{prefix}.json")), &receipt)?;
+    if let Some(reply) = reply {
+        write_new(&directory.join(format!("{prefix}.stderr")), &reply.stderr)?;
+    }
+    write_new(
+        &directory.join(format!("{prefix}.json")),
+        &serde_json::to_vec_pretty(&receipt)?,
+    )?;
     let mut stdout = std::io::stdout().lock();
     stdout.write_all(&output)?;
     stdout.flush()?;
+    if let Some(reply) = reply {
+        let mut stderr = std::io::stderr().lock();
+        stderr.write_all(&reply.stderr)?;
+        stderr.flush()?;
+    }
     fs::write(counter, format!("{}\n", index + 1))?;
-    Ok(())
+    Ok(reply.map_or(0, |reply| reply.status))
 }
 
 #[cfg(unix)]
 fn main() -> std::process::ExitCode {
     match observe() {
-        Ok(()) => std::process::ExitCode::SUCCESS,
+        Ok(status) => std::process::ExitCode::from(status),
         Err(error) => {
             eprintln!("collation word observer failed: {error}");
             std::process::ExitCode::FAILURE
