@@ -360,9 +360,8 @@ mod route_tests {
         let (inherited, _peer) = linux::socket_pair().unwrap();
         linux::cloexec(inherited.as_fd(), false).unwrap();
         linux::close_range_cloexec().unwrap();
-        // SAFETY: F_GETFD takes no pointers and reads a descriptor this test owns.
-        let flags = unsafe { linux::syscall(72, [inherited.as_raw_fd() as usize, 1, 0, 0, 0, 0]) };
-        assert_eq!(flags, 0);
+        let flags = rustix::io::fcntl_getfd(inherited.as_fd()).unwrap();
+        assert_eq!(flags, rustix::io::FdFlags::empty());
     }
 
     #[test]
