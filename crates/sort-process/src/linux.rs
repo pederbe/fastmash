@@ -163,18 +163,12 @@ pub(crate) fn access(path: &Path, mode: usize) -> bool {
     call(21, [path.as_ptr() as usize, mode, 0, 0, 0, 0]).is_ok()
 }
 pub fn cloexec(fd: BorrowedFd<'_>, enabled: bool) -> io::Result<()> {
-    let fd = fd.as_raw_fd() as usize;
-    let flags = call(72, [fd, 1, 0, 0, 0, 0])?;
-    call(
-        72,
-        [fd, 2, if enabled { flags | 1 } else { flags & !1 }, 0, 0, 0],
-    )
-    .map(|_| ())
+    let mut flags = rustix::io::fcntl_getfd(fd)?;
+    flags.set(rustix::io::FdFlags::CLOEXEC, enabled);
+    rustix::io::fcntl_setfd(fd, flags).map_err(io::Error::from)
 }
 pub fn duplicate(fd: BorrowedFd<'_>) -> io::Result<OwnedFd> {
-    let new = call(72, [fd.as_raw_fd() as usize, 1030, 3, 0, 0, 0])?;
-    // SAFETY: F_DUPFD_CLOEXEC returned a new descriptor that nothing else owns.
-    Ok(unsafe { OwnedFd::from_raw_fd(new as RawFd) })
+    fd.try_clone_to_owned()
 }
 pub fn socket_pair() -> io::Result<(OwnedFd, OwnedFd)> {
     let mut fds = [-1i32; 2];
