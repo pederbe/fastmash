@@ -4,6 +4,8 @@ mod temp_dir;
 #[path = "support/terminal.rs"]
 mod terminal;
 
+use nix::sys::signal::{Signal, kill};
+use nix::unistd::Pid;
 use std::{
     ffi::OsString,
     fs::File,
@@ -235,8 +237,10 @@ fn interrupt_after_visible_terminal_output_ends_the_command() {
     let mut line = [0; 6];
     master.read_exact(&mut line).unwrap();
     assert_eq!(&line, b"ready\n");
-    // SAFETY: kill sends SIGINT to the child PID returned by Command.
-    assert_eq!(unsafe { libc::kill(child.id() as i32, libc::SIGINT) }, 0);
+    assert_eq!(
+        kill(Pid::from_raw(child.id() as i32), Signal::SIGINT),
+        Ok(())
+    );
     assert_eq!(wait(&mut child).signal(), Some(libc::SIGINT));
     drop(input);
     let mut error = Vec::new();

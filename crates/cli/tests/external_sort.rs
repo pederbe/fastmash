@@ -2,6 +2,8 @@
 //! Every command sets FASTMASH_GROUPING=sort: hash grouping would otherwise
 //! group input from a file without the system sort.
 #![cfg(target_os = "linux")]
+use nix::sys::signal::{Signal, kill};
+use nix::unistd::Pid;
 use std::{
     ffi::OsString,
     fs,
@@ -586,8 +588,11 @@ fn interrupted_external_sort_leaves_no_temporary_directory() {
         }
         thread::sleep(Duration::from_millis(5));
     };
-    // SAFETY: kill takes no pointers; the child is unreaped, so its PID is ours.
-    assert_eq!(unsafe { libc::kill(fastmash.id() as i32, libc::SIGINT) }, 0);
+    // The child is unreaped, so its PID is still ours.
+    assert_eq!(
+        kill(Pid::from_raw(fastmash.id() as i32), Signal::SIGINT),
+        Ok(())
+    );
     let status = wait(&mut fastmash, Duration::from_secs(10));
     assert_eq!(status.signal(), Some(libc::SIGINT), "{status:?}");
     // TMPDIR is unset here, so the root is in /tmp.
@@ -638,10 +643,15 @@ fn a_killed_sort_is_named_before_read_error_on_close() {
     for (signal, named) in [(libc::SIGKILL, "Killed"), (libc::SIGTERM, "Terminated")] {
         let mut fastmash = start_external(None, &cwd.0);
         let sort = running_sort(&mut fastmash);
-        // SAFETY: kill takes no pointers. The sort waits for input that stays
-        // open, and its supervisor reaps it only once it has ended, so its PID
-        // is not reused before this.
-        assert_eq!(unsafe { libc::kill(sort as i32, signal) }, 0);
+        // The sort waits for input that stays open, and its supervisor reaps
+        // it only once it has ended, so its PID is not reused before this.
+        assert_eq!(
+            kill(
+                Pid::from_raw(sort as i32),
+                Signal::try_from(signal).unwrap()
+            ),
+            Ok(())
+        );
         drop(fastmash.stdin.take());
         let status = wait(&mut fastmash, Duration::from_secs(10));
         let mut stdout = Vec::new();
