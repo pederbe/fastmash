@@ -1,6 +1,10 @@
 //! Linux x86-64 process primitives. No application code runs after fork.
 //! Internal to Fastmash's executables; not a stable API. Functions that act
 //! on a descriptor borrow it, so they cannot outlive its owner.
+use rustix::{
+    io::Errno,
+    rand::{GetRandomFlags, getrandom},
+};
 use std::ffi::CString;
 use std::io;
 use std::marker::PhantomData;
@@ -159,18 +163,12 @@ pub(crate) fn access(path: &Path, mode: usize) -> bool {
     call(21, [path.as_ptr() as usize, mode, 0, 0, 0, 0]).is_ok()
 }
 pub fn cloexec(fd: BorrowedFd<'_>, enabled: bool) -> io::Result<()> {
-    let fd = fd.as_raw_fd() as usize;
-    let flags = call(72, [fd, 1, 0, 0, 0, 0])?;
-    call(
-        72,
-        [fd, 2, if enabled { flags | 1 } else { flags & !1 }, 0, 0, 0],
-    )
-    .map(|_| ())
+    let mut flags = rustix::io::fcntl_getfd(fd)?;
+    flags.set(rustix::io::FdFlags::CLOEXEC, enabled);
+    rustix::io::fcntl_setfd(fd, flags).map_err(io::Error::from)
 }
 pub fn duplicate(fd: BorrowedFd<'_>) -> io::Result<OwnedFd> {
-    let new = call(72, [fd.as_raw_fd() as usize, 1030, 3, 0, 0, 0])?;
-    // SAFETY: F_DUPFD_CLOEXEC returned a new descriptor that nothing else owns.
-    Ok(unsafe { OwnedFd::from_raw_fd(new as RawFd) })
+    fd.try_clone_to_owned()
 }
 pub fn socket_pair() -> io::Result<(OwnedFd, OwnedFd)> {
     let mut fds = [-1i32; 2];
@@ -285,21 +283,11 @@ pub fn read_signal(fd: &OwnedFd) -> io::Result<Option<i32>> {
 pub fn random(bytes: &mut [u8]) -> io::Result<()> {
     let mut at = 0;
     while at < bytes.len() {
-        match call(
-            318,
-            [
-                bytes[at..].as_mut_ptr() as usize,
-                bytes.len() - at,
-                0,
-                0,
-                0,
-                0,
-            ],
-        ) {
+        match getrandom(&mut bytes[at..], GetRandomFlags::empty()) {
             Ok(0) => return Err(io::Error::other("empty random read")),
             Ok(n) => at += n,
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
+            Err(Errno::INTR) => {}
+            Err(e) => return Err(e.into()),
         }
     }
     Ok(())

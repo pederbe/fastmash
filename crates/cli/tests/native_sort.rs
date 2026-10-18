@@ -4,6 +4,8 @@ mod temp_dir;
 #[path = "support/terminal.rs"]
 mod terminal;
 
+use nix::sys::signal::{Signal, kill};
+use nix::unistd::Pid;
 use std::{
     fs::{self, File},
     io::{BufRead, BufReader, Read, Write},
@@ -435,8 +437,11 @@ fn interrupted_spill(fixture: &Fixture, csv: bool, signal: i32) {
     fixture.clean();
     assert!(child_ref.try_wait().unwrap().is_none());
     let pid = i32::try_from(child_ref.id()).unwrap();
-    // SAFETY: pid names the live child held by the reaping guard.
-    assert_eq!(unsafe { libc::kill(pid, signal) }, 0);
+    // The reaping guard still holds this live child.
+    assert_eq!(
+        kill(Pid::from_raw(pid), Signal::try_from(signal).unwrap()),
+        Ok(())
+    );
     let deadline = Instant::now() + Duration::from_secs(5);
     let status = loop {
         if let Some(status) = child_ref.try_wait().unwrap() {

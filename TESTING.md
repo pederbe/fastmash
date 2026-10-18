@@ -69,15 +69,54 @@ verification updates accept the original producer's format and refuse unsupporte
 prior fields or record order. Unix tests exercise comparison
 execution and both command interfaces with fixed local fixtures. Linux/glibc
 also exercises the numeric generator with the installed POSIX locale and an
-invalid locale. Keep the Python locale tools for reference work until full
-reference and transport parity is established. The numeric emitter's header names
-its actual
+invalid locale. Numeric generation and comparison use the Rust tools. The Python
+collation tools remain in use while their replacement checks are completed.
+The numeric emitter's header names its actual
 `fastmash-generate-numeric-locales` command. This provenance-only difference from
 legacy emission leaves the table body and data unchanged.
 
+Build the compiled locale tree with the reference's `localedef --no-archive`, using its
+`SUPPORTED` list. Include each UTF-8 entry without a modifier under its listed
+name, keeping names without a codeset suffix bare. Include every modifier entry,
+even if it lists another character set, compiled with UTF-8 under
+`NAME.UTF-8@MODIFIER`. Its generated table key remains `NAME@MODIFIER`. Keep the
+modifier after the codeset suffix and do not replace it with its base locale,
+since their numeric rules can differ.
+
+For example, compile a modifier with:
+
+```sh
+localedef --no-archive -i nan_TW@latin -f UTF-8 /path/to/compiled-locales/nan_TW.UTF-8@latin
+```
+
+To generate numeric JSON and Rust source from the compiled locale tree, run:
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-generate-numeric-locales -- \
+  --ldd /path/to/reference/bin/ldd --locale /path/to/reference/bin/locale \
+  --uname /path/to/reference/bin/uname -- /path/to/compiled-locales \
+  /tmp/fastmash-numeric.json /tmp/fastmash-numeric.rs
+```
+
+Run in the identified reference environment with its matching glibc tools and
+compiled locale data. The generator queries native tools rather than the
+product's built-in tables, so the host's default locale data is not a substitute
+for that reference.
+Use fresh output paths and keep the generated files separate from the committed
+tables until their data and behavior have been checked.
+
 The numeric comparator accepts explicit candidate and reference executables,
-locale data and locale names. Each run retains raw evidence in a new directory.
-Check its options with:
+compiled locale data and the numeric JSON. By default it checks one locale for
+each distinct combination of decimal separator, thousands separator and grouping
+rules. Each run retains raw evidence in a new directory.
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-compare-numeric-locales -- \
+  --evidence /tmp/fastmash-numeric-comparison -- /path/to/fastmash \
+  /path/to/reference /path/to/compiled-locales data/locales/glibc-lc-numeric.json
+```
+
+Run the comparison in the same reference environment. Check its options with:
 
 ```sh
 cargo run --release -p fastmash-locale-tools --bin fastmash-compare-numeric-locales -- --help
@@ -95,6 +134,32 @@ at the signed index `N` from `data/locales/collation-candidates.json` instead. N
 indices count from the end of each locale's list. This command projects supplied
 data without probing a native collator or updating a product table.
 
+To compare the fixed punctuation workload against an identified native reference,
+use explicit executables, GNU sort and matching compiled locale data:
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-compare-collation-punctuation -- \
+  --evidence /tmp/fastmash-punctuation-evidence --locale en_US --locale tk_TM -- \
+  data/locales/collation-verification.json /path/to/fastmash /path/to/reference \
+  /path/to/gnu-sort /path/to/compiled-locales /tmp/fastmash-punctuation.json
+```
+
+Both the report file and evidence directory must be new. Without `--locale`, the
+command selects every verification entry with a nonempty final tag. Repeated
+selections form a subset in the source's sorted name order. Names are kept
+literally and receive the original `.UTF-8` suffix. Each candidate and reference
+invocation receives all 1,983 punctuation words through a pipe, with a 300-second
+execution budget and the existing cleanup reserve. Raw arguments, environment,
+input, output, delivery and wait receipts remain in the private evidence directory.
+
+The command prints the existing punctuation summary and writes its report format.
+Order differences and native nonzero statuses remain report observations and do
+not make a completed report a command failure. Spawn, transport and strict
+first-field UTF-8 decoding errors stop the run with partial evidence and no
+completed report. Successful stderr is retained without rejecting the result.
+This command covers fixed punctuation only. Keep the Python collation tools until
+the remaining workflows and reference parity have been established.
+
 ### Integration tests
 
 `crates/cli/tests/` runs the compiled `fastmash` binary as a user would:
@@ -102,8 +167,9 @@ arguments, standard input, standard output, standard error and exit status.
 Each file covers one area, such as grouping, selectors, quantiles, record
 separators or pipeline failures (closed pipes, unreadable input, full disks).
 
-Native tests use the same command boundary. `native_streams.rs` covers inherited
-descriptors and signals, terminal buffering and output faults; `native_sort.rs`
+Native tests use the same command boundary. `native_descriptors.rs` covers closed
+and incorrectly opened standard streams. `native_streams.rs` covers inherited
+signals, terminal buffering and output faults; `native_sort.rs`
 covers stable sorting, quoted CSV, complete records, selection, weighted
 calculations, hash restart, piped replay, supported locales and forced spill.
 Its interruption checks wait until a private run has been opened and unlinked

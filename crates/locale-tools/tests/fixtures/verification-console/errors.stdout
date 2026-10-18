@@ -1,0 +1,2 @@
+en_US: differs alphabet:{'error': ['candidate can\'t "quote"\\\x00\x07\x08\t\n\x0b\x0c\r\x7f�', "reference can't"]} digits:{'error': ['"digits" é́😀\xa0\x85\u200b\ue000\u0378\u2028\U0001d173�', 'bad:���|���|����|�']}
+0 of 1 locales verified with candidate 0; 0 locales verified overall

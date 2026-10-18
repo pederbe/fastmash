@@ -5,14 +5,21 @@
 #[cfg(unix)]
 mod capture;
 pub mod collation;
+#[cfg(unix)]
+mod collation_command;
 pub mod collation_plan;
 pub mod collation_punctuation;
+pub mod collation_unicode;
 pub mod collation_verification;
 pub mod comparison;
 #[cfg(unix)]
 pub mod executor;
 #[cfg(unix)]
 pub mod native;
+#[cfg(unix)]
+pub mod punctuation_executor;
+#[cfg(unix)]
+pub mod verification_executor;
 
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Deserialize, Serialize, Serializer};

@@ -116,14 +116,7 @@ fn random_bytes(bytes: &mut [u8]) -> io::Result<()> {
 }
 #[cfg(target_os = "macos")]
 fn random_bytes(bytes: &mut [u8]) -> io::Result<()> {
-    for chunk in bytes.chunks_mut(256) {
-        // SAFETY: getentropy writes exactly the chunk's live bytes on success.
-        // Each request is within its 256-byte limit.
-        if unsafe { libc::getentropy(chunk.as_mut_ptr().cast(), chunk.len()) } != 0 {
-            return Err(io::Error::last_os_error());
-        }
-    }
-    Ok(())
+    getrandom::fill(bytes).map_err(io::Error::from)
 }
 
 /// Threads for the external sort, as GNU sort chooses its default: the

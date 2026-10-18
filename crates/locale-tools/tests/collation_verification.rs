@@ -141,6 +141,10 @@ fn retained_en_us_subset_update_preserves_complete_document_and_negative_evidenc
         report.summary_line(),
         "1 of 1 locales verified with candidate 0; 194 locales verified overall"
     );
+    assert_eq!(
+        report.console_output(),
+        "en_US: verified\n1 of 1 locales verified with candidate 0; 194 locales verified overall\n"
+    );
     let actual = value(&report);
     assert_eq!(actual["locales"].as_object().unwrap().len(), 319);
     assert_eq!(actual["variants"].as_object().unwrap().len(), 2);
@@ -259,6 +263,16 @@ fn literal_baseline_differences_promote_only_null_alphabets_and_keep_failed_bloc
         report.summary_line(),
         "3 of 4 locales verified with candidate 0; 3 locales verified overall"
     );
+    assert_eq!(
+        report.console_output(),
+        concat!(
+            "empty: verified\nen_US: verified\n",
+            "null: differs alphabet:0 digits:{'error': ['candidate\\né', 'reference \"bad\"']} ",
+            "block:z-script:1 block:a-script:error\n",
+            "subset: verified\n",
+            "3 of 4 locales verified with candidate 0; 3 locales verified overall\n",
+        )
+    );
 }
 
 #[test]
@@ -295,6 +309,13 @@ fn new_case_records_keep_full_counts_first_forty_and_unequal_empty_failures() {
     assert_eq!(
         report.summary_line(),
         "1 of 2 locales verified with candidate 0; 1 locales verified overall"
+    );
+    assert_eq!(
+        report.console_output(),
+        concat!(
+            "en_US: verified\nmany: differs alphabet:47 digits:0\n",
+            "1 of 2 locales verified with candidate 0; 1 locales verified overall\n",
+        )
     );
 }
 
@@ -375,6 +396,13 @@ fn partial_updates_preserve_dynamic_positions_untouched_failures_and_orphan_hist
         report.summary_line(),
         "4 of 4 locales verified with candidate 0; 4 locales verified overall"
     );
+    assert_eq!(
+        report.console_output(),
+        concat!(
+            "a: verified\nb: verified\nen_US: verified\nz: verified\n",
+            "4 of 4 locales verified with candidate 0; 4 locales verified overall\n",
+        )
+    );
 }
 
 #[test]
@@ -417,6 +445,10 @@ fn first_verified_selection_uses_positive_preference_stored_and_empty_tags() {
     assert_eq!(
         report.summary_line(),
         "1 of 1 locales verified with candidate -1; 3 locales verified overall"
+    );
+    assert_eq!(
+        report.console_output(),
+        "en_US: verified\n1 of 1 locales verified with candidate -1; 3 locales verified overall\n"
     );
 }
 
@@ -465,6 +497,10 @@ fn indexing_only_observed_names_and_failure_replacement_keep_run_counters() {
         report.summary_line(),
         "0 of 1 locales verified with candidate 0; 1 locales verified overall"
     );
+    assert_eq!(
+        report.console_output(),
+        "en_US: differs alphabet:0\n0 of 1 locales verified with candidate 0; 1 locales verified overall\n"
+    );
 }
 
 #[test]
@@ -509,6 +545,13 @@ fn duplicate_equivalence_is_checked_after_aggregation_without_discarded_traces()
         "1 of 2 locales verified with candidate 0; 1 locales verified overall"
     );
     assert_eq!(
+        report.console_output(),
+        concat!(
+            "dup: differs alphabet:47\ndup: differs alphabet:47\nen_US: verified\n",
+            "1 of 2 locales verified with candidate 0; 1 locales verified overall\n",
+        )
+    );
+    assert_eq!(
         value(&report)["variants"]["0"]["locales"]["dup"]["failures"]["alphabet"]["displaced"],
         47
     );
@@ -530,6 +573,55 @@ fn duplicate_equivalence_is_checked_after_aggregation_without_discarded_traces()
     assert_eq!(
         report.summary_line(),
         "1 of 1 locales verified with candidate 0; 1 locales verified overall"
+    );
+    assert_eq!(
+        report.console_output(),
+        concat!(
+            "en_US: verified\nen_US: verified\n",
+            "1 of 1 locales verified with candidate 0; 1 locales verified overall\n",
+        )
+    );
+}
+
+#[test]
+fn complete_console_and_json_match_the_independent_error_observation() {
+    let raw = [
+        include_bytes!("fixtures/verification-console/candidate-alphabet.stderr").as_slice(),
+        include_bytes!("fixtures/verification-console/reference-alphabet.stderr").as_slice(),
+        include_bytes!("fixtures/verification-console/candidate-digits.stderr").as_slice(),
+        include_bytes!("fixtures/verification-console/reference-digits.stderr").as_slice(),
+    ];
+    // Decode original raw stderr as the executor will. Expected output is the
+    // complete unchanged producer capture, including its replacement behavior.
+    let [
+        candidate_alphabet,
+        reference_alphabet,
+        candidate_digits,
+        reference_digits,
+    ] = raw.map(|bytes| String::from_utf8_lossy(bytes).into_owned());
+    let baseline = BLOCKS
+        .iter()
+        .map(|&block| (block.into(), Some(BTreeSet::new())))
+        .collect();
+    let report = Report::update(
+        None,
+        include_bytes!("fixtures/verification-console/candidates.json"),
+        0,
+        vec![observation(
+            "en_US",
+            Err([candidate_alphabet, reference_alphabet]),
+            Err([candidate_digits, reference_digits]),
+            baseline,
+        )],
+    )
+    .unwrap();
+    assert_eq!(
+        report.console_output().as_bytes(),
+        include_bytes!("fixtures/verification-console/errors.stdout")
+    );
+    assert_eq!(
+        report.json().unwrap(),
+        include_bytes!("fixtures/verification-console/errors.json")
     );
 }
 

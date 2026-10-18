@@ -1,0 +1,11 @@
+{
+ "icu": "fixture-only-not-native-reference",
+ "glibc": "fixture-only-not-native-reference",
+ "locales": {
+  "en_US": {
+   "tags": ["fixture-mixed-unicode"],
+   "alphabet": ["ß", "İ", "ǳ", "ΟΣ", "ch", "á", "́", "!", "²", "中"],
+   "auxiliary": ["ﬃ", "ǅ", "Ⅻ", "ǲ"]
+  }
+ }
+}

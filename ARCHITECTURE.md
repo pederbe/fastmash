@@ -89,10 +89,13 @@ The unpublished `fastmash-locale-tools` crate in `crates/locale-tools/` is also 
 development tool outside the product dependency graph. It owns native numeric
 locale queries, JSON and Rust table generation, collation-table projection,
 numeric comparison plans, fixed collation word lists and collation reports.
-Its Unix comparison executor runs bounded external
-commands and retains their exact streams and statuses in a private evidence
-directory. Full reference and transport parity remain pending, so the Python
-tools stay in use.
+Its Unix numeric and punctuation comparison executors run bounded external
+commands and retain their exact streams and statuses in a private evidence
+directory. Punctuation comparison selects the retained verification's nonempty
+final tags, sends the fixed word list through pipes and preserves native failures
+and order differences in the existing report format. Rust tools generate and
+check the numeric tables. Python collation tools remain in use while their
+replacement checks are completed.
 
 ## How a command runs
 
@@ -363,6 +366,10 @@ end the process with `SIGABRT`; all of them are bugs.
   warns on any `unsafe` block without a `// SAFETY:` comment, which CI treats
   as an error.
 - **Overflow checks stay on** in release builds, and panics abort.
+- **Native entropy** uses safe dependency interfaces to `getrandom` on Linux
+  and `getentropy` on macOS. Invocation seeds and private temporary names fail
+  when required entropy is unavailable. Hash grouping keeps its existing fixed
+  fallback when an internal table seed is unavailable.
 - **No network, no shell.** Fastmash never makes network connections and never
   passes input to a shell. The only child processes are the sort
   supervisor and the system `sort` it starts, with a fixed argument list.

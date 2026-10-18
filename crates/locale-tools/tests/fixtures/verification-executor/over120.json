@@ -1,0 +1,53 @@
+{
+ "variants": {
+  "0": {
+   "locales": {
+    "en_US": {
+     "verified": true,
+     "tag": "bo-CN",
+     "failures": {},
+     "other_scripts": {}
+    }
+   },
+   "baseline_displaced": {
+    "latin": [],
+    "vietnamese": [],
+    "greek": [],
+    "cyrillic": [],
+    "armenian": [],
+    "hebrew": [],
+    "arabic": [],
+    "devanagari": [],
+    "bengali": [],
+    "gurmukhi": [],
+    "gujarati": [],
+    "oriya": [],
+    "tamil": [],
+    "telugu": [],
+    "kannada": [],
+    "malayalam": [],
+    "sinhala": [],
+    "thai": [],
+    "lao": [],
+    "tibetan": [],
+    "myanmar": [],
+    "georgian": [],
+    "ethiopic": [],
+    "khmer": [],
+    "thaana": [],
+    "hiragana": [],
+    "katakana": [],
+    "hangul": [],
+    "han": []
+   }
+  }
+ },
+ "icu": "fixture-only-not-native-reference",
+ "glibc": "fixture-only-not-native-reference",
+ "locales": {
+  "en_US": {
+   "tag": "bo-CN",
+   "alphabet_data": true
+  }
+ }
+}

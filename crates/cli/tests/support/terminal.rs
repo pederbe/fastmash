@@ -1,13 +1,17 @@
+#![forbid(unsafe_code)]
+
 //! Independent stdout/stderr pseudo-terminals for executable presentation tests.
 #[path = "executable.rs"]
 mod executable;
+use nix::{
+    fcntl::{FcntlArg, FdFlag, fcntl},
+    pty::openpty,
+    sys::termios::{SetArg, cfmakeraw, tcgetattr, tcsetattr},
+};
 use std::{
     fs::File,
     io::{Read, Write},
-    os::{
-        fd::{AsRawFd, FromRawFd},
-        unix::process::CommandExt,
-    },
+    os::unix::process::CommandExt,
     process::{Command, Output, Stdio},
     thread,
 };
@@ -51,44 +55,15 @@ impl Program {
 
 #[allow(dead_code)]
 pub fn pair() -> (File, File) {
-    let (mut master, mut slave) = (-1, -1);
-    assert_eq!(
-        // SAFETY: openpty initializes both descriptors; null optional arguments
-        // request the default terminal settings and no copied device name.
-        unsafe {
-            libc::openpty(
-                &mut master,
-                &mut slave,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            )
-        },
-        0
-    );
-    // SAFETY: successful openpty transfers two valid, distinct descriptors.
-    let pair = unsafe { (File::from_raw_fd(master), File::from_raw_fd(slave)) };
+    let pty = openpty(None, None).unwrap();
+    let pair = (File::from(pty.master), File::from(pty.slave));
     for file in [&pair.0, &pair.1] {
-        assert_eq!(
-            // SAFETY: F_SETFD accepts integer flags and retains descriptor ownership.
-            unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) },
-            0
-        );
+        assert_eq!(fcntl(file, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)), Ok(0));
     }
-    let mut attributes = std::mem::MaybeUninit::uninit();
-    assert_eq!(
-        // SAFETY: tcgetattr initializes attributes for this valid terminal.
-        unsafe { libc::tcgetattr(slave, attributes.as_mut_ptr()) },
-        0
-    );
-    // SAFETY: the successful tcgetattr initialized the value above.
-    let mut attributes = unsafe { attributes.assume_init() };
-    // SAFETY: cfmakeraw edits a valid termios value; tcsetattr copies it. Raw
-    // mode prevents terminal newline conversion from changing captured bytes.
-    unsafe {
-        libc::cfmakeraw(&mut attributes);
-        assert_eq!(libc::tcsetattr(slave, libc::TCSANOW, &attributes), 0);
-    }
+    let mut attributes = tcgetattr(&pair.1).unwrap();
+    // Raw mode prevents terminal newline conversion from changing captured bytes.
+    cfmakeraw(&mut attributes);
+    tcsetattr(&pair.1, SetArg::TCSANOW, &attributes).unwrap();
     pair
 }
 

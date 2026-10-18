@@ -4,9 +4,11 @@ mod temp_dir;
 #[path = "support/terminal.rs"]
 mod terminal;
 
+use nix::sys::signal::{Signal, kill};
+use nix::unistd::Pid;
 use std::{
     ffi::OsString,
-    fs::{self, File},
+    fs::File,
     io::{Read, Write},
     os::{
         fd::{AsRawFd, OwnedFd},
@@ -38,97 +40,6 @@ fn command(args: &[&str]) -> Command {
         });
     }
     command
-}
-
-#[test]
-fn closed_standard_stream_combinations_keep_their_original_failure() {
-    let directory = temp_dir::TempDir::new("closed-stream-combinations");
-    let input = directory.0.join("input");
-    fs::write(&input, b"a\nb\n").unwrap();
-    for closed in 1u8..8 {
-        let mut command = command(&["count", "1"]);
-        command.stdin(File::open(&input).unwrap());
-        // SAFETY: close is async-signal-safe and touches only the child's
-        // standard streams, after Command has installed its owned handles.
-        unsafe {
-            command.pre_exec(move || {
-                for fd in 0..3 {
-                    if closed & (1 << fd) != 0 && libc::close(fd) != 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                }
-                Ok(())
-            });
-        }
-        let output = command.output().unwrap();
-        let expected = if closed & 3 == 0 { 0 } else { 1 };
-        assert_eq!(
-            output.status.code(),
-            Some(expected),
-            "closed={closed}: {output:?}"
-        );
-        assert_eq!(
-            output.stdout,
-            if closed & 3 == 0 {
-                b"2\n".as_slice()
-            } else {
-                b""
-            },
-            "closed={closed}"
-        );
-        let error: &[u8] = if closed & 4 != 0 {
-            b""
-        } else if closed & 1 != 0 {
-            b"fastmash: read error: Bad file descriptor\n"
-        } else {
-            b"fastmash: write error: Bad file descriptor\n"
-        };
-        assert_eq!(output.stderr, error, "closed={closed}");
-    }
-}
-
-#[test]
-fn wrong_access_stream_combinations_keep_their_original_failure() {
-    let directory = temp_dir::TempDir::new("wrong-access-combinations");
-    let input = directory.0.join("input");
-    fs::write(&input, b"a\nb\n").unwrap();
-    for wrong in 1u8..8 {
-        let mut command = command(&["count", "1"]);
-        command.stdin(if wrong & 1 == 0 {
-            File::open(&input).unwrap()
-        } else {
-            File::options().write(true).open("/dev/null").unwrap()
-        });
-        if wrong & 2 != 0 {
-            command.stdout(File::open("/dev/null").unwrap());
-        }
-        if wrong & 4 != 0 {
-            command.stderr(File::open("/dev/null").unwrap());
-        }
-        let output = command.output().unwrap();
-        assert_eq!(
-            output.status.code(),
-            Some(if wrong & 3 == 0 { 0 } else { 1 }),
-            "wrong={wrong}: {output:?}"
-        );
-        assert_eq!(
-            output.stdout,
-            if wrong & 3 == 0 {
-                b"2\n".as_slice()
-            } else {
-                b""
-            },
-            "wrong={wrong}"
-        );
-        let error: &[u8] = if wrong & 4 != 0 {
-            b""
-        } else if wrong & 1 != 0 {
-            b"fastmash: read error: Bad file descriptor\n"
-        } else {
-            b"fastmash: write error: Bad file descriptor\n"
-        };
-        assert_eq!(output.stderr, error, "wrong={wrong}");
-    }
 }
 
 #[test]
@@ -326,8 +237,10 @@ fn interrupt_after_visible_terminal_output_ends_the_command() {
     let mut line = [0; 6];
     master.read_exact(&mut line).unwrap();
     assert_eq!(&line, b"ready\n");
-    // SAFETY: kill sends SIGINT to the child PID returned by Command.
-    assert_eq!(unsafe { libc::kill(child.id() as i32, libc::SIGINT) }, 0);
+    assert_eq!(
+        kill(Pid::from_raw(child.id() as i32), Signal::SIGINT),
+        Ok(())
+    );
     assert_eq!(wait(&mut child).signal(), Some(libc::SIGINT));
     drop(input);
     let mut error = Vec::new();

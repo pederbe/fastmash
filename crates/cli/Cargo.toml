@@ -49,6 +49,12 @@ sha2 = { version = "=0.11.0", default-features = false }
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 mem_prefetch = { version = "=0.1.1", default-features = false }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "=1.1.5", default-features = false, features = ["std", "rand"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+getrandom = { version = "=0.4.3", default-features = false, features = ["std"] }
+
 [features]
 default = []
 hotpath = ["dep:hotpath", "hotpath/hotpath"]
@@ -58,6 +64,9 @@ hotpath-cpu = ["hotpath", "hotpath/hotpath-cpu"]
 [dev-dependencies]
 # Independent byte-reader check for canonical CSV output, not the input parser.
 csv-core = "=0.1.13"
+# Safe descriptor file actions, access checks and bounded child reaping in tests.
+# Owned pseudo-terminals and raw mode setup use the term feature.
+nix = { version = "=0.31.3", default-features = false, features = ["fs", "signal", "term"] }
 # Exact arithmetic for the generated decimal power table and its tests.
 num-bigint = { version = "=0.5.1", default-features = false }
 
