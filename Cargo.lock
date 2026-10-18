@@ -247,6 +247,7 @@ name = "fastmash-locale-tools"
 version = "0.0.0"
 dependencies = [
  "fastmash-conversion",
+ "nix",
  "serde",
  "serde_json",
 ]

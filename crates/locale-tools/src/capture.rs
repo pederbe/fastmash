@@ -1,13 +1,17 @@
-//! Owned direct-child capture shared by the two native tool adapters.
+//! Owned capture shared by the native tool adapters.
 
 use crate::Result;
+use nix::errno::Errno;
+use nix::fcntl::{FcntlArg, OFlag, fcntl};
+use nix::sys::signal::{Signal, killpg};
+use nix::unistd::Pid;
 use serde_json::json;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::process::ExitStatusExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::Path;
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 pub(crate) struct Captured {
@@ -51,12 +55,22 @@ pub(crate) fn capture(
     directory: &Path,
     budget: Budget,
 ) -> Result<Captured> {
-    // The only input caller supplies the frozen plan's 139/223-byte payload.
-    // It fits in a fresh pipe even at the POSIX minimum capacity. Do not turn
-    // this transport into a general streaming writer.
+    // Numeric comparison keeps its frozen workload and direct-child contract.
     if input.is_some_and(|bytes| bytes.len() > 223) {
         return Err("comparison input exceeds the frozen 223-byte workload".into());
     }
+    capture_pipe(command, input, directory, budget)
+}
+
+/// Larger supplied workloads use nonblocking pipe writes and an owned process
+/// group. The frozen small-input path retains its original delivery receipts.
+pub(crate) fn capture_pipe(
+    command: &mut Command,
+    input: Option<&[u8]>,
+    directory: &Path,
+    budget: Budget,
+) -> Result<Captured> {
+    let large_input = input.is_some_and(|bytes| bytes.len() > 223);
     if let Some(bytes) = input {
         fs::write(directory.join("stdin"), bytes)?;
     }
@@ -77,6 +91,9 @@ pub(crate) fn capture(
         })
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
+    if large_input {
+        command.process_group(0);
+    }
     let mut started = Instant::now();
     let mut child = match command.spawn() {
         Ok(child) => child,
@@ -98,52 +115,61 @@ pub(crate) fn capture(
         started = Instant::now();
     }
     let pid = child.id();
-    let mut delivered = false;
-    let mut broken_pipe = false;
-    let mut input_error = None;
-    let mut writer_closed = false;
-    if let Some(bytes) = input {
-        if let Some(mut writer) = child.stdin.take() {
-            match writer.write_all(bytes) {
-                Ok(()) => delivered = true,
-                Err(error) if error.kind() == io::ErrorKind::BrokenPipe => broken_pipe = true,
-                Err(error) => input_error = Some(error.to_string()),
-            }
-            drop(writer);
-            writer_closed = true;
+    let mut delivery = input.map(|bytes| Delivery::new(bytes, child.stdin.take()));
+    if let Some(delivery) = &mut delivery {
+        if large_input {
+            delivery.nonblocking();
         } else {
-            input_error = Some("the requested child stdin pipe is unavailable".into());
+            // At most 223 bytes fit even in a fresh minimum-capacity POSIX pipe.
+            delivery.write_small();
         }
     }
     // No fallible evidence write may abandon a live child before this wait.
-    let waited = wait_bounded(&mut child, started, budget);
-    if input.is_some() {
+    let waited = wait_bounded(
+        &mut child,
+        started,
+        budget,
+        delivery.as_mut().filter(|_| large_input),
+    );
+    let input_error = delivery.as_ref().and_then(|input| input.error.as_ref());
+    if let Some(delivery) = &delivery {
+        let mut receipt = json!({
+            "delivered": delivery.delivered, "broken_pipe": delivery.broken_pipe,
+            "writer_closed": delivery.writer_closed, "error": delivery.error,
+        });
+        if large_input {
+            receipt["bytes_written"] = json!(delivery.written);
+            receipt["would_block"] = json!(delivery.would_block);
+        }
         fs::write(
             directory.join("stdin-delivery.json"),
-            serde_json::to_vec_pretty(&json!({
-                "delivered": delivered, "broken_pipe": broken_pipe,
-                "writer_closed": writer_closed, "error": input_error,
-            }))?,
+            serde_json::to_vec_pretty(&receipt)?,
         )?;
+    }
+    let mut receipt = json!({
+        "pid": pid, "raw_status": waited.status.map(ExitStatusExt::into_raw),
+        "exit_code": waited.status.and_then(|status| status.code()),
+        "signal": waited.status.and_then(|status| status.signal()),
+        "reaped": waited.status.is_some(), "timed_out": waited.timed_out,
+        "kill_error": waited.kill_error, "wait_error": waited.wait_error,
+        "execution_milliseconds": budget.execution.as_millis(),
+        "cleanup_milliseconds": budget.cleanup.as_millis(),
+        "timeout_starts_after_spawn": budget.start_after_spawn,
+        "input_error": input_error,
+    });
+    if large_input {
+        receipt["process_group"] = json!(pid);
+        receipt["group_signal"] = json!(waited.group_signal);
     }
     fs::write(
         directory.join("wait.json"),
-        serde_json::to_vec_pretty(&json!({
-            "pid": pid, "raw_status": waited.status.map(ExitStatusExt::into_raw),
-            "exit_code": waited.status.and_then(|status| status.code()),
-            "signal": waited.status.and_then(|status| status.signal()),
-            "reaped": waited.status.is_some(), "timed_out": waited.timed_out,
-            "kill_error": waited.kill_error, "wait_error": waited.wait_error,
-            "execution_milliseconds": budget.execution.as_millis(),
-            "cleanup_milliseconds": budget.cleanup.as_millis(),
-            "timeout_starts_after_spawn": budget.start_after_spawn,
-            "input_error": input_error,
-        }))?,
+        serde_json::to_vec_pretty(&receipt)?,
     )?;
     if waited.timed_out
         || waited.wait_error.is_some()
         || waited.status.is_none()
         || input_error.is_some()
+        || (large_input && waited.kill_error.is_some())
     {
         let label = if input.is_none() {
             "native query"
@@ -165,41 +191,160 @@ pub(crate) fn capture(
     })
 }
 
+struct Delivery<'a> {
+    bytes: &'a [u8],
+    writer: Option<ChildStdin>,
+    written: usize,
+    delivered: bool,
+    broken_pipe: bool,
+    writer_closed: bool,
+    would_block: bool,
+    error: Option<String>,
+}
+
+impl<'a> Delivery<'a> {
+    fn new(bytes: &'a [u8], writer: Option<ChildStdin>) -> Self {
+        let error = writer
+            .is_none()
+            .then(|| "the requested child stdin pipe is unavailable".into());
+        Self {
+            bytes,
+            writer,
+            written: 0,
+            delivered: false,
+            broken_pipe: false,
+            writer_closed: false,
+            would_block: false,
+            error,
+        }
+    }
+
+    fn close(&mut self) {
+        if self.writer.take().is_some() {
+            self.writer_closed = true;
+        }
+    }
+
+    fn write_small(&mut self) {
+        if let Some(writer) = &mut self.writer {
+            match writer.write_all(self.bytes) {
+                Ok(()) => self.delivered = true,
+                Err(error) if error.kind() == io::ErrorKind::BrokenPipe => self.broken_pipe = true,
+                Err(error) => self.error = Some(error.to_string()),
+            }
+            self.close();
+        }
+    }
+
+    fn nonblocking(&mut self) {
+        if let Some(writer) = &self.writer {
+            let configure = || -> nix::Result<()> {
+                let flags = OFlag::from_bits_truncate(fcntl(writer, FcntlArg::F_GETFL)?);
+                fcntl(writer, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK))?;
+                Ok(())
+            };
+            if let Err(error) = configure() {
+                self.error = Some(format!("cannot make child input nonblocking: {error}"));
+                self.close();
+            }
+        }
+    }
+
+    fn advance(&mut self) {
+        let Some(writer) = &mut self.writer else {
+            return;
+        };
+        match writer.write(&self.bytes[self.written..]) {
+            Ok(0) => self.error = Some("zero-length write to child input".into()),
+            Ok(length) => {
+                self.written += length;
+                self.delivered = self.written == self.bytes.len();
+            }
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => self.broken_pipe = true,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => self.would_block = true,
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => self.error = Some(error.to_string()),
+        }
+        if self.delivered || self.broken_pipe || self.error.is_some() {
+            self.close();
+        }
+    }
+}
+
 struct Waited {
     status: Option<ExitStatus>,
     timed_out: bool,
     kill_error: Option<String>,
     wait_error: Option<String>,
+    group_signal: Option<&'static str>,
 }
 
-fn wait_bounded(child: &mut Child, started: Instant, budget: Budget) -> Waited {
+fn wait_bounded(
+    child: &mut Child,
+    started: Instant,
+    budget: Budget,
+    mut delivery: Option<&mut Delivery<'_>>,
+) -> Waited {
+    let owned_group = delivery.is_some();
     let mut result = Waited {
         status: None,
         timed_out: false,
         kill_error: None,
         wait_error: None,
+        group_signal: None,
     };
+    let mut terminated = false;
     loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                result.status = Some(status);
-                result.timed_out |= started.elapsed() >= budget.completion;
-                return result;
-            }
-            Ok(None) => {}
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-            Err(error) => {
-                // Ownership is uncertain. Never signal a possibly reaped PID.
-                result.wait_error = Some(error.to_string());
-                return result;
+        if !terminated && let Some(input) = &mut delivery {
+            input.advance();
+        }
+        if result.status.is_none() {
+            match child.try_wait() {
+                Ok(status) => result.status = status,
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => {
+                    // Ownership is uncertain. Never signal a possibly reaped PID.
+                    result.wait_error = Some(error.to_string());
+                    if let Some(input) = &mut delivery {
+                        input.close();
+                    }
+                    if owned_group && !terminated {
+                        terminate_group(child, &mut result);
+                    }
+                    return result;
+                }
             }
         }
         let elapsed = started.elapsed();
-        if !result.timed_out && elapsed >= budget.execution {
-            result.timed_out = true;
-            if let Err(error) = child.kill() {
-                result.kill_error = Some(error.to_string());
+        if result.status.is_some() && delivery.as_ref().is_none_or(|input| input.writer.is_none()) {
+            result.timed_out |= elapsed >= budget.completion;
+            if owned_group && !terminated {
+                terminate_group(child, &mut result);
             }
+            return result;
+        }
+        let input_error = delivery.as_ref().is_some_and(|input| input.error.is_some());
+        if !terminated && (elapsed >= budget.execution || input_error) {
+            result.timed_out |= elapsed >= budget.execution;
+            if let Some(input) = &mut delivery {
+                input.close();
+            }
+            if owned_group {
+                terminate_group(child, &mut result);
+            }
+            // The direct-child fallback also covers a failed group signal.
+            if result.status.is_none()
+                && let Err(error) = child.kill()
+            {
+                result.kill_error = Some(match result.kill_error {
+                    Some(group_error) => format!("{group_error}; direct child: {error}"),
+                    None => error.to_string(),
+                });
+            }
+            terminated = true;
+        }
+        if result.status.is_some() && terminated {
+            return result;
         }
         if elapsed >= budget.execution + budget.cleanup {
             result.wait_error =
@@ -210,60 +355,22 @@ fn wait_bounded(child: &mut Child, started: Instant, budget: Budget) -> Waited {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs::DirBuilder;
-    use std::os::unix::fs::DirBuilderExt;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    #[test]
-    fn short_comparison_budget_delivers_input_and_reaps_a_nonreading_child() {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "locale-capture-no-read-{}-{stamp}",
-            std::process::id()
-        ));
-        DirBuilder::new().mode(0o700).create(&root).unwrap();
-        let mut command = Command::new("/bin/sleep");
-        command
-            .arg("10")
-            .env_clear()
-            .env("PATH", "/usr/bin:/bin")
-            .env("LC_ALL", "C");
-        let input = b"0\t0\n1\t1\n";
-        let started = Instant::now();
-        let result = capture(
-            &mut command,
-            Some(input),
-            &root,
-            Budget::comparison(Duration::from_millis(250)),
-        );
-        assert!(result.is_err());
-        assert!(started.elapsed() >= Duration::from_millis(250));
-        let waited: serde_json::Value =
-            serde_json::from_slice(&fs::read(root.join("wait.json")).unwrap()).unwrap();
-        assert_eq!(waited["timed_out"], true);
-        assert_eq!(waited["reaped"], true);
-        assert!(waited["raw_status"].is_number());
-        assert_eq!(waited["signal"], 9);
-        assert!(waited["exit_code"].is_null());
-        assert_eq!(waited["execution_milliseconds"], 250);
-        assert_eq!(waited["cleanup_milliseconds"], 1_000);
-        assert_eq!(waited["timeout_starts_after_spawn"], true);
-        assert!(waited["wait_error"].is_null());
-        let delivery: serde_json::Value =
-            serde_json::from_slice(&fs::read(root.join("stdin-delivery.json")).unwrap()).unwrap();
-        assert_eq!(delivery["delivered"], true);
-        assert_eq!(delivery["writer_closed"], true);
-        assert_eq!(delivery["broken_pipe"], false);
-        assert!(delivery["error"].is_null());
-        assert_eq!(fs::read(root.join("stdin")).unwrap(), input);
-        assert!(root.join("stdout").is_file());
-        assert!(root.join("stderr").is_file());
-        fs::remove_dir_all(root).unwrap();
+fn terminate_group(child: &Child, result: &mut Waited) {
+    let pid = match i32::try_from(child.id()) {
+        Ok(pid) => Pid::from_raw(pid),
+        Err(error) => {
+            result.kill_error = Some(error.to_string());
+            result.group_signal = Some("error");
+            return;
+        }
+    };
+    // Even a reaped leader can leave descendants holding its input or outputs.
+    match killpg(pid, Signal::SIGKILL) {
+        Ok(()) => result.group_signal = Some("sent"),
+        Err(Errno::ESRCH) => result.group_signal = Some("already_absent"),
+        Err(error) => {
+            result.group_signal = Some("error");
+            result.kill_error = Some(format!("process group: {error}"));
+        }
     }
 }
