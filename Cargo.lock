@@ -206,6 +206,7 @@ dependencies = [
  "md-5",
  "mem_prefetch",
  "memchr",
+ "nix",
  "num-bigint",
  "rustc_apfloat",
  "rustix",
