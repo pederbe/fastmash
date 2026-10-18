@@ -19,9 +19,20 @@ path = "tests/support/collation-words-fixture.rs"
 test = false
 bench = false
 
+[[bin]]
+name = "locale-capture-fixture"
+path = "tests/support/capture-fixture.rs"
+test = false
+bench = false
+
 [dependencies]
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
+
+[target.'cfg(unix)'.dependencies]
+# Reuse the pinned safe pipe-flag and group-signal interfaces used by the
+# corpus driver, without importing its command policies or first-party FFI.
+nix = { version = "=0.31.3", default-features = false, features = ["fs", "signal"] }
 
 [dev-dependencies]
 # Compile emitted tables against the real safe Profile constructor and getters.
