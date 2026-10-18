@@ -65,7 +65,8 @@ hotpath-cpu = ["hotpath", "hotpath/hotpath-cpu"]
 # Independent byte-reader check for canonical CSV output, not the input parser.
 csv-core = "=0.1.13"
 # Safe descriptor file actions, access checks and bounded child reaping in tests.
-nix = { version = "=0.31.3", default-features = false, features = ["fs", "signal"] }
+# Owned pseudo-terminals and raw mode setup use the term feature.
+nix = { version = "=0.31.3", default-features = false, features = ["fs", "signal", "term"] }
 # Exact arithmetic for the generated decimal power table and its tests.
 num-bigint = { version = "=0.5.1", default-features = false }
 
