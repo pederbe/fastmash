@@ -15,6 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const USAGE: &str = "Usage: fastmash-compare-collation-punctuation --evidence PATH [--locale NAME]... [--] VERIFICATION_JSON CANDIDATE REFERENCE SORT LOCPATH OUTPUT_JSON";
 
 struct Run {
+    owned_directory: PathBuf,
     root: PathBuf,
     verification: PathBuf,
     original: Vec<u8>,
@@ -37,9 +38,14 @@ impl Run {
             std::process::id()
         ));
         DirBuilder::new().mode(0o700).create(&root).unwrap();
+        let owned_directory = root;
+        let root = owned_directory.join("via-link");
+        // Exercise physical cwd observations through a supplied symlink path.
+        symlink(".", &root).unwrap();
         let verification_path = root.join("verification.json");
         fs::write(&verification_path, verification).unwrap();
         Self {
+            owned_directory,
             verification: verification_path,
             original: verification.to_vec(),
             candidate: env!("CARGO_BIN_EXE_collation-punctuation-fixture").into(),
@@ -132,7 +138,7 @@ impl Run {
             fs::read(self.root.join(&self.verification)).unwrap(),
             self.original
         );
-        fs::remove_dir_all(self.root).unwrap();
+        fs::remove_dir_all(self.owned_directory).unwrap();
     }
 }
 
@@ -142,6 +148,18 @@ fn reply(stdout: &[u8], stderr: &[u8], status: u8) -> Value {
 
 fn read_json(path: &Path) -> Value {
     serde_json::from_slice(&fs::read(path).unwrap()).unwrap()
+}
+
+fn filesystem_name(prefix: &str) -> OsString {
+    let mut name = prefix.as_bytes().to_vec();
+    // Use Unicode filenames on macOS, retaining non-UTF-8 names on Linux.
+    // Raw SORT and LOCPATH arguments below exercise arbitrary bytes on both.
+    #[cfg(target_os = "linux")]
+    name.push(0xff);
+    #[cfg(not(target_os = "linux"))]
+    name.extend_from_slice("é".as_bytes());
+    name.push(b'\n');
+    OsString::from_vec(name)
 }
 
 fn expected_input() -> Vec<u8> {
@@ -162,6 +180,8 @@ fn assert_success(output: &Output, summary: &str, root: &Path) {
 
 fn assert_observed_pair(run: &Run, observations: &[Value], index: usize, name: &str) {
     let expected_input = expected_input();
+    let working_directory = fs::canonicalize(&run.root).unwrap();
+    assert_ne!(working_directory, run.root);
     for (offset, role, argv0, program) in [
         (0, "candidate", "fastmash", &run.candidate),
         (1, "reference", "datamash", &run.reference),
@@ -182,7 +202,7 @@ fn assert_observed_pair(run: &Run, observations: &[Value], index: usize, name: &
         assert_eq!(observed["input"], json!(expected_input));
         assert_eq!(
             observed["working_directory"],
-            json!(run.root.as_os_str().as_bytes())
+            json!(working_directory.as_os_str().as_bytes())
         );
         assert_eq!(observed["environment"].as_object().unwrap().len(), 4);
         assert_eq!(observed["environment"]["PATH"], json!(b"/usr/bin:/bin"));
@@ -301,19 +321,15 @@ fn representative_subset_is_sorted_deduplicated_and_preserves_os_byte_paths() {
     }}))
     .unwrap();
     let mut run = Run::new("raw-paths", &raw);
-    let verification = PathBuf::from(OsString::from_vec(b"-verification-'\xff\n.json".to_vec()));
+    let verification = PathBuf::from(filesystem_name("-verification-'"));
     fs::rename(&run.verification, run.root.join(&verification)).unwrap();
     run.verification = verification;
-    run.report = OsString::from_vec(b"-report-'\x80\n.json".to_vec()).into();
-    run.evidence = run
-        .root
-        .join(OsString::from_vec(b"evidence-'\xff\n".to_vec()));
+    run.report = filesystem_name("-report-'").into();
+    run.evidence = run.root.join(filesystem_name("evidence-'"));
     run.sort = OsString::from_vec(b"-sort-'\xff\n".to_vec()).into();
     run.locpath = OsString::from_vec(b"relative-locales-'\x80\n".to_vec()).into();
     for role in ["candidate", "reference"] {
-        let mut name = format!("{role}-'").into_bytes();
-        name.extend_from_slice(b"\xff\n");
-        let path = run.root.join(OsString::from_vec(name));
+        let path = run.root.join(filesystem_name(&format!("{role}-'")));
         symlink(env!("CARGO_BIN_EXE_collation-punctuation-fixture"), &path).unwrap();
         if role == "candidate" {
             run.candidate = path;
