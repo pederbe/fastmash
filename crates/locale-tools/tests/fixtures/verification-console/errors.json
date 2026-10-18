@@ -1,0 +1,66 @@
+{
+ "variants": {
+  "0": {
+   "locales": {
+    "en_US": {
+     "verified": false,
+     "tag": "fixture-mixed-unicode",
+     "failures": {
+      "alphabet": {
+       "error": [
+        "candidate can't \"quote\"\\\u0000\u0007\b\t\n\u000b\f\r�",
+        "reference can't"
+       ]
+      },
+      "digits": {
+       "error": [
+        "\"digits\" é́😀 ​͸ 𝅳�",
+        "bad:���|���|����|�"
+       ]
+      }
+     },
+     "other_scripts": {}
+    }
+   },
+   "baseline_displaced": {
+    "latin": [],
+    "vietnamese": [],
+    "greek": [],
+    "cyrillic": [],
+    "armenian": [],
+    "hebrew": [],
+    "arabic": [],
+    "devanagari": [],
+    "bengali": [],
+    "gurmukhi": [],
+    "gujarati": [],
+    "oriya": [],
+    "tamil": [],
+    "telugu": [],
+    "kannada": [],
+    "malayalam": [],
+    "sinhala": [],
+    "thai": [],
+    "lao": [],
+    "tibetan": [],
+    "myanmar": [],
+    "georgian": [],
+    "ethiopic": [],
+    "khmer": [],
+    "thaana": [],
+    "hiragana": [],
+    "katakana": [],
+    "hangul": [],
+    "han": []
+   }
+  }
+ },
+ "icu": "fixture-only-not-native-reference",
+ "glibc": "fixture-only-not-native-reference",
+ "locales": {
+  "en_US": {
+   "tag": null,
+   "alphabet_data": true
+  }
+ }
+}

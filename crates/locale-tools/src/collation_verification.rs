@@ -4,11 +4,12 @@
 
 use crate::Result;
 use crate::collation_plan::OrderDifference;
+use icu_properties_15::{GeneralCategoryGroup, maps};
 use serde::de::{Error as _, MapAccess, Visitor};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
+use std::fmt::{self, Write as _};
 use std::marker::PhantomData;
 
 pub type CaseOutcome = std::result::Result<OrderDifference, [String; 2]>;
@@ -25,6 +26,7 @@ pub struct Observation {
 #[derive(Debug)]
 pub struct Report {
     document: Document,
+    console_rows: String,
     verified: usize,
     observed: usize,
     variant: i64,
@@ -42,8 +44,9 @@ impl Report {
     /// report is returned. This is not arbitrary-prior-JSON compatibility.
     ///
     /// Comparison vectors retain their established sorted unique contract.
-    /// Scripts are complete ordered maps. Native statuses/decoding and
-    /// per-locale Python-style console messages remain the caller's concern.
+    /// Scripts are complete ordered maps. Native statuses and decoding remain
+    /// the caller's concern. Console rows retain equivalent duplicate
+    /// observations even where JSON and run counters aggregate their names.
     /// Equivalent aggregated duplicates are retained until bookkeeping, while
     /// conflicting aggregated duplicates return an error.
     pub fn update(
@@ -83,6 +86,7 @@ impl Report {
             }
         }
         let mut run = Members::empty();
+        let mut console_rows = String::new();
         for mut observation in raw {
             let candidate = candidates.locales.get(&observation.name).ok_or_else(|| {
                 format!("observed locale {:?} is not a candidate", observation.name)
@@ -112,6 +116,7 @@ impl Report {
             }
             let verified = observation.failures.0.is_empty();
             let tag = candidate.tag(variant)?.clone();
+            write_console_row(&mut console_rows, &observation.name, &observation.failures);
             run.insert(
                 observation.name,
                 StoredLocale {
@@ -172,6 +177,7 @@ impl Report {
         document.locales = Some(final_locales);
         Ok(Self {
             document,
+            console_rows,
             verified,
             observed,
             variant,
@@ -195,6 +201,85 @@ impl Report {
             self.verified, self.observed, self.variant, self.overall
         )
     }
+
+    /// Complete producer-style console output, including every observed row
+    /// and the final summary, each terminated by LF.
+    pub fn console_output(&self) -> String {
+        let mut output = self.console_rows.clone();
+        output.push_str(&self.summary_line());
+        output.push('\n');
+        output
+    }
+}
+
+fn write_console_row(output: &mut String, name: &str, failures: &Members<Failure>) {
+    output.push_str(name);
+    if failures.0.is_empty() {
+        output.push_str(": verified\n");
+        return;
+    }
+    output.push_str(": differs ");
+    for (index, (label, failure)) in failures.0.iter().enumerate() {
+        if index != 0 {
+            output.push(' ');
+        }
+        output.push_str(label);
+        output.push(':');
+        match failure {
+            Failure::Moved(Moved {
+                displaced: count, ..
+            })
+            | Failure::Script(Extra::Count(count)) => {
+                write!(output, "{count}").expect("writing to a String cannot fail");
+            }
+            Failure::Script(Extra::Error(ScriptError::Error)) => output.push_str("error"),
+            Failure::Failed(failed) => {
+                output.push_str("{'error': [");
+                write_diagnostic_string(output, &failed.error[0]);
+                output.push_str(", ");
+                write_diagnostic_string(output, &failed.error[1]);
+                output.push_str("]}");
+            }
+        }
+    }
+    output.push('\n');
+}
+
+// The fixed error pair uses CPython 3.12 string repr, not JSON escaping.
+// Quote/escape rules: CPython v3.12.14 Objects/unicodeobject.c, unicode_repr.
+// Printability uses its Unicode 15 C/Z categories except ASCII space.
+fn write_diagnostic_string(output: &mut String, text: &str) {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let categories = maps::general_category();
+    let nonprintable = GeneralCategoryGroup::Other.union(GeneralCategoryGroup::Separator);
+    output.push(quote);
+    for ch in text.chars() {
+        match ch {
+            ch if ch == quote || ch == '\\' => {
+                output.push('\\');
+                output.push(ch);
+            }
+            '\t' => output.push_str("\\t"),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            ch if ch != ' ' && nonprintable.contains(categories.get(ch)) => {
+                let code = u32::from(ch);
+                if code <= 0xff {
+                    write!(output, "\\x{code:02x}").expect("writing to a String cannot fail");
+                } else if code <= 0xffff {
+                    write!(output, "\\u{code:04x}").expect("writing to a String cannot fail");
+                } else {
+                    write!(output, "\\U{code:08x}").expect("writing to a String cannot fail");
+                }
+            }
+            ch => output.push(ch),
+        }
+    }
+    output.push(quote);
 }
 
 #[derive(Deserialize)]
