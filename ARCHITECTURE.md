@@ -91,8 +91,8 @@ locale queries, JSON and Rust table generation, collation-table projection,
 numeric comparison plans, fixed collation word lists and collation reports.
 Its Unix comparison executor runs bounded external
 commands and retains their exact streams and statuses in a private evidence
-directory. Full reference and transport parity remain pending, so the Python
-tools stay in use.
+directory. Rust tools generate and check the numeric tables. Python collation
+tools remain in use while their replacement checks are completed.
 
 ## How a command runs
 

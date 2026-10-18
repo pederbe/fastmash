@@ -69,15 +69,54 @@ verification updates accept the original producer's format and refuse unsupporte
 prior fields or record order. Unix tests exercise comparison
 execution and both command interfaces with fixed local fixtures. Linux/glibc
 also exercises the numeric generator with the installed POSIX locale and an
-invalid locale. Keep the Python locale tools for reference work until full
-reference and transport parity is established. The numeric emitter's header names
-its actual
+invalid locale. Numeric generation and comparison use the Rust tools. The Python
+collation tools remain in use while their replacement checks are completed.
+The numeric emitter's header names its actual
 `fastmash-generate-numeric-locales` command. This provenance-only difference from
 legacy emission leaves the table body and data unchanged.
 
+Build the compiled locale tree with the reference's `localedef --no-archive`, using its
+`SUPPORTED` list. Include each UTF-8 entry without a modifier under its listed
+name, keeping names without a codeset suffix bare. Include every modifier entry,
+even if it lists another character set, compiled with UTF-8 under
+`NAME.UTF-8@MODIFIER`. Its generated table key remains `NAME@MODIFIER`. Keep the
+modifier after the codeset suffix and do not replace it with its base locale,
+since their numeric rules can differ.
+
+For example, compile a modifier with:
+
+```sh
+localedef --no-archive -i nan_TW@latin -f UTF-8 /path/to/compiled-locales/nan_TW.UTF-8@latin
+```
+
+To generate numeric JSON and Rust source from the compiled locale tree, run:
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-generate-numeric-locales -- \
+  --ldd /path/to/reference/bin/ldd --locale /path/to/reference/bin/locale \
+  --uname /path/to/reference/bin/uname -- /path/to/compiled-locales \
+  /tmp/fastmash-numeric.json /tmp/fastmash-numeric.rs
+```
+
+Run in the identified reference environment with its matching glibc tools and
+compiled locale data. The generator queries native tools rather than the
+product's built-in tables, so the host's default locale data is not a substitute
+for that reference.
+Use fresh output paths and keep the generated files separate from the committed
+tables until their data and behavior have been checked.
+
 The numeric comparator accepts explicit candidate and reference executables,
-locale data and locale names. Each run retains raw evidence in a new directory.
-Check its options with:
+compiled locale data and the numeric JSON. By default it checks one locale for
+each distinct combination of decimal separator, thousands separator and grouping
+rules. Each run retains raw evidence in a new directory.
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-compare-numeric-locales -- \
+  --evidence /tmp/fastmash-numeric-comparison -- /path/to/fastmash \
+  /path/to/reference /path/to/compiled-locales data/locales/glibc-lc-numeric.json
+```
+
+Run the comparison in the same reference environment. Check its options with:
 
 ```sh
 cargo run --release -p fastmash-locale-tools --bin fastmash-compare-numeric-locales -- --help
