@@ -102,8 +102,9 @@ arguments, standard input, standard output, standard error and exit status.
 Each file covers one area, such as grouping, selectors, quantiles, record
 separators or pipeline failures (closed pipes, unreadable input, full disks).
 
-Native tests use the same command boundary. `native_streams.rs` covers inherited
-descriptors and signals, terminal buffering and output faults; `native_sort.rs`
+Native tests use the same command boundary. `native_descriptors.rs` covers closed
+and incorrectly opened standard streams. `native_streams.rs` covers inherited
+signals, terminal buffering and output faults; `native_sort.rs`
 covers stable sorting, quoted CSV, complete records, selection, weighted
 calculations, hash restart, piped replay, supported locales and forced spill.
 Its interruption checks wait until a private run has been opened and unlinked
