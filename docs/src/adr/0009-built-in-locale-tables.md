@@ -31,9 +31,9 @@ second collation path, and greatly enlarges what must be tested.
   from glibc's data, not by reading host locales.
 - The tables follow glibc 2.43. Regenerate them when a glibc release changes
   locale data that Fastmash uses, or when a user reports a difference:
-  `scripts/generate_numeric_locales.py` writes the number table, checked with
-  `scripts/compare_numeric_locales.py`; `scripts/verify_collation_locales.py`
-  chooses and verifies the sorting locales; and
-  `scripts/generate_collation_glibc.py` writes glibc's treatment of the
-  characters it collates apart from letters. Their inputs and results are in
-  `data/locales/`.
+  `fastmash-generate-numeric-locales` writes the number table, checked with
+  `fastmash-compare-numeric-locales`. The [testing guide](../contributing/testing.md)
+  describes both Rust tools. `scripts/verify_collation_locales.py` chooses and
+  verifies the sorting locales. `scripts/generate_collation_glibc.py` writes
+  glibc's treatment of the characters it collates apart from letters. Their inputs
+  and results are in `data/locales/`.
