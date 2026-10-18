@@ -89,10 +89,13 @@ The unpublished `fastmash-locale-tools` crate in `crates/locale-tools/` is also 
 development tool outside the product dependency graph. It owns native numeric
 locale queries, JSON and Rust table generation, collation-table projection,
 numeric comparison plans, fixed collation word lists and collation reports.
-Its Unix comparison executor runs bounded external
-commands and retains their exact streams and statuses in a private evidence
-directory. Rust tools generate and check the numeric tables. Python collation
-tools remain in use while their replacement checks are completed.
+Its Unix numeric and punctuation comparison executors run bounded external
+commands and retain their exact streams and statuses in a private evidence
+directory. Punctuation comparison selects the retained verification's nonempty
+final tags, sends the fixed word list through pipes and preserves native failures
+and order differences in the existing report format. Rust tools generate and
+check the numeric tables. Python collation tools remain in use while their
+replacement checks are completed.
 
 ## How a command runs
 

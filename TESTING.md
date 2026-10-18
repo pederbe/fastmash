@@ -134,6 +134,32 @@ at the signed index `N` from `data/locales/collation-candidates.json` instead. N
 indices count from the end of each locale's list. This command projects supplied
 data without probing a native collator or updating a product table.
 
+To compare the fixed punctuation workload against an identified native reference,
+use explicit executables, GNU sort and matching compiled locale data:
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-compare-collation-punctuation -- \
+  --evidence /tmp/fastmash-punctuation-evidence --locale en_US --locale tk_TM -- \
+  data/locales/collation-verification.json /path/to/fastmash /path/to/reference \
+  /path/to/gnu-sort /path/to/compiled-locales /tmp/fastmash-punctuation.json
+```
+
+Both the report file and evidence directory must be new. Without `--locale`, the
+command selects every verification entry with a nonempty final tag. Repeated
+selections form a subset in the source's sorted name order. Names are kept
+literally and receive the original `.UTF-8` suffix. Each candidate and reference
+invocation receives all 1,983 punctuation words through a pipe, with a 300-second
+execution budget and the existing cleanup reserve. Raw arguments, environment,
+input, output, delivery and wait receipts remain in the private evidence directory.
+
+The command prints the existing punctuation summary and writes its report format.
+Order differences and native nonzero statuses remain report observations and do
+not make a completed report a command failure. Spawn, transport and strict
+first-field UTF-8 decoding errors stop the run with partial evidence and no
+completed report. Successful stderr is retained without rejecting the result.
+This command covers fixed punctuation only. Keep the Python collation tools until
+the remaining workflows and reference parity have been established.
+
 ### Integration tests
 
 `crates/cli/tests/` runs the compiled `fastmash` binary as a user would:

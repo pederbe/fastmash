@@ -13,6 +13,8 @@ pub mod comparison;
 pub mod executor;
 #[cfg(unix)]
 pub mod native;
+#[cfg(unix)]
+pub mod punctuation_executor;
 
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Deserialize, Serialize, Serializer};
