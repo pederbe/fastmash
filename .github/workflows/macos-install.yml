@@ -97,6 +97,7 @@ jobs:
         env:
           ARCHIVE_KIND: ${{ inputs.release-archive && 'release-candidate' || 'development-test' }}
         run: |
+          cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
           printf 'FASTMASH_ARCHIVE_KIND=%s\n' "$ARCHIVE_KIND" >> "$GITHUB_ENV"
           FASTMASH_ARCHIVE_KIND="$ARCHIVE_KIND" cargo test --release --locked -p fastmash --test archive_installation native_archive_installs_and_runs_outside_the_checkout -- --ignored --nocapture 2>&1 | tee "$EVIDENCE/installation.log"
           bash release/check-installed.sh "$(sed -n 's/^version = "\([^\"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)" "$FASTMASH_ARCHIVE_INSTALL_DIR" "$FASTMASH_ARCHIVE_DIR/binary.sha256"

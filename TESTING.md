@@ -22,6 +22,7 @@ or WSL2. The native Apple Silicon development gate below runs on macOS 15 and 26
 ```sh
 cargo fmt --all --check                  # formatting
 cargo clippy --workspace --all-targets -- -D warnings   # lints
+cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 cargo test --release --workspace         # unit and integration tests
 cargo build --release --workspace        # the binaries the corpus runs
 python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version 0.2.0
@@ -36,6 +37,12 @@ Installer tests exercise both Linux and macOS archive layouts, so Linux test
 environments also need `shasum` on `PATH`. On Arch-based systems, it is supplied
 at `/usr/bin/core_perl/shasum`; add that directory to the test environment's
 `PATH` if needed.
+
+Build the private release tools before the workspace tests. Installed-release
+tests invoke the prepared checker without starting another Cargo build. If the
+tools are built elsewhere, set `FASTMASH_INSTALLED_CHECKER` and
+`FASTMASH_INSTALLED_PLATFORM_FIXTURE` to their executable paths.
+
 A change is ready for review when all of these checks pass locally. CI also runs
 on pushes and pull requests against `main` once the repository is public;
 private automatic runs skip their jobs, while manual runs remain available.
@@ -53,6 +60,14 @@ number parsing and formatting, and the arithmetic primitives.
 ```sh
 cargo test -p fastmash-portable-numerics   # one crate
 cargo test -p fastmash grammar             # tests whose names match "grammar"
+```
+
+For changes to the private installation and publication tools, also run:
+
+```sh
+cargo fmt --manifest-path release/publication-test-server/Cargo.toml --check
+cargo clippy --manifest-path release/publication-test-server/Cargo.toml --target-dir target --all-targets --locked -- -D warnings
+cargo test --manifest-path release/publication-test-server/Cargo.toml --target-dir target --locked
 ```
 
 For locale tooling checks, run:
@@ -298,6 +313,7 @@ export FASTMASH_TEST_FULL_OUTPUT_LIBRARY="$helpers/full-output.dylib"
 export FASTMASH_TEST_FULL_OUTPUT_PROBE="$helpers/full-output-probe"
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 cargo test --release --workspace --locked
 cargo build --release --workspace --locked
 version=$(sed -n '\''s/^version = "\([^"]*\)"$/\1/p'\'' crates/cli/Cargo.toml | head -n 1)

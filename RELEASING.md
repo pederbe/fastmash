@@ -167,6 +167,7 @@ set -euo pipefail
 candidate=$(realpath "$1")
 version=$2
 export FASTMASH_TEST_BINARY="$candidate/fastmash"
+cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 cargo test --release --workspace --locked
 python3 -B scripts/check_regressions.py --binary "$FASTMASH_TEST_BINARY" --expected-version "$version"
 python3 -B scripts/check_regressions.py --binary "$FASTMASH_TEST_BINARY" --expected-version "$version" --stdin-file

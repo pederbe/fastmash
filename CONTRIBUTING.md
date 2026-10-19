@@ -34,6 +34,7 @@ coreutils. Native macOS development is verified by the
 git clone https://github.com/pederbe/fastmash
 cd fastmash
 cargo build
+cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 cargo test --release --workspace
 ./target/debug/fastmash --help
 ```
