@@ -74,6 +74,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Prepare installed verification tools
+        run: cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
       - run: cargo test --release --workspace --locked
       - run: cargo build --release --workspace --locked
       # The supervisor must sit beside the binary (built by the workspace build).
@@ -167,6 +169,7 @@ jobs:
         with:
           toolchain: "1.88" # rust-version in crates/*/Cargo.toml
       - run: cargo check --workspace --locked
+      - run: cargo check --manifest-path release/publication-test-server/Cargo.toml --target-dir target --all-targets --locked
 
   licenses:
     name: Dependency licenses and advisories

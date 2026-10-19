@@ -1,4 +1,5 @@
 //! The Linux release check executes an installed, checksummed pair.
+#![forbid(unsafe_code)]
 #![cfg(target_os = "linux")]
 
 use std::os::unix::fs::PermissionsExt;
@@ -6,6 +7,21 @@ use std::{fs, path::Path, process::Command};
 
 #[path = "support/temp_dir.rs"]
 mod test_dir;
+
+fn prepared_tool(name: &str, variable: &str) -> std::path::PathBuf {
+    let path = std::env::var_os(variable)
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../target/debug")
+                .join(name)
+        });
+    assert!(
+        path.is_file(),
+        "prepare release tools before workspace tests: cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins"
+    );
+    path.canonicalize().unwrap()
+}
 
 fn installed_pair(directory: &Path) {
     fs::copy(env!("CARGO_BIN_EXE_fastmash"), directory.join("fastmash")).unwrap();
@@ -38,6 +54,10 @@ fn check(directory: &Path, version: &str) -> std::process::Output {
         .arg(directory.join("qualified.sha256"))
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
+        .env(
+            "FASTMASH_INSTALLED_CHECKER",
+            prepared_tool("fastmash-check-installed", "FASTMASH_INSTALLED_CHECKER"),
+        )
         .current_dir(directory)
         .output()
         .unwrap()
@@ -57,6 +77,10 @@ fn release_check_rejects_a_version_from_another_release() {
     installed_pair(&directory.0);
     let output = check(&directory.0, "0.0.0-wrong-release");
     assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("unexpected installed output: --version"),
+        "{output:?}"
+    );
 }
 
 #[test]
@@ -85,11 +109,24 @@ fn release_check_rejects_a_missing_or_incompatible_supervisor() {
     assert!(!missing.status.success(), "{missing:?}");
     assert!(String::from_utf8_lossy(&missing.stderr).contains("not installed and executable"));
 
+    fs::copy(env!("CARGO_BIN_EXE_fastmash-sort-supervisor"), &supervisor).unwrap();
+    fs::set_permissions(&supervisor, fs::Permissions::from_mode(0o644)).unwrap();
+    record_checksums(&directory.0);
+    let nonexecutable = check(&directory.0, env!("CARGO_PKG_VERSION"));
+    assert!(!nonexecutable.status.success(), "{nonexecutable:?}");
+    assert!(
+        String::from_utf8_lossy(&nonexecutable.stderr).contains("not installed and executable")
+    );
+
     // Its checksum is admitted here to isolate the supervisor execution check.
     fs::copy("/usr/bin/false", &supervisor).unwrap();
     record_checksums(&directory.0);
     let incompatible = check(&directory.0, env!("CARGO_PKG_VERSION"));
     assert!(!incompatible.status.success(), "{incompatible:?}");
+    assert!(
+        String::from_utf8_lossy(&incompatible.stderr).contains("sort supervisor"),
+        "{incompatible:?}"
+    );
 }
 
 // Exercise the native archive's one-executable layout on Linux. Actual Mach-O
@@ -98,11 +135,15 @@ fn native_layout_check(directory: &Path, version: &str) -> std::process::Output 
     let tools = directory.join("tools");
     if !tools.exists() {
         fs::create_dir(&tools).unwrap();
-        fs::write(tools.join("uname"), "#!/bin/sh\necho Darwin\n").unwrap();
-        fs::set_permissions(tools.join("uname"), fs::Permissions::from_mode(0o755)).unwrap();
-        fs::write(tools.join("shasum"), "#!/bin/sh\n[ \"$1\" = -a ] && [ \"$2\" = 256 ] || exit 2\nshift 2\nexec /usr/bin/sha256sum \"$@\"\n").unwrap();
-        fs::set_permissions(tools.join("shasum"), fs::Permissions::from_mode(0o755)).unwrap();
+        let fixture = prepared_tool(
+            "fastmash-installed-platform-fixture",
+            "FASTMASH_INSTALLED_PLATFORM_FIXTURE",
+        );
+        fs::copy(&fixture, tools.join("uname")).unwrap();
+        fs::copy(&fixture, tools.join("shasum")).unwrap();
     }
+    let mut path = tools.as_os_str().to_owned();
+    path.push(":/usr/bin:/bin");
     Command::new("bash")
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -112,7 +153,11 @@ fn native_layout_check(directory: &Path, version: &str) -> std::process::Output 
         .arg(directory)
         .arg(directory.join("qualified.sha256"))
         .env_clear()
-        .env("PATH", format!("{}:/usr/bin:/bin", tools.display()))
+        .env("PATH", path)
+        .env(
+            "FASTMASH_INSTALLED_CHECKER",
+            prepared_tool("fastmash-check-installed", "FASTMASH_INSTALLED_CHECKER"),
+        )
         .current_dir(directory)
         .output()
         .unwrap()
@@ -135,6 +180,15 @@ fn release_check_accepts_the_native_one_executable_layout() {
     native_layout(&directory.0);
     let output = native_layout_check(&directory.0, env!("CARGO_PKG_VERSION"));
     assert!(output.status.success(), "{output:?}");
+
+    fs::copy(
+        env!("CARGO_BIN_EXE_fastmash-sort-supervisor"),
+        directory.0.join("fastmash-sort-supervisor"),
+    )
+    .unwrap();
+    let extra = native_layout_check(&directory.0, env!("CARGO_PKG_VERSION"));
+    assert!(!extra.status.success(), "{extra:?}");
+    assert!(String::from_utf8_lossy(&extra.stderr).contains("must not contain a supervisor"));
 }
 
 #[test]

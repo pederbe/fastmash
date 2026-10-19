@@ -118,14 +118,43 @@ as part of publication.
 
 ## Checking locally
 
-With Docker, a throwaway key in `GNUPGHOME` and its public key in a file:
+With Rust, Docker, curl, the GitHub CLI, a throwaway key in `GNUPGHOME` and its
+public key in a file, this example checks version 0.2.0. Its expected documents
+come from the same version's verified Linux release archive.
 
 ```sh
+bash -c '
+set -euo pipefail
+version=0.2.0
+tag="v$version"
+name="fastmash-${tag}-x86_64-unknown-linux-gnu"
+assets=$(mktemp -d)
+trap "rm -rf -- \"$assets\"" EXIT
+for file in "$name.tar.gz" "$name.tar.gz.sha256"; do
+  curl --proto "=https" -fsSLo "$assets/$file" \
+    "https://github.com/pederbe/fastmash/releases/download/$tag/$file"
+done
+(cd "$assets" && sha256sum -c "$name.tar.gz.sha256")
+gh attestation verify "$assets/$name.tar.gz" --repo pederbe/fastmash \
+  --source-ref "refs/tags/$tag" --signer-workflow pederbe/fastmash/.github/workflows/release.yml
+tar -xzf "$assets/$name.tar.gz" --no-same-owner -C "$assets" \
+  "$name/README.md" "$name/CHANGELOG.md" "$name/LICENSE-MIT" \
+  "$name/LICENSE-APACHE" "$name/THIRD-PARTY-LICENSES.md"
+cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 GPG_PASSPHRASE=... bash release/package-repository.sh /tmp/repository test-key.asc \
-  fastmash_0.1.0_amd64.deb fastmash-0.1.0-1.x86_64.rpm
-git show v0.1.0:release/qualified.sha256 > /tmp/qualified.sha256
-bash release/test-package-repository.sh /tmp/repository 0.1.0 /tmp/qualified.sha256
+  "fastmash_${version}_amd64.deb" "fastmash-${version}-1.x86_64.rpm"
+git show "$tag:release/qualified.sha256" > "$assets/qualified.sha256"
+bash release/test-package-repository.sh /tmp/repository "$version" "$assets/qualified.sha256" \
+  --expected-docs "$assets/$name"
+'
 ```
+
+`--expected-docs` compares all five installed documents with those independent
+bytes and preserves only Fastmash's documentation in the disposable Debian and
+Ubuntu clients. Calls without the option retain the executable, installation
+and removal checks. If the repository also contains an earlier version, put it
+after `QUALIFIED` and before `--expected-docs` to check its upgrade to the version
+whose documents were supplied.
 
 Publication regression checks use small fixture packages and a throwaway key.
 They need the repository tools above, Rust, Docker and the Debian 12 and

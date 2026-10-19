@@ -52,12 +52,13 @@ jobs:
           test "$state" = "false false" || { echo "$TAG is not a published full release" >&2; exit 1; }
           git fetch --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG"
           git show "$TAG:release/qualified.sha256" > "$RUNNER_TEMP/qualified.sha256"
-      - name: Download and verify the packages
+      - name: Download and verify release assets
         run: |
           version=${TAG#v}
           mkdir "$RUNNER_TEMP/assets"
           cd "$RUNNER_TEMP/assets"
-          for name in "fastmash_${version}_amd64.deb" "fastmash-${version}-1.x86_64.rpm"; do
+          for name in "fastmash_${version}_amd64.deb" "fastmash-${version}-1.x86_64.rpm" \
+            "fastmash-${TAG}-x86_64-unknown-linux-gnu.tar.gz"; do
             for file in "$name" "$name.sha256"; do
               curl --proto '=https' -fsSLO "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$file"
             done
@@ -65,10 +66,22 @@ jobs:
             gh attestation verify "$name" --repo "$GITHUB_REPOSITORY" --source-ref "refs/tags/$TAG" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
           done
+      - name: Prepare independent package documents
+        run: |
+          name="fastmash-${TAG}-x86_64-unknown-linux-gnu"
+          mkdir "$RUNNER_TEMP/expected-documents"
+          tar -xzf "$RUNNER_TEMP/assets/$name.tar.gz" --no-same-owner -C "$RUNNER_TEMP/expected-documents" \
+            "$name/README.md" "$name/CHANGELOG.md" "$name/LICENSE-MIT" \
+            "$name/LICENSE-APACHE" "$name/THIRD-PARTY-LICENSES.md"
       - name: Install the repository tools
         run: |
           sudo apt-get update -q
           sudo apt-get install -qy --no-install-recommends apt-utils createrepo-c rpm
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: '1.98.1'
+      - name: Prepare installed verification tools
+        run: cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
       - name: Import the signing key
         env:
           PACKAGE_SIGNING_KEY: ${{ secrets.PACKAGE_SIGNING_KEY }}
@@ -113,6 +126,7 @@ jobs:
       - name: Install, upgrade and remove from the repository
         run: |
           version=${TAG#v}
+          documents="$RUNNER_TEMP/expected-documents/fastmash-${TAG}-x86_64-unknown-linux-gnu"
           # When this is the newest version, the next one down is upgraded from;
           # an older release added later is installed directly.
           versions=$(find "$RUNNER_TEMP/repository/apt/pool" -name 'fastmash_*_amd64.deb' -printf '%f\n' |
@@ -122,7 +136,7 @@ jobs:
             previous=$(grep -vxF "$version" <<<"$versions" | tail -n 1 || true)
           fi
           bash release/test-package-repository.sh "$RUNNER_TEMP/repository" "$version" \
-            "$RUNNER_TEMP/qualified.sha256" ${previous:+"$previous"}
+            "$RUNNER_TEMP/qualified.sha256" ${previous:+"$previous"} --expected-docs "$documents"
       # Publish all immutable references before advancing InRelease and the
       # dnf mirrorlist. Clients already reading the old generation keep working.
       - name: Upload

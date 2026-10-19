@@ -65,6 +65,7 @@ jobs:
           toolchain: "1.98.1"
       - name: Workspace and exact release command checks
         run: |
+          cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
           FASTMASH_TEST_BINARY="$PWD/out/target/release/fastmash" cargo test --release --workspace --locked
       - name: Package
         run: |
@@ -97,10 +98,9 @@ jobs:
       - name: Test the packages
         run: |
           version="${GITHUB_REF_NAME#v}"
-          docker run --rm --network=none -v "$PWD:/w:ro" -e VERSION="$version" debian:12-slim bash -c \
-            'set -euo pipefail; dpkg -i /w/fastmash_*_amd64.deb; bash /w/release/check-installed.sh "$VERSION" /usr/bin /w/release/qualified.sha256; dpkg -r fastmash; test ! -e /usr/bin/fastmash; test ! -e /usr/bin/fastmash-sort-supervisor'
-          docker run --rm --network=none -v "$PWD:/w:ro" -e VERSION="$version" almalinux:8-minimal bash -c \
-            'set -euo pipefail; rpm -i /w/fastmash-*.x86_64.rpm; bash /w/release/check-installed.sh "$VERSION" /usr/bin /w/release/qualified.sha256; rpm -e fastmash; test ! -e /usr/bin/fastmash; test ! -e /usr/bin/fastmash-sort-supervisor'
+          name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
+          target/debug/fastmash-test-package-installation packages packages "$version" release/qualified.sha256 \
+            --expected-docs "$name"
       - name: Retain qualified Linux assets and notes
         run: |
           mkdir release-assets
