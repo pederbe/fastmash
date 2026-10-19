@@ -2,7 +2,14 @@
 name = "fastmash-publication-test-server"
 version = "0.0.0"
 edition = "2024"
+rust-version = "1.88"
 publish = false
 license = "MIT OR Apache-2.0"
 
+[lints]
+workspace = true
+
 [workspace]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
