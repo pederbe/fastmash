@@ -48,29 +48,11 @@ EOF
         "$work/build/fastmash_${version}_amd64.deb" \
         "$work/build/rpm/RPMS/x86_64/fastmash-${version}-1.x86_64.rpm"
 done
-# Replay a partly uploaded snapshot with an unchanged metadata generation.
-# Freeze the indexer's output here so a new timestamp cannot conceal a missing
-# file by generating a different snapshot URL during the retry.
-reference=$(cat "$work/new/rpm/mirrorlist")
-reference=$work/new/${reference#https://packages.fastmash.io/}
-mkdir -p "$work/build/bin" "$work/partial"
-cp -a "$work/new/." "$work/partial/"
-snapshot=$work/partial/rpm/snapshots/$(basename "$reference")
-primary=$(find "$snapshot/repodata" -name '*-primary.xml.gz' -print -quit)
-test -n "$primary"
-rm "$primary" "$snapshot/repodata/repomd.xml.asc"
-cat > "$work/build/bin/createrepo_c" <<'EOF'
-#!/bin/bash
-set -euo pipefail
-while [ "$1" != --outputdir ]; do shift; done
-mkdir -p "$2"
-cp -a "$PUBLICATION_REFERENCE/." "$2/"
-rm "$2/repodata/repomd.xml.asc"
-EOF
-chmod +x "$work/build/bin/createrepo_c"
-PUBLICATION_REFERENCE=$reference PATH="$work/build/bin:$PATH" \
-    bash "$here/package-repository.sh" "$work/partial" "$work/test-key.asc" \
-        "$work/build/fastmash_0.2.0_amd64.deb"
-cmp "$primary" "$reference/repodata/$(basename "$primary")"
-rm -rf "$work/partial"
-echo 'regeneration completes a partially uploaded snapshot'
+# Check the same-generation repair while the disposable signing key is live.
+target=${CARGO_TARGET_DIR:-$here/../target}
+checker=${FASTMASH_FIXTURE_REPAIR_CHECKER:-$target/debug/fastmash-test-package-fixture-repair}
+if [ ! -x "$checker" ]; then
+    echo 'prepare the fixture checker with cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins' >&2
+    exit 1
+fi
+"$checker" "$work" "$here/package-repository.sh"
