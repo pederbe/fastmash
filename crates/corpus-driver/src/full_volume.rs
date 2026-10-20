@@ -164,8 +164,8 @@ fn remaining(deadline: Instant) -> io::Result<Duration> {
     }
 }
 
-// The native detach can unmount first and remain busy while the device ejects.
-// Use the shared deadline, not an attempt count, to bound that transition.
+// Native image inventories can lag successful attach/detach commands. Keep the
+// shared deadline until the required native and filesystem conditions hold.
 fn retry_transition(
     deadline: Instant,
     mut attempt: impl FnMut(usize) -> io::Result<bool>,
@@ -173,8 +173,13 @@ fn retry_transition(
     let mut index = 0;
     loop {
         remaining(deadline)?;
-        if attempt(index)? {
-            return Ok(());
+        match attempt(index) {
+            Ok(true) => return Ok(()),
+            Ok(false) => {}
+            Err(error) if error.raw_os_error() == Some(nix::errno::Errno::EBUSY as i32) => {
+                eprintln!("[DEBUG-full-cleanup] busy filesystem at attempt={index}; ownership retained");
+            }
+            Err(error) => return Err(error),
         }
         thread::sleep(Duration::from_millis(250).min(remaining(deadline)?));
         index += 1;
@@ -185,13 +190,15 @@ fn wait_for_attachment(
     deadline: Instant,
     mut observe: impl FnMut(usize) -> io::Result<Option<String>>,
 ) -> io::Result<()> {
-    remaining(deadline)?;
-    if observe(0)?.is_none() {
-        return Err(io::Error::other(
-            "attached image missing from native ownership list",
-        ));
-    }
-    Ok(())
+    retry_transition(deadline, |attempt| {
+        let found = observe(attempt)?.is_some();
+        if !found {
+            eprintln!("[DEBUG-full-cleanup] attachment association pending attempt={attempt}");
+        } else if attempt != 0 {
+            eprintln!("[DEBUG-full-cleanup] attachment association observed attempt={attempt}");
+        }
+        Ok(found)
+    })
 }
 
 pub struct FullVolume {
