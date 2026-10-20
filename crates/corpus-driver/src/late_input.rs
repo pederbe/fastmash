@@ -216,15 +216,26 @@ fn collect(stream: &mut Streaming, sink: &mut File, copied: &mut usize) -> Resul
 }
 
 fn stop(running: &mut Running, pid: Pid, started: Instant, cancel: BorrowedFd<'_>) -> Result<bool> {
-    match killpg(pid, Signal::SIGSTOP) {
-        Ok(()) => {}
-        Err(error)
-            if (error == Errno::ESRCH || cfg!(target_os = "macos") && error == Errno::EPERM)
-                && running.status()?.is_some() =>
-        {
-            return Ok(false);
+    loop {
+        match killpg(pid, Signal::SIGSTOP) {
+            Ok(()) => break,
+            Err(error)
+                if error == Errno::ESRCH || cfg!(target_os = "macos") && error == Errno::EPERM =>
+            {
+                if running.status()?.is_some() {
+                    return Ok(false);
+                }
+                // A disappearing group may become unsignalable just before
+                // waitid reports its terminal state. Keep the leader unreaped
+                // and use the existing deadline/cancellation check throughout.
+                pause(started, cancel)?;
+            }
+            Err(error) => {
+                return Err(Error::message(format!(
+                    "stop owned candidate group {pid}: {error}"
+                )));
+            }
         }
-        Err(error) => return Err(error.into()),
     }
     loop {
         match crate::child_status::observe(
@@ -684,8 +695,10 @@ fn execute(
         fresh(&root.join("coordinator.stderr"))?.write_all(&diagnostics)?;
     }
     if !status.success() {
+        let diagnostic = bounded_read(&root.join("coordinator.stderr"))?;
         return Err(Error::message(format!(
-            "late-input coordinator failed: {status}; inspect {}",
+            "late-input coordinator failed: {status}; {}; inspect {}",
+            String::from_utf8_lossy(&diagnostic).trim(),
             root.display()
         )));
     }

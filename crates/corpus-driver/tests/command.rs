@@ -319,6 +319,27 @@ fn buffered_input_selects_eio_after_input_drain_without_output_acknowledgement()
 }
 
 #[test]
+fn buffered_input_preserves_repeated_parse_errors_during_stop_selection() {
+    let run = TestRun::new(&[]);
+    for attempt in 0..1000 {
+        let root = run.root.join(format!("parse-{attempt}"));
+        let output = fastmash_corpus_driver::late_input::buffered(
+            &run.binary,
+            &["buffered-parse-error".into()],
+            b"input\n",
+            "C",
+            Path::new(env!("CARGO_BIN_EXE_fastmash-corpus")),
+            &root,
+        )
+        .unwrap_or_else(|error| panic!("parse attempt {attempt}: {error}"));
+        assert_eq!(output.status.code(), Some(17));
+        assert!(output.stdout.is_empty());
+        assert_eq!(output.stderr, b"parse error before another read\n");
+        assert_eq!(json_file(&root.join("completed.json"))["reaped"], true);
+    }
+}
+
+#[test]
 fn buffered_input_returns_early_errors_and_reaps_stalled_descendants() {
     let run = TestRun::new(&[]);
     let launcher = Path::new(env!("CARGO_BIN_EXE_fastmash-corpus"));

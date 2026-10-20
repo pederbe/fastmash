@@ -2,7 +2,7 @@ name: Native safe stream launcher
 
 on:
   push:
-    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams, contrib/safe-quantile-test-streams, contrib/safe-grouping-test-streams, contrib/safe-summary-test-streams, contrib/safe-report-test-streams, contrib/safe-weighted-test-streams, contrib/safe-buffered-input-tests]
+    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams, contrib/safe-quantile-test-streams, contrib/safe-grouping-test-streams, contrib/safe-summary-test-streams, contrib/safe-report-test-streams, contrib/safe-weighted-test-streams, contrib/safe-buffered-input-tests, contrib/safe-record-test-streams]
 
 permissions:
   contents: read
