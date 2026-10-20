@@ -1814,13 +1814,23 @@ mod tests {
         let descriptor_path = format!("/proc/self/fd/{descriptor}");
         #[cfg(target_os = "macos")]
         let descriptor_path = format!("/dev/fd/{descriptor}");
-        let open = || {
-            // Resolve the live descriptor through the native descriptor
-            // filesystem. A closed or reused slot cannot match the held file.
-            std::fs::metadata(&descriptor_path).is_ok_and(|metadata| {
-                metadata.dev() == target.dev() && metadata.ino() == target.ino()
-            })
+        // Inspect the file through a temporary handle, rather than relying on
+        // metadata of the descriptor filesystem's node. The handle is dropped
+        // inside inspect, before the merge continues to the next Record.
+        let inspect = || {
+            File::open(&descriptor_path)
+                .and_then(|file| file.metadata())
+                .map(|metadata| (metadata.dev(), metadata.ino()))
         };
+        let expected = (target.dev(), target.ino());
+        let initial = inspect();
+        let direct =
+            std::fs::metadata(&descriptor_path).map(|metadata| (metadata.dev(), metadata.ino()));
+        eprintln!(
+            "Spill descriptor metadata: node={direct:?}, file={initial:?}, expected={expected:?}"
+        );
+        assert_eq!(initial.unwrap(), expected);
+        let open = || inspect().is_ok_and(|identity| identity == expected);
         let mut seen = Vec::new();
         merge_into::<Packed>(run_sources(vec![first, second]), |row| {
             seen.push((row.sequence, open()));
