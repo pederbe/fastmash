@@ -83,6 +83,20 @@ fn utility(root: &Path, name: &str, arguments: &[&OsStr]) -> io::Result<()> {
     if status.success() {
         Ok(())
     } else {
+        if name == "create" {
+            let _ = bounded(
+                Command::new("/usr/bin/hdiutil").args(["info", "-plist"]),
+                root,
+                "create-failure-info",
+                Duration::from_secs(2),
+            );
+            let _ = bounded(
+                &mut Command::new("/sbin/mount"),
+                root,
+                "create-failure-mounts",
+                Duration::from_secs(2),
+            );
+        }
         Err(io::Error::other(format!("hdiutil {name}: {status}")))
     }
 }
@@ -248,9 +262,6 @@ impl FullVolume {
     }
 
     pub fn new(root: &Path) -> io::Result<Self> {
-        Self::with_label(root, "FastmashFault")
-    }
-    fn with_label(root: &Path, label: &str) -> io::Result<Self> {
         let mut volume = Self::create(root, |root, image| {
             utility(
                 root,
@@ -263,7 +274,7 @@ impl FullVolume {
                     OsStr::new("-fs"),
                     OsStr::new("HFS+"),
                     OsStr::new("-volname"),
-                    OsStr::new(label),
+                    OsStr::new("FastmashFault"),
                     image.as_os_str(),
                 ],
             )
@@ -411,89 +422,6 @@ mod tests {
             fs::read(root.join("create.stderr")).unwrap(),
             b"Resource busy\n"
         );
-    }
-
-    #[test]
-    #[ignore = "bounded native creation diagnostic, retains all raw receipts"]
-    fn concurrent_native_creation_labels() {
-        let root = PathBuf::from(std::env::var_os("FASTMASH_CREATION_PROBE").unwrap());
-        fs::create_dir(&root).unwrap();
-        let mut failures = [[0; 2]; 2];
-        for (mode, width, batches) in [(0, 1, 32), (1, 16, 12)] {
-            for batch in 0..batches {
-                let barrier = std::sync::Arc::new(std::sync::Barrier::new(width));
-                let mut children = Vec::new();
-                for index in 0..width {
-                    let unique = if width == 1 {
-                        batch % 2 == 1
-                    } else {
-                        index % 2 == 1
-                    };
-                    let label = if unique {
-                        format!("FastmashFault-{mode}-{batch}-{index}")
-                    } else {
-                        "FastmashFault".to_owned()
-                    };
-                    let directory = root.join(format!("mode-{mode}-batch-{batch}-item-{index}"));
-                    fs::create_dir(&directory).unwrap();
-                    let barrier = barrier.clone();
-                    children.push((
-                        unique,
-                        thread::spawn(move || {
-                            fs::write(directory.join("label.txt"), &label).unwrap();
-                            barrier.wait();
-                            let status =
-                                FullVolume::with_label(&directory.join("volume"), &label).map(drop);
-                            if let Err(error) = &status {
-                                fs::write(directory.join("lifecycle.error"), error.to_string())
-                                    .unwrap();
-                            }
-                            let success = status.is_ok();
-                            if !success {
-                                let _ = bounded(
-                                    Command::new("/usr/bin/hdiutil").args(["info", "-plist"]),
-                                    &directory,
-                                    "failure-info",
-                                    Duration::from_secs(15),
-                                );
-                                let _ = bounded(
-                                    &mut Command::new("/sbin/mount"),
-                                    &directory,
-                                    "failure-mounts",
-                                    Duration::from_secs(2),
-                                );
-                            }
-                            (unique, success)
-                        }),
-                    ));
-                }
-                for (unique, child) in children {
-                    let success = child.join().is_ok_and(|(_, success)| success);
-                    failures[mode][usize::from(unique)] += usize::from(!success);
-                }
-                bounded(
-                    Command::new("/usr/bin/hdiutil").args(["info", "-plist"]),
-                    &root,
-                    &format!("mode-{mode}-after-batch-{batch}"),
-                    Duration::from_secs(15),
-                )
-                .unwrap();
-                eprintln!(
-                    "lifecycle failures mode={mode} after batch {batch}: fixed={} unique={}",
-                    failures[mode][0], failures[mode][1]
-                );
-            }
-        }
-        // Images and raw receipts remain owned by the disposable diagnostic
-        // runner. Do not unlink them based on a possibly provisional inventory.
-        fs::write(
-            root.join("failures.txt"),
-            format!(
-                "serial fixed={} unique={}; concurrent fixed={} unique={}\n",
-                failures[0][0], failures[0][1], failures[1][0], failures[1][1]
-            ),
-        )
-        .unwrap();
     }
 
     fn info(images: &str) -> Value {

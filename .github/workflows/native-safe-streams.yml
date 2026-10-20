@@ -62,8 +62,23 @@ jobs:
       - name: Verify launcher controls and executed native streams
         timeout-minutes: 10
         run: |
-          export FASTMASH_CREATION_PROBE="$CAPTURES/creation-probe"
-          cargo test --release --locked -p fastmash-corpus-driver --lib full_volume::tests::concurrent_native_creation_labels -- --ignored --nocapture > "$CAPTURES/creation-probe.log" 2>&1
+          export FASTMASH_TEST_BINARY="$CAPTURES/bin/fastmash"
+          export FASTMASH_TEST_CORPUS="$CAPTURES/bin/fastmash-corpus"
+          export FASTMASH_TEST_PROCESS="$CAPTURES/bin/fastmash-test-process"
+          cargo test --release --locked -p fastmash-corpus-driver --lib full_volume::tests -- --nocapture > "$CAPTURES/full-volume-controls.log" 2>&1
+          failure=0
+          shopt -s nullglob
+          for attempt in 1 2 3 4 5 6 7 8; do
+            status=0
+            log="$CAPTURES/record-attempt-$attempt.log"
+            cargo test --release --locked -p fastmash --test record_separators -- --nocapture > "$log" 2>&1 || status=$?
+            printf '%s\n' "$status" > "$CAPTURES/record-attempt-$attempt.status"
+            if [ "$status" -ne 0 ]; then
+              failure=1
+              break
+            fi
+          done
+          test "$failure" -eq 0
           shasum -a 256 -c "$CAPTURES/inputs.sha256"
           shasum -a 256 -c "$CAPTURES/binaries.sha256"
       - name: Collect failed full-volume receipts
@@ -80,8 +95,6 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-safe-streams-${{ matrix.os }}-${{ matrix.rust }}
-          path: |
-            ${{ runner.temp }}/native-safe-streams
-            !${{ runner.temp }}/native-safe-streams/creation-probe/**/full.dmg
+          path: ${{ runner.temp }}/native-safe-streams
           if-no-files-found: error
           retention-days: 7
