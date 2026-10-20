@@ -73,12 +73,14 @@ fn main() {
         "count" => std::process::exit(17),
         "version" => println!("fastmash 0.2.0"),
         "early-close" => println!("early"),
-        "late-input" | "late-input-stall" => {
+        "late-input" | "late-input-stall" | "buffered-input" | "buffered-input-stall" => {
             let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
             let mut bytes = [0; 6];
             input.read_exact(&mut bytes).unwrap();
             assert_eq!(&bytes, b"input\n");
-            println!("before");
+            if !mode.to_str().unwrap().starts_with("buffered-") {
+                println!("before");
+            }
             let failed = loop {
                 match input.read(&mut [0]) {
                     Ok(0) => break false,
@@ -89,7 +91,12 @@ fn main() {
                     result => panic!("unexpected late-input read: {result:?}"),
                 }
             };
-            if failed && mode == "late-input-stall" {
+            if failed
+                && matches!(
+                    mode.to_str().unwrap(),
+                    "late-input-stall" | "buffered-input-stall"
+                )
+            {
                 #[allow(clippy::zombie_processes)]
                 let child = Command::new(std::env::current_exe().unwrap())
                     .arg("sleep")

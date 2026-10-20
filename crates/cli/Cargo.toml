@@ -74,8 +74,7 @@ nix = { version = "=0.31.3", default-features = false, features = ["fs", "signal
 # Exact arithmetic for the generated decimal power table and its tests.
 num-bigint = { version = "=0.5.1", default-features = false }
 
-[target.'cfg(target_os = "macos")'.dev-dependencies]
-# Reuse the qualified owned full destination only in native integration tests.
+# Reuse owned full-output and terminal-input transports in integration tests.
 fastmash-corpus-driver = { path = "../corpus-driver" }
 
 # Same as the workspace release profile, for crates.io installs (cargo

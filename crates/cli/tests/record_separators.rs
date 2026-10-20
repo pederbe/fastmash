@@ -1,7 +1,6 @@
 #[path = "support/output_fault.rs"]
 mod output_fault;
 use output_fault::OutputFault;
-#[cfg(target_os = "macos")]
 #[path = "support/temp_dir.rs"]
 mod temp_dir;
 

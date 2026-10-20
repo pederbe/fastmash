@@ -269,6 +269,103 @@ fn assert_stopped(pidfile: &Path) {
 }
 
 #[test]
+fn buffered_input_selects_eio_after_input_drain_without_output_acknowledgement() {
+    let run = TestRun::new(&[]);
+    let input = run.root.join("ordinary-input");
+    fs::write(&input, b"input\n").unwrap();
+    let ordinary = Command::new(&run.binary)
+        .arg("buffered-input")
+        .stdin(fs::File::open(&input).unwrap())
+        .output()
+        .unwrap();
+    assert!(ordinary.status.success());
+    assert_eq!(ordinary.stdout, b"after\n");
+    assert!(ordinary.stderr.is_empty());
+
+    let root = run.root.join("buffered");
+    let output = fastmash_corpus_driver::late_input::buffered(
+        &run.binary,
+        &["buffered-input".into()],
+        b"input\n",
+        "C",
+        Path::new(env!("CARGO_BIN_EXE_fastmash-corpus")),
+        &root,
+    )
+    .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, b"after\n");
+    assert_eq!(output.stderr, b"actual late EIO confirmed\n");
+    assert!(!root.join("acknowledged.json").exists());
+    let queued = json_file(&root.join("input-queued.json"));
+    let drained = json_file(&root.join("input-drained.json"));
+    let stopped = json_file(&root.join("stopped.json"));
+    let completed = json_file(&root.join("completed.json"));
+    assert_eq!(queued["before_exec_release"], true);
+    assert_eq!(queued["kernel_unread"], 6);
+    assert_eq!(queued["exact_input_length"], 6);
+    assert_eq!(queued["candidate_pid"], drained["candidate_pid"]);
+    assert_eq!(drained["candidate_live"], true);
+    assert_eq!(drained["exact_input_delivered"], true);
+    assert_eq!(drained["kernel_unread"], 0);
+    assert_eq!(drained["candidate_pid"], stopped["pid"]);
+    assert_eq!(stopped["pid"], completed["pid"]);
+    assert_eq!(stopped["kernel_unread"], 0);
+    assert_eq!(stopped["acknowledgement_before_stop"], false);
+    assert_eq!(completed["reaped"], true);
+    println!(
+        "buffered input queued: {queued}; drain: {drained}; stop: {stopped}; completion: {completed}"
+    );
+}
+
+#[test]
+fn buffered_input_rejects_early_exit_and_reaps_stalled_descendants() {
+    let run = TestRun::new(&[]);
+    let launcher = Path::new(env!("CARGO_BIN_EXE_fastmash-corpus"));
+    let early = run.root.join("early");
+    assert!(
+        fastmash_corpus_driver::late_input::buffered(
+            &run.binary,
+            &["wrong-status".into()],
+            b"input\n",
+            "C",
+            launcher,
+            &early,
+        )
+        .is_err()
+    );
+    assert!(!early.join("input-drained.json").exists());
+    assert!(!early.join("stopped.json").exists());
+    let pidfile = run.root.join("buffered-descendant.pid");
+    let stalled = run.root.join("stalled");
+    let started = Instant::now();
+    assert!(
+        fastmash_corpus_driver::late_input::buffered(
+            &run.binary,
+            &[
+                "buffered-input-stall".into(),
+                pidfile.clone().into_os_string()
+            ],
+            b"input\n",
+            "C",
+            launcher,
+            &stalled,
+        )
+        .is_err()
+    );
+    assert!(started.elapsed() < Duration::from_secs(12));
+    assert_stopped(&pidfile);
+    let pid = json_file(&stalled.join("started.json"))["candidate_pid"]
+        .as_u64()
+        .unwrap();
+    let cleanup = fs::read_to_string(stalled.join("candidate-cleanup.txt")).unwrap();
+    assert!(cleanup.contains("reaped=true") && cleanup.contains(&format!("pid={pid} ")));
+    assert!(matches!(
+        nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None),
+        Err(nix::errno::Errno::ESRCH)
+    ));
+}
+
+#[test]
 fn late_input_requires_real_acknowledgement_eio_and_owned_cleanup() {
     let mut fault = case(
         "late-input",

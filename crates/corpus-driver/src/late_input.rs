@@ -37,7 +37,13 @@ struct Plan {
     name: String,
     arguments: Vec<Vec<u8>>,
     env: BTreeMap<String, String>,
-    acknowledgement: Vec<u8>,
+    barrier: Barrier,
+}
+
+#[derive(Serialize, Deserialize)]
+enum Barrier {
+    OutputPrefix(Vec<u8>),
+    InputDrained,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -256,31 +262,64 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
             "stdin_is_terminal":nix::unistd::isatty(input)?,"destination":destination,
         }))?,
     )?;
-    fs::write(root.join("release"), b"foreground ready\n")?;
-    fs::write(root.join("input-ready"), b"input ready\n")?;
-    loop {
-        collect(&mut stream, &mut sink, &mut copied)?;
-        if running.status()?.is_some() {
-            return Err(Error::message(
-                "candidate exited before late-input acknowledgement",
-            ));
-        }
-        if stream.bytes.len() >= plan.acknowledgement.len() {
-            if !stream.bytes.starts_with(&plan.acknowledgement) {
-                return Err(Error::message("late-input acknowledgement differs"));
-            }
-            break;
-        }
-        pause(started)?;
+    let output_acknowledged = matches!(plan.barrier, Barrier::OutputPrefix(_));
+    if output_acknowledged {
+        fs::write(root.join("release"), b"foreground ready\n")?;
     }
-    let acknowledgement = encode(&stream.bytes[..plan.acknowledgement.len()]);
-    fs::write(
-        root.join("acknowledged.json"),
-        serde_json::to_vec(&json!({
-            "acknowledged":acknowledgement,"candidate_live":true,
-            "foreground":rustix::termios::tcgetpgrp(input)?.as_raw_nonzero().get(),
-        }))?,
-    )?;
+    fs::write(root.join("input-ready"), b"input ready\n")?;
+    if !output_acknowledged {
+        let length = fs::metadata(root.join("input"))?.len();
+        // An empty queue alone could precede delivery through the terminal's
+        // line discipline. First observe every byte queued while the exec
+        // helper is held at `release` and cannot read stdin.
+        loop {
+            if running.status()?.is_some() {
+                return Err(Error::message("candidate exited before input delivery"));
+            }
+            let queued = rustix::io::ioctl_fionread(input)?;
+            if root.join("input-delivered").try_exists()? && queued == length {
+                fs::write(
+                    root.join("input-queued.json"),
+                    serde_json::to_vec(&json!({
+                        "candidate_pid":running.child.id(),"kernel_unread":queued,
+                        "exact_input_length":length,"before_exec_release":true,
+                    }))?,
+                )?;
+                break;
+            }
+            pause(started)?;
+        }
+        fs::write(root.join("release"), b"exact input queued\n")?;
+    }
+    let acknowledgement = match &plan.barrier {
+        Barrier::OutputPrefix(prefix) => {
+            loop {
+                collect(&mut stream, &mut sink, &mut copied)?;
+                if running.status()?.is_some() {
+                    return Err(Error::message(
+                        "candidate exited before late-input acknowledgement",
+                    ));
+                }
+                if stream.bytes.len() >= prefix.len() {
+                    if !stream.bytes.starts_with(prefix) {
+                        return Err(Error::message("late-input acknowledgement differs"));
+                    }
+                    break;
+                }
+                pause(started)?;
+            }
+            let acknowledgement = encode(&stream.bytes[..prefix.len()]);
+            fs::write(
+                root.join("acknowledged.json"),
+                serde_json::to_vec(&json!({
+                    "acknowledged":acknowledgement,"candidate_live":true,
+                    "foreground":rustix::termios::tcgetpgrp(input)?.as_raw_nonzero().get(),
+                }))?,
+            )?;
+            acknowledgement
+        }
+        Barrier::InputDrained => String::new(),
+    };
     while !root.join("input-delivered").try_exists()? || rustix::io::ioctl_fionread(input)? != 0 {
         collect(&mut stream, &mut sink, &mut copied)?;
         if running.status()?.is_some() {
@@ -289,6 +328,20 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
             ));
         }
         pause(started)?;
+    }
+    // Input drain proves that the candidate read these bytes, not that it
+    // parsed them or emitted a result. Never label it an output acknowledgement.
+    if running.status()?.is_some() {
+        return Err(Error::message("candidate exited before late-input stop"));
+    }
+    if !output_acknowledged {
+        fs::write(
+            root.join("input-drained.json"),
+            serde_json::to_vec(&json!({
+                "candidate_pid":running.child.id(),"candidate_live":true,
+                "kernel_unread":0,"exact_input_delivered":true,
+            }))?,
+        )?;
     }
     killpg(pid, Signal::SIGSTOP)?;
     loop {
@@ -313,7 +366,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
         root.join("stopped.json"),
         serde_json::to_vec(&json!({
             "pid":running.child.id(),"signal":"SIGSTOP","kernel_unread":rustix::io::ioctl_fionread(input)?,
-            "acknowledgement_before_stop":true,
+            "acknowledgement_before_stop":output_acknowledged,
         }))?,
     )?;
     rustix::termios::tcsetpgrp(input, session)?;
@@ -389,15 +442,74 @@ pub fn invoke(
     let args = case.arguments()?;
     let name = case.name.as_deref().unwrap_or("fastmash");
     let env = control.env;
-    fresh(&root.join("input"))?.write_all(&data)?;
     let plan = Plan {
         case_id: case.id.clone(),
         binary: binary.to_owned(),
         name: name.to_owned(),
         arguments: args.iter().map(|arg| arg.as_bytes().to_vec()).collect(),
         env: env.clone(),
-        acknowledgement: ack,
+        barrier: Barrier::OutputPrefix(ack),
     };
+    execute(plan, &data, launcher, &root)
+}
+
+/// Deliver exact input to a live terminal reader, then select real EIO after
+/// its kernel input queue drains. This does not require or infer parsed output.
+/// `root` must not exist. The caller retains its ordinary-EOF controls and exact
+/// fault-result assertions, since incomplete records can make those differ.
+pub fn buffered(
+    binary: &Path,
+    arguments: &[OsString],
+    input: &[u8],
+    locale: &str,
+    launcher: &Path,
+    root: &Path,
+) -> Result<std::process::Output> {
+    if input.is_empty() || input.len() > 1024 {
+        return Err(Error::message("late-input input bounds differ"));
+    }
+    let binary = binary.canonicalize()?;
+    fs::DirBuilder::new().mode(0o700).create(root)?;
+    let root = root.canonicalize()?;
+    let plan = Plan {
+        case_id: "buffered-input".to_owned(),
+        binary,
+        name: "fastmash".to_owned(),
+        arguments: arguments
+            .iter()
+            .map(|arg| arg.as_bytes().to_vec())
+            .collect(),
+        env: BTreeMap::from([
+            ("LC_ALL".to_owned(), locale.to_owned()),
+            ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
+        ]),
+        barrier: Barrier::InputDrained,
+    };
+    let observed = execute(plan, input, launcher, &root)?;
+    let status = if observed.returncode >= 0 {
+        observed.returncode << 8
+    } else {
+        -observed.returncode
+    };
+    Ok(std::process::Output {
+        status: std::process::ExitStatus::from_raw(status),
+        stdout: decode(&observed.stdout_hex)?,
+        stderr: decode(&observed.stderr_hex)?,
+    })
+}
+
+fn execute(plan: Plan, data: &[u8], launcher: &Path, root: &Path) -> Result<Observed> {
+    let expected_ack = match &plan.barrier {
+        Barrier::OutputPrefix(prefix) => Some(encode(prefix)),
+        Barrier::InputDrained => None,
+    };
+    let args: Vec<OsString> = plan
+        .arguments
+        .iter()
+        .cloned()
+        .map(OsString::from_vec)
+        .collect();
+    fresh(&root.join("input"))?.write_all(data)?;
     let mut file = fresh(&root.join("plan.json"))?;
     serde_json::to_writer(&mut file, &plan)?;
     drop(file);
@@ -416,7 +528,7 @@ pub fn invoke(
     let mut command = Command::new(launcher);
     command
         .arg(COORDINATE)
-        .arg(&root)
+        .arg(root)
         .stdin(Stdio::from(pair.slave))
         .stdout(Stdio::from(OwnedFd::from(peer)))
         .stderr(fresh(&root.join("coordinator.stderr"))?);
@@ -464,11 +576,11 @@ pub fn invoke(
     let result: Completed = serde_json::from_slice(&bounded_read(&root.join("completed.json"))?)?;
     if !result.reaped
         || delivered != data.len()
-        || result.acknowledgement != encode(&plan.acknowledgement)
+        || result.acknowledgement != expected_ack.as_deref().unwrap_or("")
     {
         return Err(Error::message("late-input completion facts differ"));
     }
-    let mut argv = vec![OsStr::new(name).to_owned()];
+    let mut argv = vec![OsStr::new(&plan.name).to_owned()];
     argv.extend(args);
     Ok(Observed {
         argv: argv
@@ -476,8 +588,8 @@ pub fn invoke(
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect(),
         argv_hex: argv.iter().map(|arg| encode(arg.as_bytes())).collect(),
-        executable: binary.to_owned(),
-        env,
+        executable: plan.binary,
+        env: plan.env,
         process_group: result.pid,
         returncode: result.returncode,
         timed_out: false,
@@ -486,8 +598,15 @@ pub fn invoke(
         stdin_held_until_exit: false,
         held: None,
         destination: None,
-        acknowledged: Some(result.acknowledgement),
-        input_error_mechanism: Some("controlling-terminal-stop-resume-EIO".to_owned()),
+        acknowledged: expected_ack.clone(),
+        input_error_mechanism: Some(
+            if expected_ack.is_some() {
+                "controlling-terminal-stop-resume-EIO"
+            } else {
+                "controlling-terminal-input-drained-stop-resume-EIO"
+            }
+            .to_owned(),
+        ),
         stdout_hex: encode(&bounded_read(&root.join("stdout"))?),
         stderr_hex: encode(&bounded_read(&root.join("stderr"))?),
     })

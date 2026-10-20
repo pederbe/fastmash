@@ -5,7 +5,8 @@ pub(super) fn failing_input(binary: &OsStr, arguments: &[&str], full: bool) -> O
 }
 
 /// Runs `binary` with a late EIO, discarding a final incomplete record.
-/// Linux uses a real PTY; Darwin uses the calibrated native read fault.
+/// Ordinary output uses owned terminal job control and an input-drain barrier.
+/// Full output retains the existing combined transport until its migration.
 #[forbid(unsafe_code)]
 pub(super) fn failing_input_with(
     binary: &OsStr,
@@ -14,6 +15,38 @@ pub(super) fn failing_input_with(
     full: bool,
     locale: &str,
 ) -> Output {
+    if !full {
+        let directory =
+            temp_dir::TempDir::new(&format!("read-fault-{:?}", std::thread::current().id()));
+        let launcher = std::env::var_os("FASTMASH_TEST_CORPUS")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::env::current_exe()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join("fastmash-corpus")
+            });
+        let result = fastmash_corpus_driver::late_input::buffered(
+            std::path::Path::new(binary),
+            &args(arguments),
+            input,
+            locale,
+            &launcher,
+            &directory.0.join("input-error"),
+        );
+        return match result {
+            Ok(output) => output,
+            Err(error) => {
+                // Keep the private coordinator and child captures on failure.
+                let root = directory.0.clone();
+                std::mem::forget(directory);
+                panic!("buffered input error: {error}; inspect {}", root.display());
+            }
+        };
+    }
     #[cfg(target_os = "macos")]
     {
         let directory =

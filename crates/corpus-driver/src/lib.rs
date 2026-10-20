@@ -8,7 +8,7 @@ pub mod fixture;
 pub mod full_output;
 pub mod full_volume;
 mod held_output;
-mod late_input;
+pub mod late_input;
 mod process;
 
 use fixture::{Fixture, digest};

@@ -284,6 +284,17 @@ the fresh child. The file-size check uses native spawn attributes to restore
 SIGXFSZ only in that child, with real output pipes and signal status. The paused
 memory check retains the tested process's PID across exec.
 
+Focused `record_separators` tests also need
+`cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-corpus`.
+Set `FASTMASH_TEST_CORPUS` to use a prepared copy elsewhere. Ordinary-output
+read-error fixtures observe the exact input queued in a raw terminal before
+releasing the executable. They wait for that queue to drain while the child is
+alive, observe the child stopped,
+then reclaim the foreground and resume it to produce real `EIO`. This is an input
+drain observation, not proof of parsed records or an output acknowledgement.
+The existing corpus cases still require their visible output acknowledgement.
+Full-output/read-error combinations retain the preceding transport.
+
 Native tests use the same command boundary. `native_descriptors.rs` covers closed
 and incorrectly opened standard streams. `native_streams.rs` covers inherited
 signals, terminal buffering and output faults; `native_sort.rs`
