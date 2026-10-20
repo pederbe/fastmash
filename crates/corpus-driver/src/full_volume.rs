@@ -166,7 +166,7 @@ fn remaining(deadline: Instant) -> io::Result<Duration> {
 
 // The native detach can unmount first and remain busy while the device ejects.
 // Use the shared deadline, not an attempt count, to bound that transition.
-fn retry_detach(
+fn retry_transition(
     deadline: Instant,
     mut attempt: impl FnMut(usize) -> io::Result<bool>,
 ) -> io::Result<()> {
@@ -179,6 +179,19 @@ fn retry_detach(
         thread::sleep(Duration::from_millis(250).min(remaining(deadline)?));
         index += 1;
     }
+}
+
+fn wait_for_attachment(
+    deadline: Instant,
+    mut observe: impl FnMut(usize) -> io::Result<Option<String>>,
+) -> io::Result<()> {
+    remaining(deadline)?;
+    if observe(0)?.is_none() {
+        return Err(io::Error::other(
+            "attached image missing from native ownership list",
+        ));
+    }
+    Ok(())
 }
 
 pub struct FullVolume {
@@ -228,14 +241,10 @@ impl FullVolume {
                 OsStr::new("-noautoopen"),
             ],
         )?;
-        if volume
-            .current_device("attach-info", Instant::now() + Duration::from_secs(15))?
-            .is_none()
-        {
-            return Err(io::Error::other(
-                "attached image missing from native ownership list",
-            ));
-        }
+        let deadline = Instant::now() + Duration::from_secs(15);
+        wait_for_attachment(deadline, |attempt| {
+            volume.current_device(&format!("attach-info-{attempt}"), deadline)
+        })?;
         Ok(volume)
     }
     pub fn mount(&self) -> &Path {
@@ -256,16 +265,12 @@ impl FullVolume {
         attached_device(&info, &self.image)
     }
     fn cleanup(&mut self) -> io::Result<()> {
-        if self.attached {
-            // A busy detach may already have unmounted the filesystem. Resolve
-            // this image's whole device afresh before each bounded attempt.
-            let deadline = Instant::now() + Duration::from_secs(15);
-            let detached = retry_detach(deadline, |attempt| {
-                let Some(device) =
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let cleaned = retry_transition(deadline, |attempt| {
+            if self.attached
+                && let Some(device) =
                     self.current_device(&format!("cleanup-info-{attempt}"), deadline)?
-                else {
-                    return Ok(true);
-                };
+            {
                 let status = bounded(
                     Command::new("/usr/bin/hdiutil").args(["detach", "-force", &device]),
                     &self.root,
@@ -276,37 +281,20 @@ impl FullVolume {
                     return Err(io::Error::other(format!("hdiutil detach: {status}")));
                 }
                 // Success still needs a fresh native absence observation.
-                Ok(false)
-            });
-            if let Err(error) = detached {
-                // Preserve a read-only inventory without hiding the cleanup
-                // failure or delaying it indefinitely when inspection fails.
-                if let Err(inventory) = bounded(
-                    Command::new("/usr/sbin/lsof")
-                        .args([OsStr::new("-nP"), OsStr::new("+D")])
-                        .arg(&self.mount)
-                        .arg(&self.image),
-                    &self.root,
-                    "cleanup-holders",
-                    Duration::from_secs(2),
-                ) {
-                    let _ = fs::write(
-                        self.root.join("cleanup-holders.error"),
-                        inventory.to_string(),
-                    );
-                }
-                return Err(error);
+                return Ok(false);
             }
-            self.attached = false;
+            if self.mount.try_exists()? {
+                fs::remove_dir(&self.mount)?;
+            }
+            if self.image.try_exists()? {
+                fs::remove_file(&self.image)?;
+            }
+            Ok(true)
+        });
+        if let Err(error) = cleaned {
+            return Err(self.cleanup_failure("cleanup-transition", error));
         }
-        if self.mount.try_exists()? {
-            fs::remove_dir(&self.mount)
-                .map_err(|error| self.cleanup_failure("remove-mount", error))?;
-        }
-        if self.image.try_exists()? {
-            fs::remove_file(&self.image)
-                .map_err(|error| self.cleanup_failure("remove-image", error))?;
-        }
+        self.attached = false;
         fs::write(
             self.root.join("cleanup.ok"),
             b"owned image absent from native attachment list and removed\n",
@@ -417,7 +405,7 @@ mod tests {
     #[test]
     fn busy_detachment_uses_the_budget_until_absence_is_confirmed() {
         let mut calls = 0;
-        retry_detach(Instant::now() + Duration::from_secs(3), |attempt| {
+        retry_transition(Instant::now() + Duration::from_secs(3), |attempt| {
             assert_eq!(attempt, calls);
             calls += 1;
             // Replay three fast busy outcomes, then a native absence result.
@@ -430,7 +418,7 @@ mod tests {
     #[test]
     fn expired_detachment_budget_never_calls_the_native_utility() {
         let mut calls = 0;
-        let error = retry_detach(Instant::now() - Duration::from_secs(1), |_| {
+        let error = retry_transition(Instant::now() - Duration::from_secs(1), |_| {
             calls += 1;
             Ok(true)
         })
@@ -442,13 +430,48 @@ mod tests {
     #[test]
     fn unexpected_detachment_errors_stop_without_retry() {
         let mut calls = 0;
-        let error = retry_detach(Instant::now() + Duration::from_secs(3), |_| {
+        let error = retry_transition(Instant::now() + Duration::from_secs(3), |_| {
             calls += 1;
             Err(io::Error::from(io::ErrorKind::PermissionDenied))
         })
         .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
         assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn attachment_waits_for_the_owned_image_to_appear_in_native_inventory() {
+        let owned = Path::new("/owned/full.dmg");
+        let snapshots = [
+            info(""),
+            info(&image("/owned/full.dmg", &["/dev/disk7", "/dev/disk7s1"])),
+        ];
+        let mut calls = 0;
+        wait_for_attachment(Instant::now() + Duration::from_secs(3), |attempt| {
+            calls += 1;
+            attached_device(&snapshots[attempt], owned)
+        })
+        .unwrap();
+        assert_eq!(calls, 2);
+    }
+
+    #[test]
+    fn busy_mount_after_provisional_absence_preserves_cleanup_ownership() {
+        let mut calls = 0;
+        retry_transition(Instant::now() + Duration::from_secs(3), |attempt| {
+            calls += 1;
+            match attempt {
+                // Native image absence alone did not release the mount.
+                0 => Err(io::Error::from_raw_os_error(libc::EBUSY)),
+                // A fresh observation finds the owned association again;
+                // detachment is requested before another absence check.
+                1 => Ok(false),
+                2 => Ok(true),
+                _ => panic!("cleanup retried after confirmed completion"),
+            }
+        })
+        .unwrap();
+        assert_eq!(calls, 3);
     }
 
     #[test]
