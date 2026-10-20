@@ -1,7 +1,9 @@
+#![forbid(unsafe_code)]
 //! Executable weighted Command checks over actual files and pipes.
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
+#[path = "support/full_output.rs"]
+mod full_output;
+#[path = "support/test_process.rs"]
+mod test_process;
 use std::{
     fs,
     io::Write,
@@ -23,13 +25,42 @@ const PAIRED_SORT_ROUTE: &str = "system sort";
 const PAIRED_SORT_ROUTE: &str = "native sort";
 
 fn candidate() -> Command {
-    let mut command = Command::new(executable::fastmash());
+    configure(Command::new(executable::fastmash()))
+}
+
+fn configure(mut command: Command) -> Command {
     command
         .arg0("fastmash")
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C");
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    command
+}
+
+fn full_candidate() -> Command {
+    #[cfg(target_os = "linux")]
+    let command = candidate();
+    #[cfg(target_os = "macos")]
+    let command = {
+        let mut command = configure(test_process::bounded(executable::fastmash(), 30));
+        command.process_group(0);
+        command
+    };
+    command
+}
+
+fn file_size_candidate() -> Command {
+    let launcher = test_process::bounded(executable::fastmash(), 30);
+    // POSIX exec preserves ignored dispositions. This child-only setup keeps
+    // SIGXFSZ ignored through both execs, while Rust applies the actual limit.
+    let mut command = Command::new("/bin/sh");
+    command
+        .args(["-c", r#"trap '' XFSZ && exec "$@""#, "fastmash-file-size"])
+        .arg(launcher.get_program())
+        .args(launcher.get_args());
+    let mut command = configure(command);
+    command.env("FASTMASH_TEST_PROCESS_FILE_SIZE", "0");
     command
 }
 
@@ -819,30 +850,13 @@ fn weighted_sort_cleanup(csv: bool) {
     if csv {
         args.push("--csv");
     }
-    let mut command = candidate();
+    let mut command = file_size_candidate();
     command
         .args(&args)
         .env("FASTMASH_GROUPING", "sort")
         .env("FASTMASH_SORT_MEMORY_BYTES", "1")
         .env("TMPDIR", &directory.0)
         .stdin(fs::File::open(&input).unwrap());
-    // SAFETY: these async-signal-safe operations affect only the child. A zero
-    // file-size allowance exercises the maintained temporary-write failure path.
-    unsafe {
-        command.pre_exec(|| {
-            let limit = libc::rlimit {
-                rlim_cur: 0,
-                rlim_max: 0,
-            };
-            if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            if libc::signal(libc::SIGXFSZ, libc::SIG_IGN) == libc::SIG_ERR {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
     let output = command.output().unwrap();
     assert_eq!(output.status.code(), Some(1), "{output:?}");
     assert!(output.stdout.is_empty());
@@ -850,14 +864,19 @@ fn weighted_sort_cleanup(csv: bool) {
     assert_eq!(fs::read(&sentinel).unwrap(), b"untouched");
     assert_eq!(fs::read_dir(&directory.0).unwrap().count(), 2);
     for memory in ["67108864", "1"] {
-        let output = candidate()
+        let fixture = temp_dir::TempDir::new("weighted-full-output");
+        let mut command = full_candidate();
+        command
             .args(&args)
             .env("FASTMASH_GROUPING", "sort")
             .env("FASTMASH_SORT_MEMORY_BYTES", memory)
-            .stdin(fs::File::open(&input).unwrap())
-            .full_stdout(true)
-            .output()
-            .unwrap();
+            .stdin(fs::File::open(&input).unwrap());
+        let output = full_output::output(
+            command,
+            &executable::fastmash(),
+            true,
+            &fixture.0.with_extension("full-output"),
+        );
         assert_eq!(output.status.code(), Some(1), "{output:?}");
         assert!(String::from_utf8_lossy(&output.stderr).contains("write error"));
     }
@@ -944,19 +963,18 @@ fn a_large_weighted_pipe_is_collected_without_retained_observations() {
 
 #[test]
 fn real_output_failure_prevents_weighted_success() {
-    let mut child = candidate()
-        .args(["wmean", "1:2"])
-        .stdin(Stdio::piped())
-        .full_stdout(true)
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(b"10\t1\n20\t3\n")
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
+    let fixture = temp_dir::TempDir::new("weighted-pipe-full-output");
+    let (input, mut producer) = std::io::pipe().unwrap();
+    producer.write_all(b"10\t1\n20\t3\n").unwrap();
+    drop(producer);
+    let mut command = full_candidate();
+    command.args(["wmean", "1:2"]).stdin(input);
+    let output = full_output::output(
+        command,
+        &executable::fastmash(),
+        true,
+        &fixture.0.with_extension("full-output"),
+    );
     assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).contains("write error"));
 }

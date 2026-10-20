@@ -13,6 +13,24 @@ fn main() {
     let name = args.next().unwrap();
     let mode = args.next().unwrap();
     match mode.to_str().unwrap() {
+        "ignored-file-size-signal" => {
+            use nix::sys::{
+                resource::{Resource, getrlimit},
+                signal::{SigSet, Signal, raise},
+            };
+            let blocked = SigSet::thread_get_mask().unwrap().contains(Signal::SIGXFSZ);
+            assert!(!blocked, "file-size signal must be unblocked");
+            raise(Signal::SIGXFSZ).unwrap();
+            println!(
+                "{}",
+                serde_json::json!({
+                    "pid":std::process::id(),
+                    "file_size":getrlimit(Resource::RLIMIT_FSIZE).unwrap(),
+                    "file_size_signal_blocked":blocked,
+                    "private_environment_present":std::env::vars_os().any(|(k,_)|k.as_bytes().starts_with(b"FASTMASH_TEST_PROCESS_")),
+                })
+            );
+        }
         "resource-facts" => {
             use nix::sys::resource::{Resource, getrlimit};
             let facts = serde_json::json!({
