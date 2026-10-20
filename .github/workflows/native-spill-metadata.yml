@@ -1,0 +1,75 @@
+name: Native Spill metadata
+
+on:
+  push:
+    branches: [contrib/safe-spill-metadata-qualification]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-spill-metadata-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  MACOSX_DEPLOYMENT_TARGET: '15.0'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lifetime:
+    name: Spill metadata on ${{ matrix.os }} with Rust ${{ matrix.rust }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+        rust: ['1.88.0', '1.98.1']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Record native inputs
+        run: |
+          captures="$RUNNER_TEMP/native-spill-metadata"
+          printf 'CAPTURES=%s\n' "$captures" >> "$GITHUB_ENV"
+          mkdir "$captures"
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" = "${{ matrix.os == 'macos-15' && '15' || '26' }}"
+          {
+            git rev-parse HEAD
+            git status --porcelain
+            uname -a
+            sw_vers
+            rustc -Vv
+            cargo -V
+          } > "$captures/identity.txt"
+          shasum -a 256 Cargo.toml Cargo.lock crates/cli/Cargo.toml crates/cli/src/projected_spill.rs > "$captures/inputs.sha256"
+      - name: Execute the exact release lifetime test
+        run: |
+          result=0
+          cargo test --release --locked -p fastmash --bin fastmash projected_sort::spill::tests::exhausted_merge_inputs_are_released_before_the_merge_ends -- --exact --nocapture > "$CAPTURES/lifetime.log" 2>&1 || result=$?
+          printf '%s\n' "$result" > "$CAPTURES/lifetime.exit"
+          cat "$CAPTURES/lifetime.log"
+          test "$result" = 0
+          grep -F 'running 1 test' "$CAPTURES/lifetime.log"
+          grep -F 'exhausted_merge_inputs_are_released_before_the_merge_ends ... ok' "$CAPTURES/lifetime.log"
+          shasum -a 256 -c "$CAPTURES/inputs.sha256"
+      - name: Retain native observations
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-spill-metadata-${{ matrix.os }}-${{ matrix.rust }}
+          path: ${{ runner.temp }}/native-spill-metadata
+          if-no-files-found: error
+          retention-days: 7
