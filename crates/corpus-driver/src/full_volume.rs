@@ -323,7 +323,7 @@ impl FullVolume {
         eprint!("{detail}");
         let _ = fs::write(self.root.join("cleanup-failure.txt"), detail);
         let _ = bounded(
-            Command::new("/sbin/mount"),
+            &mut Command::new("/sbin/mount"),
             &self.root,
             "cleanup-mounts",
             Duration::from_secs(2),
