@@ -1,0 +1,50 @@
+name: Homebrew recipe checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/homebrew.yml'
+      - 'packaging/homebrew/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/homebrew.yml'
+      - 'packaging/homebrew/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  recipe:
+    name: Source package on ${{ matrix.os }}
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install and check the retained formula
+        run: |
+          brew --version
+          brew config
+          brew tap-new --no-git fastmash-qualification/local
+          tap=$(brew --repository)/Library/Taps/fastmash-qualification/homebrew-local
+          cp packaging/homebrew/fastmash.rb "$tap/Formula/fastmash.rb"
+          brew install --build-from-source fastmash-qualification/local/fastmash
+          brew test fastmash-qualification/local/fastmash
+          brew audit --strict fastmash-qualification/local/fastmash
+          brew style fastmash-qualification/local/fastmash
+          brew uninstall fastmash-qualification/local/fastmash
