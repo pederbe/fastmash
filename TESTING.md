@@ -142,6 +142,28 @@ Run the comparison in the same reference environment. Check its options with:
 cargo run --release -p fastmash-locale-tools --bin fastmash-compare-numeric-locales -- --help
 ```
 
+To regenerate collation candidates, first query the independently installed
+ICU 78 reference with the [separate development tool](https://github.com/pederbe/fastmash/blob/main/tools/icu-exemplars/README.md).
+Then probe an identified GNU sort with the matching compiled glibc locale tree:
+
+```sh
+cargo run --locked --manifest-path tools/icu-exemplars/Cargo.toml --target-dir target -- \
+  data/locales/glibc-lc-numeric.json /tmp/fastmash-icu-exemplars.json
+cargo run --release -p fastmash-locale-tools --bin fastmash-generate-collation-candidates -- \
+  --evidence /tmp/fastmash-candidate-evidence -- \
+  data/locales/glibc-lc-numeric.json /tmp/fastmash-icu-exemplars.json \
+  /path/to/gnu-sort /path/to/compiled-locales /tmp/fastmash-candidates.json
+```
+
+The files and evidence directory must be new. The exemplar snapshot must identify
+ICU 78 and contain exactly the numeric reference's locale names. GNU sort receives
+`a` then `A` through a pipe, the literal locale name followed by `.UTF-8`, and
+only `PATH=/usr/bin:/bin`, `LC_ALL`, `LOCPATH` and `TZ=UTC` in its environment.
+Each probe has the retained 300-second budget. Arguments, input, output and
+wait receipts remain in the private evidence directory. Failed probes,
+diagnostics and unexpected output stop generation rather than guessing case
+order. Successful output preserves the retained candidate JSON layout.
+
 To project the retained collation verification data into a new Rust file, run:
 
 ```sh

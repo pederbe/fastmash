@@ -1,0 +1,58 @@
+name: ICU locale reference
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/locale-reference.yml'
+      - 'tools/icu-exemplars/**'
+      - 'data/locales/collation-candidates.json'
+      - 'deny.toml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/locale-reference.yml'
+      - 'tools/icu-exemplars/**'
+      - 'data/locales/collation-candidates.json'
+      - 'deny.toml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: locale-reference-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  reference:
+    if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install native reference build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -qy --no-install-recommends libicu-dev libclang-dev pkg-config
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: '1.98.1'
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: tools/icu-exemplars -> ../../target
+      - name: Check safe ICU resource tool and version refusal
+        run: |
+          cargo fmt --manifest-path tools/icu-exemplars/Cargo.toml --check
+          cargo clippy --manifest-path tools/icu-exemplars/Cargo.toml --target-dir target --all-targets --locked -- -D warnings
+          cargo test --manifest-path tools/icu-exemplars/Cargo.toml --target-dir target --locked
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: '1.88'
+      - name: Check minimum supported Rust
+        run: cargo test --manifest-path tools/icu-exemplars/Cargo.toml --target-dir target --locked
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          manifest-path: tools/icu-exemplars/Cargo.toml
