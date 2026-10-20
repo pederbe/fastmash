@@ -23,7 +23,8 @@ fn invoke(binary: &OsStr, args: &[String], input: &[u8], full: bool) -> Output {
     invoke_at(binary, args, input, full, false)
 }
 fn invoke_at(binary: &OsStr, args: &[String], input: &[u8], full: bool, german: bool) -> Output {
-    let fixture = temp_dir::TempDir::new(&format!("presentation-{:?}", std::thread::current().id()));
+    let fixture =
+        temp_dir::TempDir::new(&format!("presentation-{:?}", std::thread::current().id()));
     let path = fixture.0.join("input");
     fs::write(&path, input).unwrap();
     #[cfg(target_os = "linux")]
