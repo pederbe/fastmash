@@ -462,7 +462,7 @@ mod tests {
             calls += 1;
             match attempt {
                 // Native image absence alone did not release the mount.
-                0 => Err(io::Error::from_raw_os_error(libc::EBUSY)),
+                0 => Err(io::Error::from_raw_os_error(nix::errno::Errno::EBUSY as i32)),
                 // A fresh observation finds the owned association again;
                 // detachment is requested before another absence check.
                 1 => Ok(false),
