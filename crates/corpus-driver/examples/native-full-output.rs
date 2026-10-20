@@ -112,10 +112,9 @@ fn require_full(file: &mut File) -> Result<i32> {
 
 fn fill(volume: &Path, root: &Path) -> Result<File> {
     let stats = nix::sys::statvfs::statvfs(volume)?;
-    let capacity = stats
-        .blocks()
-        .checked_mul(stats.fragment_size())
-        .ok_or("volume size overflow")?;
+    // Native block-count widths differ between Linux and Darwin. Widen
+    // before multiplication and refuse a capacity that cannot fit in u64.
+    let capacity = u64::try_from(u128::from(stats.blocks()) * u128::from(stats.fragment_size()))?;
     if !(1024 * 1024..=MAX_VOLUME).contains(&capacity) {
         return Err(format!(
             "require a private mounted volume of 1 to 16 MiB, observed {capacity} bytes"
