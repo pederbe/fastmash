@@ -1,3 +1,6 @@
+#![forbid(unsafe_code)]
+#[path = "support/test_process.rs"]
+mod test_process;
 use std::{
     fs,
     io::Write,
@@ -1134,7 +1137,11 @@ fn csv_spill_temporary_failures_reclaim_runs_without_touching_other_files() {
     let input = directory.0.join("input");
     fs::write(&input, b"b,1\na,2\nb,3\na,4\n").unwrap();
     for limit in [false, true] {
-        let mut command = Command::new(executable::fastmash());
+        let mut command = if limit {
+            test_process::ignoring_file_size_signal(executable::fastmash(), 30)
+        } else {
+            Command::new(executable::fastmash())
+        };
         command
             .arg0("fastmash")
             .args(["--csv", "-s", "-g", "1", "sum", "2"])
@@ -1144,23 +1151,7 @@ fn csv_spill_temporary_failures_reclaim_runs_without_touching_other_files() {
             .env("TMPDIR", &directory.0)
             .stdin(fs::File::open(&input).unwrap());
         if limit {
-            // SAFETY: setrlimit and signal are async-signal-safe; only this child
-            // receives the file-size limit and ignores its notification signal.
-            unsafe {
-                command.pre_exec(|| {
-                    let limit = libc::rlimit {
-                        rlim_cur: 0,
-                        rlim_max: 0,
-                    };
-                    if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                    if libc::signal(libc::SIGXFSZ, libc::SIG_IGN) == libc::SIG_ERR {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                    Ok(())
-                });
-            }
+            command.env("FASTMASH_TEST_PROCESS_FILE_SIZE", "0");
         }
         let output = command.output().unwrap();
         if limit {

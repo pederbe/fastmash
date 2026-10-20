@@ -123,3 +123,42 @@ fn resource_limits_apply_to_the_target_without_private_environment() {
         assert!(output.stdout.is_empty());
     }
 }
+
+#[test]
+fn file_size_signal_ignore_survives_exec_with_actual_limit_and_pid() {
+    for ignored in [false, true] {
+        let script = if ignored {
+            r#"trap '' XFSZ && exec "$@""#
+        } else {
+            r#"exec "$@""#
+        };
+        let mut command = Command::new("/bin/sh");
+        command
+            .args(["-c", script, "fastmash-file-size"])
+            .arg(env!("CARGO_BIN_EXE_fastmash-test-process"))
+            .arg("5")
+            .arg(env!("CARGO_BIN_EXE_fastmash-corpus-test-command"))
+            .arg("ignored-file-size-signal")
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .env("FASTMASH_TEST_PROCESS_FILE_SIZE", "0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let child = command.spawn().unwrap();
+        let pid = child.id();
+        let output = child.wait_with_output().unwrap();
+        if ignored {
+            assert!(output.status.success(), "{output:?}");
+            assert!(output.stderr.is_empty(), "{output:?}");
+            let facts: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(facts["pid"], pid);
+            assert_eq!(facts["file_size"], serde_json::json!([0, 0]));
+            assert_eq!(facts["file_size_signal_blocked"], false);
+            assert_eq!(facts["private_environment_present"], false);
+        } else {
+            assert_eq!(output.status.signal(), Some(nix::libc::SIGXFSZ));
+            assert!(output.stdout.is_empty());
+            assert!(output.stderr.is_empty());
+        }
+    }
+}

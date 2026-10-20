@@ -1,6 +1,11 @@
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
+#![forbid(unsafe_code)]
+#[path = "support/full_output.rs"]
+mod full_output;
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
+#[cfg(target_os = "macos")]
+#[path = "support/test_process.rs"]
+mod test_process;
 
 use std::{
     ffi::{OsStr, OsString},
@@ -18,13 +23,20 @@ fn invoke(binary: &OsStr, args: &[String], input: &[u8], full: bool) -> Output {
     invoke_at(binary, args, input, full, false)
 }
 fn invoke_at(binary: &OsStr, args: &[String], input: &[u8], full: bool, german: bool) -> Output {
-    let path = std::env::temp_dir().join(format!(
-        "presentation-{}-{:?}.tsv",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let fixture =
+        temp_dir::TempDir::new(&format!("presentation-{:?}", std::thread::current().id()));
+    let path = fixture.0.join("input");
     fs::write(&path, input).unwrap();
+    #[cfg(target_os = "linux")]
     let mut command = Command::new(binary);
+    #[cfg(target_os = "macos")]
+    let mut command = if full {
+        let mut command = test_process::bounded(binary, 30);
+        command.process_group(0);
+        command
+    } else {
+        Command::new(binary)
+    };
     command
         .arg0("fastmash")
         .args(args)
@@ -34,11 +46,13 @@ fn invoke_at(binary: &OsStr, args: &[String], input: &[u8], full: bool, german: 
         .env("LC_NUMERIC", if german { "de_DE.utf8" } else { "C" })
         .env("PATH", "/usr/bin:/bin")
         .stdin(fs::File::open(&path).unwrap())
-        .full_stdout(full)
         .stderr(Stdio::piped());
-    let result = command.output().unwrap();
-    fs::remove_file(path).unwrap();
-    result
+    full_output::output(
+        command,
+        binary,
+        full,
+        &fixture.0.with_extension("full-output"),
+    )
 }
 fn args(words: &[&str]) -> Vec<String> {
     words.iter().map(|s| s.to_string()).collect()
