@@ -1,9 +1,11 @@
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
-#[path = "support/process.rs"]
+#![forbid(unsafe_code)]
+#[path = "support/full_output.rs"]
+mod full_output;
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
+#[path = "support/test_process.rs"]
 #[cfg(target_os = "macos")]
-mod process;
+mod test_process;
 #[cfg(target_os = "linux")]
 use std::process::Command;
 
@@ -20,11 +22,8 @@ fn invoke(args: &[&str], input: &[u8], address_space: Option<u64>, full: bool) -
     let binary = std::env::var_os("FASTMASH_QUANTILE_TEST_BINARY")
         .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
-    let path = std::env::temp_dir().join(format!(
-        "quantiles-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let fixture = temp_dir::TempDir::new(&format!("quantiles-{:?}", std::thread::current().id()));
+    let path = fixture.0.join("input");
     fs::write(&path, input).unwrap();
     #[cfg(target_os = "linux")]
     let mut command = {
@@ -40,26 +39,27 @@ fn invoke(args: &[&str], input: &[u8], address_space: Option<u64>, full: bool) -
         command
     };
     #[cfg(target_os = "macos")]
-    let mut command = process::bounded(&binary, 60);
+    let mut command = test_process::bounded(&binary, if full { 30 } else { 60 });
     #[cfg(target_os = "macos")]
     if let Some(bytes) = address_space {
         panic!(
             "the Linux address-space fixture ({bytes} bytes) needs a native allocation-failure mechanism"
         );
     }
-    let result = command
+    command
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
         .stdin(fs::File::open(&path).unwrap())
-        .full_stdout(full)
-        .stderr(Stdio::piped())
-        .output()
-        .unwrap();
-    fs::remove_file(path).unwrap();
-    result
+        .stderr(Stdio::piped());
+    full_output::output(
+        command,
+        &binary,
+        full,
+        &fixture.0.with_extension("full-output"),
+    )
 }
 
 #[test]

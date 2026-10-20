@@ -13,6 +13,7 @@ fn main() {
     let name = args.next().unwrap();
     let mode = args.next().unwrap();
     match mode.to_str().unwrap() {
+        "alarm-remaining" => println!("{}", nix::unistd::alarm::cancel().unwrap_or(0)),
         "process-facts" => {
             use nix::sys::signal::{SigSet, Signal};
             let mask = SigSet::thread_get_mask().unwrap();

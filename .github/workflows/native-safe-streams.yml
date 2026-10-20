@@ -2,7 +2,7 @@ name: Native safe stream launcher
 
 on:
   push:
-    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams]
+    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams, contrib/safe-quantile-test-streams]
 
 permissions:
   contents: read
@@ -48,11 +48,11 @@ jobs:
           test "$(uname -m)" = arm64
           test "$(sw_vers -productVersion | cut -d. -f1)" = "${{ matrix.os == 'macos-15' && '15' || '26' }}"
           { git rev-parse HEAD; git status --porcelain; uname -a; sw_vers; rustc -Vv; cargo -V; } > "$captures/identity.txt"
-          shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/cli/tests/native_streams.rs crates/cli/tests/text_summaries.rs crates/cli/tests/support/test_process.rs crates/cli/tests/support/temp_dir.rs crates/corpus-driver/Cargo.toml crates/corpus-driver/src/*.rs crates/corpus-driver/tests/test_process.rs crates/corpus-driver/tests/support/command.rs > "$captures/inputs.sha256"
+          shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/cli/tests/native_streams.rs crates/cli/tests/text_summaries.rs crates/cli/tests/quantiles.rs crates/cli/tests/support/test_process.rs crates/cli/tests/support/temp_dir.rs crates/cli/tests/support/full_output.rs crates/corpus-driver/Cargo.toml crates/corpus-driver/src/*.rs crates/corpus-driver/tests/test_process.rs crates/corpus-driver/tests/support/command.rs > "$captures/inputs.sha256"
       - name: Lint with the maintained compiler
         if: matrix.rust == '1.98.1'
         run: |
-          cargo clippy --locked -p fastmash-corpus-driver --bin fastmash-test-process --test test_process -p fastmash --test native_streams --test text_summaries -- -D warnings > "$CAPTURES/clippy.log" 2>&1
+          cargo clippy --locked -p fastmash-corpus-driver --bin fastmash-test-process --test test_process -p fastmash --test native_streams --test text_summaries --test quantiles -- -D warnings > "$CAPTURES/clippy.log" 2>&1
       - name: Build candidate and safe launcher
         run: |
           cargo build --release --locked -p fastmash --bin fastmash -p fastmash-corpus-driver --bin fastmash-test-process > "$CAPTURES/build.log" 2>&1
@@ -63,7 +63,12 @@ jobs:
         timeout-minutes: 3
         run: |
           cargo test --locked -p fastmash-corpus-driver --test test_process -- --nocapture > "$CAPTURES/launcher-tests.log" 2>&1
-          FASTMASH_TEST_BINARY="$CAPTURES/bin/fastmash" FASTMASH_TEST_PROCESS="$CAPTURES/bin/fastmash-test-process" cargo test --release --locked -p fastmash --test native_streams --test text_summaries -- --include-ignored --nocapture > "$CAPTURES/native-streams.log" 2>&1
+          export FASTMASH_TEST_BINARY="$CAPTURES/bin/fastmash"
+          export FASTMASH_QUANTILE_TEST_BINARY="$CAPTURES/bin/fastmash"
+          export FASTMASH_TEST_PROCESS="$CAPTURES/bin/fastmash-test-process"
+          cargo test --release --locked -p fastmash --test native_streams --test text_summaries --test quantiles -- --nocapture > "$CAPTURES/native-streams.log" 2>&1
+          cargo test --release --locked -p fastmash --test text_summaries installed_sorted_wide_headers_keys_and_group_resets -- --ignored --nocapture > "$CAPTURES/prepared-text.log" 2>&1
+          cargo test --release --locked -p fastmash --test quantiles prepared_sorted_headers_share_quantiles -- --ignored --nocapture > "$CAPTURES/prepared-quantiles.log" 2>&1
           shasum -a 256 -c "$CAPTURES/inputs.sha256"
           shasum -a 256 -c "$CAPTURES/binaries.sha256"
       - name: Retain native observations

@@ -27,8 +27,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .to_str()
         .ok_or("invalid test-process alarm")?
         .parse()?;
-    if !(1..=30).contains(&seconds) {
-        return Err("test-process alarm must be between 1 and 30 seconds".into());
+    if !(1..=60).contains(&seconds) {
+        return Err("test-process alarm must be between 1 and 60 seconds".into());
     }
     let binary = args.next().ok_or("test-process executable is required")?;
     let arguments: Vec<OsString> = args.collect();

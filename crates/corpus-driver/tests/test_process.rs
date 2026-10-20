@@ -74,3 +74,22 @@ fn target_exit_status_is_preserved() {
     assert!(output.stdout.is_empty());
     assert!(output.stderr.is_empty());
 }
+
+#[test]
+fn sixty_second_bound_survives_exec_and_invalid_bounds_are_rejected() {
+    let output = command(60, "alarm-remaining").output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty());
+    let remaining: u32 = std::str::from_utf8(&output.stdout)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    assert!((31..=60).contains(&remaining), "{remaining}");
+    for seconds in [0, 61] {
+        let output = command(seconds, "alarm-remaining").output().unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("between 1 and 60 seconds"));
+    }
+}
