@@ -35,6 +35,14 @@ processes to be reaped and the candidate to have received `SIGKILL`.
 Failed setup or observations
 leave partial captures and return a nonzero status.
 
+The `--stop-resume` control supplies only the known input, without a wakeup
+comment. After observing the live output prefix and an empty kernel input
+queue, it sends `SIGSTOP` and waits for the candidate's stopped state. It then
+reclaims the terminal foreground and sends `SIGCONT`. The control requires the
+same exact final bytes and real input error, and records the stop and resume
+sequence. Successful execution establishes this variant only on the tested
+platform and compiler. It does not replace a retained aggregate fault case.
+
 A successful result establishes this terminal-based late-input mechanism.
 Porting the retained fault cases and qualifying full-output faults remain
 separate work. The research workflow checks macOS 15 and 26 with Rust 1.88 and
