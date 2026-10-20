@@ -1,4 +1,5 @@
 //! Command output and explicit finalization for standard output.
+#![forbid(unsafe_code)]
 use super::buffered_stdout::{BufferedStdout, Completion};
 use super::{
     Failure, OperationSet, failure, headers, options, os_failure, platform, records, standard_io,
@@ -348,17 +349,13 @@ impl Stdout {
     }
     #[cfg(target_os = "macos")]
     pub fn buffering(&self) -> (usize, bool) {
-        let mut metadata = std::mem::MaybeUninit::<libc::stat>::uninit();
-        // SAFETY: fstat initializes one stat through its valid output pointer.
-        if unsafe { libc::fstat(1, metadata.as_mut_ptr()) } != 0 {
+        let descriptor = rustix::stdio::stdout();
+        let Ok(metadata) = rustix::fs::fstat(descriptor) else {
             return (8192, false);
-        }
-        // SAFETY: successful fstat initialized the entire metadata structure.
-        let metadata = unsafe { metadata.assume_init() };
+        };
         let size = metadata.st_blksize;
-        // SAFETY: isatty only inspects the inherited standard-output descriptor.
         let terminal =
-            metadata.st_mode & libc::S_IFMT == libc::S_IFCHR && unsafe { libc::isatty(1) } == 1;
+            metadata.st_mode & libc::S_IFMT == libc::S_IFCHR && rustix::termios::isatty(descriptor);
         (
             if size > 0 && size < 8192 {
                 size as usize
