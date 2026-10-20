@@ -351,7 +351,10 @@ impl FullVolume {
             "cleanup-holders",
             Duration::from_secs(2),
         ) {
-            let _ = fs::write(self.root.join("cleanup-holders.error"), inventory.to_string());
+            let _ = fs::write(
+                self.root.join("cleanup-holders.error"),
+                inventory.to_string(),
+            );
         }
         error
     }
