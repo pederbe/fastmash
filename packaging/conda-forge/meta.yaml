@@ -23,6 +23,8 @@ requirements:
 
 # run_test.sh, next to this file, runs as the package test.
 test:
+  source_files:
+    - fastmash-package-test
   commands:
     - fastmash --version
 
