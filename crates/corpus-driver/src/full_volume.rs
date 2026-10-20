@@ -4,6 +4,7 @@ use nix::{
     sys::signal::{Signal, killpg},
     unistd::Pid,
 };
+use plist::Value;
 use std::{
     ffi::OsStr,
     fs::{self, File, OpenOptions},
@@ -86,6 +87,83 @@ fn utility(root: &Path, name: &str, arguments: &[&OsStr]) -> io::Result<()> {
     }
 }
 
+fn invalid_attachment() -> io::Error {
+    io::Error::other("invalid or ambiguous native image attachment list")
+}
+
+// Use the image's own native association, never a cached or inferred disk ID.
+fn attached_device(info: &Value, image: &Path) -> io::Result<Option<String>> {
+    let images = info
+        .as_dictionary()
+        .and_then(|value| value.get("images"))
+        .and_then(Value::as_array)
+        .ok_or_else(invalid_attachment)?;
+    let mut found = None;
+    for entry in images {
+        let entry = entry.as_dictionary().ok_or_else(invalid_attachment)?;
+        let path = entry
+            .get("image-path")
+            .and_then(Value::as_string)
+            .ok_or_else(invalid_attachment)?;
+        if Path::new(path) != image {
+            continue;
+        }
+        if found.is_some() {
+            return Err(invalid_attachment());
+        }
+        let entities = entry
+            .get("system-entities")
+            .and_then(Value::as_array)
+            .ok_or_else(invalid_attachment)?;
+        let devices = entities
+            .iter()
+            .map(|entity| {
+                entity
+                    .as_dictionary()
+                    .and_then(|entity| entity.get("dev-entry"))
+                    .and_then(Value::as_string)
+                    .ok_or_else(invalid_attachment)
+            })
+            .collect::<io::Result<Vec<_>>>()?;
+        let whole: Vec<_> = devices
+            .iter()
+            .copied()
+            .filter(|device| {
+                device.strip_prefix("/dev/disk").is_some_and(|suffix| {
+                    !suffix.is_empty() && suffix.bytes().all(|byte| byte.is_ascii_digit())
+                })
+            })
+            .collect();
+        let [whole] = whole.as_slice() else {
+            return Err(invalid_attachment());
+        };
+        if devices.iter().any(|device| {
+            *device != *whole
+                && !device.strip_prefix(*whole).is_some_and(|suffix| {
+                    suffix.strip_prefix('s').is_some_and(|partition| {
+                        !partition.is_empty() && partition.bytes().all(|byte| byte.is_ascii_digit())
+                    })
+                })
+        }) {
+            return Err(invalid_attachment());
+        }
+        found = Some((*whole).to_owned());
+    }
+    Ok(found)
+}
+
+fn remaining(deadline: Instant) -> io::Result<Duration> {
+    let budget = deadline.saturating_duration_since(Instant::now());
+    if budget.is_zero() {
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "image cleanup deadline",
+        ))
+    } else {
+        Ok(budget)
+    }
+}
+
 pub struct FullVolume {
     root: PathBuf,
     image: PathBuf,
@@ -125,6 +203,7 @@ impl FullVolume {
             "attach",
             &[
                 OsStr::new("attach"),
+                OsStr::new("-plist"),
                 volume.image.as_os_str(),
                 OsStr::new("-mountpoint"),
                 volume.mount.as_os_str(),
@@ -132,26 +211,69 @@ impl FullVolume {
                 OsStr::new("-noautoopen"),
             ],
         )?;
+        if volume
+            .current_device("attach-info", Instant::now() + Duration::from_secs(15))?
+            .is_none()
+        {
+            return Err(io::Error::other(
+                "attached image missing from native ownership list",
+            ));
+        }
         Ok(volume)
     }
     pub fn mount(&self) -> &Path {
         &self.mount
     }
+    fn current_device(&self, name: &str, deadline: Instant) -> io::Result<Option<String>> {
+        let status = bounded(
+            Command::new("/usr/bin/hdiutil").args(["info", "-plist"]),
+            &self.root,
+            name,
+            remaining(deadline)?,
+        )?;
+        if !status.success() {
+            return Err(io::Error::other(format!("hdiutil {name}: {status}")));
+        }
+        let info = Value::from_file(self.root.join(format!("{name}.stdout")))
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        attached_device(&info, &self.image)
+    }
     fn cleanup(&mut self) -> io::Result<()> {
         if self.attached {
-            utility(
-                &self.root,
-                "detach",
-                &[
-                    OsStr::new("detach"),
-                    // The probe has already reaped every candidate. A native
-                    // detach can still report EBUSY for this private volume.
-                    // Force only its owned mount, with captures kept outside.
-                    OsStr::new("-force"),
-                    self.mount.as_os_str(),
-                ],
-            )?;
-            self.attached = false;
+            // A busy detach may already have unmounted the filesystem. Resolve
+            // this image's whole device afresh before each bounded attempt.
+            let deadline = Instant::now() + Duration::from_secs(15);
+            for attempt in 0..3 {
+                let Some(device) =
+                    self.current_device(&format!("cleanup-info-{attempt}"), deadline)?
+                else {
+                    self.attached = false;
+                    break;
+                };
+                let status = bounded(
+                    Command::new("/usr/bin/hdiutil").args(["detach", "-force", &device]),
+                    &self.root,
+                    &format!("detach-{attempt}"),
+                    remaining(deadline)?,
+                )?;
+                if !status.success() && status.code() != Some(16) {
+                    return Err(io::Error::other(format!("hdiutil detach: {status}")));
+                }
+                thread::sleep(Duration::from_millis(250).min(remaining(deadline)?));
+            }
+            if self.attached {
+                if self
+                    .current_device("cleanup-info-final", deadline)?
+                    .is_some()
+                {
+                    return Err(io::Error::other(
+                        "owned image remains attached after bounded cleanup",
+                    ));
+                }
+                self.attached = false;
+            }
+        }
+        if self.mount.try_exists()? {
             fs::remove_dir(&self.mount)?;
         }
         if self.image.try_exists()? {
@@ -159,7 +281,7 @@ impl FullVolume {
         }
         fs::write(
             self.root.join("cleanup.ok"),
-            b"owned image detached and removed\n",
+            b"owned image absent from native attachment list and removed\n",
         )?;
         Ok(())
     }
@@ -174,5 +296,73 @@ impl Drop for FullVolume {
                 self.root.display()
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn info(images: &str) -> Value {
+        Value::from_reader_xml(format!(
+            "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>images</key><array>{images}</array></dict></plist>"
+        ).as_bytes()).unwrap()
+    }
+
+    fn image(path: &str, devices: &[&str]) -> String {
+        let entities: String = devices
+            .iter()
+            .map(|device| format!("<dict><key>dev-entry</key><string>{device}</string></dict>"))
+            .collect();
+        format!(
+            "<dict><key>image-path</key><string>{path}</string><key>image-alias</key><data>AAE=</data><key>system-entities</key><array>{entities}</array></dict>"
+        )
+    }
+
+    #[test]
+    fn native_binding_selects_only_the_owned_image_and_whole_device() {
+        let owned = "/owned/ångström.dmg";
+        let value = info(&format!(
+            "{}{}",
+            image("/other/ångström.dmg", &["/dev/disk42", "/dev/disk42s1"]),
+            image(owned, &["/dev/disk7", "/dev/disk7s1"]),
+        ));
+        // No mount point is needed after a partial unmount. Data fields in the
+        // native plist remain valid and do not affect the image association.
+        assert_eq!(
+            attached_device(&value, Path::new(owned))
+                .unwrap()
+                .as_deref(),
+            Some("/dev/disk7")
+        );
+        assert_eq!(
+            attached_device(&value, Path::new("/absent/ångström.dmg")).unwrap(),
+            None
+        );
+        assert_eq!(attached_device(&info(""), Path::new(owned)).unwrap(), None);
+    }
+
+    #[test]
+    fn ambiguous_or_inconsistent_native_bindings_are_refused() {
+        let owned = "/owned/full.dmg";
+        for devices in [
+            vec!["/dev/disk7s1"],
+            vec!["/dev/disk7", "/dev/disk8"],
+            vec!["/dev/disk7", "/dev/disk70s1"],
+            vec!["/dev/disk7", "/dev/disk7s1/other"],
+        ] {
+            assert!(attached_device(&info(&image(owned, &devices)), Path::new(owned)).is_err());
+        }
+        let duplicate = image(owned, &["/dev/disk7"]);
+        assert!(
+            attached_device(&info(&format!("{duplicate}{duplicate}")), Path::new(owned)).is_err()
+        );
+        assert!(attached_device(&Value::String("unknown".into()), Path::new(owned)).is_err());
+    }
+
+    #[test]
+    fn exhausted_cleanup_budget_refuses_another_utility() {
+        let error = remaining(Instant::now() - Duration::from_secs(1)).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
     }
 }
