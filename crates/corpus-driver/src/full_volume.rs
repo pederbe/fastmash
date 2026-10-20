@@ -467,8 +467,8 @@ mod tests {
                         }),
                     ));
                 }
-                for child in children {
-                    let (unique, success) = child.join().unwrap();
+                for (unique, child) in children {
+                    let success = child.join().is_ok_and(|(_, success)| success);
                     failures[mode][usize::from(unique)] += usize::from(!success);
                 }
                 bounded(
