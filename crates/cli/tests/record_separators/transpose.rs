@@ -6,6 +6,7 @@ pub(super) fn failing_input(binary: &OsStr, arguments: &[&str], full: bool) -> O
 
 /// Runs `binary` with a late EIO, discarding a final incomplete record.
 /// Linux uses a real PTY; Darwin uses the calibrated native read fault.
+#[forbid(unsafe_code)]
 pub(super) fn failing_input_with(
     binary: &OsStr,
     arguments: &[&str],
@@ -34,33 +35,20 @@ pub(super) fn failing_input_with(
     }
     #[cfg(target_os = "linux")]
     {
-        use std::{io::Write, os::fd::FromRawFd};
-        let mut master = -1;
-        let mut slave = -1;
-        // Successful openpty transfers two owned descriptors. Raw mode prevents
+        use nix::{
+            pty::openpty,
+            sys::termios::{SetArg, cfmakeraw, tcgetattr, tcsetattr},
+        };
+        use std::io::Write;
+        let pair = openpty(None, None).unwrap();
+        // openpty returns two owned descriptors. Raw mode prevents
         // terminal newline conversion; closing the slave gives the master EIO after
         // its queued bytes, including one incomplete record, have been consumed.
-        // SAFETY: every pointer is to a live local or null where the API allows it.
-        unsafe {
-            assert_eq!(
-                libc::openpty(
-                    &mut master,
-                    &mut slave,
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut()
-                ),
-                0
-            );
-            let mut term = std::mem::zeroed();
-            assert_eq!(libc::tcgetattr(slave, &mut term), 0);
-            libc::cfmakeraw(&mut term);
-            assert_eq!(libc::tcsetattr(slave, libc::TCSANOW, &term), 0);
-        }
-        // SAFETY: openpty returned two new descriptors that nothing else owns.
-        let terminal = unsafe { fs::File::from_raw_fd(master) };
-        // SAFETY: as above.
-        let mut feed = unsafe { fs::File::from_raw_fd(slave) };
+        let mut term = tcgetattr(&pair.slave).unwrap();
+        cfmakeraw(&mut term);
+        tcsetattr(&pair.slave, SetArg::TCSANOW, &term).unwrap();
+        let terminal = fs::File::from(pair.master);
+        let mut feed = fs::File::from(pair.slave);
         feed.write_all(input).unwrap();
         drop(feed);
         Command::new(binary)
