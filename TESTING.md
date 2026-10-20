@@ -283,7 +283,7 @@ differs record Fastmash's documented behavior instead; the
 reasons.
 
 ```sh
-cargo build --release --workspace   # candidate, companion and corpus driver
+cargo build --release --workspace   # candidate, Sort supervisor and corpus driver
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --keep-going
 target/release/fastmash-corpus --help
 ```
@@ -408,7 +408,8 @@ These named dispositions adapt observation or diagnostics only:
 
 | Mechanism or frozen case | Native disposition |
 | --- | --- |
-| Rust full-stream tests | A test-only dyld interposer returns `-1` with native `ENOSPC` for the selected stdout or stderr descriptor. A Rust probe checks the actual return and errno, ordinary and unselected writes must remain exact, and the actual candidate must pass calibration before a fault result is accepted. Corpus stdout uses a writable, nonterminal regular capture admitted with an actual 4,096-byte block size, preserving the frozen output buffer boundary and literal diagnostics; observations retain its destination facts. Linux keeps `/dev/full`. |
+| Rust full-stream tests | A test-only dyld interposer returns `-1` with native `ENOSPC` for the selected stdout or stderr descriptor. A Rust probe checks the actual return and errno, ordinary and unselected writes must remain exact, and the actual candidate must pass calibration before a fault result is accepted. Linux keeps `/dev/full`. |
+| All 72 `io=full` corpus cases | The Rust corpus driver uses a private 8 MiB HFS+ image filled to real `ENOSPC`. Actual executable controls calibrate selected and unselected streams, with empty-sink checks before and after each case. Destination facts and owned-image cleanup are retained. Linux uses `/dev/full`. |
 | `grouping-next:read-error`, `grouping-next:read-error-header`, `paired-private:grouped-read-error-after-result` | The corpus driver observes the frozen visible completed-group acknowledgement, stops the candidate, reclaims the controlling terminal foreground and resumes it. The next read produces real `EIO` without wake bytes on both platforms. Final stdout, stderr and status 1 stay frozen. |
 | `sorting/header-empty`, `sorting/header-only-comments`; native calculations in `record_separators::record_intake::missing_headers_keep_native_and_external_full_warning_order`; ordinary aggregates in `weighted_mean::sorted_named_empty_completion_keeps_header_errors_and_legacy_commands` | Native sorting on Linux and macOS reports exactly `fastmash: missing input header for named grouping key`, with empty stdout and status 1. It emits no full warning because the data phase has not begun. The fixture remains frozen; only these two named corpus diagnostics are adapted. |
 | `rms` in `record_separators::record_intake::missing_headers_keep_native_and_external_full_warning_order` | Linux's external route retains the system-sort error, then the full warning and `read error (on close)`. macOS uses the native missing-header diagnostic without a full warning. Both require empty stdout and status 1. |
