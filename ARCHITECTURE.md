@@ -83,9 +83,10 @@ executable verifies frozen Command cases against a selected executable, includin
 directory input, closed output pipes, calibrated real full-output failures and
 early commands with stdin held open. It also observes live processes and actual
 output prefixes before EOF through regular files, pipes and raw terminals.
-It uses safe process-group and resource-limit APIs to bound each invocation,
-and records exact results and explicit transport deferrals. The complete corpus
-gate retains the stream and fault transports described in the
+It also exercises real late input EIO after an acknowledged output prefix,
+using owned controlling-terminal job control. Safe process-group and resource-limit
+APIs bound each invocation. It records exact results and every case disposition.
+Both drivers remain in the complete corpus gate during native qualification, as described in the
 [testing guide](https://fastmash.io/contributing/testing.html).
 
 The unpublished `fastmash-locale-tools` crate in `crates/locale-tools/` is also a

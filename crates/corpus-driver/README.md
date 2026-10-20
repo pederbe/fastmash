@@ -22,13 +22,12 @@ target/release/fastmash-corpus --binary target/release/fastmash --expected-versi
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --stdin-file --evidence-dir /tmp/ordinary-file
 ```
 
-The default run executes 3,134 cases: 2,857 ordinary cases, 22 directory-input
+The default run executes all 3,137 frozen cases: 2,857 ordinary cases, 22 directory-input
 cases, 51 closed-output-pipe cases, 72 full-output cases and 65 early commands
-with stdin held open, plus 67 held-output observations. It records three late-input cases
-as deferred. Regular-file mode executes the same 2,857 ordinary cases as before
-and records why each other case belongs to the default Rust run or the full
-Python run. Both modes account for all 3,137 case IDs. Keep the complete Python
-corpus gate until the remaining transports have migrated.
+with stdin held open, plus 67 held-output observations and three late-input errors. Regular-file mode executes the same 2,857 ordinary cases as before
+and records why each other case belongs to the default Rust run. Both modes
+account for all 3,137 case IDs. Keep the complete Python corpus gate until the
+Rust driver has completed native qualification.
 Native macOS keeps the two existing missing-header diagnostic adaptations and
 the four buffer-size adaptations described below.
 Running this tool on Linux supplies Linux evidence only.
@@ -42,6 +41,14 @@ record the actual output prefix and whether the process is still alive, then
 close stdin and compare the completed output. Destinations are regular files,
 pipes or raw terminals. Native macOS preserves the four existing buffer-size
 adaptations using frozen bytes and observed destination facts.
+
+Late-input cases first check ordinary completion against the actual executable.
+They then retain exact input, observe a live acknowledgement through a raw
+terminal, stop the candidate, reclaim its input terminal foreground and resume
+it. The next read produces a real EIO without added wake bytes. Captures include
+the acknowledgement, terminal/session identities, signal masks and reaping.
+The coordinator survives terminal hangup to cancel its group when the driver
+disappears. The candidate keeps its normal hangup signal setting.
 
 Full-output cases use Linux's `/dev/full` or a private 8 MiB HFS+ image on macOS,
 created with the system's `hdiutil`. Ordinary, selected and unselected I/O controls
