@@ -23,3 +23,16 @@ pub fn bounded(binary: impl AsRef<OsStr>, seconds: u32) -> Command {
     command.arg(seconds.to_string()).arg(binary);
     command
 }
+
+/// Preserve ignored SIGXFSZ across the fresh launcher and target execs.
+/// Set the selected file-size limit after the caller's env_clear().
+#[allow(dead_code)] // Other suites use only the ordinary alarm launcher.
+pub fn ignoring_file_size_signal(binary: impl AsRef<OsStr>, seconds: u32) -> Command {
+    let launcher = bounded(binary, seconds);
+    let mut command = Command::new("/bin/sh");
+    command
+        .args(["-c", r#"trap '' XFSZ && exec "$@""#, "fastmash-file-size"])
+        .arg(launcher.get_program())
+        .args(launcher.get_args());
+    command
+}

@@ -51,15 +51,10 @@ fn full_candidate() -> Command {
 }
 
 fn file_size_candidate() -> Command {
-    let launcher = test_process::bounded(executable::fastmash(), 30);
-    // POSIX exec preserves ignored dispositions. This child-only setup keeps
-    // SIGXFSZ ignored through both execs, while Rust applies the actual limit.
-    let mut command = Command::new("/bin/sh");
-    command
-        .args(["-c", r#"trap '' XFSZ && exec "$@""#, "fastmash-file-size"])
-        .arg(launcher.get_program())
-        .args(launcher.get_args());
-    let mut command = configure(command);
+    let mut command = configure(test_process::ignoring_file_size_signal(
+        executable::fastmash(),
+        30,
+    ));
     command.env("FASTMASH_TEST_PROCESS_FILE_SIZE", "0");
     command
 }
