@@ -262,6 +262,9 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     }
     if let Some(full) = full {
         full.finish()?;
+        if options.evidence_dir.is_none() {
+            fs::remove_dir_all(&full_root)?;
+        }
     }
     directory.remove()?;
     // A run's identity must still describe the executables and frozen inputs
@@ -313,7 +316,10 @@ fn prepare_evidence(directory: &Path) -> Result<()> {
 }
 
 fn full_output_root(scratch: &Path, evidence: Option<&Path>) -> PathBuf {
-    evidence.unwrap_or(scratch).join("full-output")
+    evidence.map_or_else(
+        || scratch.with_extension("full-output"),
+        |directory| directory.join("full-output"),
+    )
 }
 
 #[cfg(test)]
