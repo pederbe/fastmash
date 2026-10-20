@@ -86,8 +86,8 @@ output prefixes before EOF through regular files, pipes and raw terminals.
 It also exercises real late input EIO after an acknowledged output prefix,
 using owned controlling-terminal job control. Safe process-group and resource-limit
 APIs bound each invocation. It records exact results and every case disposition.
-Both drivers remain in the complete corpus gate during native qualification, as described in the
-[testing guide](https://fastmash.io/contributing/testing.html).
+CI and native archive installation checks use this same driver, as described in
+the [testing guide](https://fastmash.io/contributing/testing.html).
 
 The unpublished `fastmash-locale-tools` crate in `crates/locale-tools/` is also a
 development tool outside the product dependency graph. It owns native numeric

@@ -26,8 +26,8 @@ The default run executes all 3,137 frozen cases: 2,857 ordinary cases, 22 direct
 cases, 51 closed-output-pipe cases, 72 full-output cases and 65 early commands
 with stdin held open, plus 67 held-output observations and three late-input errors. Regular-file mode executes the same 2,857 ordinary cases as before
 and records why each other case belongs to the default Rust run. Both modes
-account for all 3,137 case IDs. Keep the complete Python corpus gate until the
-Rust driver has completed native qualification.
+account for all 3,137 case IDs. Application CI, contributor commands and native
+archive installation checks use this driver.
 Native macOS keeps the two existing missing-header diagnostic adaptations and
 the four buffer-size adaptations described below.
 Running this tool on Linux supplies Linux evidence only.

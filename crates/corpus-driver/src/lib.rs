@@ -352,7 +352,7 @@ pub fn main_entry(mut args: impl Iterator<Item = OsString>) -> Result<i32> {
         match arg.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Run frozen Fastmash commands and supported transports.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n  --fixture PATH          compressed corpus and sibling provenance\n  --match TEXT            select case IDs containing TEXT\n  --expected-version V    successful version-action expectation\n  --stdin-file            ordinary input through a regular file\n  --keep-going            continue after mismatches\n  --evidence-dir PATH     retain one run in an empty directory\n\nHeld stdin, pre-EOF output and late-input error cases run by default alongside directory input, closed output pipes and full-output cases. The full Python gate remains required during qualification."
+                    "Run frozen Fastmash commands and supported transports.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n  --fixture PATH          compressed corpus and sibling provenance\n  --match TEXT            select case IDs containing TEXT\n  --expected-version V    successful version-action expectation\n  --stdin-file            ordinary input through a regular file\n  --keep-going            continue after mismatches\n  --evidence-dir PATH     retain one run in an empty directory\n\nHeld stdin, pre-EOF output and late-input error cases run by default alongside directory input, closed output pipes and full-output cases. Both input modes account for every frozen case."
                 );
                 return Ok(0);
             }

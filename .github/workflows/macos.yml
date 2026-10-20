@@ -79,7 +79,6 @@ jobs:
             sw_vers
             rustc -Vv
             cargo -V
-            python3 --version
             printf 'target=aarch64-apple-darwin\nMACOSX_DEPLOYMENT_TARGET=%s\nCARGO_INCREMENTAL=%s\n' "$MACOSX_DEPLOYMENT_TARGET" "$CARGO_INCREMENTAL"
             printf 'RUSTFLAGS=%s\nCARGO_ENCODED_RUSTFLAGS=%s\n' "${RUSTFLAGS-}" "${CARGO_ENCODED_RUSTFLAGS-}"
             printf 'profile=release opt-level=2 panic=abort overflow-checks=true lto=false codegen-units=1\n'
@@ -95,11 +94,10 @@ jobs:
           rustc --edition=2024 -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_probe.rs -o "$helpers/full-output-probe"
           shasum -a 256 "$helpers/full-output.dylib" "$helpers/full-output-probe" | tee "$EVIDENCE/fault-helpers.sha256"
           printf 'FASTMASH_TEST_FULL_OUTPUT_LIBRARY=%s\nFASTMASH_TEST_FULL_OUTPUT_PROBE=%s\n' "$helpers/full-output.dylib" "$helpers/full-output-probe" >> "$GITHUB_ENV"
-      - name: Check formatting, native lint and corpus adapters
+      - name: Check formatting and native lint
         run: |
           cargo fmt --all --check 2>&1 | tee "$EVIDENCE/fmt.log"
           cargo clippy --workspace --all-targets --locked -- -D warnings 2>&1 | tee "$EVIDENCE/clippy.log"
-          python3 -B -m unittest discover -s scripts -p 'test_check_regressions.py' 2>&1 | tee "$EVIDENCE/corpus-adapters.log"
       - name: Check retained package tooling
         run: |
           cargo fmt --manifest-path release/publication-test-server/Cargo.toml --check
@@ -118,10 +116,8 @@ jobs:
           "$binary" --version | tee "$EVIDENCE/version.txt"
           "$binary" --help > "$EVIDENCE/help.txt"
           version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
-          python3 -B scripts/check_regressions.py --binary "$binary" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/corpus-pipe" 2>&1 | tee "$EVIDENCE/corpus-pipe.log"
-          python3 -B scripts/check_regressions.py --binary "$binary" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/corpus-file" 2>&1 | tee "$EVIDENCE/corpus-file.log"
-          target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/ordinary-pipe" 2>&1 | tee "$EVIDENCE/ordinary-pipe.log"
-          target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/ordinary-file" 2>&1 | tee "$EVIDENCE/ordinary-file.log"
+          target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/corpus-pipe" 2>&1 | tee "$EVIDENCE/corpus-pipe.log"
+          target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/corpus-file" 2>&1 | tee "$EVIDENCE/corpus-file.log"
       - name: Retain native command evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

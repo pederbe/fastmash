@@ -82,17 +82,15 @@ jobs:
       - name: Regression corpus
         run: |
           version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
-          python3 -B scripts/check_regressions.py --binary target/release/fastmash --expected-version "$version" --keep-going --evidence-dir "$RUNNER_TEMP/ordinary-parity/python-pipe"
-          python3 -B scripts/check_regressions.py --binary target/release/fastmash --expected-version "$version" --stdin-file --keep-going --evidence-dir "$RUNNER_TEMP/ordinary-parity/python-file"
-          target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --keep-going --evidence-dir "$RUNNER_TEMP/ordinary-parity/rust-pipe"
-          target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --stdin-file --keep-going --evidence-dir "$RUNNER_TEMP/ordinary-parity/rust-file"
-      - name: Retain ordinary corpus parity evidence
+          target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --keep-going --evidence-dir "$RUNNER_TEMP/corpus/pipe"
+          target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --stdin-file --keep-going --evidence-dir "$RUNNER_TEMP/corpus/file"
+      - name: Retain corpus evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ordinary-corpus-linux
+          name: corpus-linux
           retention-days: 7
-          path: ${{ runner.temp }}/ordinary-parity/
+          path: ${{ runner.temp }}/corpus/
           if-no-files-found: ignore
 
   profiling:
