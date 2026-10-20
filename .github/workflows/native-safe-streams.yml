@@ -69,6 +69,8 @@ jobs:
           export FASTMASH_SUM_MEAN_TEST_BINARY="$CAPTURES/bin/fastmash"
           export FASTMASH_TEST_CORPUS="$CAPTURES/bin/fastmash-corpus"
           export FASTMASH_TEST_PROCESS="$CAPTURES/bin/fastmash-test-process"
+          export FASTMASH_RECORD_FAULT_EVIDENCE="$CAPTURES/record-full-output"
+          mkdir "$FASTMASH_RECORD_FAULT_EVIDENCE"
           cargo test --release --locked -p fastmash --test native_streams --test text_summaries --test quantiles --test grouping --test dispersion --test extrema --test sum_mean --test presentation --test selectors --test weighted_mean --test csv_input --test record_separators -- --nocapture > "$CAPTURES/native-streams.log" 2>&1
           cargo test --release --locked -p fastmash --test text_summaries installed_sorted_wide_headers_keys_and_group_resets -- --ignored --nocapture > "$CAPTURES/prepared-text.log" 2>&1
           cargo test --release --locked -p fastmash --test quantiles prepared_sorted_headers_share_quantiles -- --ignored --nocapture > "$CAPTURES/prepared-quantiles.log" 2>&1

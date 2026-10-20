@@ -13,8 +13,23 @@ pub(super) fn failing_input_with(
     full: bool,
     locale: &str,
 ) -> Output {
-    let directory =
-        temp_dir::TempDir::new(&format!("read-fault-{:?}", std::thread::current().id()));
+    // Native qualification retains only completed captures and sink cleanup
+    // receipts in its prepared artifact directory. Ordinary tests stay temporary.
+    let evidence_parent = full
+        .then(|| std::env::var_os("FASTMASH_RECORD_FAULT_EVIDENCE"))
+        .flatten();
+    let directory = if let Some(parent) = &evidence_parent {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let serial = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let parent = fs::canonicalize(parent).unwrap();
+        temp_dir::TempDir::create(parent.join(format!(
+            "read-fault-{}-{serial}",
+            std::process::id()
+        )))
+        .unwrap()
+    } else {
+        temp_dir::TempDir::new(&format!("read-fault-{:?}", std::thread::current().id()))
+    };
     let launcher = std::env::var_os("FASTMASH_TEST_CORPUS")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
@@ -74,7 +89,13 @@ pub(super) fn failing_input_with(
             fs::read_to_string(root.join("completed.json")).unwrap(),
         );
         owner.finish().unwrap();
-        fs::remove_dir_all(full_root).unwrap();
+        if evidence_parent.is_some() {
+            // All children and native resources are closed before retaining
+            // these files. The neighboring owner root contains detach receipts.
+            std::mem::forget(directory);
+        } else {
+            fs::remove_dir_all(full_root).unwrap();
+        }
     }
     output
 }

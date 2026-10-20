@@ -299,6 +299,9 @@ Combined read-error/full-output fixtures borrow the calibrated full destination
 through the same coordinator and retain it until both processes are reaped. They
 keep candidate stderr separate from the cancellation channel. Calibration checks
 the selected executable's path and hash, including the named GNU 1.9 reference.
+Native qualification sets `FASTMASH_RECORD_FAULT_EVIDENCE` to a prepared private
+directory. Completed combined cases retain input observations, selected-sink
+calibration and native detach receipts there after child and sink cleanup.
 The record suite forbids unsafe code. Its Linux memory-refusal fixtures apply the
 same 32 MiB address-space limit through the fresh process launcher.
 
