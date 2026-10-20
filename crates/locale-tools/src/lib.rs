@@ -18,6 +18,8 @@ pub mod comparison;
 #[cfg(unix)]
 pub mod executor;
 #[cfg(unix)]
+pub mod glibc_artifacts;
+#[cfg(unix)]
 pub mod glibc_collation;
 #[cfg(unix)]
 pub mod glibc_generation;

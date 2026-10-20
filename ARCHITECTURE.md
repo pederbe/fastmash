@@ -94,8 +94,8 @@ commands and retain their exact streams and statuses in a private evidence
 directory. Punctuation comparison selects the retained verification's nonempty
 final tags, sends the fixed word list through pipes and preserves native failures
 and order differences in the existing report format. Rust tools generate and
-check the numeric tables. Python collation tools remain in use while their
-replacement checks are completed.
+check the numeric and collation tables with identified native references and
+pinned independent Unicode data.
 
 The separately built `tools/icu-exemplars/` development tool queries the installed
 ICU 78 reference through safe resource APIs. Its native headers and libclang

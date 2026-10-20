@@ -89,8 +89,9 @@ verification updates accept the original producer's format and refuse unsupporte
 prior fields or record order. Unix tests exercise comparison
 execution and both command interfaces with fixed local fixtures. Linux/glibc
 also exercises the numeric generator with the installed POSIX locale and an
-invalid locale. Numeric generation and comparison use the Rust tools. The Python
-collation tools remain in use while their replacement checks are completed.
+invalid locale. Numeric generation and comparison use the Rust tools. The
+collation generation and comparison commands below use independent native
+references and pinned Unicode data.
 The numeric emitter's header names its actual
 `fastmash-generate-numeric-locales` command. This provenance-only difference from
 legacy emission leaves the table body and data unchanged.
@@ -164,6 +165,35 @@ wait receipts remain in the private evidence directory. Failed probes,
 diagnostics and unexpected output stop generation rather than guessing case
 order. Successful output preserves the retained candidate JSON layout.
 
+To generate glibc's treatment of characters apart from letters, use the
+identified reference's GNU sort, glibc locale command, compiled locale tree and
+`iso14651_t1_common` source:
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-generate-glibc-collation -- \
+  --evidence /tmp/fastmash-glibc-captures -- /path/to/gnu-sort \
+  /path/to/reference/bin/locale /path/to/compiled-locales \
+  /path/to/reference/iso14651_t1_common /tmp/fastmash-glibc.json /tmp/fastmash-glibc.rs
+```
+
+Both output files and the capture directory must be new. The command probes the
+sorting locales compiled from `crates/cli/src/collation_locales.rs`. Use repeated
+`--locale NAME` options for a qualification subset. A subset's common character
+ranges describe only those selected locales, so keep its output separate from
+the complete table. Each locale must load as UTF-8 without diagnostics. Only
+`LC_COLLATE` changes, with all other locale categories set to `C`.
+
+The command reads the source's ignorable character order and named contractions.
+Pinned independent Unicode 16.0.0 data supplies canonical decompositions, names,
+and letter and number categories. Stable GNU sort comparisons in both input
+orders distinguish ties from unequal strings. NUL records preserve tabs and
+newlines in probe strings. Every native batch retains its arguments, input,
+output and wait receipt, with a 300-second execution budget. Missing locales,
+failed comparisons, inconsistent observations and values that cannot fit the
+Rust table's types stop generation. The JSON preserves source hashes and the
+retained layout. The Rust header names the new generator. Review generated
+candidates before changing any committed table.
+
 To project the retained collation verification data into a new Rust file, run:
 
 ```sh
@@ -175,6 +205,29 @@ The output must not already exist. `--variant N` selects each locale's candidate
 at the signed index `N` from `data/locales/collation-candidates.json` instead. Negative
 indices count from the end of each locale's list. This command projects supplied
 data without probing a native collator or updating a product table.
+
+To verify a candidate's alphabet, digits and script blocks, first project the
+selected variant with `fastmash-generate-collation-table --variant N` and build a
+separate measurement executable using that table. Then run:
+
+```sh
+cargo run --release -p fastmash-locale-tools --bin fastmash-verify-collation-locales -- \
+  --variant 0 --evidence /tmp/fastmash-verification-captures \
+  --prior data/locales/collation-verification.json --locale en_US -- \
+  data/locales/collation-candidates.json /path/to/measurement-fastmash \
+  /path/to/reference /path/to/gnu-sort /path/to/compiled-locales \
+  /tmp/fastmash-verification.json
+```
+
+Use the same variant for projection, the measurement build and verification.
+The verifier records the supplied variant without changing the executable's
+compiled table. Omit `--locale` to check every candidate locale. The verifier
+also checks `en_US` as the baseline, preserves prior variant history, and selects
+each locale's first verified candidate in the completed report. Word planning
+uses the retained independent Unicode 15.0.0 data, distinct from the glibc
+generator's Unicode 16.0.0 decomposition data. Native ordering differences remain
+report observations. Capture or input failures leave partial evidence and no
+completed report. The report and capture paths must be new.
 
 To compare the fixed punctuation workload against an identified native reference,
 use explicit executables, GNU sort and matching compiled locale data:
@@ -199,8 +252,8 @@ Order differences and native nonzero statuses remain report observations and do
 not make a completed report a command failure. Spawn, transport and strict
 first-field UTF-8 decoding errors stop the run with partial evidence and no
 completed report. Successful stderr is retained without rejecting the result.
-This command covers fixed punctuation only. Keep the Python collation tools until
-the remaining workflows and reference parity have been established.
+This command covers fixed punctuation only. Use the verifier above for letters,
+digits and script blocks.
 
 ### Integration tests
 

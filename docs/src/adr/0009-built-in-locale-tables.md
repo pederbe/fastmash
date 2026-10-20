@@ -33,7 +33,7 @@ second collation path, and greatly enlarges what must be tested.
   locale data that Fastmash uses, or when a user reports a difference:
   `fastmash-generate-numeric-locales` writes the number table, checked with
   `fastmash-compare-numeric-locales`. The [testing guide](../contributing/testing.md)
-  describes both Rust tools. `scripts/verify_collation_locales.py` chooses and
-  verifies the sorting locales. `scripts/generate_collation_glibc.py` writes
+  describes these Rust tools. `fastmash-verify-collation-locales` chooses and
+  verifies the sorting locales. `fastmash-generate-glibc-collation` writes
   glibc's treatment of the characters it collates apart from letters. Their inputs
   and results are in `data/locales/`.

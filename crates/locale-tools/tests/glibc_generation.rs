@@ -85,3 +85,121 @@ fn probe_predicates_preserve_reordering_and_refuse_incomplete_native_batches() {
         .is_err()
     );
 }
+
+#[test]
+fn emission_preserves_source_rank_scalar_order_and_cross_locale_intersection() {
+    use fastmash_locale_tools::collation::Row;
+    use fastmash_locale_tools::glibc_artifacts::emit;
+    use fastmash_locale_tools::glibc_generation::Observation;
+    use std::collections::BTreeMap;
+
+    let common = Common {
+        ignorable: vec![0x22, 0x20, 0x21],
+        contractions: vec![("\u{FFFF}x".into(), 'x'), ("\u{10000}x".into(), 'y')],
+    };
+    let rows = vec![
+        Row {
+            name: "bb".into(),
+            tag: "second".into(),
+        },
+        Row {
+            name: "aa".into(),
+            tag: "first".into(),
+        },
+    ];
+    let mut observed = BTreeMap::from([
+        (
+            "bb".into(),
+            Observation {
+                weighed: vec![0x20],
+                other_weighed: vec![0x22],
+                no_fourth: vec![0x4E00, 0x4E01],
+                reordered: BTreeMap::from([(0x0401, 0x0415)]),
+            },
+        ),
+        (
+            "aa".into(),
+            Observation {
+                weighed: Vec::new(),
+                other_weighed: Vec::new(),
+                no_fourth: vec![0x4E00, 0x4E02],
+                reordered: BTreeMap::from([(0x0401, 0x0415)]),
+            },
+        ),
+    ]);
+    let decomposed = BTreeMap::from([(0x00C5, "A\u{30A}".into())]);
+    let emitted = emit("own-common", b"abc", &common, &decomposed, &rows, &observed).unwrap();
+    let text = std::str::from_utf8(&emitted.json).unwrap();
+    assert!(text.find("FFFF 0078").unwrap() < text.find("10000 0078").unwrap());
+    let json: serde_json::Value = serde_json::from_slice(&emitted.json).unwrap();
+    assert_eq!(
+        json["source_sha256"],
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+    assert_eq!(
+        json["no_fourth_everywhere"],
+        serde_json::json!([[0x4E00, 0x4E00]])
+    );
+    assert_eq!(
+        json["locales"]["bb"]["no_fourth"],
+        serde_json::json!([[0x4E01, 0x4E01]])
+    );
+    assert_eq!(
+        json["locales"]["bb"]["other_weighed"],
+        serde_json::json!([0x22])
+    );
+    assert!(
+        emitted
+            .rust
+            .contains("    (0x0020, 0x0021, 1),\n    (0x0022, 0x0022, 0),")
+    );
+    assert!(emitted.rust.contains("    (0x00C5, 0x00C5, 2),"));
+    assert!(
+        emitted
+            .rust
+            .contains(r#"    ("\u{FFFF}\u{0078}", '\u{0078}'),"#)
+    );
+    assert!(emitted.rust.find("(\"first\"").unwrap() < emitted.rust.find("(\"second\"").unwrap());
+    assert!(emitted.json.ends_with(b"\n"));
+    observed.get_mut("aa").unwrap().reordered.clear();
+    assert!(emit("own-common", b"abc", &common, &decomposed, &rows, &observed).is_err());
+}
+
+#[test]
+fn emission_refuses_incomplete_observations_inconsistent_tags_and_unrepresentable_tables() {
+    use fastmash_locale_tools::collation::Row;
+    use fastmash_locale_tools::glibc_artifacts::emit;
+    use fastmash_locale_tools::glibc_generation::Observation;
+    use std::collections::BTreeMap;
+
+    let mut common = Common {
+        ignorable: vec![32],
+        contractions: Vec::new(),
+    };
+    let rows = vec![
+        Row {
+            name: "aa".into(),
+            tag: "same".into(),
+        },
+        Row {
+            name: "bb".into(),
+            tag: "same".into(),
+        },
+    ];
+    let empty = || Observation {
+        weighed: Vec::new(),
+        other_weighed: Vec::new(),
+        no_fourth: Vec::new(),
+        reordered: BTreeMap::new(),
+    };
+    let mut observed = BTreeMap::from([("aa".into(), empty())]);
+    assert!(emit("common", b"", &common, &BTreeMap::new(), &rows, &observed).is_err());
+    observed.insert("bb".into(), empty());
+    observed.get_mut("bb").unwrap().no_fourth.push(0x00C5);
+    assert!(emit("common", b"", &common, &BTreeMap::new(), &rows, &observed).is_err());
+    observed.get_mut("bb").unwrap().no_fourth.clear();
+    let long = BTreeMap::from([(0x00C5, "A".repeat(256))]);
+    assert!(emit("common", b"", &common, &long, &rows, &observed).is_err());
+    common.ignorable = (0..=0x10000).collect();
+    assert!(emit("common", b"", &common, &BTreeMap::new(), &rows, &observed).is_err());
+}
