@@ -299,7 +299,8 @@ The frozen fixture and its provenance record stay byte-identical across platform
 The unpublished Rust driver in `crates/corpus-driver/` executes the 2,857 ordinary
 cases in both modes. Its default run also executes 22 directory-input and 51
 closed-output-pipe cases, 72 full-output cases and 65 early commands with stdin
-held open, leaving 70 deferred transports. Regular-file mode
+held open, plus 67 held-output observations. Three late-input cases remain
+deferred. Regular-file mode
 records why each other case belongs to the default Rust run or the full Python
 run. Keep both complete Python runs alongside it until the remaining stream and
 fault transports have migrated. Its `--keep-going` and `--evidence-dir` options

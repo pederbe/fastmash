@@ -235,6 +235,77 @@ fn assert_stopped(pidfile: &Path) {
 }
 
 #[test]
+fn held_output_observes_live_processes_actual_destinations_and_exact_prefixes() {
+    for transport in ["normal", "pipe", "pty"] {
+        let mut observed = case(
+            "held",
+            "held-output",
+            b"input\n",
+            b"before\nafter\n",
+            b"",
+            0,
+        );
+        observed["io"] = json!(transport);
+        observed["observe_held"] = json!(true);
+        observed["expected"]["held"] = json!({"bytes":7,"alive":true});
+        if transport != "normal" {
+            observed["expected"]["held"]["stdout_hex"] = json!(encode(b"before\n"));
+        }
+        let run = TestRun::new(&[observed.clone()]);
+        let evidence = run.evidence();
+        let output = run.run(&["--evidence-dir", evidence.to_str().unwrap()]);
+        assert!(output.status.success(), "{transport}: {output:?}");
+        let records = fs::read_to_string(evidence.join("observations.jsonl")).unwrap();
+        let record: Value = serde_json::from_str(records.lines().next().unwrap()).unwrap();
+        assert_eq!(record["observed"]["held"], observed["expected"]["held"]);
+        assert_eq!(
+            record["observed"]["destination"]["isatty"],
+            transport == "pty"
+        );
+        assert!(
+            record["observed"]["destination"]["block_size"]
+                .as_u64()
+                .unwrap()
+                > 0
+        );
+        assert_eq!(record["observed"]["cleanup_confirmed"], true);
+        let file = run.run(&["--stdin-file"]);
+        assert!(file.status.success());
+        assert!(String::from_utf8_lossy(&file.stdout).contains("0 of 0 cases passed"));
+    }
+    // Completed bytes alone cannot satisfy a pre-EOF observation.
+    let mut buffered = case(
+        "buffered",
+        "held-buffered",
+        b"input\n",
+        b"before\nafter\n",
+        b"",
+        0,
+    );
+    buffered["io"] = json!("pipe");
+    buffered["observe_held"] = json!(true);
+    buffered["expected"]["held"] = json!({"bytes":7,"alive":true,"stdout_hex":encode(b"before\n")});
+    let run = TestRun::new(&[buffered]);
+    let output = run.run(&[]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("held:"));
+    // A leader that exits early must fail the live-process observation and
+    // cannot leave a descendant holding the streaming destination open.
+    let run = TestRun::new(&[]);
+    let pidfile = run.root.join("writer-descendant.pid");
+    let mut early = case("early", "orphan-output", b"input\n", b"", b"", 0);
+    early["args"] = json!(["orphan-output", pidfile]);
+    early["io"] = json!("pipe");
+    early["observe_held"] = json!(true);
+    early["expected"]["held"] = json!({"bytes":0,"alive":true,"stdout_hex":""});
+    run.write_cases(&[early]);
+    let output = run.run(&[]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("held:"));
+    assert_stopped(&pidfile);
+}
+
+#[test]
 fn early_commands_finish_before_stdin_eof_and_file_mode_defers_them() {
     let mut held = case("held", "held-input", b"", b"stdin remains open\n", b"", 0);
     held["hold_stdin"] = json!(true);

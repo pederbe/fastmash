@@ -22,9 +22,9 @@ target/release/fastmash-corpus --binary target/release/fastmash --expected-versi
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --stdin-file --evidence-dir /tmp/ordinary-file
 ```
 
-The default run executes 3,067 cases: 2,857 ordinary cases, 22 directory-input
+The default run executes 3,134 cases: 2,857 ordinary cases, 22 directory-input
 cases, 51 closed-output-pipe cases, 72 full-output cases and 65 early commands
-with stdin held open. It records 70 remaining transport cases
+with stdin held open, plus 67 held-output observations. It records three late-input cases
 as deferred. Regular-file mode executes the same 2,857 ordinary cases as before
 and records why each other case belongs to the default Rust run or the full
 Python run. Both modes account for all 3,137 case IDs. Keep the complete Python
@@ -36,6 +36,12 @@ Running this tool on Linux supplies Linux evidence only.
 Early-command cases retain an empty stdin pipe until the actual executable
 exits. Their evidence records whether the writer remained open when exit was
 observed. A timeout fails the case and cancels the owned process group.
+
+Held-output cases keep stdin open for two seconds after delivering input,
+record the actual output prefix and whether the process is still alive, then
+close stdin and compare the completed output. Destinations are regular files,
+pipes or raw terminals. Native macOS preserves the four existing buffer-size
+adaptations using frozen bytes and observed destination facts.
 
 Full-output cases use Linux's `/dev/full` or a private 8 MiB HFS+ image on macOS,
 created with the system's `hdiutil`. Ordinary, selected and unselected I/O controls

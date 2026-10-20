@@ -2,7 +2,7 @@ name: Native full-volume lifetime
 
 on:
   push:
-    branches: [contrib/native-full-volume-lifetime, contrib/native-full-output-controls, contrib/rust-full-output-corpus, contrib/rust-held-stdin-corpus]
+    branches: [contrib/native-full-volume-lifetime, contrib/native-full-output-controls, contrib/rust-full-output-corpus, contrib/rust-held-stdin-corpus, contrib/rust-held-output-corpus]
 
 permissions:
   contents: read
@@ -67,10 +67,10 @@ jobs:
           printf 'candidate: ordinary release panic=abort\nlifetime control only: CARGO_PROFILE_RELEASE_PANIC=unwind\n' > "$CAPTURES/panic-builds.txt"
           shasum -a 256 -c "$CAPTURES/candidate-before-lifetime.sha256"
           shasum -a 256 target/release/fastmash target/release/fastmash-corpus target/release/examples/native-full-output target/release/examples/native-full-volume-lifetime > "$CAPTURES/binaries.sha256"
-      - name: Check held-stdin lifecycle controls
+      - name: Check corpus lifecycle controls
         timeout-minutes: 3
         run: |
-          cargo test --locked -p fastmash-corpus-driver --test command early_commands_finish_before_stdin_eof_and_file_mode_defers_them > "$CAPTURES/held-stdin-selftest.log" 2>&1
+          cargo test --locked -p fastmash-corpus-driver > "$CAPTURES/corpus-selftests.log" 2>&1
       - name: Observe actual faults through normal and unwind cleanup
         timeout-minutes: 10
         run: |
@@ -98,7 +98,7 @@ jobs:
           test -f "$CAPTURES/lifetimes/owned-normal/volume/cleanup.ok"
           test -f "$CAPTURES/lifetimes/owned-unwind/volume/cleanup.ok"
       - name: Check the frozen corpus through the actual full destination
-        timeout-minutes: 4
+        timeout-minutes: 7
         run: |
           cleanup() {
             result=$?

@@ -6,6 +6,7 @@
 pub mod fixture;
 pub mod full_output;
 pub mod full_volume;
+mod held_output;
 mod process;
 
 use fixture::{Fixture, digest};
@@ -181,7 +182,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
         deferred_cases: excluded.len(),
     };
     for case in cases {
-        let expected = case.expected(&options.root, options.expected_version.as_deref())?;
+        let mut expected = case.expected(&options.root, options.expected_version.as_deref())?;
         result.attempted += 1;
         let observed = invoke(
             case,
@@ -191,6 +192,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
             options.stdin_file,
             full.as_mut(),
         )?;
+        case.adapt_native_buffer(&mut expected, observed.destination.as_ref())?;
         let passed =
             observed.matches(&expected) && (!case.hold_stdin || observed.stdin_held_until_exit);
         if let Some(directory) = &options.evidence_dir {
@@ -199,7 +201,11 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
                 .create(true)
                 .open(directory.join("cases.jsonl"))?;
             write_line(&mut outcomes, &json!({"id":case.id, "passed":passed}))?;
-            if !passed || case.hold_stdin || !case.native_dispositions().is_empty() {
+            if !passed
+                || case.hold_stdin
+                || case.observes_held()
+                || !case.native_dispositions().is_empty()
+            {
                 let mut observations = OpenOptions::new()
                     .append(true)
                     .create(true)
