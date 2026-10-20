@@ -3,8 +3,11 @@
 //! Deterministic locale table generation, separate from native queries.
 
 #[cfg(unix)]
+pub mod candidate_executor;
+#[cfg(unix)]
 mod capture;
 pub mod collation;
+pub mod collation_candidates;
 #[cfg(unix)]
 mod collation_command;
 pub mod collation_plan;

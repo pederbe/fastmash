@@ -1,0 +1,25 @@
+[package]
+name = "fastmash-icu-exemplars"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Development queries of the independent ICU exemplar reference"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+# Safe access to the same installed ICU reference used by the retained producer.
+rust_icu_ures = "=5.8.0"
+rust_icu_sys = "=5.8.0"
+# The parser's built-in data supports its grammar. Property expressions are refused.
+icu_unicodeset_parse = { version = "=0.1.2", features = ["compiled_data"] }
+
+[lints]
+workspace = true
+
+[workspace]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
