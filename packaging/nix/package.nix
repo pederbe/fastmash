@@ -6,6 +6,12 @@
   coreutils,
 }:
 
+let
+  packageTest = fetchurl {
+    url = "https://raw.githubusercontent.com/pederbe/fastmash/3da66cc2b825e175535ace106edbd8f73bd5b2fa/packaging/linux-source-test.rs";
+    sha256 = "71b6715633d14f654a84d7f27c9f27851bdacc0a2ece0e1ac6cb6c831ce469dc";
+  };
+in
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "fastmash";
   version = "0.1.0";
@@ -39,6 +45,12 @@ rustPlatform.buildRustPackage (finalAttrs: {
       --replace-fail '"/usr/bin/sort"' '"${lib.getExe' coreutils "sort"}"'
   '';
 
+  postBuild = ''
+    rustc --edition=2024 --crate-name fastmash_source_package_test \
+      --target x86_64-unknown-linux-gnu -C "linker=$CC" -C opt-level=2 \
+      ${packageTest} -o fastmash-test-linux-source
+  '';
+
   postInstall = ''
     python3 scripts/third_party_licenses.py > THIRD-PARTY-LICENSES.md
     install -Dm644 -t "$out/share/doc/fastmash" \
@@ -48,28 +60,8 @@ rustPlatform.buildRustPackage (finalAttrs: {
   doInstallCheck = true;
   installCheckPhase = ''
     runHook preInstallCheck
-    export LC_ALL=C
-    test -x "$out/bin/fastmash"
-    test -x "$out/bin/fastmash-sort-supervisor"
-    for document in LICENSE-MIT LICENSE-APACHE THIRD-PARTY-LICENSES.md; do
-      test -s "$out/share/doc/fastmash/$document"
-    done
-    printf 'fastmash ${finalAttrs.version}\n' > expected
-    "$out/bin/fastmash" --version > actual
-    cmp expected actual
-    printf '1\n2\n3\n' | "$out/bin/fastmash" sum 1 mean 1 > actual
-    printf '6\t2\n' > expected
-    cmp expected actual
-    printf '1\n2\n3\n' | "$out/bin/fastmash" geomean 1 > actual
-    printf '1.8171205928321\n' > expected
-    cmp expected actual
-    printf 'b\t2\t3\na\t1\t2\na\t3\t6\n' | \
-      env -i LC_ALL=C FASTMASH_GROUPING=sort FASTMASH_SORT_TRACE=1 \
-      "$out/bin/fastmash" -sg1 pcov 2:3 > actual 2> diagnostic
-    printf 'a\t2\nb\t0\n' > expected
-    cmp expected actual
-    printf 'sort route: system sort\n' > expected
-    cmp expected diagnostic
+    ./fastmash-test-linux-source nix "$out/bin" '${finalAttrs.version}' \
+      "$out/share/doc/fastmash"
     runHook postInstallCheck
   '';
 

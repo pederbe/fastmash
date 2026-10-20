@@ -7,6 +7,16 @@ publish = false
 license = "MIT OR Apache-2.0"
 
 [[bin]]
+name = "fastmash-test-linux-source"
+path = "../../packaging/linux-source-test.rs"
+
+[[bin]]
+name = "fastmash-linux-source-fixture"
+path = "tests/support/linux_source.rs"
+test = false
+bench = false
+
+[[bin]]
 name = "fastmash-test-homebrew"
 path = "../../packaging/homebrew/run_test.rs"
 
