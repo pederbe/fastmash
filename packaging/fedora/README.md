@@ -20,6 +20,8 @@ Run this Bash block from the repository root on Fedora with `rpm-build`,
 installed. Source preparation needs Cargo, curl, GNU tar and gzip and can use
 the normal Cargo download cache. It verifies the public release archive before
 vendoring dependencies; all compilation and package tests then run offline.
+Preparation also verifies the pinned Rust smoke-check source. The existing
+compiler builds this checker for `%check`; it is not installed in the RPM.
 
 ```bash
 bash -eu <<'EOF'

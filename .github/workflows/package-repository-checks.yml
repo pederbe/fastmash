@@ -8,6 +8,9 @@ on:
       - '.github/workflows/package-repository*.yml'
       - 'release/package-repository.sh'
       - 'release/macos-archive.sh'
+      - 'packaging/linux-source-test.rs'
+      - 'packaging/fedora/**'
+      - 'packaging/nix/**'
       - 'release/publish-package-repository.sh'
       - 'release/package-publication-fixtures.sh'
       - 'release/test-package-publication.sh'
@@ -23,6 +26,9 @@ on:
       - '.github/workflows/package-repository*.yml'
       - 'release/package-repository.sh'
       - 'release/macos-archive.sh'
+      - 'packaging/linux-source-test.rs'
+      - 'packaging/fedora/**'
+      - 'packaging/nix/**'
       - 'release/publish-package-repository.sh'
       - 'release/package-publication-fixtures.sh'
       - 'release/test-package-publication.sh'
@@ -61,7 +67,8 @@ jobs:
         run: |
           shellcheck release/package-repository.sh release/publish-package-repository.sh \
             release/package-publication-fixtures.sh release/test-package-publication.sh release/test-package-repository.sh release/check-installed.sh \
-            packaging/conda-forge/build.sh packaging/conda-forge/run_test.sh release/macos-archive.sh
+            packaging/conda-forge/build.sh packaging/conda-forge/run_test.sh release/macos-archive.sh \
+            packaging/fedora/prepare-sources.sh
           cargo fmt --manifest-path release/publication-test-server/Cargo.toml --check
           cargo clippy --manifest-path release/publication-test-server/Cargo.toml --target-dir target --all-targets --locked -- -D warnings
           cargo test --manifest-path release/publication-test-server/Cargo.toml --target-dir target --locked

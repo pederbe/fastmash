@@ -6,6 +6,9 @@ are installed in `bin/`, with project licenses and generated dependency
 licenses, copyright and notices in `share/doc/fastmash/`.
 Python is a build dependency only. The source-built programs carry no
 performance claim from the release binaries.
+The recipe fetches checksum-pinned Rust test source and compiles it with the
+existing build toolchain. Only the build checks use this executable; it is not
+installed in the package output.
 
 NixOS has no `/usr/bin/sort`. The recipe replaces the release's one system-sort
 constant with the immutable path of Nixpkgs coreutils, making it a runtime
