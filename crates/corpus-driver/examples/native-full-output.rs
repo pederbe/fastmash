@@ -11,7 +11,7 @@ use std::io::{self, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -31,14 +31,14 @@ fn fresh(path: &Path) -> io::Result<File> {
 
 struct Running(Child, bool);
 impl Running {
-    fn wait(&mut self) -> Result<ExitStatus> {
+    fn wait(&mut self, deadline: Instant) -> Result<ExitStatus> {
         let started = Instant::now();
         loop {
             if let Some(status) = self.0.try_wait()? {
                 self.1 = true;
                 return Ok(status);
             }
-            if started.elapsed() >= LIMIT {
+            if started.elapsed() >= LIMIT || Instant::now() >= deadline {
                 return Err("candidate execution deadline".into());
             }
             thread::sleep(Duration::from_millis(2));
@@ -64,13 +64,19 @@ impl Drop for Running {
     }
 }
 
+enum Destination {
+    Stdout(File),
+    Stderr(File),
+}
+
 fn invoke(
     binary: &Path,
     input: &Path,
     root: &Path,
     name: &str,
     args: &[&str],
-    destination: File,
+    destination: Destination,
+    deadline: Instant,
 ) -> Result<(ExitStatus, Vec<u8>)> {
     let directory = root.join(name);
     fs::create_dir(&directory)?;
@@ -83,21 +89,36 @@ fn invoke(
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
         .stdin(File::open(input)?)
-        .stdout(Stdio::from(destination))
-        .stderr(fresh(&directory.join("stderr"))?)
         .process_group(0);
+    let (destination_fd, captured_name) = match destination {
+        Destination::Stdout(file) => {
+            command
+                .stdout(file)
+                .stderr(fresh(&directory.join("stderr"))?);
+            (1, "stderr")
+        }
+        Destination::Stderr(file) => {
+            command
+                .stderr(file)
+                .stdout(fresh(&directory.join("stdout"))?);
+            (2, "stdout")
+        }
+    };
+    require_time(deadline)?;
     let mut running = Running(command.spawn()?, false);
     drop(command);
-    let status = running.wait()?;
-    let stderr = fs::read(directory.join("stderr"))?;
+    let status = running.wait(deadline)?;
+    let captured = fs::read(directory.join(captured_name))?;
     fs::write(
         directory.join("observed.json"),
         serde_json::to_vec_pretty(&json!({
             "pid": running.0.id(), "reaped": running.1, "exit_code": status.code(),
-            "argv":args, "stderr_sha256":digest(&stderr),
+            "argv":args, "destination_fd":destination_fd,
+            "captured_fd":3 - destination_fd, "captured_sha256":digest(&captured),
+            "stderr_sha256":(destination_fd == 1).then(|| digest(&captured)),
         }))?,
     )?;
-    Ok((status, stderr))
+    Ok((status, captured))
 }
 
 fn require_full(file: &mut File) -> Result<i32> {
@@ -110,7 +131,16 @@ fn require_full(file: &mut File) -> Result<i32> {
     }
 }
 
-fn fill(volume: &Path, root: &Path) -> Result<File> {
+fn require_empty_full(file: &mut File) -> Result<()> {
+    require_full(file)?;
+    let metadata = file.metadata()?;
+    if metadata.is_file() && metadata.len() != 0 {
+        return Err("full sink unexpectedly contains output bytes".into());
+    }
+    Ok(())
+}
+
+fn fill(volume: &Path, root: &Path, deadline: Instant) -> Result<File> {
     let stats = nix::sys::statvfs::statvfs(volume)?;
     // Native block-count widths differ between Linux and Darwin. Widen
     // before multiplication and refuse a capacity that cannot fit in u64.
@@ -133,6 +163,7 @@ fn fill(volume: &Path, root: &Path) -> Result<File> {
     let block = [0_u8; 65536];
     for bytes in [block.as_slice(), b"x".as_slice()] {
         loop {
+            require_time(deadline)?;
             if total >= MAX_VOLUME {
                 return Err("fill exceeded private-volume bound".into());
             }
@@ -159,7 +190,15 @@ fn fill(volume: &Path, root: &Path) -> Result<File> {
     Ok(sink)
 }
 
+fn require_time(deadline: Instant) -> Result<()> {
+    if Instant::now() >= deadline {
+        return Err("full-output probe deadline".into());
+    }
+    Ok(())
+}
+
 fn run() -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(60);
     let mut args = std::env::args_os().skip(1);
     let binary = PathBuf::from(args.next().ok_or("require executable")?).canonicalize()?;
     let root = PathBuf::from(args.next().ok_or("require new capture directory")?);
@@ -184,7 +223,8 @@ fn run() -> Result<()> {
             &root,
             &format!("ordinary-{name}"),
             arguments,
-            fresh(&output)?,
+            Destination::Stdout(fresh(&output)?),
+            deadline,
         )?;
         let stdout = fs::read(output)?;
         if !status.success()
@@ -196,7 +236,7 @@ fn run() -> Result<()> {
         }
     }
     let mut full = if let Some(volume) = volume {
-        fill(&volume.canonicalize()?, &root)?
+        fill(&volume.canonicalize()?, &root, deadline)?
     } else {
         #[cfg(target_os = "linux")]
         {
@@ -207,8 +247,7 @@ fn run() -> Result<()> {
             return Err("require private mounted volume on this platform".into());
         }
     };
-    require_full(&mut full)?;
-    let regular = full.metadata()?.is_file();
+    require_empty_full(&mut full)?;
     for (name, arguments, _) in cases {
         let (status, stderr) = invoke(
             &binary,
@@ -216,7 +255,8 @@ fn run() -> Result<()> {
             &root,
             &format!("full-{name}"),
             arguments,
-            full.try_clone()?,
+            Destination::Stdout(full.try_clone()?),
+            deadline,
         )?;
         if status.code() != Some(1) || stderr != DIAGNOSTIC {
             return Err(format!(
@@ -225,16 +265,87 @@ fn run() -> Result<()> {
             )
             .into());
         }
-        require_full(&mut full)?;
-        if regular && full.metadata()?.len() != 0 {
-            return Err("full sink unexpectedly contains output bytes".into());
-        }
+        require_empty_full(&mut full)?;
     }
+    for mode in ["never", "always"] {
+        let arguments = [format!("--color={mode}"), "--not-an-option".to_owned()];
+        let arguments = arguments.iter().map(String::as_str).collect::<Vec<_>>();
+        let baseline = root.join(format!("ordinary-error-{mode}.stdout"));
+        let (status, expected) = invoke(
+            &binary,
+            &input,
+            &root,
+            &format!("ordinary-error-{mode}"),
+            &arguments,
+            Destination::Stdout(fresh(&baseline)?),
+            deadline,
+        )?;
+        if status.code() != Some(1) || expected.is_empty() || fs::metadata(baseline)?.len() != 0 {
+            return Err(format!("ordinary diagnostic control differs: {mode}").into());
+        }
+        require_empty_full(&mut full)?;
+        let (status, stderr) = invoke(
+            &binary,
+            &input,
+            &root,
+            &format!("unselected-stderr-{mode}"),
+            &arguments,
+            Destination::Stdout(full.try_clone()?),
+            deadline,
+        )?;
+        if status.code() != Some(1) || stderr != expected {
+            return Err(format!("unselected diagnostic differs: {mode}").into());
+        }
+        require_empty_full(&mut full)?;
+        let (status, stdout) = invoke(
+            &binary,
+            &input,
+            &root,
+            &format!("full-stderr-{mode}"),
+            &arguments,
+            Destination::Stderr(full.try_clone()?),
+            deadline,
+        )?;
+        if status.code() != Some(1) || !stdout.is_empty() {
+            return Err(format!("actual full-stderr result differs: {mode}").into());
+        }
+        require_empty_full(&mut full)?;
+    }
+    let baseline = root.join("ordinary-version.stdout");
+    let (status, stderr) = invoke(
+        &binary,
+        &input,
+        &root,
+        "ordinary-version",
+        &["--version"],
+        Destination::Stdout(fresh(&baseline)?),
+        deadline,
+    )?;
+    let expected = fs::read(baseline)?;
+    if !status.success() || !stderr.is_empty() || !expected.starts_with(b"fastmash ") {
+        return Err("ordinary version control differs".into());
+    }
+    require_empty_full(&mut full)?;
+    let (status, stdout) = invoke(
+        &binary,
+        &input,
+        &root,
+        "unselected-stdout",
+        &["--version"],
+        Destination::Stderr(full.try_clone()?),
+        deadline,
+    )?;
+    if !status.success() || stdout != expected {
+        return Err("unselected stdout differs".into());
+    }
+    require_empty_full(&mut full)?;
     fs::write(
         root.join("matched.json"),
         serde_json::to_vec_pretty(&json!({
             "executable":binary,"executable_sha256":digest(&fs::read(&binary)?),
             "cases":cases.iter().map(|case|case.0).collect::<Vec<_>>(),
+            "stream_controls":["unselected-stderr-never","full-stderr-never",
+                "unselected-stderr-always","full-stderr-always","unselected-stdout"],
             "actual_enospc":true,"matched":true,
         }))?,
     )?;
