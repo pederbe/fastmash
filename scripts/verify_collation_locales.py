@@ -2,23 +2,13 @@
 """Choose the locales whose sorting fastmash reproduces, by comparison with GNU.
 
 usage:
-  verify_collation_locales.py candidates GNU_SORT LOCPATH
   verify_collation_locales.py table [--variant N]
   verify_collation_locales.py verify N FASTMASH DATAMASH GNU_SORT LOCPATH [LOCALE...]
   verify_collation_locales.py punctuation FASTMASH DATAMASH GNU_SORT LOCPATH
 
-`candidates` maps every locale of data/locales/glibc-lc-numeric.json to two
-candidate Unicode (BCP 47) collation locales, in order of preference: the same
-language and territory, whose CLDR tailoring may differ from glibc's (CLDR
-sorts a language's own script first; glibc keeps Latin first), and the root
-collation `und`, which matches glibc's untailored table. Both get
-`-u-kf-upper` where glibc sorts uppercase first (probed with GNU_SORT). It
-also records each locale's alphabet: the standard and
-auxiliary CLDR exemplar letters of the host's ICU (libicu, same CLDR
-generation as the collator data; auxiliary letters appear in loanwords and
-names, such as ć and đ in Slovenian), or none when ICU has no data for the
-language. Output:
-data/locales/collation-candidates.json.
+Candidate generation now uses the Rust ICU reference and GNU sort tools
+listed in TESTING.md. This script retains the historical projection and
+comparison modes while the rest of the collation workflow is migrated.
 
 `table` writes crates/cli/src/collation_locales.rs with each locale's first
 verified candidate from data/locales/collation-verification.json, or with
@@ -60,7 +50,6 @@ guide documents.
 """
 from bisect import bisect_left
 from concurrent.futures import ThreadPoolExecutor
-import ctypes
 import json
 from pathlib import Path
 import subprocess
@@ -71,7 +60,6 @@ CANDIDATES = Path('data/locales/collation-candidates.json')
 VERIFICATION = Path('data/locales/collation-verification.json')
 PUNCTUATION = Path('data/locales/collation-punctuation.json')
 TABLE = Path('crates/cli/src/collation_locales.rs')
-ICU = '78'
 ASCII = 'abcdefghijklmnopqrstuvwxyz'
 
 BLOCKS = {
@@ -112,57 +100,6 @@ def run(argv, stdin, locale, locpath, name=None):
     env = {'PATH': '/usr/bin:/bin', 'LC_ALL': locale, 'LOCPATH': locpath, 'TZ': 'UTC'}
     return subprocess.run([name or argv[0], *argv[1:]], executable=argv[0], input=stdin, env=env,
                           capture_output=True, timeout=300)
-
-
-def icu_function(library, name, restype=ctypes.c_int):
-    function = getattr(ctypes.CDLL(f'lib{library}.so.{ICU}'), f'{name}_{ICU}')
-    function.restype = restype
-    return function
-
-
-def icu_alphabet(name, kind):
-    """Exemplar letters (kind 0 standard, 1 auxiliary), or None without ICU data."""
-    pointer = ctypes.c_void_p
-    status = ctypes.c_int(0)
-    bundle = icu_function('icuuc', 'ures_open', pointer)(None, name.encode(), ctypes.byref(status))
-    actual = icu_function('icuuc', 'ures_getLocaleByType', ctypes.c_char_p)(
-        pointer(bundle), 1, ctypes.byref(status))
-    icu_function('icuuc', 'ures_close')(pointer(bundle))
-    if actual.decode().split('_')[0] != name.split('_')[0]:
-        return None
-    status = ctypes.c_int(0)
-    data = icu_function('icui18n', 'ulocdata_open', pointer)(name.encode(), ctypes.byref(status))
-    uset = icu_function('icui18n', 'ulocdata_getExemplarSet', pointer)(
-        pointer(data), None, 0, kind, ctypes.byref(status))
-    letters, buffer = [], (ctypes.c_uint16 * 64)()
-    for index in range(icu_function('icuuc', 'uset_getItemCount')(pointer(uset))):
-        start, end, error = ctypes.c_int(), ctypes.c_int(), ctypes.c_int(0)
-        length = icu_function('icuuc', 'uset_getItem')(
-            pointer(uset), index, ctypes.byref(start), ctypes.byref(end), buffer, 64,
-            ctypes.byref(error))
-        if length == 0:
-            letters += [chr(point) for point in range(start.value, end.value + 1)]
-        else:
-            letters.append(bytes(buffer)[:2 * length].decode('utf-16-le'))
-    icu_function('icuuc', 'uset_close')(pointer(uset))
-    icu_function('icui18n', 'ulocdata_close')(pointer(data))
-    return letters
-
-
-def candidates(gnu_sort, locpath):
-    table = json.load(open('data/locales/glibc-lc-numeric.json', encoding='utf-8'))
-    out = {'icu': ICU, 'glibc': table['glibc'], 'locales': {}}
-    for name in sorted(table['locales']):
-        probe = run([gnu_sort], b'a\nA\n', name + '.UTF-8', locpath).stdout
-        upper = probe == b'A\na\n'
-        suffix = '-u-kf-upper' if upper else ''
-        out['locales'][name] = {'tags': [name.replace('_', '-') + suffix, 'und' + suffix],
-                                'alphabet': icu_alphabet(name, 0),
-                                'auxiliary': icu_alphabet(name, 1)}
-    CANDIDATES.write_text(json.dumps(out, indent=1, ensure_ascii=False) + '\n', encoding='utf-8')
-    print(f'{len(out["locales"])} candidates, '
-          f'{sum(1 for v in out["locales"].values() if v["tags"][0].endswith("upper"))} uppercase first, '
-          f'{sum(1 for v in out["locales"].values() if v["alphabet"] is None)} without ICU data')
 
 
 def write_table(variant):
@@ -386,9 +323,7 @@ def punctuation(fastmash, datamash, gnu_sort, locpath):
 
 if __name__ == '__main__':
     command, args = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else (None, [])
-    if command == 'candidates' and len(args) == 2:
-        candidates(*args)
-    elif command == 'table':
+    if command == 'table':
         write_table(int(args[args.index('--variant') + 1]) if '--variant' in args else None)
     elif command == 'verify' and len(args) >= 5:
         verify(*args)
