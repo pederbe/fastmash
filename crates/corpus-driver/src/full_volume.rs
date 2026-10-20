@@ -222,19 +222,29 @@ fn request_detach(
     Ok(())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum CreationStatus {
+    Complete,
+    BusyTeardown,
+}
+
 // One setup retry is allowed only after a confirmed busy native teardown has
 // been recovered. Candidate execution never starts in the rejected image.
 fn create_recover_once(
-    mut create: impl FnMut(usize) -> io::Result<()>,
+    mut create: impl FnMut(usize) -> io::Result<CreationStatus>,
     recover: impl FnOnce() -> io::Result<()>,
 ) -> io::Result<()> {
-    match create(0) {
-        Ok(()) => Ok(()),
-        Err(error) if error.raw_os_error() == Some(nix::errno::Errno::EBUSY as i32) => {
+    match create(0)? {
+        CreationStatus::Complete => Ok(()),
+        CreationStatus::BusyTeardown => {
             recover()?;
-            create(1)
+            match create(1)? {
+                CreationStatus::Complete => Ok(()),
+                CreationStatus::BusyTeardown => Err(io::Error::from_raw_os_error(
+                    nix::errno::Errno::EBUSY as i32,
+                )),
+            }
         }
-        Err(error) => Err(error),
     }
 }
 
@@ -266,7 +276,17 @@ impl FullVolume {
     pub fn new(root: &Path) -> io::Result<Self> {
         let mut volume = Self::create(root, |root, image| {
             create_recover_once(
-                |attempt| create_image(root, image, attempt),
+                |attempt| {
+                    create_image(
+                        root,
+                        image,
+                        if attempt == 0 {
+                            "create"
+                        } else {
+                            "create-retry"
+                        },
+                    )
+                },
                 || Self::recover_creation(root, image),
             )
         })?;
@@ -401,12 +421,7 @@ impl FullVolume {
     }
 }
 
-fn create_image(root: &Path, image: &Path, attempt: usize) -> io::Result<()> {
-    let name = if attempt == 0 {
-        "create"
-    } else {
-        "create-retry"
-    };
+fn create_image(root: &Path, image: &Path, name: &str) -> io::Result<CreationStatus> {
     let status = bounded(
         Command::new("/usr/bin/hdiutil").env("LC_ALL", "C").args([
             OsStr::new("create"),
@@ -425,13 +440,11 @@ fn create_image(root: &Path, image: &Path, attempt: usize) -> io::Result<()> {
     creation_status(status, &fs::read(root.join(format!("{name}.stderr")))?)
 }
 
-fn creation_status(status: ExitStatus, stderr: &[u8]) -> io::Result<()> {
+fn creation_status(status: ExitStatus, stderr: &[u8]) -> io::Result<CreationStatus> {
     if status.success() {
-        Ok(())
+        Ok(CreationStatus::Complete)
     } else if status.code() == Some(1) && stderr == b"hdiutil: create failed - Resource busy\n" {
-        Err(io::Error::from_raw_os_error(
-            nix::errno::Errno::EBUSY as i32,
-        ))
+        Ok(CreationStatus::BusyTeardown)
     } else {
         Err(io::Error::other(format!("hdiutil create: {status}")))
     }
@@ -474,7 +487,10 @@ mod tests {
         assert!(root.join("create-recovery/cleanup.ok").is_file());
         assert!(!volume.image.try_exists().unwrap());
         assert!(!volume.mount.try_exists().unwrap());
-        create_image(&root, &volume.image, 1).unwrap();
+        assert_eq!(
+            create_image(&root, &volume.image, "control-create").unwrap(),
+            CreationStatus::Complete
+        );
         assert!(volume.image.is_file());
         // Require the successful retry's fresh native absence before removing
         // its owned, unmounted backing file.
@@ -516,18 +532,18 @@ mod tests {
             (1 << 8, b"Resource busy\n", false),
             (9, b"hdiutil: create failed - Resource busy\n", false),
         ] {
-            let error = creation_status(ExitStatus::from_raw(raw), stderr).unwrap_err();
-            assert_eq!(
-                error.raw_os_error() == Some(nix::errno::Errno::EBUSY as i32),
-                busy
-            );
+            let result = creation_status(ExitStatus::from_raw(raw), stderr);
+            assert_eq!(matches!(result, Ok(CreationStatus::BusyTeardown)), busy);
+            if !busy {
+                assert!(result.is_err());
+            }
         }
         assert!(creation_status(ExitStatus::from_raw(0), b"").is_ok());
         assert!(
             create_recover_once(
                 |attempt| {
                     assert_eq!(attempt, 0);
-                    Ok(())
+                    Ok(CreationStatus::Complete)
                 },
                 || panic!("successful creation needs no recovery")
             )
@@ -541,13 +557,11 @@ mod tests {
         let result = create_recover_once(
             |attempt| {
                 calls.borrow_mut().push(format!("create-{attempt}"));
-                if attempt == 0 {
-                    Err(io::Error::from_raw_os_error(
-                        nix::errno::Errno::EBUSY as i32,
-                    ))
+                Ok(if attempt == 0 {
+                    CreationStatus::BusyTeardown
                 } else {
-                    Ok(())
-                }
+                    CreationStatus::Complete
+                })
             },
             || {
                 calls.borrow_mut().push("owned-cleanup".to_owned());
@@ -560,12 +574,18 @@ mod tests {
 
     #[test]
     fn failed_cleanup_and_other_creation_errors_never_retry() {
-        for error in [nix::errno::Errno::EBUSY, nix::errno::Errno::EACCES] {
+        for native_busy in [false, true] {
             let calls = std::cell::RefCell::new(Vec::new());
             let result = create_recover_once(
                 |attempt| {
                     calls.borrow_mut().push(format!("create-{attempt}"));
-                    Err(io::Error::from_raw_os_error(error as i32))
+                    if native_busy {
+                        Ok(CreationStatus::BusyTeardown)
+                    } else {
+                        Err(io::Error::from_raw_os_error(
+                            nix::errno::Errno::EBUSY as i32,
+                        ))
+                    }
                 },
                 || {
                     calls.borrow_mut().push("owned-cleanup".to_owned());
@@ -575,7 +595,7 @@ mod tests {
             assert!(result.is_err());
             assert_eq!(
                 *calls.borrow(),
-                if error == nix::errno::Errno::EBUSY {
+                if native_busy {
                     vec!["create-0", "owned-cleanup"]
                 } else {
                     vec!["create-0"]
@@ -591,9 +611,7 @@ mod tests {
         let result = create_recover_once(
             |_| {
                 attempts.set(attempts.get() + 1);
-                Err(io::Error::from_raw_os_error(
-                    nix::errno::Errno::EBUSY as i32,
-                ))
+                Ok(CreationStatus::BusyTeardown)
             },
             || {
                 cleanups.set(cleanups.get() + 1);
