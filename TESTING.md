@@ -70,6 +70,11 @@ cargo clippy --manifest-path release/publication-test-server/Cargo.toml --target
 cargo test --manifest-path release/publication-test-server/Cargo.toml --target-dir target --locked
 ```
 
+These tests also cover native archive byte and deployment checks. The macOS
+archive builder prepares its checker in temporary storage and runs it against
+the built executable and actual `xcrun vtool` metadata. Release mode also
+compares the two clean executable builds with this checker.
+
 For locale tooling checks, run:
 
 ```sh
