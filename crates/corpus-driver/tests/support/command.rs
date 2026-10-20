@@ -25,6 +25,39 @@ fn main() {
         "count" => std::process::exit(17),
         "version" => println!("fastmash 0.2.0"),
         "early-close" => println!("early"),
+        "late-input" | "late-input-stall" => {
+            let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
+            let mut bytes = [0; 6];
+            input.read_exact(&mut bytes).unwrap();
+            assert_eq!(&bytes, b"input\n");
+            println!("before");
+            let failed = loop {
+                match input.read(&mut [0]) {
+                    Ok(0) => break false,
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                    Err(error) if error.raw_os_error() == Some(nix::errno::Errno::EIO as i32) => {
+                        break true;
+                    }
+                    result => panic!("unexpected late-input read: {result:?}"),
+                }
+            };
+            if failed && mode == "late-input-stall" {
+                #[allow(clippy::zombie_processes)]
+                let child = Command::new(std::env::current_exe().unwrap())
+                    .arg("sleep")
+                    .spawn()
+                    .unwrap();
+                let pidfile = std::path::PathBuf::from(args.next().unwrap());
+                fs::write(&pidfile, child.id().to_string()).unwrap();
+                fs::write(pidfile.with_extension("ready"), b"ready\n").unwrap();
+                std::thread::sleep(Duration::from_secs(60));
+            }
+            println!("after");
+            if failed {
+                eprintln!("actual late EIO confirmed");
+                std::process::exit(1);
+            }
+        }
         "held-output" | "held-buffered" => {
             if mode == "held-output" {
                 std::io::stdout().write_all(b"before\n").unwrap();

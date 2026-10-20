@@ -75,6 +75,13 @@ impl TestRun {
 
 impl Drop for TestRun {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            eprintln!(
+                "failed corpus selftest captures retained at {}",
+                self.root.display()
+            );
+            return;
+        }
         fs::remove_dir_all(&self.root).unwrap();
     }
 }
@@ -232,6 +239,201 @@ fn assert_stopped(pidfile: &Path) {
         assert!(Instant::now() < deadline, "descendant {pid} remained live");
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+#[test]
+fn late_input_requires_real_acknowledgement_eio_and_owned_cleanup() {
+    let mut fault = case(
+        "late-input",
+        "late-input",
+        b"input\n",
+        b"before\nafter\n",
+        b"actual late EIO confirmed\n",
+        1,
+    );
+    fault["io"] = json!("read-error");
+    fault["ack_hex"] = json!(encode(b"before\n"));
+    let run = TestRun::new(&[fault.clone()]);
+    let evidence = run.evidence();
+    let output = run.run(&["--evidence-dir", evidence.to_str().unwrap()]);
+    assert!(output.status.success(), "{output:?}");
+    let records = fs::read_to_string(evidence.join("observations.jsonl")).unwrap();
+    let record: Value = serde_json::from_str(records.lines().next().unwrap()).unwrap();
+    assert_eq!(record["observed"]["acknowledged"], encode(b"before\n"));
+    assert_eq!(
+        record["observed"]["input_error_mechanism"],
+        "controlling-terminal-stop-resume-EIO"
+    );
+    assert_eq!(record["observed"]["cleanup_confirmed"], true);
+    let root = evidence.join("late-input").join(digest(b"late-input"));
+    assert_eq!(
+        json_file(&root.join("acknowledged.json"))["candidate_live"],
+        true
+    );
+    assert_eq!(
+        json_file(&root.join("started.json"))["destination"]["isatty"],
+        true
+    );
+    assert_eq!(
+        json_file(&root.join("exec-mask.json"))["sighup_blocked"],
+        false
+    );
+    assert_eq!(
+        json_file(&root.join("started.json"))["coordinator_sighup_blocked"],
+        true
+    );
+    assert_eq!(json_file(&root.join("stopped.json"))["signal"], "SIGSTOP");
+    assert_eq!(
+        json_file(&root.join("ordinary-control.json"))["matched"],
+        true
+    );
+    assert!(run.run(&["--stdin-file"]).status.success());
+    let mut wrong_ack = fault.clone();
+    wrong_ack["ack_hex"] = json!(encode(b"unseen\n"));
+    let mismatch = TestRun::new(&[wrong_ack]);
+    let evidence = mismatch.evidence();
+    assert_eq!(
+        mismatch
+            .run(&["--evidence-dir", evidence.to_str().unwrap()])
+            .status
+            .code(),
+        Some(2)
+    );
+    let root = evidence.join("late-input").join(digest(b"late-input"));
+    assert_eq!(
+        json_file(&root.join("ordinary-control.json"))["matched"],
+        true
+    );
+    assert!(!root.join("stopped.json").exists());
+    let orphan = TestRun::new(&[]);
+    let pidfile = orphan.root.join("early-writer.pid");
+    let mut early = case("late-orphan", "orphan-output", b"input\n", b"", b"", 1);
+    early["args"] = json!(["orphan-output", pidfile]);
+    early["io"] = json!("read-error");
+    early["ack_hex"] = json!(encode(b"unseen\n"));
+    orphan.write_cases(&[early]);
+    assert_eq!(orphan.run(&[]).status.code(), Some(2));
+    assert_stopped(&pidfile);
+    // Matching final bytes cannot replace a live acknowledgement.
+    fault["args"] = json!(["early-close"]);
+    fault["expected"]["stdout_hex"] = json!(encode(b"early\n"));
+    fault["ack_hex"] = json!(encode(b"early\n"));
+    let invalid = TestRun::new(&[fault]);
+    let evidence = invalid.evidence();
+    assert_eq!(
+        invalid
+            .run(&["--evidence-dir", evidence.to_str().unwrap()])
+            .status
+            .code(),
+        Some(2)
+    );
+    let root = evidence.join("late-input").join(digest(b"late-input"));
+    assert_eq!(
+        json_file(&root.join("ordinary-control.json"))["matched"],
+        true
+    );
+    assert!(!root.join("stopped.json").exists());
+}
+
+#[test]
+fn late_input_timeout_reaps_owned_processes_and_stops_inherited_writer() {
+    let run = TestRun::new(&[]);
+    let pidfile = run.root.join("late-descendant.pid");
+    let mut fault = case(
+        "late-stall",
+        "late-input-stall",
+        b"input\n",
+        b"before\nafter\n",
+        b"actual late EIO confirmed\n",
+        1,
+    );
+    fault["args"] = json!(["late-input-stall", pidfile]);
+    fault["io"] = json!("read-error");
+    fault["ack_hex"] = json!(encode(b"before\n"));
+    run.write_cases(&[fault]);
+    let evidence = run.evidence();
+    let started = Instant::now();
+    let output = run.run(&["--evidence-dir", evidence.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    assert!(started.elapsed() < Duration::from_secs(12));
+    assert_stopped(&pidfile);
+    let root = evidence.join("late-input").join(digest(b"late-stall"));
+    let pid = json_file(&root.join("started.json"))["candidate_pid"]
+        .as_u64()
+        .unwrap();
+    let cleanup = fs::read_to_string(root.join("candidate-cleanup.txt")).unwrap();
+    assert!(cleanup.contains("reaped=true") && cleanup.contains(&format!("pid={pid} ")));
+    assert!(matches!(
+        nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None),
+        Err(nix::errno::Errno::ESRCH)
+    ));
+}
+
+#[test]
+fn late_input_parent_cancellation_stops_the_coordinator_and_owned_group() {
+    let run = TestRun::new(&[]);
+    let pidfile = run.root.join("cancel-descendant.pid");
+    let mut fault = case(
+        "late-cancel",
+        "late-input-stall",
+        b"input\n",
+        b"before\nafter\n",
+        b"actual late EIO confirmed\n",
+        1,
+    );
+    fault["args"] = json!(["late-input-stall", pidfile]);
+    fault["io"] = json!("read-error");
+    fault["ack_hex"] = json!(encode(b"before\n"));
+    run.write_cases(&[fault]);
+    let evidence = run.evidence();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_fastmash-corpus"))
+        .arg("--binary")
+        .arg(&run.binary)
+        .arg("--fixture")
+        .arg(&run.fixture)
+        .arg("--evidence-dir")
+        .arg(&evidence)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(4);
+    while !pidfile.with_extension("ready").exists() {
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "driver exited before cancellation control"
+        );
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("candidate did not reach cancellation control");
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    child.kill().unwrap();
+    child.wait().unwrap();
+    let root = evidence.join("late-input").join(digest(b"late-cancel"));
+    let started = json_file(&root.join("started.json"));
+    let candidate = root.join("candidate.pid");
+    let coordinator = root.join("coordinator.pid");
+    fs::write(
+        &candidate,
+        started["candidate_pid"].as_u64().unwrap().to_string(),
+    )
+    .unwrap();
+    fs::write(
+        &coordinator,
+        started["coordinator_pid"].as_u64().unwrap().to_string(),
+    )
+    .unwrap();
+    assert_stopped(&candidate);
+    assert_stopped(&pidfile);
+    assert_stopped(&coordinator);
+    assert!(
+        fs::read_to_string(root.join("candidate-cleanup.txt"))
+            .unwrap()
+            .contains("reaped=true")
+    );
 }
 
 #[test]
