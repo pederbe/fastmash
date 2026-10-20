@@ -70,6 +70,10 @@ jobs:
           target/release/examples/native-late-input "$PWD/target/release/fastmash" "$CAPTURES/observations" > "$CAPTURES/probe.stdout" 2> "$CAPTURES/probe.stderr" || result=$?
           printf '%s\n' "$result" > "$CAPTURES/probe.exit"
           test "$result" = 0
+          result=0
+          target/release/examples/native-late-input --cancel "$PWD/target/release/fastmash" "$CAPTURES/cancellation" > "$CAPTURES/cancellation.stdout" 2> "$CAPTURES/cancellation.stderr" || result=$?
+          printf '%s\n' "$result" > "$CAPTURES/cancellation.exit"
+          test "$result" = 0
       - name: Verify unchanged inputs
         run: |
           shasum -a 256 -c "$CAPTURES/inputs.sha256"

@@ -4,6 +4,7 @@
 //! This is mechanism evidence, not a replacement of retained fault tests.
 
 use fastmash_corpus_driver::fixture::digest;
+use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, FdFlag, OFlag, fcntl};
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, killpg, pthread_sigmask};
 use serde_json::json;
@@ -13,7 +14,7 @@ use std::io::{self, Write};
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
-use std::os::unix::process::CommandExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
@@ -36,10 +37,23 @@ struct Running {
     child: Child,
     group: bool,
     reaped: bool,
-    abort: Option<PathBuf>,
-    request_abort: Option<PathBuf>,
+    watch_cancellation: bool,
+    cancellation: Option<UnixStream>,
+    cleanup_record: Option<PathBuf>,
 }
 impl Running {
+    fn record_cleanup(&self, status: Option<ExitStatus>) {
+        if let Some(path) = &self.cleanup_record {
+            // Recording may fail on a full filesystem. Cancellation and
+            // reaping have already happened and do not depend on this write.
+            let _ = serde_json::to_vec_pretty(&json!({
+                "pid":self.child.id(), "reaped":self.reaped,
+                "wait_status":status.map(|value| format!("{value}")),
+                "signal":status.and_then(|value| value.signal()),
+            }))
+            .map(|bytes| fs::write(path, bytes));
+        }
+    }
     fn status(&mut self) -> io::Result<Option<ExitStatus>> {
         let status = self.child.try_wait()?;
         self.reaped |= status.is_some();
@@ -47,7 +61,7 @@ impl Running {
     }
     fn wait(&mut self, started: Instant) -> Result<ExitStatus> {
         loop {
-            if self.abort.as_ref().is_some_and(|path| path.exists()) {
+            if self.watch_cancellation && cancellation_requested()? {
                 return Err("coordinator cancellation requested".into());
             }
             if let Some(status) = self.status()? {
@@ -65,8 +79,11 @@ impl Drop for Running {
         if self.reaped {
             return;
         }
-        if let Some(path) = &self.request_abort {
-            let _ = fs::write(path, b"cancel and reap candidate\n");
+        if let Some(channel) = self.cancellation.take() {
+            // Closing the established peer cannot fail for lack of space in
+            // the capture filesystem. The coordinator observes EOF and owns
+            // cancellation and reaping of its separately grouped candidate.
+            drop(channel);
             let grace = Instant::now();
             while grace.elapsed() < Duration::from_secs(2) {
                 if self.status().ok().flatten().is_some() {
@@ -84,7 +101,8 @@ impl Drop for Running {
         let _ = self.child.kill();
         let cleanup = Instant::now();
         while cleanup.elapsed() < Duration::from_secs(1) {
-            if self.status().ok().flatten().is_some() {
+            if let Some(status) = self.status().ok().flatten() {
+                self.record_cleanup(Some(status));
                 return;
             }
             thread::sleep(Duration::from_millis(2));
@@ -93,6 +111,20 @@ impl Drop for Running {
             "native-late-input: child {} did not reap within cleanup reserve",
             self.child.id()
         );
+        self.record_cleanup(None);
+    }
+}
+
+fn cancellation_requested() -> Result<bool> {
+    let mut byte = [0];
+    // The coordinator's otherwise unused stdout is a full-duplex UnixStream.
+    // It has no buffered stdout writes and never passes this stream to the
+    // candidate, whose stdout is an independently captured regular file.
+    match nix::unistd::read(rustix::stdio::stdout(), &mut byte) {
+        Ok(0) => Ok(true),
+        Ok(_) => Err("unexpected cancellation channel data".into()),
+        Err(Errno::EAGAIN | Errno::EINTR) => Ok(false),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -131,8 +163,9 @@ fn ordinary(executable: &Path, root: &Path, prefix: &[u8]) -> Result<()> {
         child: command.spawn()?,
         group: true,
         reaped: false,
-        abort: None,
-        request_abort: None,
+        watch_cancellation: false,
+        cancellation: None,
+        cleanup_record: None,
     };
     drop(command);
     let started = Instant::now();
@@ -196,7 +229,7 @@ fn exec_target(executable: &Path, root: &Path) -> Result<()> {
     Err(error.into())
 }
 
-fn coordinate(executable: &Path, root: &Path) -> Result<()> {
+fn coordinate(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
     let started = Instant::now();
     let session = rustix::process::setsid()?;
     let input = rustix::stdio::stdin();
@@ -217,8 +250,9 @@ fn coordinate(executable: &Path, root: &Path) -> Result<()> {
         child: command.spawn()?,
         group: true,
         reaped: false,
-        abort: Some(root.join("abort")),
-        request_abort: None,
+        watch_cancellation: true,
+        cancellation: None,
+        cleanup_record: Some(root.join("candidate-cleanup.json")),
     };
     drop(command);
     let child =
@@ -237,7 +271,7 @@ fn coordinate(executable: &Path, root: &Path) -> Result<()> {
     fs::write(root.join("release"), b"foreground ready\n")?;
     fs::write(root.join("input-ready"), b"real terminal input ready\n")?;
     while fs::metadata(root.join("stdout"))?.len() < (PREFIX * 8) as u64 {
-        if root.join("abort").try_exists()? {
+        if cancellation_requested()? {
             return Err("coordinator cancellation requested".into());
         }
         if let Some(status) = running.status()? {
@@ -261,6 +295,14 @@ fn coordinate(executable: &Path, root: &Path) -> Result<()> {
             "foreground":rustix::termios::tcgetpgrp(input)?.as_raw_nonzero().get(),
         }))?,
     )?;
+    if cancel {
+        fs::write(
+            root.join("cancel-ready"),
+            b"live candidate prefix observed\n",
+        )?;
+        let status = running.wait(started)?;
+        return Err(format!("candidate exited before cancellation: {status}").into());
+    }
     rustix::termios::tcsetpgrp(input, session)?;
     fs::write(root.join("backgrounded"), b"terminal reclaimed\n")?;
     let status = running.wait(started)?;
@@ -274,7 +316,7 @@ fn coordinate(executable: &Path, root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn probe(executable: &Path, root: &Path) -> Result<()> {
+fn probe(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
     fs::DirBuilder::new().mode(0o700).create(root)?;
     let executable = fs::canonicalize(executable)?;
     let mut prefix = b"alpha\t2\n".repeat(PREFIX);
@@ -290,7 +332,7 @@ fn probe(executable: &Path, root: &Path) -> Result<()> {
             "input_sha256":digest(&prefix), "input_bytes":prefix.len(),
         "candidate_arguments":["--skip-comments", "--full", "noop"],
         "wakeup_comment_bytes":WAKE,
-            "selection":"foreground terminal to background group with SIGTTIN blocked",
+        "selection":if cancel { "close pre-established cancellation peer after live prefix" } else { "foreground terminal to background group with SIGTTIN blocked" },
             "source":"https://pubs.opengroup.org/onlinepubs/007904975/basedefs/xbd_chap11.html",
             "scope":"mechanism probe only; no retained fault test has been replaced",
         }))?,
@@ -310,25 +352,33 @@ fn probe(executable: &Path, root: &Path) -> Result<()> {
     let master_fd = pty.master.as_raw_fd();
     let slave_fd = pty.slave.as_raw_fd();
     let mut master = File::from(pty.master);
+    let (cancellation_reader, cancellation_writer) = UnixStream::pair()?;
+    cancellation_reader.set_nonblocking(true)?;
     let mut command = Command::new(std::env::current_exe()?);
     command
-        .arg("--coordinate")
+        .arg(if cancel {
+            "--coordinate-cancel"
+        } else {
+            "--coordinate"
+        })
         .arg(&executable)
         .arg(&directory)
         .stdin(Stdio::from(pty.slave))
-        .stdout(fresh(&directory.join("coordinator.stdout"))?)
+        .stdout(Stdio::from(std::os::fd::OwnedFd::from(cancellation_reader)))
         .stderr(fresh(&directory.join("coordinator.stderr"))?);
     let mut running = Running {
         child: command.spawn()?,
         group: false,
         reaped: false,
-        abort: None,
-        request_abort: Some(directory.join("abort")),
+        watch_cancellation: false,
+        cancellation: Some(cancellation_writer),
+        cleanup_record: Some(directory.join("coordinator-cleanup.json")),
     };
     drop(command);
     let started = Instant::now();
     let mut delivered = 0;
     let mut wake_delivered = 0;
+    let mut cancellation_sent = false;
     let coordinator_status = loop {
         if let Some(status) = running.status()? {
             break status;
@@ -343,6 +393,10 @@ fn probe(executable: &Path, root: &Path) -> Result<()> {
                     ) => {}
                 Err(e) => return Err(e.into()),
             }
+        }
+        if cancel && directory.join("cancel-ready").try_exists()? && !cancellation_sent {
+            drop(running.cancellation.take());
+            cancellation_sent = true;
         }
         if delivered == prefix.len()
             && directory.join("backgrounded").try_exists()?
@@ -365,6 +419,32 @@ fn probe(executable: &Path, root: &Path) -> Result<()> {
         }
         thread::sleep(Duration::from_millis(2));
     };
+    if cancel {
+        let cleanup: serde_json::Value =
+            serde_json::from_slice(&fs::read(directory.join("candidate-cleanup.json"))?)?;
+        let started: serde_json::Value =
+            serde_json::from_slice(&fs::read(directory.join("started.json"))?)?;
+        let stderr = fs::read(directory.join("coordinator.stderr"))?;
+        let matched = cancellation_sent
+            && coordinator_status.code() == Some(1)
+            && cleanup["reaped"] == true
+            && cleanup["signal"] == 9
+            && cleanup["pid"] == started["candidate_pid"]
+            && stderr == b"native-late-input: coordinator cancellation requested\n";
+        fs::write(
+            directory.join("cancellation-observed.json"),
+            serde_json::to_vec_pretty(&json!({
+                "matched":matched, "cancellation_sent":cancellation_sent,
+                "coordinator_reaped":running.reaped, "coordinator_exit_code":coordinator_status.code(),
+                "candidate_cleanup":cleanup,
+            }))?,
+        )?;
+        if !matched {
+            return Err("cancellation control differs; inspect captures".into());
+        }
+        println!("ordinary control and actual-candidate cancellation cleanup match");
+        return Ok(());
+    }
     if !coordinator_status.success() {
         return Err(
             format!("coordinator failed: {coordinator_status} (see coordinator.stderr)").into(),
@@ -401,10 +481,16 @@ fn main() {
             exec_target(Path::new(executable), Path::new(root))
         }
         [mode, executable, root] if mode == "--coordinate" => {
-            coordinate(Path::new(executable), Path::new(root))
+            coordinate(Path::new(executable), Path::new(root), false)
         }
-        [executable, root] => probe(Path::new(executable), &PathBuf::from(root)),
-        _ => Err("usage: native-late-input EXECUTABLE FRESH_CAPTURE_DIR".into()),
+        [mode, executable, root] if mode == "--coordinate-cancel" => {
+            coordinate(Path::new(executable), Path::new(root), true)
+        }
+        [mode, executable, root] if mode == "--cancel" => {
+            probe(Path::new(executable), &PathBuf::from(root), true)
+        }
+        [executable, root] => probe(Path::new(executable), &PathBuf::from(root), false),
+        _ => Err("usage: native-late-input [--cancel] EXECUTABLE FRESH_CAPTURE_DIR".into()),
     };
     if let Err(error) = result {
         eprintln!("native-late-input: {error}");

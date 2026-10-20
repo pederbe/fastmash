@@ -27,7 +27,12 @@ exit status 1 and reaped processes. It records the visible prefix, process and
 session identities, signal masks, output bytes and hashes.
 
 Execution and cleanup have bounded waits. Cancellation asks the coordinator to
-reap the candidate before stopping the coordinator. Failed setup or observations
+reap the candidate through a pre-established socket before stopping the
+coordinator. It needs no new file writes on the capture filesystem.
+Use `--cancel` before the executable path to check this cleanup path after a
+live prefix, instead of selecting the input fault. That control requires both
+processes to be reaped and the candidate to have received `SIGKILL`.
+Failed setup or observations
 leave partial captures and return a nonzero status.
 
 A successful result establishes this terminal-based late-input mechanism.
