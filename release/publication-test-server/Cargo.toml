@@ -6,6 +6,17 @@ rust-version = "1.88"
 publish = false
 license = "MIT OR Apache-2.0"
 
+# Also compile the self-contained recipe checker in the maintained tool gates.
+[[bin]]
+name = "fastmash-test-source-package"
+path = "../../packaging/conda-forge/run_test.rs"
+
+[[bin]]
+name = "fastmash-source-package-fixture"
+path = "tests/support/source_package.rs"
+test = false
+bench = false
+
 [lints]
 workspace = true
 

@@ -21,7 +21,7 @@ can differ slightly.
 1. Put the release tag's tarball checksum in `meta.yaml`:
    `curl -fsSL https://github.com/pederbe/fastmash/archive/refs/tags/v0.1.0.tar.gz | sha256sum`.
 2. Fork [conda-forge/staged-recipes](https://github.com/conda-forge/staged-recipes),
-   copy `meta.yaml`, `build.sh` and `run_test.sh` into `recipes/fastmash/`,
+   copy `meta.yaml`, `build.sh`, `run_test.sh` and `run_test.rs` into `recipes/fastmash/`,
    and open a pull request. Their CI builds and runs `run_test.sh`.
 3. After review and merge, conda-forge creates the `fastmash-feedstock`
    repository with the listed maintainers. Its bot opens a pull request for
@@ -29,3 +29,10 @@ can differ slightly.
 
 Then update the install page and the landing page's install tabs with
 `conda install -c conda-forge fastmash`.
+
+The build compiles `run_test.rs` with the same Rust and C toolchain used for the
+package. `test.source_files` carries this executable into the isolated test
+directory. The test environment needs no compiler, and the checker is not
+installed into the runtime prefix. It verifies both programs, arithmetic,
+grouped output and the retained geometric-mean digits, rejecting a failed
+command even if its output happens to match.

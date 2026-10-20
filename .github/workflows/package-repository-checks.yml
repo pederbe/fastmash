@@ -14,6 +14,7 @@ on:
       - 'release/check-installed.sh'
       - 'crates/cli/tests/release_installation.rs'
       - 'release/publication-test-server/**'
+      - 'packaging/conda-forge/**'
   pull_request:
     branches: [main]
     paths:
@@ -26,6 +27,7 @@ on:
       - 'release/check-installed.sh'
       - 'crates/cli/tests/release_installation.rs'
       - 'release/publication-test-server/**'
+      - 'packaging/conda-forge/**'
 
 permissions:
   contents: read
@@ -54,7 +56,8 @@ jobs:
       - name: Check tooling
         run: |
           shellcheck release/package-repository.sh release/publish-package-repository.sh \
-            release/package-publication-fixtures.sh release/test-package-publication.sh release/test-package-repository.sh release/check-installed.sh
+            release/package-publication-fixtures.sh release/test-package-publication.sh release/test-package-repository.sh release/check-installed.sh \
+            packaging/conda-forge/build.sh packaging/conda-forge/run_test.sh
           cargo fmt --manifest-path release/publication-test-server/Cargo.toml --check
           cargo clippy --manifest-path release/publication-test-server/Cargo.toml --target-dir target --all-targets --locked -- -D warnings
           cargo test --manifest-path release/publication-test-server/Cargo.toml --target-dir target --locked
