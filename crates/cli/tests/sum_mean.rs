@@ -1,6 +1,11 @@
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
+#![forbid(unsafe_code)]
+#[path = "support/full_output.rs"]
+mod full_output;
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
+#[cfg(target_os = "macos")]
+#[path = "support/test_process.rs"]
+mod test_process;
 use std::{
     io::Write,
     process::{Command, Output, Stdio},
@@ -137,16 +142,30 @@ fn write_failure_is_not_success() {
     let binary = std::env::var_os("FASTMASH_SUM_MEAN_TEST_BINARY")
         .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
-    let mut child = Command::new(binary)
+    let fixture = temp_dir::TempDir::new("sum-mean-full-output");
+    let (input, mut producer) = std::io::pipe().unwrap();
+    producer.write_all(b"1\n").unwrap();
+    drop(producer);
+    #[cfg(target_os = "linux")]
+    let mut command = Command::new(&binary);
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        use std::os::unix::process::CommandExt;
+        let mut command = test_process::bounded(&binary, 30);
+        command.process_group(0);
+        command
+    };
+    command
         .args(["sum", "1", "mean", "1"])
         .env("LC_ALL", "C")
-        .stdin(Stdio::piped())
-        .stderr(Stdio::piped())
-        .full_stdout(true)
-        .spawn()
-        .unwrap();
-    child.stdin.take().unwrap().write_all(b"1\n").unwrap();
-    let out = child.wait_with_output().unwrap();
+        .stdin(input)
+        .stderr(Stdio::piped());
+    let out = full_output::output(
+        command,
+        &binary,
+        true,
+        &fixture.0.with_extension("full-output"),
+    );
     assert_eq!(out.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&out.stderr).contains("write error"));
 }

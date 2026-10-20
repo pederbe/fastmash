@@ -1,6 +1,11 @@
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
+#![forbid(unsafe_code)]
+#[path = "support/full_output.rs"]
+mod full_output;
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
+#[cfg(target_os = "macos")]
+#[path = "support/test_process.rs"]
+mod test_process;
 
 use std::{
     ffi::OsString,
@@ -27,25 +32,33 @@ fn invoke_output(
     input: &[u8],
     full: bool,
 ) -> Output {
-    let path = std::env::temp_dir().join(format!(
-        "selector-{}-{:?}.tsv",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let fixture = temp_dir::TempDir::new(&format!("selectors-{:?}", std::thread::current().id()));
+    let path = fixture.0.join("input");
     fs::write(&path, input).unwrap();
-    let output = Command::new(binary)
+    #[cfg(target_os = "linux")]
+    let mut command = Command::new(binary);
+    #[cfg(target_os = "macos")]
+    let mut command = if full {
+        let mut command = test_process::bounded(binary, 30);
+        command.process_group(0);
+        command
+    } else {
+        Command::new(binary)
+    };
+    command
         .arg0("fastmash")
         .args(arguments)
         .env_clear()
         .env("LC_ALL", "C")
         .env("PATH", "/usr/bin:/bin")
         .stdin(fs::File::open(&path).unwrap())
-        .full_stdout(full)
-        .stderr(Stdio::piped())
-        .output()
-        .unwrap();
-    fs::remove_file(path).unwrap();
-    output
+        .stderr(Stdio::piped());
+    full_output::output(
+        command,
+        binary,
+        full,
+        &fixture.0.with_extension("full-output"),
+    )
 }
 
 #[test]

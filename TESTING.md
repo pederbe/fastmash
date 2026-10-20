@@ -261,17 +261,16 @@ Each file covers one area, such as grouping, selectors, quantiles, record
 separators or pipeline failures (closed pipes, unreadable input, full disks).
 
 For a focused `native_streams` or `grouping` run, or
-`text_summaries`/`quantiles`/`dispersion`/`extrema` on macOS, first build the
-child-only launcher with
+`text_summaries`, `quantiles`, `dispersion`, `extrema`, `sum_mean`,
+`presentation` or `selectors` on macOS, first build the child-only launcher with
 `cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-test-process`.
 Workspace tests build it automatically. Set `FASTMASH_TEST_PROCESS` to use a
 prepared launcher elsewhere. It sets alarms and selected signal masks in a fresh
 process, creates broken pipes without shared readers, then replaces itself with
 the tested executable. The tests retain its PID and actual signal status.
 
-The macOS text-summary, quantile, dispersion and extrema full-output checks own
-a calibrated full destination until the tested child has been reaped and its
-parent-side handles are closed.
+The macOS full-output checks in these suites own a calibrated full destination
+until the tested child has been reaped and its parent-side handles are closed.
 They then verify cleanup. Failed cleanup retains the private image and evidence.
 The quantile suite retains a 60-second bound for ordinary Commands and a
 30-second bound for full-output checks on macOS.
