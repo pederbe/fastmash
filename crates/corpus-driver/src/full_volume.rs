@@ -266,6 +266,21 @@ impl FullVolume {
                     .current_device("cleanup-info-final", deadline)?
                     .is_some()
                 {
+                    // Preserve a read-only inventory of holders of this image's
+                    // files. Diagnosis must neither hide the cleanup failure nor
+                    // delay it indefinitely when lsof cannot inspect a holder.
+                    if let Err(error) = bounded(
+                        Command::new("/usr/sbin/lsof")
+                            .args([OsStr::new("-nP"), OsStr::new("+D")])
+                            .arg(&self.mount)
+                            .arg(&self.image),
+                        &self.root,
+                        "cleanup-holders",
+                        Duration::from_secs(2),
+                    ) {
+                        let _ =
+                            fs::write(self.root.join("cleanup-holders.error"), error.to_string());
+                    }
                     return Err(io::Error::other(
                         "owned image remains attached after bounded cleanup",
                     ));

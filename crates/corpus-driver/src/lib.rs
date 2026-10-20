@@ -3,6 +3,7 @@
 //! Frozen Command checks, including directory, closed-pipe and full-output I/O.
 //! Remaining transports stay in the full corpus gate until migration completes.
 
+mod child_status;
 pub mod fixture;
 pub mod full_output;
 pub mod full_volume;

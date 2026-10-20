@@ -44,14 +44,20 @@ impl Running {
             {
                 return Err("candidate calibration output exceeded its capture limit".into());
             }
-            if let Some(status) = self.0.try_wait()? {
-                self.1 = true;
+            if crate::child_status::terminal(&self.0, &mut self.1)?.is_some() {
                 // A descendant may still hold a capture or the full sink after
                 // its leader exits. Cancel the owned group before reading it.
                 match killpg(Pid::from_raw(self.0.id() as i32), Signal::SIGKILL) {
                     Ok(()) | Err(nix::errno::Errno::ESRCH) => {}
-                    Err(error) => return Err(error.into()),
+                    Err(error) => {
+                        return Err(format!(
+                            "cancel full-output group {} before reap: {error}",
+                            self.0.id()
+                        )
+                        .into());
+                    }
                 }
+                let status = crate::child_status::reap(&mut self.0, &mut self.1)?;
                 return Ok(status);
             }
             if started.elapsed() >= LIMIT || Instant::now() >= deadline {
