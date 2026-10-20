@@ -2,8 +2,10 @@
 #![forbid(unsafe_code)]
 #![cfg(unix)]
 
+#[cfg(target_os = "linux")]
 use std::ffi::OsString;
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
@@ -130,7 +132,18 @@ fn a_directory_in_place_of_a_program_is_a_read_failure() {
 }
 
 #[test]
-fn path_arguments_preserve_spaces_newlines_and_non_utf8_bytes() {
+fn path_arguments_preserve_spaces_newlines_and_tabs() {
+    let fixture = Fixture::new("qualified \n", "package \t");
+    let output = fixture.run();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+}
+
+// APFS rejects non-UTF-8 names before the checker can open them.
+#[cfg(target_os = "linux")]
+#[test]
+fn path_arguments_preserve_non_utf8_bytes_on_linux() {
     let fixture = Fixture::new(
         OsString::from_vec(b"qualified \n\xff".to_vec()),
         OsString::from_vec(b"package \t\xfe".to_vec()),
