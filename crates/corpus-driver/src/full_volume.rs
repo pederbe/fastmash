@@ -235,14 +235,16 @@ impl FullVolume {
     ) -> io::Result<Self> {
         fs::DirBuilder::new().mode(0o700).create(root)?;
         let root = root.canonicalize()?;
-        let volume = Self {
-            image: root.join("full.dmg"),
+        let image = root.join("full.dmg");
+        // Failed creation can leave native state that an inventory momentarily
+        // omits. Preserve its image and receipts instead of claiming cleanup.
+        create(&root, &image)?;
+        Ok(Self {
+            image,
             mount: root.join("mount"),
             root,
             attached: false,
-        };
-        create(&volume.root, &volume.image)?;
-        Ok(volume)
+        })
     }
 
     pub fn new(root: &Path) -> io::Result<Self> {
