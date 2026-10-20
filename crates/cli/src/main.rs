@@ -97,6 +97,7 @@ mod selection_tests;
 mod sort_route;
 mod sorted_input;
 mod standard_io;
+mod standard_stream_io;
 mod table_checks;
 mod table_modes;
 mod terminal_style;

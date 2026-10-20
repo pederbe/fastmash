@@ -19,15 +19,7 @@ fn checked(value: isize) -> io::Result<usize> {
     }
 }
 
-pub(super) fn flags(fd: usize) -> io::Result<usize> {
-    #[cfg(target_os = "linux")]
-    // SAFETY: fcntl F_GETFL takes no pointers.
-    let result = unsafe { super::linux::syscall(72, fd, 3, 0, 0) };
-    #[cfg(target_os = "macos")]
-    // SAFETY: fcntl F_GETFL takes no pointers.
-    let result = unsafe { libc::fcntl(fd as libc::c_int, libc::F_GETFL) } as isize;
-    checked(result)
-}
+pub(super) use super::standard_stream_io::{flags, read, seek, write};
 
 /// Closes an exclusively owned raw descriptor, without retrying an uncertain
 /// close. Callers must finish every use of the descriptor first.
@@ -39,42 +31,6 @@ pub(super) fn close(fd: usize) -> io::Result<()> {
     // SAFETY: close takes no pointers; callers surrender their descriptor.
     let result = unsafe { libc::close(fd as libc::c_int) } as isize;
     checked(result).map(|_| ())
-}
-
-pub(super) fn read(fd: usize, bytes: &mut [u8]) -> io::Result<usize> {
-    #[cfg(target_os = "linux")]
-    // SAFETY: read writes at most the live slice's length into it.
-    let result =
-        unsafe { super::linux::syscall(0, fd, bytes.as_mut_ptr() as usize, bytes.len(), 0) };
-    #[cfg(target_os = "macos")]
-    // SAFETY: read writes at most the live slice's length into it.
-    let result = unsafe { libc::read(fd as libc::c_int, bytes.as_mut_ptr().cast(), bytes.len()) };
-    checked(result)
-}
-
-pub(super) fn write(fd: usize, bytes: &[u8]) -> io::Result<usize> {
-    #[cfg(target_os = "linux")]
-    // SAFETY: write reads at most the live slice's length from it.
-    let result = unsafe { super::linux::syscall(1, fd, bytes.as_ptr() as usize, bytes.len(), 0) };
-    #[cfg(target_os = "macos")]
-    // SAFETY: write reads at most the live slice's length from it.
-    let result = unsafe { libc::write(fd as libc::c_int, bytes.as_ptr().cast(), bytes.len()) };
-    checked(result)
-}
-
-pub(super) fn seek(fd: usize, position: io::SeekFrom) -> io::Result<u64> {
-    let (offset, whence) = match position {
-        io::SeekFrom::Start(offset) => (offset as i64, libc::SEEK_SET),
-        io::SeekFrom::Current(offset) => (offset, libc::SEEK_CUR),
-        io::SeekFrom::End(offset) => (offset, libc::SEEK_END),
-    };
-    #[cfg(target_os = "linux")]
-    // SAFETY: lseek takes no pointers.
-    let result = unsafe { super::linux::syscall(8, fd, offset as usize, whence as usize, 0) };
-    #[cfg(target_os = "macos")]
-    // SAFETY: lseek takes no pointers.
-    let result = unsafe { libc::lseek(fd as libc::c_int, offset, whence) } as isize;
-    checked(result).map(|at| at as u64)
 }
 
 pub(super) fn sigpipe_mask() -> io::Result<u64> {
