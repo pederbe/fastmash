@@ -16,8 +16,10 @@ esac
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
-test "$(uname -s)" = Darwin && test "$(uname -m)" = arm64 ||
-    { echo 'build this archive on native Apple Silicon macOS' >&2; exit 1; }
+if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
+    echo 'build this archive on native Apple Silicon macOS' >&2
+    exit 1
+fi
 os_version=$(sw_vers -productVersion)
 test "${os_version%%.*}" -ge 15 ||
     { echo 'the archive builder needs macOS 15 or later' >&2; exit 1; }
