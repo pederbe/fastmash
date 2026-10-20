@@ -142,7 +142,14 @@ impl FullVolume {
             utility(
                 &self.root,
                 "detach",
-                &[OsStr::new("detach"), self.mount.as_os_str()],
+                &[
+                    OsStr::new("detach"),
+                    // The probe has already reaped every candidate. A native
+                    // detach can still report EBUSY for this private volume.
+                    // Force only its owned mount, with captures kept outside.
+                    OsStr::new("-force"),
+                    self.mount.as_os_str(),
+                ],
             )?;
             self.attached = false;
             fs::remove_dir(&self.mount)?;

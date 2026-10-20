@@ -29,6 +29,11 @@ allows 90 seconds for that probe and 15 seconds for each image utility. Cleanup
 failure fails the control and preserves its logs and image path. Successful
 normal and unwind controls each retain a `cleanup.ok` receipt.
 
+Cleanup force-detaches only the private mount created by that control, after
+the probe and its candidates have exited and been reaped. Ordinary detach can
+report a busy volume at this point on macOS. All captures remain outside the
+image, and a failed forced detach still fails qualification.
+
 The native workflow runs on macOS 15 and 26 with Rust 1.88 and 1.98.1. This
 qualifies resource ownership for a development mechanism. Existing full-output
 test transports remain in place until their retained fault cases are ported

@@ -76,7 +76,7 @@ jobs:
             for label in normal unwind; do
               mount="$CAPTURES/lifetimes/$label/mount"
               if test -d "$mount"; then
-                if ! hdiutil detach "$mount" > "$CAPTURES/fallback-$label.stdout" 2> "$CAPTURES/fallback-$label.stderr"; then
+                if ! hdiutil detach -force "$mount" > "$CAPTURES/fallback-$label.stdout" 2> "$CAPTURES/fallback-$label.stderr"; then
                   result=1
                 fi
               fi
