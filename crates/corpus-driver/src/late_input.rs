@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::fd::OwnedFd;
+use std::os::fd::{BorrowedFd, OwnedFd};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
@@ -37,7 +37,14 @@ struct Plan {
     name: String,
     arguments: Vec<Vec<u8>>,
     env: BTreeMap<String, String>,
-    acknowledgement: Vec<u8>,
+    barrier: Barrier,
+    full_output: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+enum Barrier {
+    OutputPrefix(Vec<u8>),
+    InputDrained,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -46,6 +53,7 @@ struct Completed {
     returncode: i32,
     acknowledgement: String,
     reaped: bool,
+    terminal_reclaimed: bool,
 }
 
 struct Running {
@@ -140,9 +148,9 @@ fn root_argument(mut args: impl Iterator<Item = OsString>) -> Result<PathBuf> {
     }
     Ok(PathBuf::from(root))
 }
-fn pause(started: Instant) -> Result<()> {
+fn pause(started: Instant, cancel: BorrowedFd<'_>) -> Result<()> {
     let mut byte = [0];
-    match nix::unistd::read(rustix::stdio::stdout(), &mut byte) {
+    match nix::unistd::read(cancel, &mut byte) {
         Ok(0) => {
             return Err(Error::message(
                 "late-input coordinator cancellation requested",
@@ -207,10 +215,64 @@ fn collect(stream: &mut Streaming, sink: &mut File, copied: &mut usize) -> Resul
     Ok(())
 }
 
+fn stop(running: &mut Running, pid: Pid, started: Instant, cancel: BorrowedFd<'_>) -> Result<bool> {
+    loop {
+        match killpg(pid, Signal::SIGSTOP) {
+            Ok(()) => break,
+            Err(error)
+                if error == Errno::ESRCH || cfg!(target_os = "macos") && error == Errno::EPERM =>
+            {
+                if running.status()?.is_some() {
+                    return Ok(false);
+                }
+                // A disappearing group may become unsignalable just before
+                // waitid reports its terminal state. Keep the leader unreaped
+                // and use the existing deadline/cancellation check throughout.
+                pause(started, cancel)?;
+            }
+            Err(error) => {
+                return Err(Error::message(format!(
+                    "stop owned candidate group {pid}: {error}"
+                )));
+            }
+        }
+    }
+    loop {
+        match crate::child_status::observe(
+            &running.child,
+            &mut running.reaped,
+            rustix::process::WaitIdOptions::EXITED | rustix::process::WaitIdOptions::STOPPED,
+        ) {
+            Ok(Some(status)) if status.stopping_signal() == Some(Signal::SIGSTOP as i32) => {
+                return Ok(true);
+            }
+            Ok(Some(status)) if status.exited() || status.killed() || status.dumped() => {
+                return Ok(false);
+            }
+            Ok(None) => {}
+            Ok(Some(_)) => return Err(Error::message("unexpected late-input stop observation")),
+            Err(error) => {
+                if running.reaped {
+                    running.group = false;
+                }
+                return Err(error.into());
+            }
+        }
+        pause(started, cancel)?;
+    }
+}
+
 pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     require_unblocked_signals()?;
     let root = root_argument(args)?;
     let plan = plan(&root)?;
+    // The full sink takes stdout in the combined fixture. The same duplex
+    // cancellation socket then occupies stderr, separate from candidate stderr.
+    let cancel = if plan.full_output {
+        rustix::stdio::stderr()
+    } else {
+        rustix::stdio::stdout()
+    };
     let started = Instant::now();
     let mut mask = SigSet::empty();
     mask.add(Signal::SIGTTOU);
@@ -221,7 +283,16 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     let session = rustix::process::setsid()?;
     let input = rustix::stdio::stdin();
     rustix::process::ioctl_tiocsctty(input)?;
-    let (mut stream, output, destination) = Streaming::new(true)?;
+    let (mut stream, output, destination) = Streaming::new(!plan.full_output)?;
+    let (output, destination) = if plan.full_output {
+        // Close the unused pipe writer now so its empty capture reaches EOF.
+        drop(output);
+        let inherited = File::from(rustix::stdio::stdout().try_clone_to_owned()?);
+        let destination = crate::held_output::destination(&inherited)?;
+        (Stdio::inherit(), destination)
+    } else {
+        (output, destination)
+    };
     let mut sink = fresh(&root.join("stdout"))?;
     let mut copied = 0;
     let mut command = Command::new(std::env::current_exe()?);
@@ -256,75 +327,115 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
             "stdin_is_terminal":nix::unistd::isatty(input)?,"destination":destination,
         }))?,
     )?;
-    fs::write(root.join("release"), b"foreground ready\n")?;
-    fs::write(root.join("input-ready"), b"input ready\n")?;
-    loop {
-        collect(&mut stream, &mut sink, &mut copied)?;
-        if running.status()?.is_some() {
-            return Err(Error::message(
-                "candidate exited before late-input acknowledgement",
-            ));
-        }
-        if stream.bytes.len() >= plan.acknowledgement.len() {
-            if !stream.bytes.starts_with(&plan.acknowledgement) {
-                return Err(Error::message("late-input acknowledgement differs"));
-            }
-            break;
-        }
-        pause(started)?;
+    let output_acknowledged = matches!(plan.barrier, Barrier::OutputPrefix(_));
+    if output_acknowledged {
+        fs::write(root.join("release"), b"foreground ready\n")?;
     }
-    let acknowledgement = encode(&stream.bytes[..plan.acknowledgement.len()]);
-    fs::write(
-        root.join("acknowledged.json"),
-        serde_json::to_vec(&json!({
-            "acknowledged":acknowledgement,"candidate_live":true,
-            "foreground":rustix::termios::tcgetpgrp(input)?.as_raw_nonzero().get(),
-        }))?,
-    )?;
+    fs::write(root.join("input-ready"), b"input ready\n")?;
+    if !output_acknowledged {
+        let length = fs::metadata(root.join("input"))?.len();
+        // An empty queue alone could precede delivery through the terminal's
+        // line discipline. First observe every byte queued while the exec
+        // helper is held at `release` and cannot read stdin.
+        loop {
+            if running.status()?.is_some() {
+                return Err(Error::message("candidate exited before input delivery"));
+            }
+            let queued = rustix::io::ioctl_fionread(input)?;
+            if root.join("input-delivered").try_exists()? && queued == length {
+                fs::write(
+                    root.join("input-queued.json"),
+                    serde_json::to_vec(&json!({
+                        "candidate_pid":running.child.id(),"kernel_unread":queued,
+                        "exact_input_length":length,"before_exec_release":true,
+                    }))?,
+                )?;
+                break;
+            }
+            pause(started, cancel)?;
+        }
+        fs::write(root.join("release"), b"exact input queued\n")?;
+    }
+    let acknowledgement = match &plan.barrier {
+        Barrier::OutputPrefix(prefix) => {
+            loop {
+                collect(&mut stream, &mut sink, &mut copied)?;
+                if running.status()?.is_some() {
+                    return Err(Error::message(
+                        "candidate exited before late-input acknowledgement",
+                    ));
+                }
+                if stream.bytes.len() >= prefix.len() {
+                    if !stream.bytes.starts_with(prefix) {
+                        return Err(Error::message("late-input acknowledgement differs"));
+                    }
+                    break;
+                }
+                pause(started, cancel)?;
+            }
+            let acknowledgement = encode(&stream.bytes[..prefix.len()]);
+            fs::write(
+                root.join("acknowledged.json"),
+                serde_json::to_vec(&json!({
+                    "acknowledged":acknowledgement,"candidate_live":true,
+                    "foreground":rustix::termios::tcgetpgrp(input)?.as_raw_nonzero().get(),
+                }))?,
+            )?;
+            acknowledgement
+        }
+        Barrier::InputDrained => String::new(),
+    };
+    let mut ended = false;
     while !root.join("input-delivered").try_exists()? || rustix::io::ioctl_fionread(input)? != 0 {
         collect(&mut stream, &mut sink, &mut copied)?;
         if running.status()?.is_some() {
-            return Err(Error::message(
-                "candidate exited before late-input selection",
-            ));
-        }
-        pause(started)?;
-    }
-    killpg(pid, Signal::SIGSTOP)?;
-    loop {
-        match crate::child_status::observe(
-            &running.child,
-            &mut running.reaped,
-            rustix::process::WaitIdOptions::EXITED | rustix::process::WaitIdOptions::STOPPED,
-        ) {
-            Ok(Some(status)) if status.stopping_signal() == Some(Signal::SIGSTOP as i32) => break,
-            Ok(None) => {}
-            Ok(Some(_)) => return Err(Error::message("candidate ended before stop observation")),
-            Err(error) => {
-                if running.reaped {
-                    running.group = false;
-                }
-                return Err(error.into());
+            if output_acknowledged {
+                return Err(Error::message(
+                    "candidate exited before late-input selection",
+                ));
             }
+            ended = true;
+            break;
         }
-        pause(started)?;
+        pause(started, cancel)?;
     }
-    fs::write(
-        root.join("stopped.json"),
-        serde_json::to_vec(&json!({
-            "pid":running.child.id(),"signal":"SIGSTOP","kernel_unread":rustix::io::ioctl_fionread(input)?,
-            "acknowledgement_before_stop":true,
-        }))?,
-    )?;
-    rustix::termios::tcsetpgrp(input, session)?;
-    killpg(pid, Signal::SIGCONT)?;
-    fs::write(root.join("resumed"), b"resumed after foreground reclaim\n")?;
+    // Input drain proves that the candidate read these bytes, not that it
+    // parsed them or emitted a result. Never label it an output acknowledgement.
+    ended |= running.status()?.is_some();
+    if ended && output_acknowledged {
+        return Err(Error::message("candidate exited before late-input stop"));
+    }
+    if !ended && !output_acknowledged {
+        fs::write(
+            root.join("input-drained.json"),
+            serde_json::to_vec(&json!({
+                "candidate_pid":running.child.id(),"candidate_live":true,
+                "kernel_unread":0,"exact_input_delivered":true,
+            }))?,
+        )?;
+    }
+    let terminal_reclaimed = !ended && stop(&mut running, pid, started, cancel)?;
+    if !terminal_reclaimed && output_acknowledged {
+        return Err(Error::message("candidate ended before stop observation"));
+    }
+    if terminal_reclaimed {
+        fs::write(
+            root.join("stopped.json"),
+            serde_json::to_vec(&json!({
+                "pid":running.child.id(),"signal":"SIGSTOP","kernel_unread":rustix::io::ioctl_fionread(input)?,
+                "acknowledgement_before_stop":output_acknowledged,
+            }))?,
+        )?;
+        rustix::termios::tcsetpgrp(input, session)?;
+        killpg(pid, Signal::SIGCONT)?;
+        fs::write(root.join("resumed"), b"resumed after foreground reclaim\n")?;
+    }
     loop {
         collect(&mut stream, &mut sink, &mut copied)?;
         if running.status()?.is_some() {
             break;
         }
-        pause(started)?;
+        pause(started, cancel)?;
     }
     // Stop descendants before waiting for the terminal's last writer to close.
     crate::child_status::cancel_group(&running.child, &mut running.reaped)?;
@@ -332,7 +443,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     let status = crate::child_status::reap(&mut running.child, &mut running.reaped)?;
     while !stream.ended() {
         collect(&mut stream, &mut sink, &mut copied)?;
-        pause(started)?;
+        pause(started, cancel)?;
     }
     let result = Completed {
         pid: running.child.id(),
@@ -341,6 +452,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
             .unwrap_or_else(|| -status.signal().unwrap_or(0)),
         acknowledgement,
         reaped: running.reaped,
+        terminal_reclaimed,
     };
     let mut output = fresh(&root.join("completed.json"))?;
     serde_json::to_writer(&mut output, &result)?;
@@ -389,15 +501,119 @@ pub fn invoke(
     let args = case.arguments()?;
     let name = case.name.as_deref().unwrap_or("fastmash");
     let env = control.env;
-    fresh(&root.join("input"))?.write_all(&data)?;
     let plan = Plan {
         case_id: case.id.clone(),
         binary: binary.to_owned(),
         name: name.to_owned(),
         arguments: args.iter().map(|arg| arg.as_bytes().to_vec()).collect(),
         env: env.clone(),
-        acknowledgement: ack,
+        barrier: Barrier::OutputPrefix(ack),
+        full_output: false,
     };
+    execute(plan, &data, launcher, &root, None)
+}
+
+/// Deliver exact input to a live terminal reader, then select real EIO after
+/// its kernel input queue drains. This does not require or infer parsed output.
+/// `root` must not exist. The caller retains its ordinary-EOF controls and exact
+/// fault-result assertions, since incomplete records can make those differ.
+/// Earlier command errors are returned as observed, without claiming that the
+/// terminal was reclaimed or that a read encountered EIO.
+pub fn buffered(
+    binary: &Path,
+    arguments: &[OsString],
+    input: &[u8],
+    locale: &str,
+    launcher: &Path,
+    root: &Path,
+) -> Result<std::process::Output> {
+    buffered_output(binary, arguments, input, locale, launcher, root, None)
+}
+
+/// Combine the same actual late-input transport with an already calibrated
+/// full stdout. The caller must retain the owner until this invocation finishes.
+pub fn buffered_with_full_output(
+    binary: &Path,
+    arguments: &[OsString],
+    input: &[u8],
+    locale: &str,
+    launcher: &Path,
+    root: &Path,
+    full: &mut crate::full_output::FullOutput,
+) -> Result<std::process::Output> {
+    buffered_output(binary, arguments, input, locale, launcher, root, Some(full))
+}
+
+fn buffered_output(
+    binary: &Path,
+    arguments: &[OsString],
+    input: &[u8],
+    locale: &str,
+    launcher: &Path,
+    root: &Path,
+    mut full: Option<&mut crate::full_output::FullOutput>,
+) -> Result<std::process::Output> {
+    if input.is_empty() || input.len() > 1024 {
+        return Err(Error::message("late-input input bounds differ"));
+    }
+    let binary = binary.canonicalize()?;
+    if let Some(owner) = full.as_deref_mut() {
+        let identity = owner.identity()?;
+        if identity["executable"] != json!(binary)
+            || identity["executable_sha256"] != digest(&fs::read(&binary)?)
+        {
+            return Err(Error::message("calibrated full-output executable differs"));
+        }
+    }
+    fs::DirBuilder::new().mode(0o700).create(root)?;
+    let root = root.canonicalize()?;
+    let plan = Plan {
+        case_id: "buffered-input".to_owned(),
+        binary,
+        name: "fastmash".to_owned(),
+        arguments: arguments
+            .iter()
+            .map(|arg| arg.as_bytes().to_vec())
+            .collect(),
+        env: BTreeMap::from([
+            ("LC_ALL".to_owned(), locale.to_owned()),
+            ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
+        ]),
+        barrier: Barrier::InputDrained,
+        full_output: full.is_some(),
+    };
+    let destination = full.map(|full| full.destination()).transpose()?;
+    let observed = execute(plan, input, launcher, &root, destination)?;
+    let status = if observed.returncode >= 0 {
+        observed.returncode << 8
+    } else {
+        -observed.returncode
+    };
+    Ok(std::process::Output {
+        status: std::process::ExitStatus::from_raw(status),
+        stdout: decode(&observed.stdout_hex)?,
+        stderr: decode(&observed.stderr_hex)?,
+    })
+}
+
+fn execute(
+    plan: Plan,
+    data: &[u8],
+    launcher: &Path,
+    root: &Path,
+    full: Option<File>,
+) -> Result<Observed> {
+    let expected_ack = match &plan.barrier {
+        Barrier::OutputPrefix(prefix) => Some(encode(prefix)),
+        Barrier::InputDrained => None,
+    };
+    let args: Vec<OsString> = plan
+        .arguments
+        .iter()
+        .cloned()
+        .map(OsString::from_vec)
+        .collect();
+    fresh(&root.join("input"))?.write_all(data)?;
     let mut file = fresh(&root.join("plan.json"))?;
     serde_json::to_writer(&mut file, &plan)?;
     drop(file);
@@ -416,10 +632,17 @@ pub fn invoke(
     let mut command = Command::new(launcher);
     command
         .arg(COORDINATE)
-        .arg(&root)
-        .stdin(Stdio::from(pair.slave))
-        .stdout(Stdio::from(OwnedFd::from(peer)))
-        .stderr(fresh(&root.join("coordinator.stderr"))?);
+        .arg(root)
+        .stdin(Stdio::from(pair.slave));
+    if let Some(full) = full {
+        command
+            .stdout(full)
+            .stderr(Stdio::from(OwnedFd::from(peer)));
+    } else {
+        command
+            .stdout(Stdio::from(OwnedFd::from(peer)))
+            .stderr(fresh(&root.join("coordinator.stderr"))?);
+    }
     let mut running = Running {
         child: command.spawn()?,
         reaped: false,
@@ -455,20 +678,38 @@ pub fn invoke(
         thread::sleep(Duration::from_millis(2));
     }
     let status = crate::child_status::reap(&mut running.child, &mut running.reaped)?;
+    if plan.full_output {
+        // Only the coordinator inherited this socket as stderr. The candidate's
+        // stderr is its capture file, so reaping the coordinator closes the last
+        // socket writer even when the candidate spawned descendants.
+        let mut diagnostics = Vec::new();
+        running
+            .cancel
+            .as_mut()
+            .ok_or_else(|| Error::message("missing coordinator socket"))?
+            .take(CAP + 1)
+            .read_to_end(&mut diagnostics)?;
+        if diagnostics.len() as u64 > CAP {
+            return Err(Error::message("late-input coordinator stderr overflow"));
+        }
+        fresh(&root.join("coordinator.stderr"))?.write_all(&diagnostics)?;
+    }
     if !status.success() {
+        let diagnostic = bounded_read(&root.join("coordinator.stderr"))?;
         return Err(Error::message(format!(
-            "late-input coordinator failed: {status}; inspect {}",
+            "late-input coordinator failed: {status}; {}; inspect {}",
+            String::from_utf8_lossy(&diagnostic).trim(),
             root.display()
         )));
     }
     let result: Completed = serde_json::from_slice(&bounded_read(&root.join("completed.json"))?)?;
     if !result.reaped
         || delivered != data.len()
-        || result.acknowledgement != encode(&plan.acknowledgement)
+        || result.acknowledgement != expected_ack.as_deref().unwrap_or("")
     {
         return Err(Error::message("late-input completion facts differ"));
     }
-    let mut argv = vec![OsStr::new(name).to_owned()];
+    let mut argv = vec![OsStr::new(&plan.name).to_owned()];
     argv.extend(args);
     Ok(Observed {
         argv: argv
@@ -476,8 +717,8 @@ pub fn invoke(
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect(),
         argv_hex: argv.iter().map(|arg| encode(arg.as_bytes())).collect(),
-        executable: binary.to_owned(),
-        env,
+        executable: plan.binary,
+        env: plan.env,
         process_group: result.pid,
         returncode: result.returncode,
         timed_out: false,
@@ -486,8 +727,15 @@ pub fn invoke(
         stdin_held_until_exit: false,
         held: None,
         destination: None,
-        acknowledged: Some(result.acknowledgement),
-        input_error_mechanism: Some("controlling-terminal-stop-resume-EIO".to_owned()),
+        acknowledged: expected_ack.clone(),
+        input_error_mechanism: result.terminal_reclaimed.then(|| {
+            if expected_ack.is_some() {
+                "controlling-terminal-stop-resume-EIO"
+            } else {
+                "controlling-terminal-input-drained-stop-resume-EIO"
+            }
+            .to_owned()
+        }),
         stdout_hex: encode(&bounded_read(&root.join("stdout"))?),
         stderr_hex: encode(&bounded_read(&root.join("stderr"))?),
     })

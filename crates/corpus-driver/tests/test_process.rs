@@ -102,6 +102,12 @@ fn resource_limits_apply_to_the_target_without_private_environment() {
         (
             "FASTMASH_TEST_PROCESS_ADDRESS_SPACE",
             "address_space",
+            32 << 20,
+        ),
+        #[cfg(target_os = "linux")]
+        (
+            "FASTMASH_TEST_PROCESS_ADDRESS_SPACE",
+            "address_space",
             512 << 20,
         ),
     ];

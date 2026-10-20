@@ -284,6 +284,33 @@ the fresh child. The file-size check uses native spawn attributes to restore
 SIGXFSZ only in that child, with real output pipes and signal status. The paused
 memory check retains the tested process's PID across exec.
 
+For focused `record_separators` tests, prepare both launchers with
+`cargo build --release --locked -p fastmash-corpus-driver --bins`.
+Set `FASTMASH_TEST_CORPUS` to use a prepared copy elsewhere. Ordinary-output
+read-error fixtures observe the exact input queued in a raw terminal before
+releasing the executable. They wait for that queue to drain while the child is
+alive, observe the child stopped,
+then reclaim the foreground and resume it to produce real `EIO`. This is an input
+drain observation, not proof of parsed records or an output acknowledgement.
+The existing corpus cases still require their visible output acknowledgement.
+Commands that reject input earlier retain their actual error output and status,
+with no claim that a later read encountered `EIO`.
+Combined read-error/full-output fixtures borrow the calibrated full destination
+through the same coordinator and retain it until both processes are reaped. They
+keep candidate stderr separate from the cancellation channel. Calibration checks
+the selected executable's path and hash, including the named GNU 1.9 reference.
+Native qualification sets `FASTMASH_RECORD_FAULT_EVIDENCE` to a prepared private
+directory. Completed combined cases retain input observations, selected-sink
+calibration and native detach receipts there after child and sink cleanup.
+The record suite forbids unsafe code. Its Linux memory-refusal fixtures apply the
+same 32 MiB address-space limit through the fresh process launcher.
+
+A child can become unsignalable on macOS just before its terminal status is
+observable. Stop selection keeps its PID owned and waits within the existing
+execution deadline for a successful stop or a fresh terminal observation. The
+regression control repeats a post-read parse failure during descriptor teardown;
+an earlier exit never counts as observed late EIO.
+
 Native tests use the same command boundary. `native_descriptors.rs` covers closed
 and incorrectly opened standard streams. `native_streams.rs` covers inherited
 signals, terminal buffering and output faults; `native_sort.rs`

@@ -11,11 +11,27 @@ use std::{
 /// `root` must be a fresh sibling of the caller's private fixture, outside its
 /// ordinary cleanup guard. A failed native detach retains the image and proof.
 pub fn output(command: Command, binary: &OsStr, full: bool, root: &Path) -> Output {
+    output_with_version(command, binary, full, root, b"fastmash ")
+}
+
+/// Preserve calibration against a named reference's version action too.
+pub fn output_with_version(
+    command: Command,
+    binary: &OsStr,
+    full: bool,
+    root: &Path,
+    version_prefix: &[u8],
+) -> Output {
     #[cfg(target_os = "linux")]
-    let _ = (binary, root);
+    let _ = (binary, root, version_prefix);
     #[cfg(target_os = "macos")]
     let mut full_output = full.then(|| {
-        fastmash_corpus_driver::full_output::FullOutput::new(Path::new(binary), root).unwrap()
+        fastmash_corpus_driver::full_output::FullOutput::with_version_prefix(
+            Path::new(binary),
+            root,
+            version_prefix,
+        )
+        .unwrap()
     });
     // Declare this local after the owner so its configured file handles close
     // first even when spawning or collecting the child's output fails.

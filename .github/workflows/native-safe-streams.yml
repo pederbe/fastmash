@@ -2,7 +2,7 @@ name: Native safe stream launcher
 
 on:
   push:
-    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams, contrib/safe-quantile-test-streams, contrib/safe-grouping-test-streams, contrib/safe-summary-test-streams, contrib/safe-report-test-streams, contrib/safe-weighted-test-streams]
+    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams, contrib/safe-quantile-test-streams, contrib/safe-grouping-test-streams, contrib/safe-summary-test-streams, contrib/safe-report-test-streams, contrib/safe-weighted-test-streams, contrib/safe-buffered-input-tests, contrib/safe-record-test-streams]
 
 permissions:
   contents: read
@@ -48,31 +48,45 @@ jobs:
           test "$(uname -m)" = arm64
           test "$(sw_vers -productVersion | cut -d. -f1)" = "${{ matrix.os == 'macos-15' && '15' || '26' }}"
           { git rev-parse HEAD; git status --porcelain; uname -a; sw_vers; rustc -Vv; cargo -V; } > "$captures/identity.txt"
-          shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/cli/tests/native_streams.rs crates/cli/tests/text_summaries.rs crates/cli/tests/quantiles.rs crates/cli/tests/grouping.rs crates/cli/tests/dispersion.rs crates/cli/tests/extrema.rs crates/cli/tests/sum_mean.rs crates/cli/tests/presentation.rs crates/cli/tests/selectors.rs crates/cli/tests/weighted_mean.rs crates/cli/tests/csv_input.rs crates/cli/tests/support/process.rs crates/cli/tests/support/test_process.rs crates/cli/tests/support/temp_dir.rs crates/cli/tests/support/full_output.rs crates/corpus-driver/Cargo.toml crates/corpus-driver/src/*.rs crates/corpus-driver/tests/test_process.rs crates/corpus-driver/tests/support/command.rs > "$captures/inputs.sha256"
+          shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/cli/tests/native_streams.rs crates/cli/tests/text_summaries.rs crates/cli/tests/quantiles.rs crates/cli/tests/grouping.rs crates/cli/tests/dispersion.rs crates/cli/tests/extrema.rs crates/cli/tests/sum_mean.rs crates/cli/tests/presentation.rs crates/cli/tests/selectors.rs crates/cli/tests/weighted_mean.rs crates/cli/tests/csv_input.rs crates/cli/tests/record_separators.rs crates/cli/tests/record_separators/*.rs crates/cli/tests/support/process.rs crates/cli/tests/support/test_process.rs crates/cli/tests/support/temp_dir.rs crates/cli/tests/support/full_output.rs crates/cli/tests/support/output_fault.rs crates/cli/tests/support/full_output_interposer.rs crates/cli/tests/support/full_output_probe.rs crates/corpus-driver/Cargo.toml crates/corpus-driver/src/*.rs crates/corpus-driver/tests/test_process.rs crates/corpus-driver/tests/command.rs crates/corpus-driver/tests/support/command.rs > "$captures/inputs.sha256"
       - name: Lint with the maintained compiler
         if: matrix.rust == '1.98.1'
         run: |
-          cargo clippy --locked -p fastmash-corpus-driver --bin fastmash-test-process --test test_process -p fastmash --test native_streams --test text_summaries --test quantiles --test grouping --test dispersion --test extrema --test sum_mean --test presentation --test selectors --test weighted_mean --test csv_input -- -D warnings > "$CAPTURES/clippy.log" 2>&1
+          cargo clippy --locked -p fastmash-corpus-driver --bins --test test_process --test command -p fastmash --test native_streams --test text_summaries --test quantiles --test grouping --test dispersion --test extrema --test sum_mean --test presentation --test selectors --test weighted_mean --test csv_input --test record_separators -- -D warnings > "$CAPTURES/clippy.log" 2>&1
       - name: Build candidate and safe launcher
         run: |
-          cargo build --release --locked -p fastmash --bins -p fastmash-corpus-driver --bin fastmash-test-process > "$CAPTURES/build.log" 2>&1
+          cargo build --release --locked -p fastmash -p fastmash-corpus-driver --bins > "$CAPTURES/build.log" 2>&1
           mkdir "$CAPTURES/bin"
-          cp target/release/fastmash target/release/fastmash-sort-supervisor target/release/fastmash-test-process "$CAPTURES/bin/"
-          shasum -a 256 "$CAPTURES/bin/fastmash" "$CAPTURES/bin/fastmash-sort-supervisor" "$CAPTURES/bin/fastmash-test-process" > "$CAPTURES/binaries.sha256"
+          cp target/release/fastmash target/release/fastmash-sort-supervisor target/release/fastmash-test-process target/release/fastmash-corpus target/release/fastmash-corpus-test-command "$CAPTURES/bin/"
+          shasum -a 256 "$CAPTURES/bin/fastmash" "$CAPTURES/bin/fastmash-sort-supervisor" "$CAPTURES/bin/fastmash-test-process" "$CAPTURES/bin/fastmash-corpus" "$CAPTURES/bin/fastmash-corpus-test-command" > "$CAPTURES/binaries.sha256"
       - name: Verify launcher controls and executed native streams
-        timeout-minutes: 3
+        timeout-minutes: 6
         run: |
           cargo test --locked -p fastmash-corpus-driver --test test_process -- --nocapture > "$CAPTURES/launcher-tests.log" 2>&1
+          cargo test --release --locked -p fastmash-corpus-driver --test command -- --nocapture > "$CAPTURES/corpus-command-tests.log" 2>&1
+          cargo test --release --locked -p fastmash-corpus-driver --lib full_volume::tests -- --nocapture > "$CAPTURES/full-volume-controls.log" 2>&1
           export FASTMASH_TEST_BINARY="$CAPTURES/bin/fastmash"
           export FASTMASH_QUANTILE_TEST_BINARY="$CAPTURES/bin/fastmash"
           export FASTMASH_SUM_MEAN_TEST_BINARY="$CAPTURES/bin/fastmash"
+          export FASTMASH_TEST_CORPUS="$CAPTURES/bin/fastmash-corpus"
           export FASTMASH_TEST_PROCESS="$CAPTURES/bin/fastmash-test-process"
-          cargo test --release --locked -p fastmash --test native_streams --test text_summaries --test quantiles --test grouping --test dispersion --test extrema --test sum_mean --test presentation --test selectors --test weighted_mean --test csv_input -- --nocapture > "$CAPTURES/native-streams.log" 2>&1
+          export FASTMASH_RECORD_FAULT_EVIDENCE="$CAPTURES/record-full-output"
+          mkdir "$FASTMASH_RECORD_FAULT_EVIDENCE"
+          cargo test --release --locked -p fastmash --test native_streams --test text_summaries --test quantiles --test grouping --test dispersion --test extrema --test sum_mean --test presentation --test selectors --test weighted_mean --test csv_input --test record_separators -- --nocapture > "$CAPTURES/native-streams.log" 2>&1
           cargo test --release --locked -p fastmash --test text_summaries installed_sorted_wide_headers_keys_and_group_resets -- --ignored --nocapture > "$CAPTURES/prepared-text.log" 2>&1
           cargo test --release --locked -p fastmash --test quantiles prepared_sorted_headers_share_quantiles -- --ignored --nocapture > "$CAPTURES/prepared-quantiles.log" 2>&1
           cargo test --release --locked -p fastmash --test sum_mean sorted_wide_headers_comments_and_named_fields -- --ignored --nocapture > "$CAPTURES/prepared-sum-mean.log" 2>&1
           shasum -a 256 -c "$CAPTURES/inputs.sha256"
           shasum -a 256 -c "$CAPTURES/binaries.sha256"
+      - name: Collect failed full-volume receipts
+        if: always()
+        run: |
+          mkdir "$CAPTURES/failed-full-output"
+          shopt -s nullglob
+          for root in /private/tmp/fastmash-test-*.full-output; do
+            test -d "$root" && test ! -L "$root"
+            rsync -a --exclude=full.dmg --exclude=mount "$root" "$CAPTURES/failed-full-output/"
+          done
       - name: Retain native observations
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

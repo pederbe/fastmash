@@ -4,9 +4,8 @@ pub(super) fn failing_input(binary: &OsStr, arguments: &[&str], full: bool) -> O
     failing_input_with(binary, arguments, b"a\tb\nc\td\npartial", full, "C")
 }
 
-/// Runs `binary` with a late EIO, discarding a final incomplete record.
-/// Linux uses a real PTY; Darwin uses the calibrated native read fault.
-#[forbid(unsafe_code)]
+/// Runs `binary` with actual late EIO, discarding a final incomplete record.
+/// A selected full stdout remains owned until the coordinator and child finish.
 pub(super) fn failing_input_with(
     binary: &OsStr,
     arguments: &[&str],
@@ -14,55 +13,90 @@ pub(super) fn failing_input_with(
     full: bool,
     locale: &str,
 ) -> Output {
-    #[cfg(target_os = "macos")]
-    {
-        let directory =
-            temp_dir::TempDir::new(&format!("read-fault-{:?}", std::thread::current().id()));
-        let path = directory.0.join("input");
-        fs::write(&path, input).unwrap();
-        Command::new(binary)
-            .arg0("fastmash")
-            .args(arguments)
-            .env_clear()
-            .env("LC_ALL", locale)
-            .env("PATH", "/usr/bin:/bin")
-            .stdin(fs::File::open(&path).unwrap())
-            .full_stdout(full)
-            .read_error_at_eof()
-            .stderr(Stdio::piped())
-            .output()
-            .unwrap()
+    // Native qualification retains only completed captures and sink cleanup
+    // receipts in its prepared artifact directory. Ordinary tests stay temporary.
+    let evidence_parent = full
+        .then(|| std::env::var_os("FASTMASH_RECORD_FAULT_EVIDENCE"))
+        .flatten();
+    let directory = if let Some(parent) = &evidence_parent {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let serial = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let parent = fs::canonicalize(parent).unwrap();
+        temp_dir::TempDir::create(
+            parent.join(format!("read-fault-{}-{serial}", std::process::id())),
+        )
+        .unwrap()
+    } else {
+        temp_dir::TempDir::new(&format!("read-fault-{:?}", std::thread::current().id()))
+    };
+    let launcher = std::env::var_os("FASTMASH_TEST_CORPUS")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::current_exe()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("fastmash-corpus")
+        });
+    let full_root = directory.0.with_extension("full-output");
+    let mut owner = full.then(|| {
+        fastmash_corpus_driver::full_output::FullOutput::with_version_prefix(
+            std::path::Path::new(binary),
+            &full_root,
+            version_prefix(binary),
+        )
+        .unwrap()
+    });
+    let root = directory.0.join("input-error");
+    let result = if let Some(owner) = owner.as_mut() {
+        fastmash_corpus_driver::late_input::buffered_with_full_output(
+            std::path::Path::new(binary),
+            &args(arguments),
+            input,
+            locale,
+            &launcher,
+            &root,
+            owner,
+        )
+    } else {
+        fastmash_corpus_driver::late_input::buffered(
+            std::path::Path::new(binary),
+            &args(arguments),
+            input,
+            locale,
+            &launcher,
+            &root,
+        )
+    };
+    let output = match result {
+        Ok(output) => output,
+        Err(error) => {
+            // The calibrated owner lives outside this capture directory. Keep
+            // child/coordinator evidence even if native cleanup can complete.
+            let root = directory.0.clone();
+            std::mem::forget(directory);
+            panic!("buffered input error: {error}; inspect {}", root.display());
+        }
+    };
+    if let Some(mut owner) = owner {
+        owner.verify().unwrap();
+        println!(
+            "combined input/full-output: calibration={}; completion={}",
+            owner.identity().unwrap(),
+            fs::read_to_string(root.join("completed.json")).unwrap(),
+        );
+        owner.finish().unwrap();
+        if evidence_parent.is_some() {
+            // All children and native resources are closed before retaining
+            // these files. The neighboring owner root contains detach receipts.
+            std::mem::forget(directory);
+        } else {
+            fs::remove_dir_all(full_root).unwrap();
+        }
     }
-    #[cfg(target_os = "linux")]
-    {
-        use nix::{
-            pty::openpty,
-            sys::termios::{SetArg, cfmakeraw, tcgetattr, tcsetattr},
-        };
-        use std::io::Write;
-        let pair = openpty(None, None).unwrap();
-        // openpty returns two owned descriptors. Raw mode prevents
-        // terminal newline conversion; closing the slave gives the master EIO after
-        // its queued bytes, including one incomplete record, have been consumed.
-        let mut term = tcgetattr(&pair.slave).unwrap();
-        cfmakeraw(&mut term);
-        tcsetattr(&pair.slave, SetArg::TCSANOW, &term).unwrap();
-        let terminal = fs::File::from(pair.master);
-        let mut feed = fs::File::from(pair.slave);
-        feed.write_all(input).unwrap();
-        drop(feed);
-        Command::new(binary)
-            .arg0("fastmash")
-            .args(arguments)
-            .env_clear()
-            .env("LC_ALL", locale)
-            .env("PATH", "/usr/bin:/bin")
-            .stdin(terminal)
-            .full_stdout(full)
-            .stderr(Stdio::piped())
-            .output()
-            .unwrap()
-    }
+    output
 }
 
 #[test]
@@ -270,28 +304,18 @@ fn transpose_allocation_failure_is_explicit_and_has_no_output() {
     // Three million tiny cells need more offset storage than this child's allowance.
     let input = b"x\tx\tx\tx\tx\tx\tx\tx\tx\tx\n".repeat(300_000);
     fs::write(&path, &input).unwrap();
-    let mut command = Command::new(candidate());
+    let mut command = test_process::bounded(candidate(), 30);
     command
         .arg("transpose")
         .env_clear()
         .env("LC_ALL", "C")
+        .env(
+            "FASTMASH_TEST_PROCESS_ADDRESS_SPACE",
+            (32 * 1024 * 1024).to_string(),
+        )
         .stdin(fs::File::open(&path).unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // The child changes only its own address-space limit before exec.
-    // SAFETY: only async-signal-safe setrlimit runs between fork and exec.
-    unsafe {
-        command.pre_exec(|| {
-            let limit = libc::rlimit {
-                rlim_cur: 32 * 1024 * 1024,
-                rlim_max: 32 * 1024 * 1024,
-            };
-            if libc::setrlimit(libc::RLIMIT_AS, &limit) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
     let o = command.output().unwrap();
     fs::remove_file(path).unwrap();
     assert_eq!(o.status.code(), Some(77), "{o:?}");
