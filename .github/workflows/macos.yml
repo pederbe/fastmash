@@ -118,6 +118,27 @@ jobs:
           version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
           target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/corpus-pipe" 2>&1 | tee "$EVIDENCE/corpus-pipe.log"
           target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/corpus-file" 2>&1 | tee "$EVIDENCE/corpus-file.log"
+      - name: Collect failed full-volume receipts
+        if: always()
+        timeout-minutes: 1
+        run: |
+          test -n "${EVIDENCE:-}"
+          captures="$EVIDENCE/failed-full-output"
+          mkdir -p "$captures"
+          shopt -s nullglob
+          collected=0
+          for root in /private/tmp/fastmash-test-*.full-output "${TMPDIR:-/tmp}"/fastmash-corpus-*.full-output; do
+            test -d "$root" && test ! -L "$root"
+            ls -ld "$root/volume/full.dmg" "$root/volume/mount" > "$captures/$(basename "$root").paths.txt" 2>&1 || true
+            rsync -a --exclude=full.dmg --exclude=mount "$root" "$captures/"
+            collected=1
+          done
+          if [ "$collected" -eq 1 ]; then
+            status=0
+            /usr/bin/hdiutil info -plist > "$captures/native-images.stdout" 2> "$captures/native-images.stderr" || status=$?
+            printf '%s\n' "$status" > "$captures/native-images.status"
+            /sbin/mount > "$captures/native-mounts.txt"
+          fi
       - name: Retain native command evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
