@@ -52,6 +52,7 @@ struct Completed {
     returncode: i32,
     acknowledgement: String,
     reaped: bool,
+    terminal_reclaimed: bool,
 }
 
 struct Running {
@@ -213,6 +214,42 @@ fn collect(stream: &mut Streaming, sink: &mut File, copied: &mut usize) -> Resul
     Ok(())
 }
 
+fn stop(running: &mut Running, pid: Pid, started: Instant) -> Result<bool> {
+    match killpg(pid, Signal::SIGSTOP) {
+        Ok(()) => {}
+        Err(error)
+            if (error == Errno::ESRCH || cfg!(target_os = "macos") && error == Errno::EPERM)
+                && running.status()?.is_some() =>
+        {
+            return Ok(false);
+        }
+        Err(error) => return Err(error.into()),
+    }
+    loop {
+        match crate::child_status::observe(
+            &running.child,
+            &mut running.reaped,
+            rustix::process::WaitIdOptions::EXITED | rustix::process::WaitIdOptions::STOPPED,
+        ) {
+            Ok(Some(status)) if status.stopping_signal() == Some(Signal::SIGSTOP as i32) => {
+                return Ok(true);
+            }
+            Ok(Some(status)) if status.exited() || status.killed() || status.dumped() => {
+                return Ok(false);
+            }
+            Ok(None) => {}
+            Ok(Some(_)) => return Err(Error::message("unexpected late-input stop observation")),
+            Err(error) => {
+                if running.reaped {
+                    running.group = false;
+                }
+                return Err(error.into());
+            }
+        }
+        pause(started)?;
+    }
+}
+
 pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     require_unblocked_signals()?;
     let root = root_argument(args)?;
@@ -320,21 +357,27 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
         }
         Barrier::InputDrained => String::new(),
     };
+    let mut ended = false;
     while !root.join("input-delivered").try_exists()? || rustix::io::ioctl_fionread(input)? != 0 {
         collect(&mut stream, &mut sink, &mut copied)?;
         if running.status()?.is_some() {
-            return Err(Error::message(
-                "candidate exited before late-input selection",
-            ));
+            if output_acknowledged {
+                return Err(Error::message(
+                    "candidate exited before late-input selection",
+                ));
+            }
+            ended = true;
+            break;
         }
         pause(started)?;
     }
     // Input drain proves that the candidate read these bytes, not that it
     // parsed them or emitted a result. Never label it an output acknowledgement.
-    if running.status()?.is_some() {
+    ended |= running.status()?.is_some();
+    if ended && output_acknowledged {
         return Err(Error::message("candidate exited before late-input stop"));
     }
-    if !output_acknowledged {
+    if !ended && !output_acknowledged {
         fs::write(
             root.join("input-drained.json"),
             serde_json::to_vec(&json!({
@@ -343,35 +386,22 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
             }))?,
         )?;
     }
-    killpg(pid, Signal::SIGSTOP)?;
-    loop {
-        match crate::child_status::observe(
-            &running.child,
-            &mut running.reaped,
-            rustix::process::WaitIdOptions::EXITED | rustix::process::WaitIdOptions::STOPPED,
-        ) {
-            Ok(Some(status)) if status.stopping_signal() == Some(Signal::SIGSTOP as i32) => break,
-            Ok(None) => {}
-            Ok(Some(_)) => return Err(Error::message("candidate ended before stop observation")),
-            Err(error) => {
-                if running.reaped {
-                    running.group = false;
-                }
-                return Err(error.into());
-            }
-        }
-        pause(started)?;
+    let terminal_reclaimed = !ended && stop(&mut running, pid, started)?;
+    if !terminal_reclaimed && output_acknowledged {
+        return Err(Error::message("candidate ended before stop observation"));
     }
-    fs::write(
-        root.join("stopped.json"),
-        serde_json::to_vec(&json!({
-            "pid":running.child.id(),"signal":"SIGSTOP","kernel_unread":rustix::io::ioctl_fionread(input)?,
-            "acknowledgement_before_stop":output_acknowledged,
-        }))?,
-    )?;
-    rustix::termios::tcsetpgrp(input, session)?;
-    killpg(pid, Signal::SIGCONT)?;
-    fs::write(root.join("resumed"), b"resumed after foreground reclaim\n")?;
+    if terminal_reclaimed {
+        fs::write(
+            root.join("stopped.json"),
+            serde_json::to_vec(&json!({
+                "pid":running.child.id(),"signal":"SIGSTOP","kernel_unread":rustix::io::ioctl_fionread(input)?,
+                "acknowledgement_before_stop":output_acknowledged,
+            }))?,
+        )?;
+        rustix::termios::tcsetpgrp(input, session)?;
+        killpg(pid, Signal::SIGCONT)?;
+        fs::write(root.join("resumed"), b"resumed after foreground reclaim\n")?;
+    }
     loop {
         collect(&mut stream, &mut sink, &mut copied)?;
         if running.status()?.is_some() {
@@ -394,6 +424,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
             .unwrap_or_else(|| -status.signal().unwrap_or(0)),
         acknowledgement,
         reaped: running.reaped,
+        terminal_reclaimed,
     };
     let mut output = fresh(&root.join("completed.json"))?;
     serde_json::to_writer(&mut output, &result)?;
@@ -457,6 +488,8 @@ pub fn invoke(
 /// its kernel input queue drains. This does not require or infer parsed output.
 /// `root` must not exist. The caller retains its ordinary-EOF controls and exact
 /// fault-result assertions, since incomplete records can make those differ.
+/// Earlier command errors are returned as observed, without claiming that the
+/// terminal was reclaimed or that a read encountered EIO.
 pub fn buffered(
     binary: &Path,
     arguments: &[OsString],
@@ -599,14 +632,14 @@ fn execute(plan: Plan, data: &[u8], launcher: &Path, root: &Path) -> Result<Obse
         held: None,
         destination: None,
         acknowledged: expected_ack.clone(),
-        input_error_mechanism: Some(
+        input_error_mechanism: result.terminal_reclaimed.then(|| {
             if expected_ack.is_some() {
                 "controlling-terminal-stop-resume-EIO"
             } else {
                 "controlling-terminal-input-drained-stop-resume-EIO"
             }
-            .to_owned(),
-        ),
+            .to_owned()
+        }),
         stdout_hex: encode(&bounded_read(&root.join("stdout"))?),
         stderr_hex: encode(&bounded_read(&root.join("stderr"))?),
     })

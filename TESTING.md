@@ -293,6 +293,8 @@ alive, observe the child stopped,
 then reclaim the foreground and resume it to produce real `EIO`. This is an input
 drain observation, not proof of parsed records or an output acknowledgement.
 The existing corpus cases still require their visible output acknowledgement.
+Commands that reject input earlier retain their actual error output and status,
+with no claim that a later read encountered `EIO`.
 Full-output/read-error combinations retain the preceding transport.
 
 Native tests use the same command boundary. `native_descriptors.rs` covers closed

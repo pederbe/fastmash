@@ -73,11 +73,19 @@ fn main() {
         "count" => std::process::exit(17),
         "version" => println!("fastmash 0.2.0"),
         "early-close" => println!("early"),
-        "late-input" | "late-input-stall" | "buffered-input" | "buffered-input-stall" => {
+        "late-input"
+        | "late-input-stall"
+        | "buffered-input"
+        | "buffered-input-stall"
+        | "buffered-parse-error" => {
             let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
             let mut bytes = [0; 6];
             input.read_exact(&mut bytes).unwrap();
             assert_eq!(&bytes, b"input\n");
+            if mode == "buffered-parse-error" {
+                eprintln!("parse error before another read");
+                std::process::exit(17);
+            }
             if !mode.to_str().unwrap().starts_with("buffered-") {
                 println!("before");
             }

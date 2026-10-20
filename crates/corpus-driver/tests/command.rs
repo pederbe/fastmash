@@ -312,29 +312,55 @@ fn buffered_input_selects_eio_after_input_drain_without_output_acknowledgement()
     assert_eq!(stopped["kernel_unread"], 0);
     assert_eq!(stopped["acknowledgement_before_stop"], false);
     assert_eq!(completed["reaped"], true);
+    assert_eq!(completed["terminal_reclaimed"], true);
     println!(
         "buffered input queued: {queued}; drain: {drained}; stop: {stopped}; completion: {completed}"
     );
 }
 
 #[test]
-fn buffered_input_rejects_early_exit_and_reaps_stalled_descendants() {
+fn buffered_input_returns_early_errors_and_reaps_stalled_descendants() {
     let run = TestRun::new(&[]);
     let launcher = Path::new(env!("CARGO_BIN_EXE_fastmash-corpus"));
     let early = run.root.join("early");
-    assert!(
-        fastmash_corpus_driver::late_input::buffered(
-            &run.binary,
-            &["wrong-status".into()],
-            b"input\n",
-            "C",
-            launcher,
-            &early,
-        )
-        .is_err()
-    );
+    let output = fastmash_corpus_driver::late_input::buffered(
+        &run.binary,
+        &["wrong-status".into()],
+        b"input\n",
+        "C",
+        launcher,
+        &early,
+    )
+    .unwrap();
+    assert_eq!(output.status.code(), Some(17));
+    assert!(output.stdout.is_empty() && output.stderr.is_empty());
     assert!(!early.join("input-drained.json").exists());
     assert!(!early.join("stopped.json").exists());
+    let completion = json_file(&early.join("completed.json"));
+    assert_eq!(completion["reaped"], true);
+    assert_eq!(completion["terminal_reclaimed"], false);
+    println!("buffered early completion: {completion}");
+    let parse = run.root.join("parse-error");
+    let output = fastmash_corpus_driver::late_input::buffered(
+        &run.binary,
+        &["buffered-parse-error".into()],
+        b"input\n",
+        "C",
+        launcher,
+        &parse,
+    )
+    .unwrap();
+    assert_eq!(output.status.code(), Some(17));
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"parse error before another read\n");
+    let completion = json_file(&parse.join("completed.json"));
+    assert_eq!(completion["reaped"], true);
+    // The command may reject its first record before or after the drain
+    // observation. Preserve its real error without requiring it to read again.
+    assert_eq!(
+        completion["terminal_reclaimed"],
+        parse.join("stopped.json").exists()
+    );
     let pidfile = run.root.join("buffered-descendant.pid");
     let stalled = run.root.join("stalled");
     let started = Instant::now();
