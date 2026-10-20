@@ -16,6 +16,10 @@ path = "tests/support/linux_source.rs"
 test = false
 bench = false
 
+[[bin]]
+name = "fastmash-test-homebrew"
+path = "../../packaging/homebrew/run_test.rs"
+
 # Also compile the self-contained recipe checker in the maintained tool gates.
 [[bin]]
 name = "fastmash-test-source-package"
