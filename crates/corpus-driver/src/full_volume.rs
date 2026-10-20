@@ -157,7 +157,7 @@ fn remaining(deadline: Instant) -> io::Result<Duration> {
     if budget.is_zero() {
         Err(io::Error::new(
             io::ErrorKind::TimedOut,
-            "image cleanup deadline",
+            "native image transition deadline",
         ))
     } else {
         Ok(budget)
@@ -176,11 +176,7 @@ fn retry_transition(
         match attempt(index) {
             Ok(true) => return Ok(()),
             Ok(false) => {}
-            Err(error) if error.raw_os_error() == Some(nix::errno::Errno::EBUSY as i32) => {
-                eprintln!(
-                    "[DEBUG-full-cleanup] busy filesystem at attempt={index}; ownership retained"
-                );
-            }
+            Err(error) if error.raw_os_error() == Some(nix::errno::Errno::EBUSY as i32) => {}
             Err(error) => return Err(error),
         }
         thread::sleep(Duration::from_millis(250).min(remaining(deadline)?));
@@ -192,15 +188,7 @@ fn wait_for_attachment(
     deadline: Instant,
     mut observe: impl FnMut(usize) -> io::Result<Option<String>>,
 ) -> io::Result<()> {
-    retry_transition(deadline, |attempt| {
-        let found = observe(attempt)?.is_some();
-        if !found {
-            eprintln!("[DEBUG-full-cleanup] attachment association pending attempt={attempt}");
-        } else if attempt != 0 {
-            eprintln!("[DEBUG-full-cleanup] attachment association observed attempt={attempt}");
-        }
-        Ok(found)
-    })
+    retry_transition(deadline, |attempt| Ok(observe(attempt)?.is_some()))
 }
 
 // Called only after a fresh inventory omits the owned image. A requested
@@ -212,14 +200,7 @@ fn detachment_proven(successful: bool, requested_device: Option<&Path>) -> io::R
     let Some(device) = requested_device else {
         return Ok(false);
     };
-    let absent = !device.try_exists()?;
-    if absent {
-        eprintln!(
-            "[DEBUG-full-cleanup] requested device absent {}",
-            device.display()
-        );
-    }
-    Ok(absent)
+    Ok(!device.try_exists()?)
 }
 
 fn request_detach(
@@ -349,7 +330,7 @@ impl FullVolume {
             Ok(true)
         });
         if let Err(error) = cleaned {
-            return Err(self.cleanup_failure("cleanup-transition", error));
+            return Err(self.cleanup_failure(error));
         }
         self.attached = false;
         fs::write(
@@ -359,29 +340,19 @@ impl FullVolume {
         Ok(())
     }
 
-    fn cleanup_failure(&self, stage: &str, error: io::Error) -> io::Error {
-        let detail = format!(
-            "[DEBUG-full-cleanup] stage={stage} errno={:?} root={} error={error}\n",
-            error.raw_os_error(),
-            self.root.display(),
-        );
-        eprint!("{detail}");
-        let _ = fs::write(self.root.join("cleanup-failure.txt"), detail);
-        let _ = bounded(
-            &mut Command::new("/sbin/mount"),
-            &self.root,
-            "cleanup-mounts",
-            Duration::from_secs(2),
-        );
-        let _ = bounded(
+    fn cleanup_failure(&self, error: io::Error) -> io::Error {
+        // Preserve a bounded, read-only inventory without hiding the failure.
+        if let Err(inventory) = bounded(
             Command::new("/usr/sbin/lsof")
                 .args([OsStr::new("-nP"), OsStr::new("+D")])
                 .arg(&self.mount)
                 .arg(&self.image),
             &self.root,
-            "cleanup-path-holders",
+            "cleanup-holders",
             Duration::from_secs(2),
-        );
+        ) {
+            let _ = fs::write(self.root.join("cleanup-holders.error"), inventory.to_string());
+        }
         error
     }
 }
