@@ -23,6 +23,20 @@ fn main() {
         "wrong-status" => std::process::exit(17),
         "version" => println!("fastmash 0.2.0"),
         "early-close" => println!("early"),
+        "directory-input" => {
+            let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
+            assert!(input.metadata().unwrap().is_dir());
+            let error = input.read(&mut [0]).unwrap_err();
+            assert_eq!(error.raw_os_error(), Some(nix::errno::Errno::EISDIR as i32));
+            println!("directory read confirmed");
+        }
+        "broken-output" => {
+            let error = std::io::stdout()
+                .write_all(b"selected output\n")
+                .unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+            eprintln!("broken output confirmed");
+        }
         "overflow" => {
             let bytes = vec![b'x'; 524_289];
             let _ = std::io::stdout().write_all(&bytes);

@@ -117,13 +117,27 @@ pub(crate) fn invoke(
     let data = decode(&case.input_hex)?;
     let mut stdout = capture(directory, "stdout")?;
     let mut stderr = capture(directory, "stderr")?;
-    let input = if stdin_file {
+    let input = if case.io == "directory" {
+        let directory = File::open(directory)?;
+        if !directory.metadata()?.is_dir() {
+            return Err(Error::message("directory input is not a directory"));
+        }
+        Stdio::from(directory)
+    } else if stdin_file {
         let mut input = capture(directory, "stdin")?;
         input.write_all(&data)?;
         input.rewind()?;
         Stdio::from(input)
     } else {
         Stdio::piped()
+    };
+    let destination = if case.io == "closed-pipe" {
+        let (reader, writer) = std::io::pipe()?;
+        // No reader remains when the actual candidate inherits this writer.
+        drop(reader);
+        Stdio::from(writer)
+    } else {
+        Stdio::from(stdout.try_clone()?)
     };
     let mut env = BTreeMap::from([
         ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
@@ -143,7 +157,7 @@ pub(crate) fn invoke(
         .env_clear()
         .envs(&env)
         .stdin(input)
-        .stdout(stdout.try_clone()?)
+        .stdout(destination)
         .stderr(stderr.try_clone()?)
         .spawn()?;
     let mut child = RunningChild {

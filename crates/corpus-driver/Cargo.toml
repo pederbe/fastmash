@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 publish = false
-description = "Development driver for ordinary frozen Fastmash commands"
+description = "Development driver for frozen Fastmash commands"
 default-run = "fastmash-corpus"
 
 [[bin]]
