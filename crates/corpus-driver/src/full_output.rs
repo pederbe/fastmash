@@ -224,6 +224,18 @@ fn require_time(deadline: Instant) -> Result<()> {
 /// Calibrate the actual executable and return its still-full selected sink.
 /// A supplied private mount must remain owned until this file has closed.
 pub fn qualify(binary: &Path, root: &Path, volume: Option<&Path>) -> Result<File> {
+    qualify_version(binary, root, volume, b"fastmash ")
+}
+
+fn qualify_version(
+    binary: &Path,
+    root: &Path,
+    volume: Option<&Path>,
+    version_prefix: &[u8],
+) -> Result<File> {
+    if version_prefix.is_empty() {
+        return Err("full-output version prefix must not be empty".into());
+    }
     let deadline = Instant::now() + Duration::from_secs(60);
     let binary = binary.canonicalize()?;
     fs::DirBuilder::new().mode(0o700).create(root)?;
@@ -342,7 +354,7 @@ pub fn qualify(binary: &Path, root: &Path, volume: Option<&Path>) -> Result<File
         deadline,
     )?;
     let expected = fs::read(baseline)?;
-    if !status.success() || !stderr.is_empty() || !expected.starts_with(b"fastmash ") {
+    if !status.success() || !stderr.is_empty() || !expected.starts_with(version_prefix) {
         return Err("ordinary version control differs".into());
     }
     require_empty_full(&mut full)?;
@@ -386,6 +398,15 @@ pub struct FullOutput {
 }
 impl FullOutput {
     pub fn new(binary: &Path, root: &Path) -> Result<Self> {
+        Self::with_version_prefix(binary, root, b"fastmash ")
+    }
+
+    /// Calibrate a named reference with its expected version-action prefix.
+    /// All selected/unselected I/O controls still run against that executable.
+    pub fn with_version_prefix(binary: &Path, root: &Path, version_prefix: &[u8]) -> Result<Self> {
+        if version_prefix.is_empty() {
+            return Err("full-output version prefix must not be empty".into());
+        }
         fs::DirBuilder::new().mode(0o700).create(root)?;
         #[cfg(target_os = "macos")]
         let volume = crate::full_volume::FullVolume::new(&root.join("volume"))?;
@@ -393,7 +414,7 @@ impl FullOutput {
         let mount = Some(volume.mount());
         #[cfg(not(target_os = "macos"))]
         let mount = None;
-        let file = qualify(binary, &root.join("observations"), mount)?;
+        let file = qualify_version(binary, &root.join("observations"), mount, version_prefix)?;
         Ok(Self {
             file,
             #[cfg(target_os = "macos")]

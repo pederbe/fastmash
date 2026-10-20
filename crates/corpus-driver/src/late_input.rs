@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::fd::OwnedFd;
+use std::os::fd::{BorrowedFd, OwnedFd};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
@@ -38,6 +38,7 @@ struct Plan {
     arguments: Vec<Vec<u8>>,
     env: BTreeMap<String, String>,
     barrier: Barrier,
+    full_output: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -147,9 +148,9 @@ fn root_argument(mut args: impl Iterator<Item = OsString>) -> Result<PathBuf> {
     }
     Ok(PathBuf::from(root))
 }
-fn pause(started: Instant) -> Result<()> {
+fn pause(started: Instant, cancel: BorrowedFd<'_>) -> Result<()> {
     let mut byte = [0];
-    match nix::unistd::read(rustix::stdio::stdout(), &mut byte) {
+    match nix::unistd::read(cancel, &mut byte) {
         Ok(0) => {
             return Err(Error::message(
                 "late-input coordinator cancellation requested",
@@ -214,7 +215,7 @@ fn collect(stream: &mut Streaming, sink: &mut File, copied: &mut usize) -> Resul
     Ok(())
 }
 
-fn stop(running: &mut Running, pid: Pid, started: Instant) -> Result<bool> {
+fn stop(running: &mut Running, pid: Pid, started: Instant, cancel: BorrowedFd<'_>) -> Result<bool> {
     match killpg(pid, Signal::SIGSTOP) {
         Ok(()) => {}
         Err(error)
@@ -246,7 +247,7 @@ fn stop(running: &mut Running, pid: Pid, started: Instant) -> Result<bool> {
                 return Err(error.into());
             }
         }
-        pause(started)?;
+        pause(started, cancel)?;
     }
 }
 
@@ -254,6 +255,13 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     require_unblocked_signals()?;
     let root = root_argument(args)?;
     let plan = plan(&root)?;
+    // The full sink takes stdout in the combined fixture. The same duplex
+    // cancellation socket then occupies stderr, separate from candidate stderr.
+    let cancel = if plan.full_output {
+        rustix::stdio::stderr()
+    } else {
+        rustix::stdio::stdout()
+    };
     let started = Instant::now();
     let mut mask = SigSet::empty();
     mask.add(Signal::SIGTTOU);
@@ -264,7 +272,16 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     let session = rustix::process::setsid()?;
     let input = rustix::stdio::stdin();
     rustix::process::ioctl_tiocsctty(input)?;
-    let (mut stream, output, destination) = Streaming::new(true)?;
+    let (mut stream, output, destination) = Streaming::new(!plan.full_output)?;
+    let (output, destination) = if plan.full_output {
+        // Close the unused pipe writer now so its empty capture reaches EOF.
+        drop(output);
+        let inherited = File::from(rustix::stdio::stdout().try_clone_to_owned()?);
+        let destination = crate::held_output::destination(&inherited)?;
+        (Stdio::inherit(), destination)
+    } else {
+        (output, destination)
+    };
     let mut sink = fresh(&root.join("stdout"))?;
     let mut copied = 0;
     let mut command = Command::new(std::env::current_exe()?);
@@ -324,7 +341,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
                 )?;
                 break;
             }
-            pause(started)?;
+            pause(started, cancel)?;
         }
         fs::write(root.join("release"), b"exact input queued\n")?;
     }
@@ -343,7 +360,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
                     }
                     break;
                 }
-                pause(started)?;
+                pause(started, cancel)?;
             }
             let acknowledgement = encode(&stream.bytes[..prefix.len()]);
             fs::write(
@@ -369,7 +386,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
             ended = true;
             break;
         }
-        pause(started)?;
+        pause(started, cancel)?;
     }
     // Input drain proves that the candidate read these bytes, not that it
     // parsed them or emitted a result. Never label it an output acknowledgement.
@@ -386,7 +403,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
             }))?,
         )?;
     }
-    let terminal_reclaimed = !ended && stop(&mut running, pid, started)?;
+    let terminal_reclaimed = !ended && stop(&mut running, pid, started, cancel)?;
     if !terminal_reclaimed && output_acknowledged {
         return Err(Error::message("candidate ended before stop observation"));
     }
@@ -407,7 +424,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
         if running.status()?.is_some() {
             break;
         }
-        pause(started)?;
+        pause(started, cancel)?;
     }
     // Stop descendants before waiting for the terminal's last writer to close.
     crate::child_status::cancel_group(&running.child, &mut running.reaped)?;
@@ -415,7 +432,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     let status = crate::child_status::reap(&mut running.child, &mut running.reaped)?;
     while !stream.ended() {
         collect(&mut stream, &mut sink, &mut copied)?;
-        pause(started)?;
+        pause(started, cancel)?;
     }
     let result = Completed {
         pid: running.child.id(),
@@ -480,8 +497,9 @@ pub fn invoke(
         arguments: args.iter().map(|arg| arg.as_bytes().to_vec()).collect(),
         env: env.clone(),
         barrier: Barrier::OutputPrefix(ack),
+        full_output: false,
     };
-    execute(plan, &data, launcher, &root)
+    execute(plan, &data, launcher, &root, None)
 }
 
 /// Deliver exact input to a live terminal reader, then select real EIO after
@@ -498,10 +516,44 @@ pub fn buffered(
     launcher: &Path,
     root: &Path,
 ) -> Result<std::process::Output> {
+    buffered_output(binary, arguments, input, locale, launcher, root, None)
+}
+
+/// Combine the same actual late-input transport with an already calibrated
+/// full stdout. The caller must retain the owner until this invocation finishes.
+pub fn buffered_with_full_output(
+    binary: &Path,
+    arguments: &[OsString],
+    input: &[u8],
+    locale: &str,
+    launcher: &Path,
+    root: &Path,
+    full: &mut crate::full_output::FullOutput,
+) -> Result<std::process::Output> {
+    buffered_output(binary, arguments, input, locale, launcher, root, Some(full))
+}
+
+fn buffered_output(
+    binary: &Path,
+    arguments: &[OsString],
+    input: &[u8],
+    locale: &str,
+    launcher: &Path,
+    root: &Path,
+    mut full: Option<&mut crate::full_output::FullOutput>,
+) -> Result<std::process::Output> {
     if input.is_empty() || input.len() > 1024 {
         return Err(Error::message("late-input input bounds differ"));
     }
     let binary = binary.canonicalize()?;
+    if let Some(owner) = full.as_deref_mut() {
+        let identity = owner.identity()?;
+        if identity["executable"] != json!(binary)
+            || identity["executable_sha256"] != digest(&fs::read(&binary)?)
+        {
+            return Err(Error::message("calibrated full-output executable differs"));
+        }
+    }
     fs::DirBuilder::new().mode(0o700).create(root)?;
     let root = root.canonicalize()?;
     let plan = Plan {
@@ -517,8 +569,10 @@ pub fn buffered(
             ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
         ]),
         barrier: Barrier::InputDrained,
+        full_output: full.is_some(),
     };
-    let observed = execute(plan, input, launcher, &root)?;
+    let destination = full.map(|full| full.destination()).transpose()?;
+    let observed = execute(plan, input, launcher, &root, destination)?;
     let status = if observed.returncode >= 0 {
         observed.returncode << 8
     } else {
@@ -531,7 +585,13 @@ pub fn buffered(
     })
 }
 
-fn execute(plan: Plan, data: &[u8], launcher: &Path, root: &Path) -> Result<Observed> {
+fn execute(
+    plan: Plan,
+    data: &[u8],
+    launcher: &Path,
+    root: &Path,
+    full: Option<File>,
+) -> Result<Observed> {
     let expected_ack = match &plan.barrier {
         Barrier::OutputPrefix(prefix) => Some(encode(prefix)),
         Barrier::InputDrained => None,
@@ -562,9 +622,16 @@ fn execute(plan: Plan, data: &[u8], launcher: &Path, root: &Path) -> Result<Obse
     command
         .arg(COORDINATE)
         .arg(root)
-        .stdin(Stdio::from(pair.slave))
-        .stdout(Stdio::from(OwnedFd::from(peer)))
-        .stderr(fresh(&root.join("coordinator.stderr"))?);
+        .stdin(Stdio::from(pair.slave));
+    if let Some(full) = full {
+        command
+            .stdout(full)
+            .stderr(Stdio::from(OwnedFd::from(peer)));
+    } else {
+        command
+            .stdout(Stdio::from(OwnedFd::from(peer)))
+            .stderr(fresh(&root.join("coordinator.stderr"))?);
+    }
     let mut running = Running {
         child: command.spawn()?,
         reaped: false,
@@ -600,6 +667,22 @@ fn execute(plan: Plan, data: &[u8], launcher: &Path, root: &Path) -> Result<Obse
         thread::sleep(Duration::from_millis(2));
     }
     let status = crate::child_status::reap(&mut running.child, &mut running.reaped)?;
+    if plan.full_output {
+        // Only the coordinator inherited this socket as stderr. The candidate's
+        // stderr is its capture file, so reaping the coordinator closes the last
+        // socket writer even when the candidate spawned descendants.
+        let mut diagnostics = Vec::new();
+        running
+            .cancel
+            .as_mut()
+            .ok_or_else(|| Error::message("missing coordinator socket"))?
+            .take(CAP + 1)
+            .read_to_end(&mut diagnostics)?;
+        if diagnostics.len() as u64 > CAP {
+            return Err(Error::message("late-input coordinator stderr overflow"));
+        }
+        fresh(&root.join("coordinator.stderr"))?.write_all(&diagnostics)?;
+    }
     if !status.success() {
         return Err(Error::message(format!(
             "late-input coordinator failed: {status}; inspect {}",

@@ -1,8 +1,10 @@
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
+#![forbid(unsafe_code)]
+#[path = "support/full_output.rs"]
+mod full_output;
 #[path = "support/temp_dir.rs"]
 mod temp_dir;
+#[path = "support/test_process.rs"]
+mod test_process;
 
 use std::{
     ffi::{OsStr, OsString},
@@ -70,6 +72,46 @@ fn candidate() -> OsString {
 fn args(values: &[&str]) -> Vec<OsString> {
     values.iter().map(OsString::from).collect()
 }
+
+fn version_prefix(binary: &OsStr) -> &'static [u8] {
+    if binary == candidate() {
+        b"fastmash "
+    } else {
+        b"datamash (GNU datamash) 1.9\n"
+    }
+}
+
+#[test]
+fn combined_input_fault_rejects_another_executable_before_launch() {
+    let directory = temp_dir::TempDir::new("record-selected-executable");
+    let owner_root = directory.0.with_extension("full-output");
+    let binary = candidate();
+    let mut full = fastmash_corpus_driver::full_output::FullOutput::new(
+        std::path::Path::new(&binary),
+        &owner_root,
+    )
+    .unwrap();
+    let root = directory.0.join("rejected");
+    let result = fastmash_corpus_driver::late_input::buffered_with_full_output(
+        &std::env::current_exe().unwrap(),
+        &["--list".into()],
+        b"input\n",
+        "C",
+        std::path::Path::new("unused-launcher"),
+        &root,
+        &mut full,
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("calibrated full-output executable differs")
+    );
+    assert!(!root.exists());
+    full.verify().unwrap();
+    full.finish().unwrap();
+    fs::remove_dir_all(owner_root).unwrap();
+}
 fn invoke(binary: &OsStr, arguments: &[OsString], input: &[u8], spill: bool, full: bool) -> Output {
     invoke_locale(binary, arguments, input, spill, full, "C")
 }
@@ -82,12 +124,18 @@ fn invoke_locale(
     full: bool,
     locale: &str,
 ) -> Output {
-    let path = std::env::temp_dir().join(format!(
-        "records-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let directory = temp_dir::TempDir::new(&format!("records-{:?}", std::thread::current().id()));
+    let path = directory.0.join("input");
     fs::write(&path, input).unwrap();
+    #[cfg(target_os = "macos")]
+    let mut command = if full {
+        let mut command = test_process::bounded(binary, 30);
+        command.process_group(0);
+        command
+    } else {
+        Command::new(binary)
+    };
+    #[cfg(target_os = "linux")]
     let mut command = Command::new(binary);
     command
         .arg0("fastmash")
@@ -97,7 +145,6 @@ fn invoke_locale(
         .env("LC_NUMERIC", locale)
         .env("PATH", "/usr/bin:/bin")
         .stdin(fs::File::open(&path).unwrap())
-        .full_stdout(full)
         .stderr(Stdio::piped());
     if spill {
         command.env("FASTMASH_SORT_MEMORY_BYTES", "1");
@@ -109,9 +156,12 @@ fn invoke_locale(
                 .expect("named GNU locale directory required"),
         );
     }
-    let output = command.output().unwrap();
-    fs::remove_file(path).unwrap();
-    output
+    let root = directory.0.with_extension("full-output");
+    if binary == candidate() {
+        full_output::output(command, binary, full, &root)
+    } else {
+        full_output::output_with_version(command, binary, full, &root, version_prefix(binary))
+    }
 }
 
 #[test]

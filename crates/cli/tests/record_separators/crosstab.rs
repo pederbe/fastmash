@@ -35,28 +35,18 @@ fn crosstab_allocation_failure_is_explicit() {
         input.extend_from_slice(format!("{r}\tx\n").as_bytes());
     }
     fs::write(&path, input).unwrap();
-    let mut command = Command::new(candidate());
+    let mut command = test_process::bounded(candidate(), 30);
     command
         .args(["ct", "1,2"])
         .env_clear()
         .env("LC_ALL", "C")
+        .env(
+            "FASTMASH_TEST_PROCESS_ADDRESS_SPACE",
+            (32 * 1024 * 1024).to_string(),
+        )
         .stdin(fs::File::open(&path).unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // Restrict only the child address space; table growth must return a diagnostic.
-    // SAFETY: only async-signal-safe setrlimit runs between fork and exec.
-    unsafe {
-        command.pre_exec(|| {
-            let limit = libc::rlimit {
-                rlim_cur: 32 * 1024 * 1024,
-                rlim_max: 32 * 1024 * 1024,
-            };
-            if libc::setrlimit(libc::RLIMIT_AS, &limit) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
     let output = command.output().unwrap();
     fs::remove_file(path).unwrap();
     assert_eq!(output.status.code(), Some(77), "{output:?}");
