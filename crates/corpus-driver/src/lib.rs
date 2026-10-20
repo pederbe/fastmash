@@ -322,23 +322,6 @@ fn full_output_root(scratch: &Path, evidence: Option<&Path>) -> PathBuf {
     )
 }
 
-#[cfg(test)]
-mod ownership_tests {
-    use super::*;
-
-    #[test]
-    fn partial_full_output_survives_general_scratch_cleanup() {
-        let scratch = Scratch::new().unwrap();
-        let root = full_output_root(&scratch.path, None);
-        fs::create_dir(&root).unwrap();
-        let partial = root.join("full.dmg");
-        fs::write(&partial, b"partial native image").unwrap();
-        drop(scratch);
-        assert_eq!(fs::read(&partial).unwrap(), b"partial native image");
-        fs::remove_dir_all(root).unwrap();
-    }
-}
-
 fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     let mut file = File::create(path)?;
     serde_json::to_writer_pretty(&mut file, value)?;
@@ -410,4 +393,21 @@ pub fn main_entry(mut args: impl Iterator<Item = OsString>) -> Result<i32> {
     }
     let result = run(&options, &mut std::io::stdout().lock())?;
     Ok(i32::from(!result.failed.is_empty()))
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+
+    #[test]
+    fn partial_full_output_survives_general_scratch_cleanup() {
+        let scratch = Scratch::new().unwrap();
+        let root = full_output_root(&scratch.path, None);
+        fs::create_dir(&root).unwrap();
+        let partial = root.join("full.dmg");
+        fs::write(&partial, b"partial native image").unwrap();
+        drop(scratch);
+        assert_eq!(fs::read(&partial).unwrap(), b"partial native image");
+        fs::remove_dir_all(root).unwrap();
+    }
 }
