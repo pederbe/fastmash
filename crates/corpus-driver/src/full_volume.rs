@@ -177,7 +177,9 @@ fn retry_transition(
             Ok(true) => return Ok(()),
             Ok(false) => {}
             Err(error) if error.raw_os_error() == Some(nix::errno::Errno::EBUSY as i32) => {
-                eprintln!("[DEBUG-full-cleanup] busy filesystem at attempt={index}; ownership retained");
+                eprintln!(
+                    "[DEBUG-full-cleanup] busy filesystem at attempt={index}; ownership retained"
+                );
             }
             Err(error) => return Err(error),
         }
@@ -469,7 +471,9 @@ mod tests {
             calls += 1;
             match attempt {
                 // Native image absence alone did not release the mount.
-                0 => Err(io::Error::from_raw_os_error(nix::errno::Errno::EBUSY as i32)),
+                0 => Err(io::Error::from_raw_os_error(
+                    nix::errno::Errno::EBUSY as i32,
+                )),
                 // A fresh observation finds the owned association again;
                 // detachment is requested before another absence check.
                 1 => Ok(false),
@@ -479,6 +483,24 @@ mod tests {
         })
         .unwrap();
         assert_eq!(calls, 3);
+    }
+
+    #[test]
+    fn missing_attachment_still_refuses_when_its_budget_expires() {
+        let error = wait_for_attachment(Instant::now() + Duration::from_millis(20), |_| Ok(None))
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn permanently_busy_cleanup_still_refuses_at_its_deadline() {
+        let error = retry_transition(Instant::now() + Duration::from_millis(20), |_| {
+            Err(io::Error::from_raw_os_error(
+                nix::errno::Errno::EBUSY as i32,
+            ))
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
     }
 
     #[test]
