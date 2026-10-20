@@ -4,8 +4,8 @@
 use crate::{executable, temp_dir};
 use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
-use nix::spawn::{PosixSpawnAttr, PosixSpawnFileActions, posix_spawn};
-use nix::sys::signal::{Signal, kill};
+use nix::spawn::{PosixSpawnAttr, PosixSpawnFileActions, PosixSpawnFlags, posix_spawn};
+use nix::sys::signal::{SigSet, Signal, kill};
 use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::close;
 use std::{
@@ -182,7 +182,13 @@ pub fn invoke_bound(
         .chain(arguments.iter().copied())
         .map(CString::new)
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    let attributes = PosixSpawnAttr::init()?;
+    let mut attributes = PosixSpawnAttr::init()?;
+    // Match std::process::Command: the Rust test runtime ignores SIGPIPE, but
+    // an executed reference must receive the ordinary child disposition.
+    let mut defaults = SigSet::empty();
+    defaults.add(Signal::SIGPIPE);
+    attributes.set_sigdefault(&defaults)?;
+    attributes.set_flags(PosixSpawnFlags::POSIX_SPAWN_SETSIGDEF)?;
     let environment = environment
         .iter()
         .map(|(key, value)| CString::new(format!("{key}={value}")))
@@ -290,4 +296,37 @@ pub fn closed_stdin(arguments: &[&str]) -> std::process::Output {
     observed
         .unwrap_or_else(|error| panic!("closed stdin: {error}"))
         .into_output()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn executed_child_receives_default_sigpipe() {
+        use std::os::unix::process::ExitStatusExt;
+        let directory = temp_dir::TempDir::new("spawn-default-sigpipe");
+        let files = [
+            File::open("/dev/null").unwrap().into(),
+            File::create_new(directory.0.join("stdout")).unwrap().into(),
+            File::create_new(directory.0.join("stderr")).unwrap().into(),
+        ];
+        let output = invoke_bound(
+            BoundCommand {
+                binary: OsStr::new("/bin/sh"),
+                arguments: &["-c", "kill -PIPE $$; exit 99"],
+                files,
+                closed: 0,
+                environment: &[("LC_ALL", "C"), ("PATH", "/usr/bin:/bin")],
+            },
+            &directory.0,
+            1024,
+            1024,
+        )
+        .unwrap()
+        .into_output();
+        assert_eq!(output.status.signal(), Some(Signal::SIGPIPE as i32));
+        assert!(output.stdout.is_empty());
+        assert!(output.stderr.is_empty());
+    }
 }
