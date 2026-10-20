@@ -49,9 +49,12 @@ jobs:
           test "$(sw_vers -productVersion | cut -d. -f1)" = "${{ matrix.os == 'macos-15' && '15' || '26' }}"
           { git rev-parse HEAD; git status --porcelain; uname -a; sw_vers; rustc -Vv; cargo -V; } > "$captures/identity.txt"
           shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/cli/tests/native_streams.rs crates/corpus-driver/Cargo.toml crates/corpus-driver/src/test_process.rs crates/corpus-driver/tests/test_process.rs crates/corpus-driver/tests/support/command.rs > "$captures/inputs.sha256"
-      - name: Build candidate and safe launcher
+      - name: Lint with the maintained compiler
+        if: matrix.rust == '1.98.1'
         run: |
           cargo clippy --locked -p fastmash-corpus-driver --bin fastmash-test-process --test test_process -p fastmash --test native_streams -- -D warnings > "$CAPTURES/clippy.log" 2>&1
+      - name: Build candidate and safe launcher
+        run: |
           cargo build --release --locked -p fastmash --bin fastmash -p fastmash-corpus-driver --bin fastmash-test-process > "$CAPTURES/build.log" 2>&1
           shasum -a 256 target/release/fastmash target/release/fastmash-test-process > "$CAPTURES/binaries.sha256"
       - name: Verify launcher controls and executed native streams
