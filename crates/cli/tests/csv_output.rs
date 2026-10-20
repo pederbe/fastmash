@@ -1,3 +1,6 @@
+#![forbid(unsafe_code)]
+#[path = "support/descriptor_process.rs"]
+mod descriptor_process;
 use std::{
     ffi::OsString,
     fs,
@@ -81,22 +84,7 @@ fn csv_headers_encode_complete_generated_labels_and_custom_names() {
 }
 
 fn before_input(arguments: &[&str], status: i32, diagnostic: &[u8]) {
-    let mut command = Command::new(executable::fastmash());
-    command
-        .arg0("fastmash")
-        .args(arguments)
-        .env_clear()
-        .env("LC_ALL", "C")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    // SAFETY: close is async-signal-safe between fork and exec.
-    unsafe {
-        command.pre_exec(|| {
-            libc::close(0);
-            Ok(())
-        });
-    }
-    let output = command.output().unwrap();
+    let output = descriptor_process::closed_stdin(arguments);
     assert_eq!(
         output.status.code(),
         Some(status),
