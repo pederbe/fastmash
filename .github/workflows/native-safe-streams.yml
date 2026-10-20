@@ -75,20 +75,7 @@ jobs:
             printf '%s\n' "$status" > "$CAPTURES/record-attempt-$attempt.status"
             if [ "$status" -ne 0 ]; then
               failure=1
-              # Preserve the original cleanup symptom. A separately observed
-              # creation error may continue only after its cleanup is confirmed.
-              if grep -qF 'full-volume cleanup failed' "$log" ||
-                 ! grep -qF 'hdiutil create: exit status: 1' "$log" ||
-                 [ "$(grep -c 'test .* \.\.\. FAILED' "$log")" -ne 1 ]; then
-                break
-              fi
-              if ! /usr/bin/hdiutil info -plist > "$CAPTURES/after-creation-failure-$attempt.plist"; then break; fi
-              if ! python3 -c 'import pathlib, plistlib, sys; images=plistlib.load(open(sys.argv[1], "rb"))["images"]; owned={str(pathlib.Path(root) / "volume/full.dmg") for root in sys.argv[2:]}; sys.exit(any(image["image-path"] in owned for image in images))' "$CAPTURES/after-creation-failure-$attempt.plist" /private/tmp/fastmash-test-*.full-output; then break; fi
-              unclean=0
-              for root in /private/tmp/fastmash-test-*.full-output; do
-                if [ ! -f "$root/volume/cleanup.ok" ] || [ -e "$root/volume/full.dmg" ] || [ -e "$root/volume/mount" ]; then unclean=1; fi
-              done
-              if [ "$unclean" -ne 0 ]; then break; fi
+              break
             fi
           done
           test "$failure" -eq 0
