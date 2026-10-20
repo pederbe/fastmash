@@ -25,15 +25,17 @@ fn main() {
         "early-close" => println!("early"),
         "directory-input" => {
             let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
-            assert!(input.metadata().unwrap().is_dir());
+            if !input.metadata().unwrap().is_dir() {
+                std::process::exit(17);
+            }
             let error = input.read(&mut [0]).unwrap_err();
             assert_eq!(error.raw_os_error(), Some(nix::errno::Errno::EISDIR as i32));
             println!("directory read confirmed");
         }
         "broken-output" => {
-            let error = std::io::stdout()
-                .write_all(b"selected output\n")
-                .unwrap_err();
+            let Err(error) = std::io::stdout().write_all(b"selected output\n") else {
+                std::process::exit(17);
+            };
             assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
             eprintln!("broken output confirmed");
         }
