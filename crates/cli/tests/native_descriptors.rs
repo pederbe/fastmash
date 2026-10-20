@@ -1,54 +1,13 @@
 #![forbid(unsafe_code)]
-
 //! Executed-command checks for closed and incorrectly opened standard streams.
+#[path = "support/descriptor_process.rs"]
+mod descriptor_process;
 #[path = "support/executable.rs"]
 mod executable;
 #[path = "support/temp_dir.rs"]
 mod temp_dir;
-
-use nix::errno::Errno;
-use nix::fcntl::{FcntlArg, OFlag, fcntl};
-use nix::spawn::{PosixSpawnAttr, PosixSpawnFileActions, posix_spawn};
-use nix::sys::signal::{Signal, kill};
-use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
-use nix::unistd::close;
-use std::{
-    error::Error,
-    ffi::CString,
-    fs::{self, File, OpenOptions},
-    io::{self, Read},
-    os::{fd::AsRawFd, unix::ffi::OsStrExt, unix::fs::OpenOptionsExt},
-    path::Path,
-    thread,
-    time::{Duration, Instant},
-};
-
-type Result<T> = std::result::Result<T, Box<dyn Error>>;
-
-const CHILD_LIMIT: Duration = Duration::from_secs(5);
-const CLEANUP_RESERVE: Duration = Duration::from_secs(1);
-
-#[derive(Clone, Copy, Debug)]
-enum Streams {
-    Ordinary,
-    Closed(u8),
-    WrongAccess(u8),
-}
-
-#[derive(Debug)]
-struct Observed {
-    parent_binding_fds: [i32; 3],
-    parent_binding_flags: [i32; 3],
-    parent_close_results: [nix::Result<()>; 3],
-    status: WaitStatus,
-    timed_out: bool,
-    cancellation: Option<nix::Result<()>>,
-    stdout_length: u64,
-    stderr_length: u64,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-}
-
+use descriptor_process::{Streams, invoke};
+use nix::sys::wait::WaitStatus;
 #[test]
 fn ordinary_standard_streams_count_records() {
     check(Streams::Ordinary, 0, b"2\n", b"");
@@ -89,7 +48,14 @@ fn wrong_access_stream_combinations_keep_their_original_failure() {
 fn check(streams: Streams, status: i32, stdout: &[u8], stderr: &[u8]) {
     let directory = temp_dir::TempDir::new(&format!("native-descriptors-{streams:?}"));
     let path = directory.0.clone();
-    let observed = invoke(streams, &path, stdout.len() + 1, stderr.len() + 1);
+    let observed = invoke(
+        &["count", "1"],
+        b"a\nb\n",
+        streams,
+        &path,
+        stdout.len() + 1,
+        stderr.len() + 1,
+    );
     drop(directory);
     assert!(
         !path.try_exists().unwrap(),
@@ -123,146 +89,22 @@ fn check(streams: Streams, status: i32, stdout: &[u8], stderr: &[u8]) {
     assert_eq!(observed.stderr, stderr, "{streams:?}");
 }
 
-fn invoke(
-    streams: Streams,
-    directory: &Path,
-    stdout_limit: usize,
-    stderr_limit: usize,
-) -> Result<Observed> {
-    let executable = fs::canonicalize(executable::fastmash())?;
-    let executable = CString::new(executable.as_os_str().as_bytes())?;
-    fs::write(directory.join("stdin"), b"a\nb\n")?;
-    for name in ["stdout", "stderr"] {
-        drop(
-            OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(0o600)
-                .open(directory.join(name))?,
-        );
-    }
-    let wrong = match streams {
-        Streams::WrongAccess(mask) => mask,
-        _ => 0,
-    };
-    let files = [
-        if wrong & 1 != 0 {
-            File::options().write(true).open("/dev/null")?
-        } else {
-            File::open(directory.join("stdin"))?
-        },
-        if wrong & 2 != 0 {
-            File::open("/dev/null")?
-        } else {
-            File::options().write(true).open(directory.join("stdout"))?
-        },
-        if wrong & 4 != 0 {
-            File::open("/dev/null")?
-        } else {
-            File::options().write(true).open(directory.join("stderr"))?
-        },
-    ];
-    let parent_binding_fds = files.each_ref().map(|file| file.as_raw_fd());
-    let parent_binding_flags = [
-        fcntl(&files[0], FcntlArg::F_GETFL)?,
-        fcntl(&files[1], FcntlArg::F_GETFL)?,
-        fcntl(&files[2], FcntlArg::F_GETFL)?,
-    ];
-    let access = parent_binding_flags.map(|flags| flags & OFlag::O_ACCMODE.bits());
-    let expected_access = [
-        if wrong & 1 != 0 {
-            OFlag::O_WRONLY
-        } else {
-            OFlag::O_RDONLY
-        },
-        if wrong & 2 != 0 {
-            OFlag::O_RDONLY
-        } else {
-            OFlag::O_WRONLY
-        },
-        if wrong & 4 != 0 {
-            OFlag::O_RDONLY
-        } else {
-            OFlag::O_WRONLY
-        },
-    ]
-    .map(|flags| flags.bits());
-    if access != expected_access {
-        return Err(format!("incorrect parent descriptor access: {parent_binding_flags:?}").into());
-    }
-    let mut actions = PosixSpawnFileActions::init()?;
-    for (target, source) in [0, 1, 2].into_iter().zip(parent_binding_fds) {
-        if source < 3 {
-            return Err("parent binding unexpectedly occupies a standard descriptor".into());
-        }
-        actions.add_dup2(source, target)?;
-    }
-    if let Streams::Closed(mask) = streams {
-        for target in 0..3 {
-            if mask & (1 << target) != 0 {
-                actions.add_close(target)?;
-            }
-        }
-    }
-    let attributes = PosixSpawnAttr::init()?;
-    let deadline = Instant::now() + CHILD_LIMIT;
-    let cancel_at = deadline - CLEANUP_RESERVE;
-    let spawned = posix_spawn(
-        executable.as_c_str(),
-        &actions,
-        &attributes,
-        &[c"fastmash", c"count", c"1"],
-        &[c"LC_ALL=C", c"PATH=/usr/bin:/bin"],
-    );
-    drop(actions);
-    drop(attributes);
-    // Keep every source descriptor owned through spawn, then consume it once.
-    // A close error is recorded without retrying an uncertain descriptor number.
-    let parent_close_results = files.map(close);
-    let pid = spawned?;
-    let mut timed_out = false;
-    let mut cancellation = None;
-    let status = loop {
-        match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
-            Ok(status @ (WaitStatus::Exited(..) | WaitStatus::Signaled(..))) => break status,
-            Ok(WaitStatus::StillAlive) | Err(Errno::EINTR) => {}
-            result => {
-                // An ownership error does not authorize signalling the old PID.
-                return Err(
-                    format!("unexpected wait result: {result:?}; cleanup unconfirmed").into(),
+#[test]
+fn concurrent_closed_stdin_invocations_keep_separate_captures_and_cleanup() {
+    let start = std::sync::Barrier::new(4);
+    std::thread::scope(|scope| {
+        for _ in 0..4 {
+            let start = &start;
+            scope.spawn(move || {
+                start.wait();
+                let output = descriptor_process::closed_stdin(&["count", "1"]);
+                assert_eq!(output.status.code(), Some(1), "{output:?}");
+                assert!(output.stdout.is_empty(), "{output:?}");
+                assert_eq!(
+                    output.stderr,
+                    b"fastmash: read error: Bad file descriptor\n"
                 );
-            }
+            });
         }
-        if cancellation.is_none() && Instant::now() >= cancel_at {
-            timed_out = true;
-            cancellation = Some(kill(pid, Signal::SIGKILL));
-        }
-        if Instant::now() >= deadline {
-            return Err(
-                format!("child was not reaped within five seconds: {cancellation:?}").into(),
-            );
-        }
-        thread::sleep(Duration::from_millis(2));
-    };
-    timed_out |= Instant::now() >= deadline;
-    Ok(Observed {
-        parent_binding_fds,
-        parent_binding_flags,
-        parent_close_results,
-        status,
-        timed_out,
-        cancellation,
-        stdout_length: fs::metadata(directory.join("stdout"))?.len(),
-        stderr_length: fs::metadata(directory.join("stderr"))?.len(),
-        stdout: read_prefix(&directory.join("stdout"), stdout_limit)?,
-        stderr: read_prefix(&directory.join("stderr"), stderr_limit)?,
-    })
-}
-
-fn read_prefix(path: &Path, limit: usize) -> io::Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    File::open(path)?
-        .take(limit as u64)
-        .read_to_end(&mut bytes)?;
-    Ok(bytes)
+    });
 }
