@@ -321,7 +321,7 @@ fn buffered_input_selects_eio_after_input_drain_without_output_acknowledgement()
 #[test]
 fn buffered_input_preserves_repeated_parse_errors_during_stop_selection() {
     let run = TestRun::new(&[]);
-    for attempt in 0..100 {
+    for attempt in 0..1000 {
         let root = run.root.join(format!("parse-{attempt}"));
         let output = fastmash_corpus_driver::late_input::buffered(
             &run.binary,

@@ -78,6 +78,15 @@ fn main() {
         | "buffered-input"
         | "buffered-input-stall"
         | "buffered-parse-error" => {
+            // Keep descriptors owned until process exit so the parse-error
+            // control exercises kernel exit cleanup during stop selection.
+            let _open_files = if mode == "buffered-parse-error" {
+                (0..64)
+                    .map(|_| File::open("/dev/null").unwrap())
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
             let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
             let mut bytes = [0; 6];
             input.read_exact(&mut bytes).unwrap();
