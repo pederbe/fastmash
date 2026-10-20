@@ -222,6 +222,21 @@ fn detachment_proven(successful: bool, requested_device: Option<&Path>) -> io::R
     Ok(absent)
 }
 
+fn request_detach(
+    successful: &mut bool,
+    requested_device: &mut Option<PathBuf>,
+    device: &str,
+    request: impl FnOnce() -> io::Result<ExitStatus>,
+) -> io::Result<()> {
+    let status = request()?;
+    if !status.success() && status.code() != Some(16) {
+        return Err(io::Error::other(format!("hdiutil detach: {status}")));
+    }
+    *successful = status.success();
+    *requested_device = Some(PathBuf::from(device));
+    Ok(())
+}
+
 pub struct FullVolume {
     root: PathBuf,
     image: PathBuf,
@@ -301,17 +316,19 @@ impl FullVolume {
                 && let Some(device) =
                     self.current_device(&format!("cleanup-info-{attempt}"), deadline)?
             {
-                let status = bounded(
-                    Command::new("/usr/bin/hdiutil").args(["detach", "-force", &device]),
-                    &self.root,
-                    &format!("detach-{attempt}"),
-                    remaining(deadline)?,
+                request_detach(
+                    &mut successful_detach,
+                    &mut requested_device,
+                    &device,
+                    || {
+                        bounded(
+                            Command::new("/usr/bin/hdiutil").args(["detach", "-force", &device]),
+                            &self.root,
+                            &format!("detach-{attempt}"),
+                            remaining(deadline)?,
+                        )
+                    },
                 )?;
-                if !status.success() && status.code() != Some(16) {
-                    return Err(io::Error::other(format!("hdiutil detach: {status}")));
-                }
-                successful_detach = status.success();
-                requested_device = Some(PathBuf::from(device));
                 // Success still needs a fresh native absence observation.
                 return Ok(false);
             }
@@ -532,6 +549,21 @@ mod tests {
         // A successful owned detach remains proof if that device name is reused.
         fs::write(&device, b"reused name").unwrap();
         assert!(detachment_proven(true, Some(&device)).unwrap());
+    }
+
+    #[test]
+    fn a_new_association_invalidates_old_proof_before_a_busy_request() {
+        let mut successful = true;
+        let mut requested = Some(PathBuf::from("/dev/disk7"));
+        let error = request_detach(&mut successful, &mut requested, "/dev/disk8", || {
+            Err(io::Error::from_raw_os_error(
+                nix::errno::Errno::EBUSY as i32,
+            ))
+        })
+        .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(nix::errno::Errno::EBUSY as i32));
+        assert!(!detachment_proven(successful, requested.as_deref()).unwrap());
+        assert!(requested.is_none());
     }
 
     #[test]
