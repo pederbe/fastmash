@@ -4,6 +4,8 @@
 mod temp_dir;
 #[path = "support/terminal.rs"]
 mod terminal;
+#[path = "support/test_process.rs"]
+mod test_process;
 
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
@@ -23,26 +25,9 @@ use std::{
 };
 
 fn command(args: &[&str]) -> Command {
-    let launcher = std::env::var_os("FASTMASH_TEST_PROCESS")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| {
-            std::env::current_exe()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join("fastmash-test-process")
-        });
-    assert!(
-        launcher.is_file(),
-        "prepare fastmash-test-process before native stream tests"
-    );
     let target = terminal::Program.command(args, &[]);
-    let mut command = Command::new(launcher);
+    let mut command = test_process::bounded(target.get_program(), 5);
     command
-        .arg("5")
-        .arg(target.get_program())
         .args(target.get_args())
         .arg0("fastmash")
         .env_clear()
