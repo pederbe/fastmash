@@ -29,10 +29,26 @@ allows 90 seconds for that probe and 15 seconds for each image utility. Cleanup
 failure fails the control and preserves its logs and image path. Successful
 normal and unwind controls each retain a `cleanup.ok` receipt.
 
-Cleanup force-detaches only the private mount created by that control, after
-the probe and its candidates have exited and been reaped. Ordinary detach can
-report a busy volume at this point on macOS. All captures remain outside the
-image, and a failed forced detach still fails qualification.
+A second pair exercises the corpus driver's `FullOutput` owner directly. Its
+selected sink must close before the image detaches, on both completion and
+unwinding. These controls retain `volume/cleanup.ok` below `owned-normal` and
+`owned-unwind`. The native workflow also runs the frozen corpus through that
+owner with both input modes, retaining the calibration and cleanup records.
+
+Cleanup resolves the owned image's current whole device from `hdiutil info
+-plist`, after the probe and its candidates have exited and been reaped. A busy
+detach can already have removed the mount association. Cleanup therefore checks
+the image binding afresh before each attempt and verifies its absence before
+removing the image. At most three attempts share one 15-second cleanup budget.
+Unknown bindings, other errors and an image that remains attached fail the
+control. All captures remain outside the image.
+
+The [hdiutil manual](https://keith.github.io/xcode-man-pages/hdiutil.1.html)
+distinguishes image attachment from filesystem mounting. The pinned MIT-licensed
+[plist parser](https://docs.rs/crate/plist/1.10.1/source/Cargo.toml.orig) reads
+the native image/device associations, including non-JSON property-list values.
+Its Rust 1.88 minimum matches this workspace's supported minimum. Text parsing
+or a cached disk identifier cannot establish the same current ownership.
 
 The native workflow runs on macOS 15 and 26 with Rust 1.88 and 1.98.1. This
 qualifies resource ownership for a development mechanism. Existing full-output

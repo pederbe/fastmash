@@ -21,8 +21,26 @@ fn main() {
         "wrong-output" => println!("incorrect"),
         "wrong-error" => eprintln!("incorrect"),
         "wrong-status" => std::process::exit(17),
+        // Deliberately reject the ordinary full-output calibration control.
+        "count" => std::process::exit(17),
         "version" => println!("fastmash 0.2.0"),
         "early-close" => println!("early"),
+        "directory-input" => {
+            let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
+            if !input.metadata().unwrap().is_dir() {
+                std::process::exit(17);
+            }
+            let error = input.read(&mut [0]).unwrap_err();
+            assert_eq!(error.raw_os_error(), Some(nix::errno::Errno::EISDIR as i32));
+            println!("directory read confirmed");
+        }
+        "broken-output" => {
+            let Err(error) = std::io::stdout().write_all(b"selected output\n") else {
+                std::process::exit(17);
+            };
+            assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+            eprintln!("broken output confirmed");
+        }
         "overflow" => {
             let bytes = vec![b'x'; 524_289];
             let _ = std::io::stdout().write_all(&bytes);

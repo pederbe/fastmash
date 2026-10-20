@@ -26,6 +26,8 @@ pub const NATIVE_SORT_DIAGNOSTICS: &[&str] =
     &["sorting/header-empty", "sorting/header-only-comments"];
 pub const TRANSPORT_REASON: &str =
     "non-ordinary input transport; covered by the full Python corpus run";
+pub const FILE_TRANSPORT_REASON: &str =
+    "transport case is covered by the default Rust run, not --stdin-file";
 pub const NATIVE_REASON: &str =
     "native missing-header diagnostic replaces Linux system-sort stderr";
 
@@ -176,6 +178,38 @@ impl Case {
         self.io == "normal" && !truthy(&self.observe_held) && !self.hold_stdin
     }
 
+    pub fn supported(&self, stdin_file: bool) -> bool {
+        self.ordinary()
+            || (!stdin_file
+                && matches!(self.io.as_str(), "directory" | "closed-pipe" | "full")
+                && !truthy(&self.observe_held)
+                && !self.hold_stdin)
+    }
+
+    pub fn disposition(&self, stdin_file: bool) -> &'static str {
+        if !self.supported(stdin_file) {
+            "deferred-transport"
+        } else {
+            match self.io.as_str() {
+                "directory" => "directory-input",
+                "closed-pipe" => "closed-output-pipe",
+                "full" => "full-output",
+                _ if stdin_file => "ordinary-file",
+                _ => "ordinary-pipe",
+            }
+        }
+    }
+
+    pub fn deferred_reason(&self, stdin_file: bool) -> Option<&'static str> {
+        if self.supported(stdin_file) {
+            None
+        } else if self.supported(false) {
+            Some(FILE_TRANSPORT_REASON)
+        } else {
+            Some(TRANSPORT_REASON)
+        }
+    }
+
     pub fn arguments(&self) -> Result<Vec<OsString>> {
         match (&self.args_hex, &self.args) {
             (Some(args), _) => args
@@ -191,9 +225,9 @@ impl Case {
     }
 
     pub fn expected(&self, root: &Path, version: Option<&str>) -> Result<Expected> {
-        if !self.ordinary() || !self.expected.other.is_empty() {
+        if !self.supported(false) || !self.expected.other.is_empty() {
             return Err(Error::message(format!(
-                "{} is not an ordinary expectation",
+                "{} is not a supported expectation",
                 self.id
             )));
         }
@@ -297,6 +331,22 @@ mod tests {
             .filter(|case| case.ordinary())
             .collect();
         assert_eq!(ordinary.len(), 2857);
+        assert_eq!(
+            fixture
+                .cases
+                .iter()
+                .filter(|case| case.supported(false))
+                .count(),
+            3002
+        );
+        assert_eq!(
+            fixture
+                .cases
+                .iter()
+                .filter(|case| case.supported(true))
+                .count(),
+            2857
+        );
         assert_eq!(
             fixture.cases.iter().filter(|case| !case.ordinary()).count(),
             280

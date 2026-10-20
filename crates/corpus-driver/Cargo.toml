@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 publish = false
-description = "Development driver for ordinary frozen Fastmash commands"
+description = "Development driver for frozen Fastmash commands"
 default-run = "fastmash-corpus"
 
 [[bin]]
@@ -28,6 +28,9 @@ sha2 = { version = "=0.11.0", default-features = false }
 # Safe Unix signal-mask, session, resource-limit and whole-group cancellation
 # APIs keep the existing harness process contract without first-party unsafe.
 nix = { version = "=0.31.3", default-features = false, features = ["signal", "resource", "fs"] }
+# Native image ownership must survive a partial unmount. Parse hdiutil's
+# structured image/device associations instead of guessing from text or disk IDs.
+plist = { version = "=1.10.1", default-features = false }
 
 [dev-dependencies]
 # Safe controlling-terminal ownership and foreground process-group probes.

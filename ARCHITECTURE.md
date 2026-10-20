@@ -79,7 +79,8 @@ graph TD
 
 The unpublished `fastmash-corpus-driver` crate in `crates/corpus-driver/` is a
 development tool outside the product dependency graph. Its `fastmash-corpus`
-executable verifies frozen ordinary Command cases against a selected executable.
+executable verifies frozen Command cases against a selected executable, including
+directory input, closed output pipes and calibrated real full-output failures.
 It uses safe process-group and resource-limit APIs to bound each invocation,
 and records exact results and explicit transport deferrals. The complete corpus
 gate retains the stream and fault transports described in the

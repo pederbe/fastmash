@@ -1,12 +1,14 @@
 #![forbid(unsafe_code)]
 
-//! Frozen ordinary Command checks. Stream and fault transports remain in the
-//! existing full corpus gate until their separate migration is complete.
+//! Frozen Command checks, including directory, closed-pipe and full-output I/O.
+//! Remaining transports stay in the full corpus gate until migration completes.
 
 pub mod fixture;
+pub mod full_output;
+pub mod full_volume;
 mod process;
 
-use fixture::{Fixture, TRANSPORT_REASON, digest};
+use fixture::{Fixture, digest};
 use process::{Scratch, invoke, require_unblocked_signals};
 use serde::Serialize;
 use serde_json::json;
@@ -45,6 +47,11 @@ impl From<serde_json::Error> for Error {
 impl From<nix::errno::Errno> for Error {
     fn from(error: nix::errno::Errno) -> Self {
         Self(error.into())
+    }
+}
+impl From<Box<dyn std::error::Error>> for Error {
+    fn from(error: Box<dyn std::error::Error>) -> Self {
+        Self::message(error.to_string())
     }
 }
 
@@ -119,13 +126,24 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     let cases: Vec<_> = matched
         .iter()
         .copied()
-        .filter(|case| case.ordinary())
+        .filter(|case| case.supported(options.stdin_file))
         .collect();
     let excluded: Vec<_> = matched
         .iter()
-        .filter(|case| !case.ordinary())
-        .map(|case| json!({"id":case.id, "reason":TRANSPORT_REASON}))
+        .filter(|case| !case.supported(options.stdin_file))
+        .map(|case| json!({"id":case.id, "reason":case.deferred_reason(options.stdin_file)}))
         .collect();
+    let directory = Scratch::new()?;
+    let full_root = options
+        .evidence_dir
+        .as_ref()
+        .unwrap_or(&directory.path)
+        .join("full-output");
+    let mut full = if cases.iter().any(|case| case.io == "full") {
+        Some(full_output::FullOutput::new(&binary, &full_root)?)
+    } else {
+        None
+    };
     let evidence = json!({
         "platform": if cfg!(target_os="macos") { "darwin" } else { "linux" },
         "binary": binary, "binary_sha256":binary_sha256,
@@ -134,7 +152,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
         "content_sha256":fixture.content_sha256,
         "provenance":fixture.provenance_path, "provenance_sha256":fixture.provenance_sha256,
         "expected_version":options.expected_version, "stdin_file":options.stdin_file,
-        "full_output_calibration":null,
+        "full_output_calibration":full.as_ref().map(|full| full.identity()).transpose()?,
         "selected_cases":cases.len(), "matched_cases":matched.len(),
         "transport_dispositions":excluded,
         "native_dispositions":cases.iter().filter(|case| !case.native_dispositions().is_empty())
@@ -147,14 +165,13 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
             write_line(
                 &mut dispositions,
                 &json!({"id":case.id,
-                    "disposition":if case.ordinary() { if options.stdin_file { "ordinary-file" } else { "ordinary-pipe" } } else { "deferred-transport" },
-                    "reason":if case.ordinary() { None } else { Some(TRANSPORT_REASON) },
+                    "disposition":case.disposition(options.stdin_file),
+                    "reason":case.deferred_reason(options.stdin_file),
                     "native_dispositions":case.native_dispositions(),
                 }),
             )?;
         }
     }
-    let directory = Scratch::new()?;
     let launcher = std::env::current_exe()?;
     let mut result = RunResult {
         attempted: 0,
@@ -172,6 +189,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
             &launcher,
             &directory.path,
             options.stdin_file,
+            full.as_mut(),
         )?;
         let passed = observed.matches(&expected);
         if let Some(directory) = &options.evidence_dir {
@@ -222,6 +240,9 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
             break;
         }
     }
+    if let Some(full) = full {
+        full.finish()?;
+    }
     directory.remove()?;
     // A run's identity must still describe the executables and frozen inputs
     // used by its final case. A shared build replacing them invalidates evidence.
@@ -250,7 +271,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     if result.deferred_cases != 0 {
         writeln!(
             output,
-            "{} transport cases remain in the full Python corpus run",
+            "{} transport cases deferred in this input mode",
             result.deferred_cases
         )?;
     }
@@ -300,7 +321,7 @@ pub fn main_entry(mut args: impl Iterator<Item = OsString>) -> Result<i32> {
         match arg.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Run ordinary frozen Fastmash commands.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n  --fixture PATH          compressed corpus and sibling provenance\n  --match TEXT            select case IDs containing TEXT\n  --expected-version V    successful version-action expectation\n  --stdin-file            ordinary input through a regular file\n  --keep-going            continue after mismatches\n  --evidence-dir PATH     retain one run in an empty directory\n\nTransport cases stay in the existing full corpus run."
+                    "Run frozen Fastmash commands and supported transports.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n  --fixture PATH          compressed corpus and sibling provenance\n  --match TEXT            select case IDs containing TEXT\n  --expected-version V    successful version-action expectation\n  --stdin-file            ordinary input through a regular file\n  --keep-going            continue after mismatches\n  --evidence-dir PATH     retain one run in an empty directory\n\nDirectory input, closed output pipes and full-output cases run by default. Remaining transports stay in the full Python corpus run."
                 );
                 return Ok(0);
             }

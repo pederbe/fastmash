@@ -1,7 +1,8 @@
-# Ordinary regression commands
+# Regression commands
 
-`fastmash-corpus` checks the ordinary commands in the existing compressed
-regression corpus, through either piped or regular-file standard input. It
+`fastmash-corpus` checks commands in the existing compressed regression corpus,
+through either piped or regular-file standard input. Its default run also checks
+directory input, output to a pipe whose reader has closed and full-output errors. It
 verifies the frozen fixture and provenance, records executable identities and
 compares exact bytes and status. It preserves byte arguments, the isolated
 environment, the eight-second execution deadline and the 524,288-byte output
@@ -21,11 +22,23 @@ target/release/fastmash-corpus --binary target/release/fastmash --expected-versi
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --stdin-file --evidence-dir /tmp/ordinary-file
 ```
 
-Both modes execute 2,857 ordinary cases. Their evidence accounts for all 3,137
-case IDs, including 280 deferred transport cases. The complete Python corpus
-gate remains required for those transports. Native macOS uses the same ordinary
+The default run executes 3,002 cases: 2,857 ordinary cases, 22 directory-input
+cases, 51 closed-output-pipe cases and 72 full-output cases. It records 135 remaining transport cases
+as deferred. Regular-file mode executes the same 2,857 ordinary cases as before
+and records why each other case belongs to the default Rust run or the full
+Python run. Both modes account for all 3,137 case IDs. Keep the complete Python
+corpus gate until the remaining transports have migrated.
+Native macOS uses the same
 expectations and the existing two named missing-header diagnostic adaptations.
 Running this tool on Linux supplies Linux evidence only.
+
+Full-output cases use Linux's `/dev/full` or a private 8 MiB HFS+ image on macOS,
+created with the system's `hdiutil`. Ordinary, selected and unselected I/O controls
+first calibrate the actual executable. Each full-output case requires real ENOSPC
+and an empty sink before and after execution. The sink closes after candidates
+are reaped and before the owned image detaches. Calibration, destination facts
+and cleanup records are retained below the run's evidence directory. A run that
+selects no full-output cases creates no image.
 
 An empty evidence directory receives fixture, provenance and executable hashes,
 every selected case's disposition, attempted outcomes, native observations and
@@ -33,7 +46,9 @@ complete mismatch bytes. `--keep-going` continues after mismatches. A nonempty
 evidence directory is rejected to preserve the identity of each run.
 
 The unpublished crate's Rust test command exercises deliberately incorrect
-output, exit status, overflow and timeout behavior. It is a development helper
+output, exit status, overflow and timeout behavior. It also verifies actual
+directory reads and broken-pipe writes, including successful output on the
+unselected stream. It is a development helper
 and does not enter product archives.
 
 The pinned MIT-licensed Nix dependency supplies safe Unix signal-mask, session,

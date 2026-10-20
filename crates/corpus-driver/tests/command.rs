@@ -233,13 +233,91 @@ fn assert_stopped(pidfile: &Path) {
 }
 
 #[test]
+fn directory_and_closed_pipe_faults_are_real_and_keep_other_io_intact() {
+    let mut directory = case(
+        "directory",
+        "directory-input",
+        b"unused input",
+        b"directory read confirmed\n",
+        b"",
+        0,
+    );
+    directory["io"] = json!("directory");
+    let mut pipe = case(
+        "closed-pipe",
+        "broken-output",
+        b"",
+        b"",
+        b"broken output confirmed\n",
+        0,
+    );
+    pipe["io"] = json!("closed-pipe");
+    let ordinary = case("ordinary", "echo", b"ordinary\n", b"ordinary\n", b"", 0);
+    for file in [false, true] {
+        let run = TestRun::new(&[directory.clone(), pipe.clone(), ordinary.clone()]);
+        let evidence = run.evidence();
+        let mut args = vec!["--evidence-dir", evidence.to_str().unwrap()];
+        if file {
+            args.push("--stdin-file");
+        }
+        let output = run.run(&args);
+        assert!(output.status.success(), "{output:?}");
+        let result = json_file(&evidence.join("result.json"));
+        assert_eq!(result["attempted"], if file { 1 } else { 3 });
+        assert_eq!(result["passed"], result["attempted"]);
+        assert_eq!(result["deferred_cases"], if file { 2 } else { 0 });
+        let dispositions = fs::read_to_string(evidence.join("dispositions.jsonl")).unwrap();
+        let dispositions: Vec<Value> = dispositions
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(dispositions.len(), 3);
+        if file {
+            assert_eq!(dispositions[0]["disposition"], "deferred-transport");
+            assert_eq!(
+                dispositions[1]["reason"],
+                fastmash_corpus_driver::fixture::FILE_TRANSPORT_REASON
+            );
+        } else {
+            assert_eq!(dispositions[0]["disposition"], "directory-input");
+            assert_eq!(dispositions[1]["disposition"], "closed-output-pipe");
+        }
+    }
+    // The same probe executables reject ordinary descriptors, so a missing
+    // transport cannot produce a false passing observation.
+    directory["io"] = json!("normal");
+    pipe["io"] = json!("normal");
+    let run = TestRun::new(&[directory, pipe]);
+    let output = run.run(&["--keep-going"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("0 of 2 cases passed"));
+}
+
+#[test]
+fn full_output_refuses_a_candidate_that_fails_ordinary_calibration() {
+    let mut full = case("full", "echo", b"", b"", b"", 0);
+    full["io"] = json!("full");
+    let run = TestRun::new(&[full]);
+    let evidence = run.evidence();
+    let output = run.run(&["--evidence-dir", evidence.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("ordinary candidate control differs"));
+    assert!(!evidence.join("result.json").exists());
+    assert!(
+        evidence
+            .join("full-output/observations/ordinary-count/observed.json")
+            .is_file()
+    );
+}
+
+#[test]
 fn transport_dispositions_account_for_held_normal_cases_in_both_modes() {
     let mut held = case("held", "sleep", b"", b"", b"", 0);
     held["hold_stdin"] = json!(true);
     let mut observed = case("observe", "sleep", b"", b"", b"", 0);
     observed["observe_held"] = json!({"bytes":0});
     let mut fault = case("fault", "sleep", b"", b"", b"", 0);
-    fault["io"] = json!("full");
+    fault["io"] = json!("read-error");
     for file in [false, true] {
         let run = TestRun::new(&[
             held.clone(),
