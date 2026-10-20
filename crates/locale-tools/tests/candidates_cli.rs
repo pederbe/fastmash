@@ -39,7 +39,7 @@ impl Fixture {
             .env("FASTMASH_CANDIDATE_POISON", "must be cleared")
             .args([
                 "--evidence",
-                "evidence",
+                "captures",
                 "numeric.json",
                 "exemplars.json",
                 "sort",
@@ -80,7 +80,7 @@ fn actual_cli_retains_original_output_format_and_native_probe_contract() {
         expected.as_bytes()
     );
     for index in [1, 2] {
-        let evidence = fixture.0.join(format!("evidence/locale-{index:06}"));
+        let evidence = fixture.0.join(format!("captures/locale-{index:06}"));
         assert_eq!(fs::read(evidence.join("stdin")).unwrap(), b"a\nA\n");
         assert!(evidence.join("wait.json").is_file());
         let command: serde_json::Value =
@@ -98,8 +98,8 @@ fn failed_reference_with_matching_output_wrong_output_or_diagnostic_creates_no_t
         assert_eq!(output.status.code(), Some(1), "{mode}: {output:?}");
         assert!(output.stdout.is_empty());
         assert!(!fixture.0.join("output.json").exists());
-        assert!(fixture.0.join("evidence/locale-000001/stdout").is_file());
-        assert!(fixture.0.join("evidence/locale-000001/wait.json").is_file());
+        assert!(fixture.0.join("captures/locale-000001/stdout").is_file());
+        assert!(fixture.0.join("captures/locale-000001/wait.json").is_file());
     }
 }
 
@@ -112,7 +112,7 @@ fn invalid_reference_and_existing_output_are_preserved_before_probing() {
         fs::read(fixture.0.join("output.json")).unwrap(),
         b"preserve"
     );
-    assert!(!fixture.0.join("evidence").exists());
+    assert!(!fixture.0.join("captures").exists());
     fs::remove_file(fixture.0.join("output.json")).unwrap();
     fs::write(
         fixture.0.join("exemplars.json"),
@@ -120,7 +120,7 @@ fn invalid_reference_and_existing_output_are_preserved_before_probing() {
     )
     .unwrap();
     assert_eq!(fixture.run().status.code(), Some(1));
-    assert!(!fixture.0.join("evidence").exists());
+    assert!(!fixture.0.join("captures").exists());
     let output = Command::new(env!("CARGO_BIN_EXE_fastmash-generate-collation-candidates"))
         .arg("--help")
         .output()
