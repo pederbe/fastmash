@@ -65,6 +65,7 @@ jobs:
           export FASTMASH_TEST_BINARY="$PWD/target/release/fastmash"
           export FASTMASH_TEST_CORPUS="$PWD/target/release/fastmash-corpus"
           export FASTMASH_TEST_PROCESS="$PWD/target/release/fastmash-test-process"
+          cargo test --release --locked -p fastmash-corpus-driver --lib full_volume::tests -- --nocapture > "$CAPTURES/full-volume-controls.log" 2>&1
           failure=0
           shopt -s nullglob
           for attempt in 1 2 3 4 5 6 7 8; do
