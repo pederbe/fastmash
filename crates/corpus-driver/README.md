@@ -29,8 +29,8 @@ as deferred. Regular-file mode executes the same 2,857 ordinary cases as before
 and records why each other case belongs to the default Rust run or the full
 Python run. Both modes account for all 3,137 case IDs. Keep the complete Python
 corpus gate until the remaining transports have migrated.
-Native macOS uses the same
-expectations and the existing two named missing-header diagnostic adaptations.
+Native macOS keeps the two existing missing-header diagnostic adaptations and
+the four buffer-size adaptations described below.
 Running this tool on Linux supplies Linux evidence only.
 
 Early-command cases retain an empty stdin pipe until the actual executable
