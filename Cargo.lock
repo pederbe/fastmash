@@ -201,6 +201,7 @@ dependencies = [
  "base64",
  "csv-core",
  "fastmash-conversion",
+ "fastmash-corpus-driver",
  "fastmash-numeric-contract",
  "fastmash-portable-numerics",
  "fastmash-sort-process",

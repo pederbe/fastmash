@@ -1,9 +1,9 @@
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
-#[path = "support/process.rs"]
+#![forbid(unsafe_code)]
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
+#[path = "support/test_process.rs"]
 #[cfg(target_os = "macos")]
-mod process;
+mod test_process;
 #[cfg(target_os = "linux")]
 use std::process::Command;
 
@@ -22,12 +22,21 @@ fn command_with_resources(args: &[&str], input: &[u8], full: bool, limited: bool
         .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
     // A file avoids pipe deadlock when wide or grouped output exceeds pipe capacity.
-    let path = std::env::temp_dir().join(format!(
-        "fastmash-text-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let fixture = temp_dir::TempDir::new(&format!("text-{:?}", std::thread::current().id()));
+    let path = fixture.0.join("input");
     File::create(&path).unwrap().write_all(input).unwrap();
+    // Keep full-volume evidence outside the ordinary fixture guard. A failed
+    // detach must retain its owned image and observations for diagnosis.
+    #[cfg(target_os = "macos")]
+    let full_root = fixture.0.with_extension("full-output");
+    #[cfg(target_os = "macos")]
+    let mut full_output = full.then(|| {
+        fastmash_corpus_driver::full_output::FullOutput::new(
+            std::path::Path::new(&binary),
+            &full_root,
+        )
+        .unwrap()
+    });
     #[cfg(target_os = "linux")]
     let mut child = {
         let mut child = Command::new("/usr/bin/timeout");
@@ -39,23 +48,43 @@ fn command_with_resources(args: &[&str], input: &[u8], full: bool, limited: bool
         child
     };
     #[cfg(target_os = "macos")]
-    let mut child = process::bounded(&binary, 30);
+    let mut child = test_process::bounded(&binary, 30);
     #[cfg(target_os = "macos")]
     if limited {
         panic!("the Linux address-space fixture needs a native allocation-failure mechanism");
     }
-    let out = child
+    child
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
         .stdin(File::open(&path).unwrap())
-        .full_stdout(full)
-        .stderr(Stdio::piped())
-        .output()
-        .unwrap();
-    std::fs::remove_file(path).unwrap();
+        .stderr(Stdio::piped());
+    #[cfg(target_os = "linux")]
+    let destination: Stdio = if full {
+        File::options()
+            .write(true)
+            .open("/dev/full")
+            .unwrap()
+            .into()
+    } else {
+        Stdio::piped()
+    };
+    #[cfg(target_os = "macos")]
+    let destination: Stdio = full_output
+        .as_mut()
+        .map_or_else(Stdio::piped, |full| full.destination().unwrap().into());
+    let out = child.stdout(destination).output().unwrap();
+    // Command retains configured file handles after output(). Close those
+    // copies after the child is reaped and before detaching the full volume.
+    drop(child);
+    #[cfg(target_os = "macos")]
+    if let Some(mut full) = full_output {
+        full.verify().unwrap();
+        full.finish().unwrap();
+        std::fs::remove_dir_all(full_root).unwrap();
+    }
     out
 }
 
