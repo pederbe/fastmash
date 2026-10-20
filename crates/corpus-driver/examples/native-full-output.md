@@ -5,7 +5,8 @@ an output destination that actually reports `ENOSPC`. It checks ordinary
 successful input first, then requires the existing write-error diagnostic and
 exit status 1 for `count`, full `noop` and help output. It calibrates the full
 destination before and after each invocation. Candidate execution and cleanup
-have bounded waits.
+have bounded waits. The whole probe has a 60-second deadline, with a 10-second
+limit for each candidate and bounded child cleanup.
 
 On Linux, use the native full device:
 

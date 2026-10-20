@@ -31,14 +31,14 @@ fn fresh(path: &Path) -> io::Result<File> {
 
 struct Running(Child, bool);
 impl Running {
-    fn wait(&mut self) -> Result<ExitStatus> {
+    fn wait(&mut self, deadline: Instant) -> Result<ExitStatus> {
         let started = Instant::now();
         loop {
             if let Some(status) = self.0.try_wait()? {
                 self.1 = true;
                 return Ok(status);
             }
-            if started.elapsed() >= LIMIT {
+            if started.elapsed() >= LIMIT || Instant::now() >= deadline {
                 return Err("candidate execution deadline".into());
             }
             thread::sleep(Duration::from_millis(2));
@@ -71,6 +71,7 @@ fn invoke(
     name: &str,
     args: &[&str],
     destination: File,
+    deadline: Instant,
 ) -> Result<(ExitStatus, Vec<u8>)> {
     let directory = root.join(name);
     fs::create_dir(&directory)?;
@@ -86,9 +87,10 @@ fn invoke(
         .stdout(Stdio::from(destination))
         .stderr(fresh(&directory.join("stderr"))?)
         .process_group(0);
+    require_time(deadline)?;
     let mut running = Running(command.spawn()?, false);
     drop(command);
-    let status = running.wait()?;
+    let status = running.wait(deadline)?;
     let stderr = fs::read(directory.join("stderr"))?;
     fs::write(
         directory.join("observed.json"),
@@ -110,7 +112,7 @@ fn require_full(file: &mut File) -> Result<i32> {
     }
 }
 
-fn fill(volume: &Path, root: &Path) -> Result<File> {
+fn fill(volume: &Path, root: &Path, deadline: Instant) -> Result<File> {
     let stats = nix::sys::statvfs::statvfs(volume)?;
     // Native block-count widths differ between Linux and Darwin. Widen
     // before multiplication and refuse a capacity that cannot fit in u64.
@@ -133,6 +135,7 @@ fn fill(volume: &Path, root: &Path) -> Result<File> {
     let block = [0_u8; 65536];
     for bytes in [block.as_slice(), b"x".as_slice()] {
         loop {
+            require_time(deadline)?;
             if total >= MAX_VOLUME {
                 return Err("fill exceeded private-volume bound".into());
             }
@@ -159,7 +162,15 @@ fn fill(volume: &Path, root: &Path) -> Result<File> {
     Ok(sink)
 }
 
+fn require_time(deadline: Instant) -> Result<()> {
+    if Instant::now() >= deadline {
+        return Err("full-output probe deadline".into());
+    }
+    Ok(())
+}
+
 fn run() -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(60);
     let mut args = std::env::args_os().skip(1);
     let binary = PathBuf::from(args.next().ok_or("require executable")?).canonicalize()?;
     let root = PathBuf::from(args.next().ok_or("require new capture directory")?);
@@ -185,6 +196,7 @@ fn run() -> Result<()> {
             &format!("ordinary-{name}"),
             arguments,
             fresh(&output)?,
+            deadline,
         )?;
         let stdout = fs::read(output)?;
         if !status.success()
@@ -196,7 +208,7 @@ fn run() -> Result<()> {
         }
     }
     let mut full = if let Some(volume) = volume {
-        fill(&volume.canonicalize()?, &root)?
+        fill(&volume.canonicalize()?, &root, deadline)?
     } else {
         #[cfg(target_os = "linux")]
         {
@@ -217,6 +229,7 @@ fn run() -> Result<()> {
             &format!("full-{name}"),
             arguments,
             full.try_clone()?,
+            deadline,
         )?;
         if status.code() != Some(1) || stderr != DIAGNOSTIC {
             return Err(format!(

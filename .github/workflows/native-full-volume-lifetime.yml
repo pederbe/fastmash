@@ -1,0 +1,104 @@
+name: Native full-volume lifetime
+
+on:
+  push:
+    branches: [contrib/native-full-volume-lifetime]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-full-volume-lifetime-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  MACOSX_DEPLOYMENT_TARGET: '15.0'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  probe:
+    name: Full-volume lifetime on ${{ matrix.os }} with Rust ${{ matrix.rust }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+        rust: ['1.88.0', '1.98.1']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Record native inputs
+        run: |
+          captures="$RUNNER_TEMP/native-full-volume-lifetime"
+          printf 'CAPTURES=%s\n' "$captures" >> "$GITHUB_ENV"
+          mkdir "$captures"
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" = "${{ matrix.os == 'macos-15' && '15' || '26' }}"
+          {
+            git rev-parse HEAD
+            git status --porcelain
+            uname -a
+            sw_vers
+            rustc -Vv
+            cargo -V
+          } > "$captures/identity.txt"
+          shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/corpus-driver/Cargo.toml crates/corpus-driver/examples/native-full-output.rs crates/corpus-driver/examples/native-full-volume-lifetime.rs crates/cli/tests/support/full_volume.rs > "$captures/inputs.sha256"
+      - name: Build candidate and safe mechanism probe
+        timeout-minutes: 10
+        run: |
+          cargo clippy --locked -p fastmash-corpus-driver --example native-full-output --example native-full-volume-lifetime -- -D warnings > "$CAPTURES/clippy.log" 2>&1
+          cargo build --release --locked -p fastmash --bin fastmash > "$CAPTURES/candidate-build.log" 2>&1
+          cargo build --release --locked -p fastmash-corpus-driver --example native-full-output > "$CAPTURES/probe-build.log" 2>&1
+          shasum -a 256 target/release/fastmash > "$CAPTURES/candidate-before-lifetime.sha256"
+          CARGO_PROFILE_RELEASE_PANIC=unwind cargo build --release --locked -p fastmash-corpus-driver --example native-full-volume-lifetime > "$CAPTURES/lifetime-build.log" 2>&1
+          printf 'candidate: ordinary release panic=abort\nlifetime control only: CARGO_PROFILE_RELEASE_PANIC=unwind\n' > "$CAPTURES/panic-builds.txt"
+          shasum -a 256 -c "$CAPTURES/candidate-before-lifetime.sha256"
+          shasum -a 256 target/release/fastmash target/release/examples/native-full-output target/release/examples/native-full-volume-lifetime > "$CAPTURES/binaries.sha256"
+      - name: Observe actual faults through normal and unwind cleanup
+        timeout-minutes: 6
+        run: |
+          cleanup() {
+            result=$?
+            trap - EXIT
+            for label in normal unwind; do
+              mount="$CAPTURES/lifetimes/$label/mount"
+              if test -d "$mount"; then
+                if ! hdiutil detach "$mount" > "$CAPTURES/fallback-$label.stdout" 2> "$CAPTURES/fallback-$label.stderr"; then
+                  result=1
+                fi
+              fi
+            done
+            exit "$result"
+          }
+          trap cleanup EXIT
+          result=0
+          target/release/examples/native-full-volume-lifetime "$PWD/target/release/fastmash" "$CAPTURES/lifetimes" > "$CAPTURES/probe.stdout" 2> "$CAPTURES/probe.stderr" || result=$?
+          printf '%s\n' "$result" > "$CAPTURES/probe.exit"
+          test "$result" = 0
+          test -f "$CAPTURES/lifetimes/normal/cleanup.ok"
+          test -f "$CAPTURES/lifetimes/unwind/cleanup.ok"
+      - name: Verify unchanged inputs
+        run: |
+          shasum -a 256 -c "$CAPTURES/inputs.sha256"
+          shasum -a 256 -c "$CAPTURES/binaries.sha256"
+      - name: Retain mechanism observations
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-full-volume-lifetime-${{ matrix.os }}-${{ matrix.rust }}
+          path: ${{ runner.temp }}/native-full-volume-lifetime
+          if-no-files-found: error
+          retention-days: 7
