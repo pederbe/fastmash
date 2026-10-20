@@ -24,8 +24,7 @@ pub const VERSION_CASES: &[&str] = &[
 ];
 pub const NATIVE_SORT_DIAGNOSTICS: &[&str] =
     &["sorting/header-empty", "sorting/header-only-comments"];
-pub const TRANSPORT_REASON: &str =
-    "unsupported transport combination";
+pub const TRANSPORT_REASON: &str = "unsupported transport combination";
 pub const FILE_TRANSPORT_REASON: &str =
     "transport case is covered by the default Rust run, not --stdin-file";
 pub const NATIVE_REASON: &str =
