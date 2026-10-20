@@ -1,3 +1,6 @@
+#![forbid(unsafe_code)]
+#[path = "support/descriptor_process.rs"]
+mod descriptor_process;
 use std::{
     ffi::OsString,
     fs,
@@ -185,23 +188,9 @@ fn result_names_refuse_excluded_modes_before_reading_input() {
         &["reverse"],
         &["noop"],
     ] {
-        let mut command = Command::new(executable::fastmash());
-        command
-            .arg0("fastmash")
-            .args(["--header-out", "--result-name=1:result"])
-            .args(mode)
-            .env_clear()
-            .env("LC_ALL", "C")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        // SAFETY: close is async-signal-safe between fork and exec.
-        unsafe {
-            command.pre_exec(|| {
-                libc::close(0);
-                Ok(())
-            });
-        }
-        let output = command.output().unwrap();
+        let mut arguments = vec!["--header-out", "--result-name=1:result"];
+        arguments.extend_from_slice(mode);
+        let output = descriptor_process::closed_stdin(&arguments);
         assert_eq!(output.status.code(), Some(77), "{mode:?}: {output:?}");
         assert!(output.stdout.is_empty());
         assert_eq!(
