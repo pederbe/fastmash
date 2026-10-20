@@ -421,7 +421,7 @@ mod tests {
         use crate::held_output::Destination;
         let mut case: Case = serde_json::from_value(serde_json::json!({
             "id":"grouping-reference-r2:held-flush-pipe", "io":"pipe", "locale":"C",
-            "observe_held":true,"args":["count","1"],"input_hex":"780a",
+            "observe_held":true,"args_hex":["636f756e74","31"],"input_hex":"780a",
             "expected":{"returncode":0,"stdout_hex":encode(b"first\nlast\n"),"stderr_hex":"",
                 "held":{"alive":true,"bytes":6,"stdout_hex":encode(b"first\n")}}
         }))
