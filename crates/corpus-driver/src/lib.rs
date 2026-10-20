@@ -142,11 +142,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
         .map(|case| json!({"id":case.id, "reason":case.deferred_reason(options.stdin_file)}))
         .collect();
     let directory = Scratch::new()?;
-    let full_root = options
-        .evidence_dir
-        .as_ref()
-        .unwrap_or(&directory.path)
-        .join("full-output");
+    let full_root = full_output_root(&directory.path, options.evidence_dir.as_deref());
     let mut full = if cases.iter().any(|case| case.io == "full") {
         Some(full_output::FullOutput::new(&binary, &full_root)?)
     } else {
@@ -314,6 +310,27 @@ fn prepare_evidence(directory: &Path) -> Result<()> {
     }
     fs::create_dir_all(directory)?;
     Ok(())
+}
+
+fn full_output_root(scratch: &Path, evidence: Option<&Path>) -> PathBuf {
+    evidence.unwrap_or(scratch).join("full-output")
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+
+    #[test]
+    fn partial_full_output_survives_general_scratch_cleanup() {
+        let scratch = Scratch::new().unwrap();
+        let root = full_output_root(&scratch.path, None);
+        fs::create_dir(&root).unwrap();
+        let partial = root.join("full.dmg");
+        fs::write(&partial, b"partial native image").unwrap();
+        drop(scratch);
+        assert_eq!(fs::read(&partial).unwrap(), b"partial native image");
+        fs::remove_dir_all(root).unwrap();
+    }
 }
 
 fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
