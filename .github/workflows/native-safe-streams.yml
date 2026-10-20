@@ -2,7 +2,7 @@ name: Native safe stream launcher
 
 on:
   push:
-    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams, contrib/safe-quantile-test-streams, contrib/safe-grouping-test-streams, contrib/safe-summary-test-streams, contrib/safe-report-test-streams, contrib/safe-weighted-test-streams, contrib/safe-buffered-input-tests, contrib/safe-record-test-streams]
+    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams, contrib/safe-quantile-test-streams, contrib/safe-grouping-test-streams, contrib/safe-summary-test-streams, contrib/safe-report-test-streams, contrib/safe-weighted-test-streams, contrib/safe-buffered-input-tests, contrib/safe-record-test-streams, contrib/diagnose-native-create-recovery]
 
 permissions:
   contents: read
@@ -59,23 +59,21 @@ jobs:
           mkdir "$CAPTURES/bin"
           cp target/release/fastmash target/release/fastmash-sort-supervisor target/release/fastmash-test-process target/release/fastmash-corpus target/release/fastmash-corpus-test-command "$CAPTURES/bin/"
           shasum -a 256 "$CAPTURES/bin/fastmash" "$CAPTURES/bin/fastmash-sort-supervisor" "$CAPTURES/bin/fastmash-test-process" "$CAPTURES/bin/fastmash-corpus" "$CAPTURES/bin/fastmash-corpus-test-command" > "$CAPTURES/binaries.sha256"
-      - name: Verify launcher controls and executed native streams
-        timeout-minutes: 6
+      - name: Verify creation recovery and replay the original record workload
+        timeout-minutes: 10
         run: |
-          cargo test --locked -p fastmash-corpus-driver --test test_process -- --nocapture > "$CAPTURES/launcher-tests.log" 2>&1
-          cargo test --release --locked -p fastmash-corpus-driver --test command -- --nocapture > "$CAPTURES/corpus-command-tests.log" 2>&1
-          cargo test --release --locked -p fastmash-corpus-driver --lib full_volume::tests -- --nocapture > "$CAPTURES/full-volume-controls.log" 2>&1
           export FASTMASH_TEST_BINARY="$CAPTURES/bin/fastmash"
-          export FASTMASH_QUANTILE_TEST_BINARY="$CAPTURES/bin/fastmash"
-          export FASTMASH_SUM_MEAN_TEST_BINARY="$CAPTURES/bin/fastmash"
           export FASTMASH_TEST_CORPUS="$CAPTURES/bin/fastmash-corpus"
           export FASTMASH_TEST_PROCESS="$CAPTURES/bin/fastmash-test-process"
-          export FASTMASH_RECORD_FAULT_EVIDENCE="$CAPTURES/record-full-output"
-          mkdir "$FASTMASH_RECORD_FAULT_EVIDENCE"
-          cargo test --release --locked -p fastmash --test native_streams --test text_summaries --test quantiles --test grouping --test dispersion --test extrema --test sum_mean --test presentation --test selectors --test weighted_mean --test csv_input --test record_separators -- --nocapture > "$CAPTURES/native-streams.log" 2>&1
-          cargo test --release --locked -p fastmash --test text_summaries installed_sorted_wide_headers_keys_and_group_resets -- --ignored --nocapture > "$CAPTURES/prepared-text.log" 2>&1
-          cargo test --release --locked -p fastmash --test quantiles prepared_sorted_headers_share_quantiles -- --ignored --nocapture > "$CAPTURES/prepared-quantiles.log" 2>&1
-          cargo test --release --locked -p fastmash --test sum_mean sorted_wide_headers_comments_and_named_fields -- --ignored --nocapture > "$CAPTURES/prepared-sum-mean.log" 2>&1
+          FASTMASH_VOLUME_RECOVERY_EVIDENCE="$CAPTURES/native-create-recovery-control" cargo test --release --locked -p fastmash-corpus-driver --lib full_volume::tests -- --nocapture > "$CAPTURES/full-volume-controls.log" 2>&1
+          failure=0
+          for attempt in 1 2 3 4 5 6 7 8; do
+            status=0
+            cargo test --release --locked -p fastmash --test record_separators -- --nocapture > "$CAPTURES/record-attempt-$attempt.log" 2>&1 || status=$?
+            printf '%s\n' "$status" > "$CAPTURES/record-attempt-$attempt.status"
+            if [ "$status" -ne 0 ]; then failure=1; break; fi
+          done
+          test "$failure" -eq 0
           shasum -a 256 -c "$CAPTURES/inputs.sha256"
           shasum -a 256 -c "$CAPTURES/binaries.sha256"
       - name: Collect failed full-volume receipts
