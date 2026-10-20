@@ -161,6 +161,7 @@ They need the repository tools above, Rust, Docker and the Debian 12 and
 AlmaLinux 8 container images:
 
 ```sh
+cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 bash release/package-publication-fixtures.sh /tmp/publication-fixtures
 bash release/test-package-publication.sh /tmp/publication-fixtures/old /tmp/publication-fixtures/new
 ```
