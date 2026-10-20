@@ -60,14 +60,35 @@ jobs:
           cp target/release/fastmash target/release/fastmash-sort-supervisor target/release/fastmash-test-process target/release/fastmash-corpus target/release/fastmash-corpus-test-command "$CAPTURES/bin/"
           shasum -a 256 "$CAPTURES/bin/fastmash" "$CAPTURES/bin/fastmash-sort-supervisor" "$CAPTURES/bin/fastmash-test-process" "$CAPTURES/bin/fastmash-corpus" "$CAPTURES/bin/fastmash-corpus-test-command" > "$CAPTURES/binaries.sha256"
       - name: Verify launcher controls and executed native streams
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           export FASTMASH_TEST_BINARY="$PWD/target/release/fastmash"
           export FASTMASH_TEST_CORPUS="$PWD/target/release/fastmash-corpus"
           export FASTMASH_TEST_PROCESS="$PWD/target/release/fastmash-test-process"
-          for attempt in 1 2 3; do
-            cargo test --release --locked -p fastmash --test record_separators -- --nocapture > "$CAPTURES/record-attempt-$attempt.log" 2>&1
+          failure=0
+          shopt -s nullglob
+          for attempt in 1 2 3 4 5 6 7 8; do
+            status=0
+            log="$CAPTURES/record-attempt-$attempt.log"
+            cargo test --release --locked -p fastmash --test record_separators -- --nocapture > "$log" 2>&1 || status=$?
+            printf '%s\n' "$status" > "$CAPTURES/record-attempt-$attempt.status"
+            if [ "$status" -ne 0 ]; then
+              failure=1
+              # Preserve the original cleanup symptom. A separately observed
+              # creation error may continue only after its cleanup is confirmed.
+              if grep -qF 'full-volume cleanup failed' "$log" ||
+                 ! grep -qF 'hdiutil create: exit status: 1' "$log" ||
+                 [ "$(grep -c 'test .* \.\.\. FAILED' "$log")" -ne 1 ]; then
+                break
+              fi
+              unclean=0
+              for root in /private/tmp/fastmash-test-*.full-output; do
+                if [ ! -f "$root/volume/cleanup.ok" ]; then unclean=1; fi
+              done
+              if [ "$unclean" -ne 0 ]; then break; fi
+            fi
           done
+          test "$failure" -eq 0
           shasum -a 256 -c "$CAPTURES/inputs.sha256"
           shasum -a 256 -c "$CAPTURES/binaries.sha256"
       - name: Collect failed full-volume receipts
