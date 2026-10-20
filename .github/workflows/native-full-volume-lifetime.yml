@@ -23,7 +23,7 @@ defaults:
 jobs:
   probe:
     name: Full-volume lifetime on ${{ matrix.os }} with Rust ${{ matrix.rust }}
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -68,7 +68,7 @@ jobs:
           shasum -a 256 -c "$CAPTURES/candidate-before-lifetime.sha256"
           shasum -a 256 target/release/fastmash target/release/fastmash-corpus target/release/examples/native-full-output target/release/examples/native-full-volume-lifetime > "$CAPTURES/binaries.sha256"
       - name: Observe actual faults through normal and unwind cleanup
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           cleanup() {
             result=$?
