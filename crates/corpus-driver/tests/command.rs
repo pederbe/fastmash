@@ -336,6 +336,10 @@ fn buffered_input_preserves_repeated_parse_errors_during_stop_selection() {
         assert!(output.stdout.is_empty());
         assert_eq!(output.stderr, b"parse error before another read\n");
         assert_eq!(json_file(&root.join("completed.json"))["reaped"], true);
+        let diagnostic = fs::read_to_string(root.join("coordinator.stderr")).unwrap();
+        if diagnostic.contains("[DEBUG-buffered-stop]") {
+            println!("parse attempt {attempt}: {diagnostic}");
+        }
     }
 }
 

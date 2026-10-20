@@ -215,18 +215,38 @@ fn collect(stream: &mut Streaming, sink: &mut File, copied: &mut usize) -> Resul
 }
 
 fn stop(running: &mut Running, pid: Pid, started: Instant) -> Result<bool> {
-    match killpg(pid, Signal::SIGSTOP) {
-        Ok(()) => {}
-        Err(error)
-            if (error == Errno::ESRCH || cfg!(target_os = "macos") && error == Errno::EPERM)
-                && running.status()?.is_some() =>
-        {
-            return Ok(false);
-        }
-        Err(error) => {
-            return Err(Error::message(format!(
-                "stop owned candidate group {pid}: {error}"
-            )));
+    let mut retried = false;
+    loop {
+        match killpg(pid, Signal::SIGSTOP) {
+            Ok(()) => break,
+            Err(error)
+                if error == Errno::ESRCH || cfg!(target_os = "macos") && error == Errno::EPERM =>
+            {
+                if running.status()?.is_some() {
+                    if retried {
+                        eprintln!(
+                            "[DEBUG-buffered-stop] pid={pid} terminal observed; reaped={}",
+                            running.reaped
+                        );
+                    }
+                    return Ok(false);
+                }
+                if !retried {
+                    eprintln!(
+                        "[DEBUG-buffered-stop] pid={pid} {error}; waiting for fresh owned state"
+                    );
+                    retried = true;
+                }
+                // A disappearing group may become unsignalable just before
+                // waitid reports its terminal state. Keep the leader unreaped
+                // and use the existing deadline/cancellation check throughout.
+                pause(started)?;
+            }
+            Err(error) => {
+                return Err(Error::message(format!(
+                    "stop owned candidate group {pid}: {error}"
+                )));
+            }
         }
     }
     loop {
