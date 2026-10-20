@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! Executed-command checks for inherited streams and native terminal behavior.
 #[path = "support/temp_dir.rs"]
 mod temp_dir;
@@ -11,7 +12,7 @@ use std::{
     fs::File,
     io::{Read, Write},
     os::{
-        fd::{AsRawFd, OwnedFd},
+        fd::{AsFd, OwnedFd},
         unix::{
             ffi::OsStringExt,
             process::{CommandExt, ExitStatusExt},
@@ -22,8 +23,27 @@ use std::{
 };
 
 fn command(args: &[&str]) -> Command {
-    let mut command = terminal::Program.command(args, &[]);
+    let launcher = std::env::var_os("FASTMASH_TEST_PROCESS")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::current_exe()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .join("fastmash-test-process")
+        });
+    assert!(
+        launcher.is_file(),
+        "prepare fastmash-test-process before native stream tests"
+    );
+    let target = terminal::Program.command(args, &[]);
+    let mut command = Command::new(launcher);
     command
+        .arg("5")
+        .arg(target.get_program())
+        .args(target.get_args())
         .arg0("fastmash")
         .env_clear()
         .env("LC_ALL", "C")
@@ -31,14 +51,6 @@ fn command(args: &[&str]) -> Command {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // SAFETY: alarm is async-signal-safe and bounds any unexpected wait in the
-    // child, including assertion failures before the parent can reap it.
-    unsafe {
-        command.pre_exec(|| {
-            libc::alarm(5);
-            Ok(())
-        });
-    }
     command
 }
 
@@ -62,24 +74,10 @@ fn argument_initialization_preserves_non_utf8_bytes() {
 }
 
 fn signal_mask(command: &mut Command, blocked: i32, ignored: Option<i32>) {
-    // SAFETY: these signal operations use stack-local sigset_t storage and
-    // async-signal-safe libc calls; they change only the child before exec.
-    unsafe {
-        command.pre_exec(move || {
-            let mut mask = std::mem::zeroed();
-            if libc::sigemptyset(&mut mask) != 0
-                || libc::sigaddset(&mut mask, blocked) != 0
-                || libc::sigprocmask(libc::SIG_SETMASK, &mask, std::ptr::null_mut()) != 0
-            {
-                return Err(std::io::Error::last_os_error());
-            }
-            if let Some(signal) = ignored
-                && libc::signal(signal, libc::SIG_IGN) == libc::SIG_ERR
-            {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
+    command.env("FASTMASH_TEST_PROCESS_BLOCKED", blocked.to_string());
+    if let Some(signal) = ignored {
+        assert_eq!(signal, libc::SIGPIPE);
+        command.env("FASTMASH_TEST_PROCESS_IGNORE_PIPE", "1");
     }
 }
 
@@ -108,34 +106,7 @@ fn ordinary_broken_pipes_restore_sigpipe_even_when_inherited_ignored() {
     for ignored in [false, true] {
         let mut command = command(&["count", "1"]);
         command.stdout(Stdio::null());
-        // Create the pipe after fork so concurrent test children cannot retain
-        // its reader before their own exec and make the write succeed.
-        // SAFETY: the callback uses only async-signal-safe libc operations and
-        // stack-local storage. Command has installed open standard streams,
-        // so the new descriptors are distinct from stdout and belong only to
-        // this child. Both are closed after duplicating the writer onto stdout.
-        unsafe {
-            command.pre_exec(|| {
-                let mut pipe = [-1; 2];
-                if libc::pipe(pipe.as_mut_ptr()) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                if libc::close(pipe[0]) != 0 {
-                    let error = std::io::Error::last_os_error();
-                    libc::close(pipe[1]);
-                    return Err(error);
-                }
-                if libc::dup2(pipe[1], libc::STDOUT_FILENO) < 0 {
-                    let error = std::io::Error::last_os_error();
-                    libc::close(pipe[1]);
-                    return Err(error);
-                }
-                if libc::close(pipe[1]) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
+        command.env("FASTMASH_TEST_PROCESS_BROKEN_OUTPUT", "1");
         signal_mask(
             &mut command,
             libc::SIGTERM,
@@ -153,22 +124,10 @@ fn ordinary_broken_pipes_restore_sigpipe_even_when_inherited_ignored() {
     }
 }
 
-fn readable(file: &impl AsRawFd, timeout: Duration) -> bool {
-    let mut descriptor = libc::pollfd {
-        fd: file.as_raw_fd(),
-        events: libc::POLLIN,
-        revents: 0,
-    };
-    // SAFETY: poll reads and updates one live pollfd for an owned descriptor.
-    let result = unsafe {
-        libc::poll(
-            &mut descriptor,
-            1,
-            timeout.as_millis().min(i32::MAX as u128) as i32,
-        )
-    };
-    assert!(result >= 0, "poll: {}", std::io::Error::last_os_error());
-    result != 0
+fn readable(file: &impl AsFd, timeout: Duration) -> bool {
+    use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
+    let mut descriptor = [PollFd::new(file.as_fd(), PollFlags::POLLIN)];
+    poll(&mut descriptor, PollTimeout::try_from(timeout).unwrap()).unwrap() != 0
 }
 
 fn wait(child: &mut Child) -> std::process::ExitStatus {

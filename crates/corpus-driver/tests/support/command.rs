@@ -13,6 +13,21 @@ fn main() {
     let name = args.next().unwrap();
     let mode = args.next().unwrap();
     match mode.to_str().unwrap() {
+        "process-facts" => {
+            use nix::sys::signal::{SigSet, Signal};
+            let mask = SigSet::thread_get_mask().unwrap();
+            println!(
+                "{}",
+                serde_json::json!({
+                    "pid":std::process::id(),
+                    "argv0":name.as_bytes(),
+                    "arguments":args.map(|s| s.as_bytes().to_vec()).collect::<Vec<_>>(),
+                    "sigterm_blocked":mask.contains(Signal::SIGTERM),
+                    "selected_environment":std::env::var_os("SELECTED_ENVIRONMENT").map(|s|s.as_bytes().to_vec()),
+                    "private_environment_present":std::env::vars_os().any(|(k,_)|k.as_bytes().starts_with(b"FASTMASH_TEST_PROCESS_")),
+                })
+            );
+        }
         "echo" => {
             let mut bytes = Vec::new();
             std::io::stdin().read_to_end(&mut bytes).unwrap();

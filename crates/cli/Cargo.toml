@@ -68,7 +68,7 @@ hotpath-cpu = ["hotpath", "hotpath/hotpath-cpu"]
 csv-core = "=0.1.13"
 # Safe descriptor file actions, access checks and bounded child reaping in tests.
 # Owned pseudo-terminals and raw mode setup use the term feature.
-nix = { version = "=0.31.3", default-features = false, features = ["fs", "signal", "term"] }
+nix = { version = "=0.31.3", default-features = false, features = ["fs", "signal", "term", "poll"] }
 # Exact arithmetic for the generated decimal power table and its tests.
 num-bigint = { version = "=0.5.1", default-features = false }
 
