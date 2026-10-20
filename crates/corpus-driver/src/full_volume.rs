@@ -203,6 +203,10 @@ fn wait_for_attachment(
     })
 }
 
+fn detachment_proven(_successful: bool, _requested_device: Option<&Path>) -> io::Result<bool> {
+    Ok(true)
+}
+
 pub struct FullVolume {
     root: PathBuf,
     image: PathBuf,
@@ -275,6 +279,8 @@ impl FullVolume {
     }
     fn cleanup(&mut self) -> io::Result<()> {
         let deadline = Instant::now() + Duration::from_secs(15);
+        let mut successful_detach = false;
+        let mut requested_device = None;
         let cleaned = retry_transition(deadline, |attempt| {
             if self.attached
                 && let Some(device) =
@@ -289,7 +295,13 @@ impl FullVolume {
                 if !status.success() && status.code() != Some(16) {
                     return Err(io::Error::other(format!("hdiutil detach: {status}")));
                 }
+                successful_detach |= status.success();
+                requested_device = Some(PathBuf::from(device));
                 // Success still needs a fresh native absence observation.
+                return Ok(false);
+            }
+            if self.attached && !detachment_proven(successful_detach, requested_device.as_deref())?
+            {
                 return Ok(false);
             }
             if self.mount.try_exists()? {
@@ -483,6 +495,22 @@ mod tests {
         })
         .unwrap();
         assert_eq!(calls, 3);
+    }
+
+    #[test]
+    fn absent_image_and_empty_mount_do_not_prove_device_detachment() {
+        let directory = crate::process::Scratch::new().unwrap();
+        let device = directory.path.join("device-node");
+        let mount = directory.path.join("unmounted-directory");
+        fs::create_dir(&mount).unwrap();
+        fs::write(&device, b"still present").unwrap();
+        assert!(!detachment_proven(false, None).unwrap());
+        assert!(!detachment_proven(false, Some(&device)).unwrap());
+        fs::remove_file(&device).unwrap();
+        assert!(detachment_proven(false, Some(&device)).unwrap());
+        // A successful owned detach remains proof if that device name is reused.
+        fs::write(&device, b"reused name").unwrap();
+        assert!(detachment_proven(true, Some(&device)).unwrap());
     }
 
     #[test]
