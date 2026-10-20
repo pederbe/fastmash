@@ -15,7 +15,7 @@
 //! key ascend by the gap between their lines, and a new key jumps either way.
 //! The zigzag delta is smaller than the plain sequence whenever keys repeat
 //! within a run, and at most one byte larger when they do not.
-#![cfg_attr(not(test), forbid(unsafe_code))]
+#![forbid(unsafe_code)]
 
 use super::batch::Projected;
 #[cfg(test)]
@@ -1810,20 +1810,16 @@ mod tests {
         let kept = first.try_clone().unwrap();
         use std::os::unix::fs::MetadataExt;
         let target = kept.metadata().unwrap();
+        #[cfg(target_os = "linux")]
+        let descriptor_path = format!("/proc/self/fd/{descriptor}");
+        #[cfg(target_os = "macos")]
+        let descriptor_path = format!("/dev/fd/{descriptor}");
         let open = || {
-            let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
-            // SAFETY: fstat writes into live storage; it may reject the closed
-            // descriptor or inspect a reused slot without borrowing that slot.
-            if unsafe { libc::fstat(descriptor, stat.as_mut_ptr()) } != 0 {
-                return false;
-            }
-            // SAFETY: successful fstat initialized the complete stat value.
-            let stat = unsafe { stat.assume_init() };
-            #[cfg(target_os = "macos")]
-            let device = stat.st_dev as u64;
-            #[cfg(target_os = "linux")]
-            let device = stat.st_dev;
-            device == target.dev() && stat.st_ino == target.ino()
+            // Resolve the live descriptor through the native descriptor
+            // filesystem. A closed or reused slot cannot match the held file.
+            std::fs::metadata(&descriptor_path).is_ok_and(|metadata| {
+                metadata.dev() == target.dev() && metadata.ino() == target.ino()
+            })
         };
         let mut seen = Vec::new();
         merge_into::<Packed>(run_sources(vec![first, second]), |row| {
