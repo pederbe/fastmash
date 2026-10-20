@@ -41,6 +41,9 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
 export MACOSX_DEPLOYMENT_TARGET=15.0 CARGO_INCREMENTAL=0
+cargo build --locked --manifest-path release/publication-test-server/Cargo.toml \
+    --target-dir "$work/tools" --target "$target" --bin fastmash-check-archive
+checker=$work/tools/$target/debug/fastmash-check-archive
 if [ "$mode" = release ]; then
     # Stable source and dependency paths make separate clean target trees
     # comparable. The hosted compiler is pinned by the calling workflow.
@@ -52,16 +55,15 @@ cargo build --locked --release -p fastmash --bin fastmash --target "$target"
 binary=${CARGO_TARGET_DIR:-$root/target}/$target/release/fastmash
 if [ "$mode" = release ]; then
     CARGO_TARGET_DIR="$work/second" cargo build --locked --release -p fastmash --bin fastmash --target "$target"
-    cmp "$binary" "$work/second/$target/release/fastmash"
+    "$checker" bytes "$binary" "$work/second/$target/release/fastmash"
 fi
 stage=$work/$name
 mkdir "$stage"
 cp "$binary" "$stage/fastmash"
 chmod 755 "$stage/fastmash"
-cmp "$binary" "$stage/fastmash"
+"$checker" bytes "$binary" "$stage/fastmash"
 deployment=$(xcrun vtool -show-build "$stage/fastmash")
-printf '%s\n' "$deployment" | grep -Eq '^[[:space:]]*minos 15\.0(\.0)?$' ||
-    { echo 'the binary does not record the macOS 15 deployment target' >&2; exit 1; }
+"$checker" deployment "$deployment"
 cp README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$stage/"
 cargo run --locked --release -p fastmash-license-notices -- --target "$target" > "$stage/THIRD-PARTY-LICENSES.md"
 (
