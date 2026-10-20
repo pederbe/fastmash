@@ -29,6 +29,12 @@ name = "libloading"
 version = "=0.8.9"
 allow = ["ISC"]
 
+# The development-only Unicode 16 name lookup retains its data-file license.
+[[licenses.exceptions]]
+name = "unicode_names2"
+version = "=2.0.0"
+allow = ["Unicode-DFS-2016"]
+
 [advisories]
 version = 2
 # Vulnerabilities fail the check; unmaintained crates are reported for review
