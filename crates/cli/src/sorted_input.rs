@@ -3,6 +3,7 @@
 //! the startup order requires before any sort starts, prepares the input
 //! (`Sorting`), starts the sort by its keys and runs its calculation over the
 //! sorted records (`Sorted::run`), which completes the session.
+#![forbid(unsafe_code)]
 use super::{
     Failure, append, failure,
     intake::{self, Intake},
@@ -12,7 +13,6 @@ use fastmash_sort_process::{Message, Session, StartError};
 use std::{
     fs::File,
     io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write},
-    os::fd::BorrowedFd,
     process::ChildStdout,
 };
 
@@ -65,9 +65,7 @@ impl Sorting {
         if !options.header_in {
             return Ok(sorting);
         }
-        // SAFETY: standard_io's preinitializer keeps descriptor 0 open for the
-        // whole process, so the borrow cannot outlive it.
-        let stdin = unsafe { BorrowedFd::borrow_raw(0) };
+        let stdin = rustix::stdio::stdin();
         #[cfg(target_os = "linux")]
         let input = fastmash_sort_process::linux::duplicate(stdin);
         #[cfg(target_os = "macos")]
