@@ -2,7 +2,7 @@ name: Native full-volume lifetime
 
 on:
   push:
-    branches: [contrib/native-full-volume-lifetime, contrib/native-full-output-controls, contrib/rust-full-output-corpus, contrib/rust-held-stdin-corpus, contrib/rust-held-output-corpus, contrib/rust-late-read-corpus]
+    branches: [contrib/native-full-volume-lifetime, contrib/native-full-output-controls, contrib/rust-full-output-corpus, contrib/rust-held-stdin-corpus, contrib/rust-held-output-corpus, contrib/rust-late-read-corpus, contrib/safe-standard-stream-io]
 
 permissions:
   contents: read
@@ -55,22 +55,28 @@ jobs:
             rustc -Vv
             cargo -V
           } > "$captures/identity.txt"
-          shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/corpus-driver/Cargo.toml crates/corpus-driver/examples/native-full-output.rs crates/corpus-driver/examples/native-full-volume-lifetime.rs crates/corpus-driver/src/*.rs > "$captures/inputs.sha256"
+          shasum -a 256 Cargo.lock crates/cli/src/main.rs crates/cli/src/platform.rs crates/cli/src/standard_stream_io.rs crates/cli/Cargo.toml crates/corpus-driver/Cargo.toml crates/corpus-driver/examples/native-full-output.rs crates/corpus-driver/examples/native-full-volume-lifetime.rs crates/corpus-driver/src/*.rs > "$captures/inputs.sha256"
       - name: Build candidate and safe mechanism probe
         timeout-minutes: 10
         run: |
           cargo clippy --locked -p fastmash-corpus-driver --example native-full-output --example native-full-volume-lifetime -- -D warnings > "$CAPTURES/clippy.log" 2>&1
           cargo build --release --locked -p fastmash --bin fastmash > "$CAPTURES/candidate-build.log" 2>&1
-          cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-corpus --example native-full-output > "$CAPTURES/probe-build.log" 2>&1
-          shasum -a 256 target/release/fastmash > "$CAPTURES/candidate-before-lifetime.sha256"
+          mkdir "$CAPTURES/bin"
+          cp target/release/fastmash "$CAPTURES/bin/fastmash"
+          cargo build --release --locked -p fastmash-corpus-driver --bins --example native-full-output > "$CAPTURES/probe-build.log" 2>&1
+          shasum -a 256 "$CAPTURES/bin/fastmash" > "$CAPTURES/candidate-before-lifetime.sha256"
           CARGO_PROFILE_RELEASE_PANIC=unwind cargo build --release --locked -p fastmash-corpus-driver --example native-full-volume-lifetime > "$CAPTURES/lifetime-build.log" 2>&1
           printf 'candidate: ordinary release panic=abort\nlifetime control only: CARGO_PROFILE_RELEASE_PANIC=unwind\n' > "$CAPTURES/panic-builds.txt"
           shasum -a 256 -c "$CAPTURES/candidate-before-lifetime.sha256"
-          shasum -a 256 target/release/fastmash target/release/fastmash-corpus target/release/examples/native-full-output target/release/examples/native-full-volume-lifetime > "$CAPTURES/binaries.sha256"
+          shasum -a 256 "$CAPTURES/bin/fastmash" target/release/fastmash-corpus target/release/examples/native-full-output target/release/examples/native-full-volume-lifetime > "$CAPTURES/binaries.sha256"
       - name: Check corpus lifecycle controls
         timeout-minutes: 3
         run: |
           cargo test --locked -p fastmash-corpus-driver > "$CAPTURES/corpus-selftests.log" 2>&1
+      - name: Check native standard descriptors and streams
+        timeout-minutes: 5
+        run: |
+          FASTMASH_TEST_BINARY="$CAPTURES/bin/fastmash" cargo test --release --locked -p fastmash --test native_descriptors --test native_streams -- --nocapture > "$CAPTURES/native-stream-tests.log" 2>&1
       - name: Observe actual faults through normal and unwind cleanup
         timeout-minutes: 10
         run: |
@@ -90,7 +96,7 @@ jobs:
           }
           trap cleanup EXIT
           result=0
-          target/release/examples/native-full-volume-lifetime "$PWD/target/release/fastmash" "$CAPTURES/lifetimes" > "$CAPTURES/probe.stdout" 2> "$CAPTURES/probe.stderr" || result=$?
+          target/release/examples/native-full-volume-lifetime "$CAPTURES/bin/fastmash" "$CAPTURES/lifetimes" > "$CAPTURES/probe.stdout" 2> "$CAPTURES/probe.stderr" || result=$?
           printf '%s\n' "$result" > "$CAPTURES/probe.exit"
           test "$result" = 0
           test -f "$CAPTURES/lifetimes/normal/cleanup.ok"
@@ -112,10 +118,10 @@ jobs:
             exit "$result"
           }
           trap cleanup EXIT
-          target/release/fastmash-corpus --binary "$PWD/target/release/fastmash" --expected-version 0.2.0 --keep-going --evidence-dir "$CAPTURES/corpus" > "$CAPTURES/corpus.stdout" 2> "$CAPTURES/corpus.stderr"
+          target/release/fastmash-corpus --binary "$CAPTURES/bin/fastmash" --expected-version 0.2.0 --keep-going --evidence-dir "$CAPTURES/corpus" > "$CAPTURES/corpus.stdout" 2> "$CAPTURES/corpus.stderr"
           test -f "$CAPTURES/corpus/full-output/volume/cleanup.ok"
           test -f "$CAPTURES/corpus/full-output/finished"
-          target/release/fastmash-corpus --binary "$PWD/target/release/fastmash" --expected-version 0.2.0 --stdin-file --evidence-dir "$CAPTURES/corpus-file" > "$CAPTURES/corpus-file.stdout" 2> "$CAPTURES/corpus-file.stderr"
+          target/release/fastmash-corpus --binary "$CAPTURES/bin/fastmash" --expected-version 0.2.0 --stdin-file --evidence-dir "$CAPTURES/corpus-file" > "$CAPTURES/corpus-file.stdout" 2> "$CAPTURES/corpus-file.stderr"
       - name: Verify unchanged inputs
         run: |
           shasum -a 256 -c "$CAPTURES/inputs.sha256"
