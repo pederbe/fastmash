@@ -1,0 +1,106 @@
+name: Native full-output mechanism
+
+on:
+  push:
+    branches: [contrib/native-full-output-probe]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-full-output-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+  MACOSX_DEPLOYMENT_TARGET: '15.0'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  probe:
+    name: Full output on ${{ matrix.os }} with Rust ${{ matrix.rust }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+        rust: ['1.88.0', '1.98.1']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: Record native inputs
+        run: |
+          captures="$RUNNER_TEMP/native-full-output"
+          printf 'CAPTURES=%s\n' "$captures" >> "$GITHUB_ENV"
+          mkdir "$captures"
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" = "${{ matrix.os == 'macos-15' && '15' || '26' }}"
+          {
+            git rev-parse HEAD
+            git status --porcelain
+            uname -a
+            sw_vers
+            rustc -Vv
+            cargo -V
+          } > "$captures/identity.txt"
+          shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/corpus-driver/Cargo.toml crates/corpus-driver/examples/native-full-output.rs > "$captures/inputs.sha256"
+      - name: Build candidate and safe mechanism probe
+        timeout-minutes: 10
+        run: |
+          cargo clippy --locked -p fastmash-corpus-driver --example native-full-output -- -D warnings > "$CAPTURES/clippy.log" 2>&1
+          cargo build --release --locked -p fastmash --bin fastmash > "$CAPTURES/candidate-build.log" 2>&1
+          cargo build --release --locked -p fastmash-corpus-driver --example native-full-output > "$CAPTURES/probe-build.log" 2>&1
+          shasum -a 256 target/release/fastmash target/release/examples/native-full-output > "$CAPTURES/binaries.sha256"
+      - name: Observe ordinary output and real ENOSPC
+        timeout-minutes: 3
+        run: |
+          image="$RUNNER_TEMP/fm-full-${{ strategy.job-index }}.dmg"
+          mount="/tmp/fm-full-${{ github.run_id }}-${{ strategy.job-index }}"
+          attached=0
+          cleanup() {
+            result=$?
+            trap - EXIT
+            if test "$attached" = 1; then
+              if ! hdiutil detach "$mount" > "$CAPTURES/cleanup.stdout" 2> "$CAPTURES/cleanup.stderr"; then
+                result=1
+              fi
+            fi
+            exit "$result"
+          }
+          trap cleanup EXIT
+          hdiutil create -size 8m -fs HFS+ -volname FastmashFault "$image" > "$CAPTURES/create.stdout" 2> "$CAPTURES/create.stderr"
+          mkdir "$mount"
+          attached=1
+          hdiutil attach "$image" -mountpoint "$mount" -nobrowse -noautoopen > "$CAPTURES/attach.stdout" 2> "$CAPTURES/attach.stderr"
+          result=0
+          target/release/examples/native-full-output "$PWD/target/release/fastmash" "$CAPTURES/observations" "$mount" > "$CAPTURES/probe.stdout" 2> "$CAPTURES/probe.stderr" || result=$?
+          printf '%s\n' "$result" > "$CAPTURES/probe.exit"
+          test "$result" = 0
+          hdiutil detach "$mount" > "$CAPTURES/detach.stdout" 2> "$CAPTURES/detach.stderr"
+          attached=0
+          rmdir "$mount"
+          rm "$image"
+      - name: Verify unchanged inputs
+        run: |
+          shasum -a 256 -c "$CAPTURES/inputs.sha256"
+          shasum -a 256 -c "$CAPTURES/binaries.sha256"
+      - name: Retain mechanism observations
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-full-output-${{ matrix.os }}-${{ matrix.rust }}
+          path: ${{ runner.temp }}/native-full-output
+          if-no-files-found: error
+          retention-days: 7
