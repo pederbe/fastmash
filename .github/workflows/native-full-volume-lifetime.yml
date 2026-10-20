@@ -2,7 +2,7 @@ name: Native full-volume lifetime
 
 on:
   push:
-    branches: [contrib/native-full-volume-lifetime]
+    branches: [contrib/native-full-volume-lifetime, contrib/native-full-output-controls]
 
 permissions:
   contents: read
