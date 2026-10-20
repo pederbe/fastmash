@@ -6,6 +6,10 @@ Linux installs `fastmash` and its Sort supervisor together; macOS installs
 only `fastmash`. Both include the project licenses and generated dependency
 licenses, copyright and notice texts for their target. Python and Rust are
 build dependencies only.
+The retained formula compiles its checksum-pinned Rust test resource during the
+build and installs the checker under `libexec`. `brew test` runs this checker
+without a compiler in its test dependencies. The published source archive and
+its checksum remain unchanged.
 The source-built programs carry no performance claim from the release binaries.
 
 The formula is published in the [maintainer's tap](https://github.com/pederbe/homebrew-tap):

@@ -17,6 +17,11 @@ class Fastmash < Formula
     depends_on arch: :x86_64
   end
 
+  resource "package-test" do
+    url "https://raw.githubusercontent.com/pederbe/fastmash/e8ec726952adc36070dc381fbb46394c9541dee7/packaging/homebrew/run_test.rs"
+    sha256 "74982a7204196bccb4c684f1961d55e99d61c85c53899efd025fdfd7100059d9"
+  end
+
   def install
     if OS.mac?
       # The Sort supervisor is Linux-only; macOS sorts with the built-in sorter.
@@ -29,28 +34,14 @@ class Fastmash < Formula
     notices = Utils.safe_popen_read("python3", "scripts/third_party_licenses.py", "--target", target)
     (buildpath/"THIRD-PARTY-LICENSES.md").write notices
     doc.install "README.md", "LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"
+    resource("package-test").stage do
+      system "rustc", "--edition=2024", "--target", target, "-C", "linker=#{ENV.cc}",
+             "-C", "opt-level=2", "-C", "strip=symbols", "run_test.rs", "-o", "fastmash-test-homebrew"
+      libexec.install "fastmash-test-homebrew"
+    end
   end
 
   test do
-    %w[LICENSE-MIT LICENSE-APACHE THIRD-PARTY-LICENSES.md].each do |document|
-      assert_predicate doc/document, :size?
-    end
-    assert_equal "fastmash #{version}\n", shell_output("#{bin}/fastmash --version")
-    assert_equal "6\t2\n", pipe_output("#{bin}/fastmash sum 1 mean 1", "1\n2\n3\n", 0)
-    assert_equal "1.8171205928321\n", pipe_output("#{bin}/fastmash geomean 1", "1\n2\n3\n", 0)
-
-    # A paired operation with a route trace shows which sorter ran.
-    (testpath/"input").write "b\t2\t3\na\t1\t2\na\t3\t6\n"
-    assert_equal "a\t2\nb\t0\n",
-                 shell_output("LC_ALL=C FASTMASH_GROUPING=sort FASTMASH_SORT_TRACE=1 " \
-                              "#{bin}/fastmash -sg1 pcov 2:3 <input 2>trace")
-    if OS.mac?
-      refute_path_exists bin/"fastmash-sort-supervisor"
-      assert_match(/\Asort route: native sort/, (testpath/"trace").read)
-    else
-      # An unusable Sort supervisor would fall back to the built-in sorter.
-      assert_path_exists bin/"fastmash-sort-supervisor"
-      assert_equal "sort route: system sort\n", (testpath/"trace").read
-    end
+    system libexec/"fastmash-test-homebrew", bin, doc, version.to_s
   end
 end

@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 use std::io::{self, Read};
+use std::os::fd::AsFd;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -40,7 +41,42 @@ fn main() -> ExitCode {
         if input != b"1\n2\n3\n" {
             return ExitCode::from(20);
         }
-        println!("1.8171205928321");
+        println!(
+            "{}",
+            if mode == "wrong-geomean" {
+                "incorrect"
+            } else {
+                "1.8171205928321"
+            }
+        );
+    } else if args == ["-sg1", "pcov", "2:3"] {
+        if input != b"b\t2\t3\na\t1\t2\na\t3\t6\n"
+            || std::env::var("LC_ALL").as_deref() != Ok("C")
+            || std::env::var("FASTMASH_GROUPING").as_deref() != Ok("sort")
+            || std::env::var("FASTMASH_SORT_TRACE").as_deref() != Ok("1")
+            || !std::fs::File::from(io::stdin().as_fd().try_clone_to_owned().unwrap())
+                .metadata()
+                .unwrap()
+                .is_file()
+        {
+            return ExitCode::from(20);
+        }
+        print!(
+            "{}",
+            if mode == "wrong-paired-output" {
+                "a\t3\nb\t0\n"
+            } else {
+                "a\t2\nb\t0\n"
+            }
+        );
+        let native = cfg!(target_os = "macos") != (mode == "wrong-route");
+        eprintln!(
+            "sort route: {} sort",
+            if native { "native" } else { "system" }
+        );
+        if mode == "failed-route" {
+            return ExitCode::from(17);
+        }
     } else {
         return ExitCode::from(19);
     }
