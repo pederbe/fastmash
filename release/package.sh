@@ -6,9 +6,20 @@
 # BIN_DIR holds fastmash and fastmash-sort-supervisor, DOC_DIR the README,
 # changelog, licenses and THIRD-PARTY-LICENSES.md. Both packages install the
 # programs into /usr/bin, unchanged: the script checks that the binaries in
-# each package are byte-identical to BIN_DIR's. Needs dpkg-deb, and rpmbuild
-# and rpm2cpio for the .rpm (the rpm package on Debian and Ubuntu).
+# each package are byte-identical to BIN_DIR's. Prepare the Rust tools with
+# cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins.
+# FASTMASH_PACKAGE_BYTES_CHECKER can select another prepared checker. Needs
+# dpkg-deb, and rpmbuild and rpm2cpio for the .rpm (the rpm package on Debian
+# and Ubuntu).
 set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+target=${CARGO_TARGET_DIR:-$here/../target}
+checker=${FASTMASH_PACKAGE_BYTES_CHECKER:-$target/debug/fastmash-check-package-bytes}
+if [ ! -x "$checker" ]; then
+    echo 'prepare the package byte checker with cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins' >&2
+    exit 1
+fi
 
 version=$1 bin=$(realpath "$2") docs=$(realpath "$3") out=$(realpath "$4")
 summary="Fast command-line statistics on text data, compatible with GNU datamash"
@@ -19,13 +30,6 @@ export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(stat -c %Y "$bin/fastmash")}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$out"
-
-same() { # PACKAGE_ROOT: the packaged programs equal the qualified ones
-    for program in "${programs[@]}"; do
-        cmp -s "$bin/$program" "$1/usr/bin/$program" ||
-            { echo "$program changed during packaging" >&2; exit 1; }
-    done
-}
 
 # Debian and Ubuntu
 deb=$work/deb
@@ -57,11 +61,11 @@ Description: $summary
  Fastmash summarizes, groups and reshapes tab-separated or delimited text
  with the GNU datamash command language.
 EOF
-same "$deb"
+"$checker" "$bin" "$deb"
 dpkg-deb --root-owner-group -Zxz --build "$deb" "$out/fastmash_${version}_amd64.deb" >/dev/null
 check=$work/deb-check
 dpkg-deb -x "$out/fastmash_${version}_amd64.deb" "$check"
-same "$check"
+"$checker" "$bin" "$check"
 echo "$out/fastmash_${version}_amd64.deb"
 
 # Fedora, RHEL and openSUSE
@@ -110,6 +114,6 @@ rpm=$top/RPMS/x86_64/fastmash-$version-1.x86_64.rpm
 check=$work/rpm-check
 mkdir -p "$check"
 (cd "$check" && rpm2cpio "$rpm" | cpio -idm --quiet)
-same "$check"
+"$checker" "$bin" "$check"
 cp "$rpm" "$out/"
 echo "$out/fastmash-$version-1.x86_64.rpm"
