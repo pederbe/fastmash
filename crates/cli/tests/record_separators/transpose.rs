@@ -22,10 +22,9 @@ pub(super) fn failing_input_with(
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let serial = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let parent = fs::canonicalize(parent).unwrap();
-        temp_dir::TempDir::create(parent.join(format!(
-            "read-fault-{}-{serial}",
-            std::process::id()
-        )))
+        temp_dir::TempDir::create(
+            parent.join(format!("read-fault-{}-{serial}", std::process::id())),
+        )
         .unwrap()
     } else {
         temp_dir::TempDir::new(&format!("read-fault-{:?}", std::thread::current().id()))
