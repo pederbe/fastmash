@@ -64,6 +64,7 @@ jobs:
         run: |
           cargo test --locked -p fastmash-corpus-driver --test test_process -- --nocapture > "$CAPTURES/launcher-tests.log" 2>&1
           cargo test --release --locked -p fastmash-corpus-driver --test command -- --nocapture > "$CAPTURES/corpus-command-tests.log" 2>&1
+          cargo test --release --locked -p fastmash-corpus-driver --lib full_volume::tests -- --nocapture > "$CAPTURES/full-volume-controls.log" 2>&1
           export FASTMASH_TEST_BINARY="$CAPTURES/bin/fastmash"
           export FASTMASH_QUANTILE_TEST_BINARY="$CAPTURES/bin/fastmash"
           export FASTMASH_SUM_MEAN_TEST_BINARY="$CAPTURES/bin/fastmash"
@@ -77,6 +78,15 @@ jobs:
           cargo test --release --locked -p fastmash --test sum_mean sorted_wide_headers_comments_and_named_fields -- --ignored --nocapture > "$CAPTURES/prepared-sum-mean.log" 2>&1
           shasum -a 256 -c "$CAPTURES/inputs.sha256"
           shasum -a 256 -c "$CAPTURES/binaries.sha256"
+      - name: Collect failed full-volume receipts
+        if: always()
+        run: |
+          mkdir "$CAPTURES/failed-full-output"
+          shopt -s nullglob
+          for root in /private/tmp/fastmash-test-*.full-output; do
+            test -d "$root" && test ! -L "$root"
+            rsync -a --exclude=full.dmg --exclude=mount "$root" "$CAPTURES/failed-full-output/"
+          done
       - name: Retain native observations
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
