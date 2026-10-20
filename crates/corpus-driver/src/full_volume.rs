@@ -228,6 +228,10 @@ fn request_detach(
     device: &str,
     request: impl FnOnce() -> io::Result<ExitStatus>,
 ) -> io::Result<()> {
+    // A fresh association invalidates proof about an earlier attachment, even
+    // when the next request fails before returning a native exit status.
+    *successful = false;
+    *requested_device = None;
     let status = request()?;
     if !status.success() && status.code() != Some(16) {
         return Err(io::Error::other(format!("hdiutil detach: {status}")));
