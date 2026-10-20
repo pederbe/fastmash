@@ -181,7 +181,7 @@ impl Case {
     pub fn supported(&self, stdin_file: bool) -> bool {
         self.ordinary()
             || (!stdin_file
-                && matches!(self.io.as_str(), "directory" | "closed-pipe")
+                && matches!(self.io.as_str(), "directory" | "closed-pipe" | "full")
                 && !truthy(&self.observe_held)
                 && !self.hold_stdin)
     }
@@ -193,6 +193,7 @@ impl Case {
             match self.io.as_str() {
                 "directory" => "directory-input",
                 "closed-pipe" => "closed-output-pipe",
+                "full" => "full-output",
                 _ if stdin_file => "ordinary-file",
                 _ => "ordinary-pipe",
             }
@@ -336,7 +337,7 @@ mod tests {
                 .iter()
                 .filter(|case| case.supported(false))
                 .count(),
-            2930
+            3002
         );
         assert_eq!(
             fixture

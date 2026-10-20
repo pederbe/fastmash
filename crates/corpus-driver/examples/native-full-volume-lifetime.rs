@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 //! Qualify Rust ownership of native full-output images, including panic cleanup.
-#[path = "../../cli/tests/support/full_volume.rs"]
-mod full_volume;
+use fastmash_corpus_driver::full_volume;
 use std::{error::Error, fs, path::PathBuf, process::Command};
 fn run() -> Result<(), Box<dyn Error>> {
     if !cfg!(panic = "unwind") {
@@ -50,6 +49,37 @@ fn run() -> Result<(), Box<dyn Error>> {
             || directory.join("full.dmg").try_exists()?
         {
             return Err("owned volume lifetime cleanup differs".into());
+        }
+    }
+    // The corpus owner must also close its selected sink before detaching,
+    // both on ordinary completion and while unwinding.
+    for unwind in [false, true] {
+        let directory = root.join(if unwind {
+            "owned-unwind"
+        } else {
+            "owned-normal"
+        });
+        let result = std::panic::catch_unwind(|| -> Result<(), Box<dyn Error>> {
+            let owner =
+                fastmash_corpus_driver::full_output::FullOutput::new(&candidate, &directory)?;
+            if unwind {
+                panic!("selected corpus-owner unwind");
+            }
+            owner.finish()?;
+            Ok(())
+        });
+        match (unwind, result) {
+            (false, Ok(result)) => result?,
+            (true, Err(error))
+                if error.downcast_ref::<&str>() == Some(&"selected corpus-owner unwind") => {}
+            (_, Ok(Err(error))) => return Err(error),
+            _ => return Err("unexpected corpus-owner unwind result".into()),
+        }
+        if !directory.join("volume/cleanup.ok").is_file()
+            || directory.join("volume/mount").try_exists()?
+            || directory.join("volume/full.dmg").try_exists()?
+        {
+            return Err("corpus full-output lifetime cleanup differs".into());
         }
     }
     println!("ordinary and unwind lifetime controls matched actual full-output observations");

@@ -21,6 +21,8 @@ fn main() {
         "wrong-output" => println!("incorrect"),
         "wrong-error" => eprintln!("incorrect"),
         "wrong-status" => std::process::exit(17),
+        // Deliberately reject the ordinary full-output calibration control.
+        "count" => std::process::exit(17),
         "version" => println!("fastmash 0.2.0"),
         "early-close" => println!("early"),
         "directory-input" => {

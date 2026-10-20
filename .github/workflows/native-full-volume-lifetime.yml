@@ -2,7 +2,7 @@ name: Native full-volume lifetime
 
 on:
   push:
-    branches: [contrib/native-full-volume-lifetime, contrib/native-full-output-controls]
+    branches: [contrib/native-full-volume-lifetime, contrib/native-full-output-controls, contrib/rust-full-output-corpus]
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ defaults:
 jobs:
   probe:
     name: Full-volume lifetime on ${{ matrix.os }} with Rust ${{ matrix.rust }}
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -55,28 +55,29 @@ jobs:
             rustc -Vv
             cargo -V
           } > "$captures/identity.txt"
-          shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/corpus-driver/Cargo.toml crates/corpus-driver/examples/native-full-output.rs crates/corpus-driver/examples/native-full-volume-lifetime.rs crates/cli/tests/support/full_volume.rs > "$captures/inputs.sha256"
+          shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/corpus-driver/Cargo.toml crates/corpus-driver/examples/native-full-output.rs crates/corpus-driver/examples/native-full-volume-lifetime.rs crates/corpus-driver/src/*.rs > "$captures/inputs.sha256"
       - name: Build candidate and safe mechanism probe
         timeout-minutes: 10
         run: |
           cargo clippy --locked -p fastmash-corpus-driver --example native-full-output --example native-full-volume-lifetime -- -D warnings > "$CAPTURES/clippy.log" 2>&1
           cargo build --release --locked -p fastmash --bin fastmash > "$CAPTURES/candidate-build.log" 2>&1
-          cargo build --release --locked -p fastmash-corpus-driver --example native-full-output > "$CAPTURES/probe-build.log" 2>&1
+          cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-corpus --example native-full-output > "$CAPTURES/probe-build.log" 2>&1
           shasum -a 256 target/release/fastmash > "$CAPTURES/candidate-before-lifetime.sha256"
           CARGO_PROFILE_RELEASE_PANIC=unwind cargo build --release --locked -p fastmash-corpus-driver --example native-full-volume-lifetime > "$CAPTURES/lifetime-build.log" 2>&1
           printf 'candidate: ordinary release panic=abort\nlifetime control only: CARGO_PROFILE_RELEASE_PANIC=unwind\n' > "$CAPTURES/panic-builds.txt"
           shasum -a 256 -c "$CAPTURES/candidate-before-lifetime.sha256"
-          shasum -a 256 target/release/fastmash target/release/examples/native-full-output target/release/examples/native-full-volume-lifetime > "$CAPTURES/binaries.sha256"
+          shasum -a 256 target/release/fastmash target/release/fastmash-corpus target/release/examples/native-full-output target/release/examples/native-full-volume-lifetime > "$CAPTURES/binaries.sha256"
       - name: Observe actual faults through normal and unwind cleanup
         timeout-minutes: 6
         run: |
           cleanup() {
             result=$?
             trap - EXIT
-            for label in normal unwind; do
+            for label in normal unwind owned-normal/volume owned-unwind/volume; do
               mount="$CAPTURES/lifetimes/$label/mount"
+              capture_label="${label//\//-}"
               if test -d "$mount"; then
-                if ! hdiutil detach -force "$mount" > "$CAPTURES/fallback-$label.stdout" 2> "$CAPTURES/fallback-$label.stderr"; then
+                if ! hdiutil detach -force "$mount" > "$CAPTURES/fallback-$capture_label.stdout" 2> "$CAPTURES/fallback-$capture_label.stderr"; then
                   result=1
                 fi
               fi
@@ -90,6 +91,27 @@ jobs:
           test "$result" = 0
           test -f "$CAPTURES/lifetimes/normal/cleanup.ok"
           test -f "$CAPTURES/lifetimes/unwind/cleanup.ok"
+          test -f "$CAPTURES/lifetimes/owned-normal/volume/cleanup.ok"
+          test -f "$CAPTURES/lifetimes/owned-unwind/volume/cleanup.ok"
+      - name: Check the frozen corpus through the actual full destination
+        timeout-minutes: 4
+        run: |
+          cleanup() {
+            result=$?
+            trap - EXIT
+            mount="$CAPTURES/corpus/full-output/volume/mount"
+            if test -d "$mount"; then
+              if ! hdiutil detach -force "$mount" > "$CAPTURES/corpus-fallback.stdout" 2> "$CAPTURES/corpus-fallback.stderr"; then
+                result=1
+              fi
+            fi
+            exit "$result"
+          }
+          trap cleanup EXIT
+          target/release/fastmash-corpus --binary "$PWD/target/release/fastmash" --expected-version 0.2.0 --keep-going --evidence-dir "$CAPTURES/corpus" > "$CAPTURES/corpus.stdout" 2> "$CAPTURES/corpus.stderr"
+          test -f "$CAPTURES/corpus/full-output/volume/cleanup.ok"
+          test -f "$CAPTURES/corpus/full-output/finished"
+          target/release/fastmash-corpus --binary "$PWD/target/release/fastmash" --expected-version 0.2.0 --stdin-file --evidence-dir "$CAPTURES/corpus-file" > "$CAPTURES/corpus-file.stdout" 2> "$CAPTURES/corpus-file.stderr"
       - name: Verify unchanged inputs
         run: |
           shasum -a 256 -c "$CAPTURES/inputs.sha256"

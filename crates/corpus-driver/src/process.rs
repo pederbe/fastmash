@@ -110,6 +110,7 @@ pub(crate) fn invoke(
     launcher: &Path,
     directory: &Path,
     stdin_file: bool,
+    full: Option<&mut crate::full_output::FullOutput>,
 ) -> Result<Observed> {
     require_unblocked_signals()?;
     let args = case.arguments()?;
@@ -131,7 +132,14 @@ pub(crate) fn invoke(
     } else {
         Stdio::piped()
     };
-    let destination = if case.io == "closed-pipe" {
+    let mut full = full;
+    let destination = if case.io == "full" {
+        Stdio::from(
+            full.as_mut()
+                .ok_or_else(|| Error::message("missing calibrated full output"))?
+                .destination()?,
+        )
+    } else if case.io == "closed-pipe" {
         let (reader, writer) = std::io::pipe()?;
         // No reader remains when the actual candidate inherits this writer.
         drop(reader);
@@ -224,6 +232,11 @@ pub(crate) fn invoke(
         None => child.child.wait()?,
     };
     child.reaped = true;
+    if case.io == "full" {
+        full.as_mut()
+            .ok_or_else(|| Error::message("missing calibrated full output"))?
+            .verify()?;
+    }
     stdout.rewind()?;
     stderr.rewind()?;
     let mut out = Vec::new();

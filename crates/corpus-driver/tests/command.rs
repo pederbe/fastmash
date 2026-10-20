@@ -294,13 +294,30 @@ fn directory_and_closed_pipe_faults_are_real_and_keep_other_io_intact() {
 }
 
 #[test]
+fn full_output_refuses_a_candidate_that_fails_ordinary_calibration() {
+    let mut full = case("full", "echo", b"", b"", b"", 0);
+    full["io"] = json!("full");
+    let run = TestRun::new(&[full]);
+    let evidence = run.evidence();
+    let output = run.run(&["--evidence-dir", evidence.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("ordinary candidate control differs"));
+    assert!(!evidence.join("result.json").exists());
+    assert!(
+        evidence
+            .join("full-output/observations/ordinary-count/observed.json")
+            .is_file()
+    );
+}
+
+#[test]
 fn transport_dispositions_account_for_held_normal_cases_in_both_modes() {
     let mut held = case("held", "sleep", b"", b"", b"", 0);
     held["hold_stdin"] = json!(true);
     let mut observed = case("observe", "sleep", b"", b"", b"", 0);
     observed["observe_held"] = json!({"bytes":0});
     let mut fault = case("fault", "sleep", b"", b"", b"", 0);
-    fault["io"] = json!("full");
+    fault["io"] = json!("read-error");
     for file in [false, true] {
         let run = TestRun::new(&[
             held.clone(),
