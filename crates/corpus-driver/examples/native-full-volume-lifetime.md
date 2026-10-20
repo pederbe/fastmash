@@ -29,6 +29,12 @@ allows 90 seconds for that probe and 15 seconds for each image utility. Cleanup
 failure fails the control and preserves its logs and image path. Successful
 normal and unwind controls each retain a `cleanup.ok` receipt.
 
+A second pair exercises the corpus driver's `FullOutput` owner directly. Its
+selected sink must close before the image detaches, on both completion and
+unwinding. These controls retain `volume/cleanup.ok` below `owned-normal` and
+`owned-unwind`. The native workflow also runs the frozen corpus through that
+owner with both input modes, retaining the calibration and cleanup records.
+
 Cleanup force-detaches only the private mount created by that control, after
 the probe and its candidates have exited and been reaped. Ordinary detach can
 report a busy volume at this point on macOS. All captures remain outside the
