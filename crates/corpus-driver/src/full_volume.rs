@@ -203,8 +203,23 @@ fn wait_for_attachment(
     })
 }
 
-fn detachment_proven(_successful: bool, _requested_device: Option<&Path>) -> io::Result<bool> {
-    Ok(true)
+// Called only after a fresh inventory omits the owned image. A requested
+// device path is observed for absence, never reused as detach authority.
+fn detachment_proven(successful: bool, requested_device: Option<&Path>) -> io::Result<bool> {
+    if successful {
+        return Ok(true);
+    }
+    let Some(device) = requested_device else {
+        return Ok(false);
+    };
+    let absent = !device.try_exists()?;
+    if absent {
+        eprintln!(
+            "[DEBUG-full-cleanup] requested device absent {}",
+            device.display()
+        );
+    }
+    Ok(absent)
 }
 
 pub struct FullVolume {
@@ -295,7 +310,7 @@ impl FullVolume {
                 if !status.success() && status.code() != Some(16) {
                     return Err(io::Error::other(format!("hdiutil detach: {status}")));
                 }
-                successful_detach |= status.success();
+                successful_detach = status.success();
                 requested_device = Some(PathBuf::from(device));
                 // Success still needs a fresh native absence observation.
                 return Ok(false);
@@ -504,6 +519,12 @@ mod tests {
         let mount = directory.path.join("unmounted-directory");
         fs::create_dir(&mount).unwrap();
         fs::write(&device, b"still present").unwrap();
+        fs::remove_dir(&mount).unwrap();
+        let image = directory.path.join("backing-image");
+        fs::write(&image, b"still open").unwrap();
+        let held = File::open(&image).unwrap();
+        fs::remove_file(&image).unwrap();
+        assert_eq!(held.metadata().unwrap().len(), 10);
         assert!(!detachment_proven(false, None).unwrap());
         assert!(!detachment_proven(false, Some(&device)).unwrap());
         fs::remove_file(&device).unwrap();
