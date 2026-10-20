@@ -229,29 +229,45 @@ pub struct FullVolume {
     attached: bool,
 }
 impl FullVolume {
-    pub fn new(root: &Path) -> io::Result<Self> {
+    fn create(
+        root: &Path,
+        create: impl FnOnce(&Path, &Path) -> io::Result<()>,
+    ) -> io::Result<Self> {
         fs::DirBuilder::new().mode(0o700).create(root)?;
         let root = root.canonicalize()?;
-        let mut volume = Self {
-            image: root.join("full.dmg"),
+        let image = root.join("full.dmg");
+        // Failed creation can leave native state that an inventory momentarily
+        // omits. Preserve its image and receipts instead of claiming cleanup.
+        create(&root, &image)?;
+        Ok(Self {
+            image,
             mount: root.join("mount"),
             root,
             attached: false,
-        };
-        utility(
-            &volume.root,
-            "create",
-            &[
-                OsStr::new("create"),
-                OsStr::new("-size"),
-                OsStr::new("8m"),
-                OsStr::new("-fs"),
-                OsStr::new("HFS+"),
-                OsStr::new("-volname"),
-                OsStr::new("FastmashFault"),
-                volume.image.as_os_str(),
-            ],
-        )?;
+        })
+    }
+
+    pub fn new(root: &Path) -> io::Result<Self> {
+        Self::with_label(root, "FastmashFault")
+    }
+    fn with_label(root: &Path, label: &str) -> io::Result<Self> {
+        let mut volume = Self::create(root, |root, image| {
+            utility(
+                root,
+                "create",
+                &[
+                    OsStr::new("create"),
+                    OsStr::new("-verbose"),
+                    OsStr::new("-size"),
+                    OsStr::new("8m"),
+                    OsStr::new("-fs"),
+                    OsStr::new("HFS+"),
+                    OsStr::new("-volname"),
+                    OsStr::new(label),
+                    image.as_os_str(),
+                ],
+            )
+        })?;
         fs::create_dir(&volume.mount)?;
         // An unsuccessful attach may already have mounted the owned image.
         // Drop must attempt cleanup before leaving its partial captures.
@@ -377,6 +393,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn failed_creation_preserves_partial_image_without_a_cleanup_claim() {
+        let directory = crate::process::Scratch::new().unwrap();
+        let root = directory.path.join("failed-creation");
+        let result = FullVolume::create(&root, |root, image| {
+            fs::write(image, b"partial native image")?;
+            fs::write(root.join("create.stderr"), b"Resource busy\n")?;
+            Err(io::Error::other("hdiutil create: exit status: 1"))
+        });
+        assert!(result.is_err());
+        assert!(!root.join("cleanup.ok").exists());
+        assert_eq!(
+            fs::read(root.join("full.dmg")).unwrap(),
+            b"partial native image"
+        );
+        assert_eq!(
+            fs::read(root.join("create.stderr")).unwrap(),
+            b"Resource busy\n"
+        );
+    }
+
+    #[test]
     #[ignore = "bounded native creation diagnostic, retains all raw receipts"]
     fn concurrent_native_creation_labels() {
         let root = PathBuf::from(std::env::var_os("FASTMASH_CREATION_PROBE").unwrap());
@@ -400,46 +437,35 @@ mod tests {
                     let directory = root.join(format!("mode-{mode}-batch-{batch}-item-{index}"));
                     fs::create_dir(&directory).unwrap();
                     let barrier = barrier.clone();
-                    children.push(thread::spawn(move || {
-                        let image = directory.join("full.dmg");
-                        fs::write(directory.join("label.txt"), &label).unwrap();
-                        barrier.wait();
-                        let status = bounded(
-                            Command::new("/usr/bin/hdiutil").args([
-                                OsStr::new("create"),
-                                OsStr::new("-verbose"),
-                                OsStr::new("-size"),
-                                OsStr::new("8m"),
-                                OsStr::new("-fs"),
-                                OsStr::new("HFS+"),
-                                OsStr::new("-volname"),
-                                OsStr::new(&label),
-                                image.as_os_str(),
-                            ]),
-                            &directory,
-                            "create",
-                            Duration::from_secs(15),
-                        );
-                        if let Err(error) = &status {
-                            fs::write(directory.join("create.error"), error.to_string()).unwrap();
-                        }
-                        let success = status.is_ok_and(|status| status.success());
-                        if !success {
-                            let _ = bounded(
-                                Command::new("/usr/bin/hdiutil").args(["info", "-plist"]),
-                                &directory,
-                                "failure-info",
-                                Duration::from_secs(15),
-                            );
-                            let _ = bounded(
-                                &mut Command::new("/sbin/mount"),
-                                &directory,
-                                "failure-mounts",
-                                Duration::from_secs(2),
-                            );
-                        }
-                        (unique, success)
-                    }));
+                    children.push((
+                        unique,
+                        thread::spawn(move || {
+                            fs::write(directory.join("label.txt"), &label).unwrap();
+                            barrier.wait();
+                            let status =
+                                FullVolume::with_label(&directory.join("volume"), &label).map(drop);
+                            if let Err(error) = &status {
+                                fs::write(directory.join("create.error"), error.to_string())
+                                    .unwrap();
+                            }
+                            let success = status.is_ok();
+                            if !success {
+                                let _ = bounded(
+                                    Command::new("/usr/bin/hdiutil").args(["info", "-plist"]),
+                                    &directory,
+                                    "failure-info",
+                                    Duration::from_secs(15),
+                                );
+                                let _ = bounded(
+                                    &mut Command::new("/sbin/mount"),
+                                    &directory,
+                                    "failure-mounts",
+                                    Duration::from_secs(2),
+                                );
+                            }
+                            (unique, success)
+                        }),
+                    ));
                 }
                 for child in children {
                     let (unique, success) = child.join().unwrap();
