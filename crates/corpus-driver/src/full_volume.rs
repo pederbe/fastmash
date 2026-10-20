@@ -229,29 +229,39 @@ pub struct FullVolume {
     attached: bool,
 }
 impl FullVolume {
-    pub fn new(root: &Path) -> io::Result<Self> {
+    fn create(
+        root: &Path,
+        create: impl FnOnce(&Path, &Path) -> io::Result<()>,
+    ) -> io::Result<Self> {
         fs::DirBuilder::new().mode(0o700).create(root)?;
         let root = root.canonicalize()?;
-        let mut volume = Self {
+        let volume = Self {
             image: root.join("full.dmg"),
             mount: root.join("mount"),
             root,
             attached: false,
         };
-        utility(
-            &volume.root,
-            "create",
-            &[
-                OsStr::new("create"),
-                OsStr::new("-size"),
-                OsStr::new("8m"),
-                OsStr::new("-fs"),
-                OsStr::new("HFS+"),
-                OsStr::new("-volname"),
-                OsStr::new("FastmashFault"),
-                volume.image.as_os_str(),
-            ],
-        )?;
+        create(&volume.root, &volume.image)?;
+        Ok(volume)
+    }
+
+    pub fn new(root: &Path) -> io::Result<Self> {
+        let mut volume = Self::create(root, |root, image| {
+            utility(
+                root,
+                "create",
+                &[
+                    OsStr::new("create"),
+                    OsStr::new("-size"),
+                    OsStr::new("8m"),
+                    OsStr::new("-fs"),
+                    OsStr::new("HFS+"),
+                    OsStr::new("-volname"),
+                    OsStr::new("FastmashFault"),
+                    image.as_os_str(),
+                ],
+            )
+        })?;
         fs::create_dir(&volume.mount)?;
         // An unsuccessful attach may already have mounted the owned image.
         // Drop must attempt cleanup before leaving its partial captures.
@@ -375,6 +385,27 @@ impl Drop for FullVolume {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_creation_preserves_partial_image_without_a_cleanup_claim() {
+        let directory = crate::process::Scratch::new().unwrap();
+        let root = directory.path.join("failed-creation");
+        let result = FullVolume::create(&root, |root, image| {
+            fs::write(image, b"partial native image")?;
+            fs::write(root.join("create.stderr"), b"Resource busy\n")?;
+            Err(io::Error::other("hdiutil create: exit status: 1"))
+        });
+        assert!(result.is_err());
+        assert!(!root.join("cleanup.ok").exists());
+        assert_eq!(
+            fs::read(root.join("full.dmg")).unwrap(),
+            b"partial native image"
+        );
+        assert_eq!(
+            fs::read(root.join("create.stderr")).unwrap(),
+            b"Resource busy\n"
+        );
+    }
 
     fn info(images: &str) -> Value {
         Value::from_reader_xml(format!(
