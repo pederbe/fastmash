@@ -80,3 +80,12 @@ upstream [package declaration](https://docs.rs/crate/nix/0.31.3/source/Cargo.tom
 [session API](https://docs.rs/nix/0.31.3/nix/unistd/fn.setsid.html) and
 [process-group signal implementation](https://github.com/nix-rust/nix/blob/v0.31.3/src/sys/signal.rs)
 describe those contracts.
+
+`fastmash-test-process` prepares direct native stream tests in a fresh process.
+It sets an alarm and a selected signal mask, creates a real broken output pipe
+when requested, then replaces itself with the actual executable. It preserves
+raw argument and environment bytes, PID, descriptors and final signal status.
+Private setup variables are removed from the candidate environment. Ordinary
+execution uses `Command::exec`; the inherited-ignored-SIGPIPE control uses safe
+POSIX `execve` to retain Rust's ignored disposition, calibrated by an actual
+failed pipe write. The launcher and migrated stream suite forbid unsafe code.
