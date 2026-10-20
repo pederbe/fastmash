@@ -93,3 +93,33 @@ fn sixty_second_bound_survives_exec_and_invalid_bounds_are_rejected() {
         assert!(String::from_utf8_lossy(&output.stderr).contains("between 1 and 60 seconds"));
     }
 }
+
+#[test]
+fn resource_limits_apply_to_the_target_without_private_environment() {
+    let limits = [
+        ("FASTMASH_TEST_PROCESS_FILE_SIZE", "file_size", 8192u64),
+        #[cfg(target_os = "linux")]
+        (
+            "FASTMASH_TEST_PROCESS_ADDRESS_SPACE",
+            "address_space",
+            512 << 20,
+        ),
+    ];
+    for (variable, field, limit) in limits {
+        let output = command(5, "resource-facts")
+            .env(variable, limit.to_string())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(output.stderr.is_empty());
+        let facts: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(facts[field], serde_json::json!([limit, limit]));
+        assert_eq!(facts["private_environment_present"], false);
+        let output = command(5, "resource-facts")
+            .env(variable, "invalid")
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+    }
+}

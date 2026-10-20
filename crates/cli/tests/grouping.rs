@@ -1,6 +1,6 @@
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
+#![forbid(unsafe_code)]
+#[path = "support/full_output.rs"]
+mod full_output;
 #[path = "support/process.rs"]
 mod process;
 #[path = "support/temp_dir.rs"]
@@ -23,11 +23,8 @@ fn invoke_at(
     temporary: Option<&std::path::Path>,
     full: bool,
 ) -> Output {
-    let path = std::env::temp_dir().join(format!(
-        "grouping-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let fixture = temp_dir::TempDir::new(&format!("grouping-{:?}", std::thread::current().id()));
+    let path = fixture.0.join("input");
     fs::write(&path, input).unwrap();
     let mut command = process::bounded(binary, 30);
     command
@@ -42,14 +39,16 @@ fn invoke_at(
         .env("FASTMASH_GROUPING", "sort")
         .env("FASTMASH_SORT_MEMORY_BYTES", memory)
         .stdin(fs::File::open(&path).unwrap())
-        .full_stdout(full)
         .stderr(Stdio::piped());
     if let Some(temporary) = temporary {
         command.env("TMPDIR", temporary);
     }
-    let result = command.output().unwrap();
-    fs::remove_file(path).unwrap();
-    result
+    full_output::output(
+        command,
+        binary,
+        full,
+        &fixture.0.with_extension("full-output"),
+    )
 }
 fn candidate() -> std::ffi::OsString {
     std::env::var_os("FASTMASH_GROUP_TEST_BINARY")
@@ -462,44 +461,28 @@ fn native_variable_allocation_refusal_is_explicit() {
 
 #[test]
 fn spill_write_failure_does_not_leave_named_files() {
-    use std::os::unix::process::{CommandExt, ExitStatusExt};
     let directory = temp_dir::TempDir::new("grouping-file-limit");
     let input = directory.0.join("input");
     fs::write(&input, b"a\ttranscript\n".repeat(10_000)).unwrap();
     let temporary = directory.0.join("spill");
     fs::create_dir(&temporary).unwrap();
-    let mut command = Command::new(candidate());
+    let mut command = process::native(candidate(), 30);
     command
         .args(["-s", "-g", "1", "count", "2"])
         .env_clear()
         .env("LC_ALL", "C")
         .env("FASTMASH_GROUPING", "sort")
         .env("FASTMASH_SORT_MEMORY_BYTES", "1024")
-        .env("TMPDIR", &temporary)
-        .stdin(fs::File::open(input).unwrap());
-    // SAFETY: setrlimit and sigaction are async-signal-safe. The initialized
-    // action gives the child the ordinary file-size-limit signal behavior.
-    unsafe {
-        command.pre_exec(|| {
-            let limit = libc::rlimit {
-                rlim_cur: 8192,
-                rlim_max: 8192,
-            };
-            if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            let mut action: libc::sigaction = std::mem::zeroed();
-            action.sa_sigaction = libc::SIG_DFL;
-            libc::sigemptyset(&mut action.sa_mask);
-            if libc::sigaction(libc::SIGXFSZ, &action, std::ptr::null_mut()) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            libc::alarm(30);
-            Ok(())
-        });
-    }
-    let out = command.output().unwrap();
-    assert_eq!(out.status.signal(), Some(libc::SIGXFSZ), "{out:?}");
+        .env("TMPDIR", &temporary);
+    let (status, stdout, stderr) =
+        process::file_size_output(command, fs::File::open(input).unwrap(), 8192);
+    assert!(
+        matches!(
+            status,
+            nix::sys::wait::WaitStatus::Signaled(_, nix::sys::signal::Signal::SIGXFSZ, _)
+        ),
+        "{status:?}: stdout={stdout:?} stderr={stderr:?}"
+    );
     assert_eq!(fs::read_dir(temporary).unwrap().count(), 0);
 }
 
@@ -894,11 +877,10 @@ fn a_restart_reads_standard_input_from_where_the_command_began() {
 #[cfg(target_os = "linux")]
 fn paused_language_sort(limit: u64, environment: &[(&str, &str)]) -> u64 {
     use std::io::Write;
-    use std::os::unix::process::CommandExt;
     let rows: Vec<u8> = (0..300_000u32)
         .flat_map(|n| format!("k{:05}\t{}\n", n * 7919 % 20_000, n % 1000).into_bytes())
         .collect();
-    let mut command = Command::new(candidate());
+    let mut command = process::native(candidate(), 60);
     command
         .args(["-s", "-g", "1", "count", "2"])
         .env_clear()
@@ -907,24 +889,10 @@ fn paused_language_sort(limit: u64, environment: &[(&str, &str)]) -> u64 {
         .env("OMP_NUM_THREADS", "8")
         .env("TMPDIR", std::env::temp_dir())
         .envs(environment.iter().copied())
+        .env("FASTMASH_TEST_PROCESS_ADDRESS_SPACE", limit.to_string())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // SAFETY: only async-signal-safe setrlimit and alarm run between fork
-    // and exec. The alarm, which exec keeps, ends a sort that hangs.
-    unsafe {
-        command.pre_exec(move || {
-            let limit = libc::rlimit {
-                rlim_cur: limit,
-                rlim_max: limit,
-            };
-            if libc::setrlimit(libc::RLIMIT_AS, &limit) != 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            libc::alarm(60);
-            Ok(())
-        });
-    }
     let mut child = command.spawn().unwrap();
     let mut input = child.stdin.take().unwrap();
     // Once the sort has read most of two thirds of the rows, it has

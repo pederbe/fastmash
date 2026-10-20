@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 //! Child-only native stream setup, followed by exec in the same process.
+use nix::sys::resource::{Resource, setrlimit};
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, pthread_sigmask};
 use nix::unistd::{alarm, dup2_stdout, execve, pipe, write};
 use std::ffi::{CString, OsString};
@@ -10,6 +11,19 @@ use std::process::Command;
 const BLOCKED: &str = "FASTMASH_TEST_PROCESS_BLOCKED";
 const IGNORE_PIPE: &str = "FASTMASH_TEST_PROCESS_IGNORE_PIPE";
 const BROKEN_OUTPUT: &str = "FASTMASH_TEST_PROCESS_BROKEN_OUTPUT";
+const FILE_SIZE: &str = "FASTMASH_TEST_PROCESS_FILE_SIZE";
+const ADDRESS_SPACE: &str = "FASTMASH_TEST_PROCESS_ADDRESS_SPACE";
+
+fn limit(name: &str, resource: Resource) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(value) = std::env::var_os(name) {
+        let value = value
+            .to_str()
+            .ok_or("invalid test-process resource limit")?
+            .parse()?;
+        setrlimit(resource, value, value)?;
+    }
+    Ok(())
+}
 
 fn selected(name: &str) -> Result<bool, Box<dyn std::error::Error>> {
     match std::env::var_os(name) {
@@ -51,6 +65,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         mask.add(signal);
     }
     pthread_sigmask(SigmaskHow::SIG_SETMASK, Some(&mask), None)?;
+    limit(FILE_SIZE, Resource::RLIMIT_FSIZE)?;
+    #[cfg(target_os = "linux")]
+    limit(ADDRESS_SPACE, Resource::RLIMIT_AS)?;
+    #[cfg(target_os = "macos")]
+    if std::env::var_os(ADDRESS_SPACE).is_some() {
+        return Err("test-process address-space fixture requires Linux".into());
+    }
     alarm::set(seconds);
     if broken {
         // This fresh process owns both endpoints. No other test can retain a
@@ -73,9 +94,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         let mut environment = Vec::new();
         for (key, value) in std::env::vars_os() {
-            if [BLOCKED, IGNORE_PIPE, BROKEN_OUTPUT]
-                .iter()
-                .any(|name| key == *name)
+            if [
+                BLOCKED,
+                IGNORE_PIPE,
+                BROKEN_OUTPUT,
+                FILE_SIZE,
+                ADDRESS_SPACE,
+            ]
+            .iter()
+            .any(|name| key == *name)
             {
                 continue;
             }
@@ -93,6 +120,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .env_remove(BLOCKED)
         .env_remove(IGNORE_PIPE)
         .env_remove(BROKEN_OUTPUT)
+        .env_remove(FILE_SIZE)
+        .env_remove(ADDRESS_SPACE)
         .exec();
     Err(error.into())
 }
