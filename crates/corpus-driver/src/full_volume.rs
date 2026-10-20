@@ -445,7 +445,7 @@ mod tests {
                             let status =
                                 FullVolume::with_label(&directory.join("volume"), &label).map(drop);
                             if let Err(error) = &status {
-                                fs::write(directory.join("create.error"), error.to_string())
+                                fs::write(directory.join("lifecycle.error"), error.to_string())
                                     .unwrap();
                             }
                             let success = status.is_ok();
@@ -479,7 +479,7 @@ mod tests {
                 )
                 .unwrap();
                 eprintln!(
-                    "creation failures mode={mode} after batch {batch}: fixed={} unique={}",
+                    "lifecycle failures mode={mode} after batch {batch}: fixed={} unique={}",
                     failures[mode][0], failures[mode][1]
                 );
             }
