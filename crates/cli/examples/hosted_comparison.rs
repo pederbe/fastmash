@@ -1,6 +1,7 @@
 //! Representative same-runner comparisons, scoped to the hosted machine.
 //! Usage: hosted_comparison FASTMASH GNU WORK_DIRECTORY [RECORDS] [SAMPLES]
 //! Output eligibility is checked before timing; no release threshold is implied.
+#![forbid(unsafe_code)]
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
@@ -131,6 +132,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     for (name, input, arguments) in [
+        ("reverse-fields", &arithmetic, vec!["reverse"]),
         ("sum-and-mean", &arithmetic, vec!["sum", "1", "mean", "2"]),
         ("grouped-sum", &grouped, vec!["-sg1", "sum", "2"]),
         ("grouped-median", &grouped, vec!["-sg1", "median", "2"]),
