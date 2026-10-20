@@ -56,12 +56,14 @@ jobs:
       - name: Build candidate and safe launcher
         run: |
           cargo build --release --locked -p fastmash --bin fastmash -p fastmash-corpus-driver --bin fastmash-test-process > "$CAPTURES/build.log" 2>&1
-          shasum -a 256 target/release/fastmash target/release/fastmash-test-process > "$CAPTURES/binaries.sha256"
+          mkdir "$CAPTURES/bin"
+          cp target/release/fastmash target/release/fastmash-test-process "$CAPTURES/bin/"
+          shasum -a 256 "$CAPTURES/bin/fastmash" "$CAPTURES/bin/fastmash-test-process" > "$CAPTURES/binaries.sha256"
       - name: Verify launcher controls and executed native streams
         timeout-minutes: 3
         run: |
           cargo test --locked -p fastmash-corpus-driver --test test_process -- --nocapture > "$CAPTURES/launcher-tests.log" 2>&1
-          FASTMASH_TEST_BINARY="$PWD/target/release/fastmash" cargo test --release --locked -p fastmash --test native_streams -- --nocapture > "$CAPTURES/native-streams.log" 2>&1
+          FASTMASH_TEST_BINARY="$CAPTURES/bin/fastmash" FASTMASH_TEST_PROCESS="$CAPTURES/bin/fastmash-test-process" cargo test --release --locked -p fastmash --test native_streams -- --nocapture > "$CAPTURES/native-streams.log" 2>&1
           shasum -a 256 -c "$CAPTURES/inputs.sha256"
           shasum -a 256 -c "$CAPTURES/binaries.sha256"
       - name: Retain native observations
