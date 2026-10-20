@@ -2,7 +2,7 @@ name: Native safe stream launcher
 
 on:
   push:
-    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams, contrib/safe-quantile-test-streams, contrib/safe-grouping-test-streams, contrib/safe-summary-test-streams, contrib/safe-report-test-streams, contrib/safe-weighted-test-streams, contrib/safe-buffered-input-tests, contrib/safe-record-test-streams]
+    branches: [contrib/safe-native-stream-launcher, contrib/safe-text-test-streams, contrib/safe-quantile-test-streams, contrib/safe-grouping-test-streams, contrib/safe-summary-test-streams, contrib/safe-report-test-streams, contrib/safe-weighted-test-streams, contrib/safe-buffered-input-tests, contrib/safe-record-test-streams, contrib/diagnose-native-volume-cleanup]
 
 permissions:
   contents: read
@@ -27,8 +27,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26]
-        rust: ['1.88.0', '1.98.1']
+        os: [macos-26]
+        rust: ['1.98.1']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,21 +62,23 @@ jobs:
       - name: Verify launcher controls and executed native streams
         timeout-minutes: 6
         run: |
-          cargo test --locked -p fastmash-corpus-driver --test test_process -- --nocapture > "$CAPTURES/launcher-tests.log" 2>&1
-          cargo test --release --locked -p fastmash-corpus-driver --test command -- --nocapture > "$CAPTURES/corpus-command-tests.log" 2>&1
-          export FASTMASH_TEST_BINARY="$CAPTURES/bin/fastmash"
-          export FASTMASH_QUANTILE_TEST_BINARY="$CAPTURES/bin/fastmash"
-          export FASTMASH_SUM_MEAN_TEST_BINARY="$CAPTURES/bin/fastmash"
-          export FASTMASH_TEST_CORPUS="$CAPTURES/bin/fastmash-corpus"
-          export FASTMASH_TEST_PROCESS="$CAPTURES/bin/fastmash-test-process"
-          export FASTMASH_RECORD_FAULT_EVIDENCE="$CAPTURES/record-full-output"
-          mkdir "$FASTMASH_RECORD_FAULT_EVIDENCE"
-          cargo test --release --locked -p fastmash --test native_streams --test text_summaries --test quantiles --test grouping --test dispersion --test extrema --test sum_mean --test presentation --test selectors --test weighted_mean --test csv_input --test record_separators -- --nocapture > "$CAPTURES/native-streams.log" 2>&1
-          cargo test --release --locked -p fastmash --test text_summaries installed_sorted_wide_headers_keys_and_group_resets -- --ignored --nocapture > "$CAPTURES/prepared-text.log" 2>&1
-          cargo test --release --locked -p fastmash --test quantiles prepared_sorted_headers_share_quantiles -- --ignored --nocapture > "$CAPTURES/prepared-quantiles.log" 2>&1
-          cargo test --release --locked -p fastmash --test sum_mean sorted_wide_headers_comments_and_named_fields -- --ignored --nocapture > "$CAPTURES/prepared-sum-mean.log" 2>&1
+          export FASTMASH_TEST_BINARY="$PWD/target/release/fastmash"
+          export FASTMASH_TEST_CORPUS="$PWD/target/release/fastmash-corpus"
+          export FASTMASH_TEST_PROCESS="$PWD/target/release/fastmash-test-process"
+          for attempt in 1 2 3; do
+            cargo test --release --locked -p fastmash --test record_separators -- --nocapture > "$CAPTURES/record-attempt-$attempt.log" 2>&1
+          done
           shasum -a 256 -c "$CAPTURES/inputs.sha256"
           shasum -a 256 -c "$CAPTURES/binaries.sha256"
+      - name: Collect failed full-volume receipts
+        if: always()
+        run: |
+          mkdir "$CAPTURES/failed-full-output"
+          shopt -s nullglob
+          for root in /private/tmp/fastmash-test-*.full-output; do
+            test -d "$root" && test ! -L "$root"
+            rsync -a --exclude=full.dmg --exclude=mount "$root" "$CAPTURES/failed-full-output/"
+          done
       - name: Retain native observations
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

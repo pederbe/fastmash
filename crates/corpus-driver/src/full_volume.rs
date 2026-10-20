@@ -300,16 +300,44 @@ impl FullVolume {
             self.attached = false;
         }
         if self.mount.try_exists()? {
-            fs::remove_dir(&self.mount)?;
+            fs::remove_dir(&self.mount)
+                .map_err(|error| self.cleanup_failure("remove-mount", error))?;
         }
         if self.image.try_exists()? {
-            fs::remove_file(&self.image)?;
+            fs::remove_file(&self.image)
+                .map_err(|error| self.cleanup_failure("remove-image", error))?;
         }
         fs::write(
             self.root.join("cleanup.ok"),
             b"owned image absent from native attachment list and removed\n",
         )?;
         Ok(())
+    }
+
+    fn cleanup_failure(&self, stage: &str, error: io::Error) -> io::Error {
+        let detail = format!(
+            "[DEBUG-full-cleanup] stage={stage} errno={:?} root={} error={error}\n",
+            error.raw_os_error(),
+            self.root.display(),
+        );
+        eprint!("{detail}");
+        let _ = fs::write(self.root.join("cleanup-failure.txt"), detail);
+        let _ = bounded(
+            Command::new("/sbin/mount"),
+            &self.root,
+            "cleanup-mounts",
+            Duration::from_secs(2),
+        );
+        let _ = bounded(
+            Command::new("/usr/sbin/lsof")
+                .args([OsStr::new("-nP"), OsStr::new("+D")])
+                .arg(&self.mount)
+                .arg(&self.image),
+            &self.root,
+            "cleanup-path-holders",
+            Duration::from_secs(2),
+        );
+        error
     }
 }
 impl Drop for FullVolume {
