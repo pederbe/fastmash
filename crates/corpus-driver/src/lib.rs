@@ -6,6 +6,7 @@
 pub mod fixture;
 pub mod full_output;
 pub mod full_volume;
+mod held_output;
 mod process;
 
 use fixture::{Fixture, digest};
@@ -181,7 +182,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
         deferred_cases: excluded.len(),
     };
     for case in cases {
-        let expected = case.expected(&options.root, options.expected_version.as_deref())?;
+        let mut expected = case.expected(&options.root, options.expected_version.as_deref())?;
         result.attempted += 1;
         let observed = invoke(
             case,
@@ -191,14 +192,20 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
             options.stdin_file,
             full.as_mut(),
         )?;
-        let passed = observed.matches(&expected);
+        case.adapt_native_buffer(&mut expected, observed.destination.as_ref())?;
+        let passed =
+            observed.matches(&expected) && (!case.hold_stdin || observed.stdin_held_until_exit);
         if let Some(directory) = &options.evidence_dir {
             let mut outcomes = OpenOptions::new()
                 .append(true)
                 .create(true)
                 .open(directory.join("cases.jsonl"))?;
             write_line(&mut outcomes, &json!({"id":case.id, "passed":passed}))?;
-            if !passed || !case.native_dispositions().is_empty() {
+            if !passed
+                || case.hold_stdin
+                || case.observes_held()
+                || !case.native_dispositions().is_empty()
+            {
                 let mut observations = OpenOptions::new()
                     .append(true)
                     .create(true)
@@ -321,7 +328,7 @@ pub fn main_entry(mut args: impl Iterator<Item = OsString>) -> Result<i32> {
         match arg.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Run frozen Fastmash commands and supported transports.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n  --fixture PATH          compressed corpus and sibling provenance\n  --match TEXT            select case IDs containing TEXT\n  --expected-version V    successful version-action expectation\n  --stdin-file            ordinary input through a regular file\n  --keep-going            continue after mismatches\n  --evidence-dir PATH     retain one run in an empty directory\n\nDirectory input, closed output pipes and full-output cases run by default. Remaining transports stay in the full Python corpus run."
+                    "Run frozen Fastmash commands and supported transports.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n  --fixture PATH          compressed corpus and sibling provenance\n  --match TEXT            select case IDs containing TEXT\n  --expected-version V    successful version-action expectation\n  --stdin-file            ordinary input through a regular file\n  --keep-going            continue after mismatches\n  --evidence-dir PATH     retain one run in an empty directory\n\nHeld stdin and pre-EOF output observations run by default alongside directory input, closed output pipes and full-output cases. Late-input errors remain in the full Python corpus run."
                 );
                 return Ok(0);
             }

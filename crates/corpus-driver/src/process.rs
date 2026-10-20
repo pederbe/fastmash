@@ -1,4 +1,5 @@
-use crate::fixture::{Case, Expected, decode, encode};
+use crate::fixture::{Case, Expected, Held, decode, encode};
+use crate::held_output::{Destination, Streaming};
 use crate::{Error, Result};
 use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
@@ -37,6 +38,11 @@ pub struct Observed {
     pub timed_out: bool,
     pub overflow: bool,
     pub cleanup_confirmed: bool,
+    pub stdin_held_until_exit: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub held: Option<Held>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub destination: Option<Destination>,
     pub stdout_hex: String,
     pub stderr_hex: String,
 }
@@ -49,6 +55,7 @@ impl Observed {
             && self.returncode == expected.returncode
             && self.stdout_hex == expected.stdout_hex
             && normalize_sort_name(&self.stderr_hex) == expected.stderr_hex
+            && self.held == expected.held
     }
 }
 
@@ -133,7 +140,24 @@ pub(crate) fn invoke(
         Stdio::piped()
     };
     let mut full = full;
-    let destination = if case.io == "full" {
+    let (mut streaming, streaming_destination, facts) =
+        if case.observes_held() && matches!(case.io.as_str(), "pipe" | "pty") {
+            let (stream, destination, facts) = Streaming::new(case.io == "pty")?;
+            (Some(stream), Some(destination), Some(facts))
+        } else {
+            (
+                None,
+                None,
+                if case.observes_held() {
+                    Some(crate::held_output::destination(&stdout)?)
+                } else {
+                    None
+                },
+            )
+        };
+    let destination = if let Some(destination) = streaming_destination {
+        destination
+    } else if case.io == "full" {
         Stdio::from(
             full.as_mut()
                 .ok_or_else(|| Error::message("missing calibrated full output"))?
@@ -183,6 +207,8 @@ pub(crate) fn invoke(
     let mut status = None;
     let mut timed_out = false;
     let mut overflow = false;
+    let mut observation_end = None;
+    let mut held = None;
     loop {
         if let Some(stdin) = &mut input {
             if written < data.len() {
@@ -202,7 +228,11 @@ pub(crate) fn invoke(
                 }
             }
             if written == data.len() {
-                input = None;
+                if case.observes_held() {
+                    observation_end.get_or_insert_with(|| Instant::now() + Duration::from_secs(2));
+                } else if !case.hold_stdin {
+                    input = None;
+                }
             }
         }
         if status.is_none() {
@@ -210,7 +240,27 @@ pub(crate) fn invoke(
             child.reaped = status.is_some();
         }
         overflow |= stdout.metadata()?.len() > CAP || stderr.metadata()?.len() > CAP;
-        if status.is_some() && input.is_none() {
+        if let Some(streaming) = &mut streaming {
+            streaming.drain(CAP as usize)?;
+            overflow |= streaming.bytes.len() as u64 > CAP;
+        }
+        if held.is_none() && observation_end.is_some_and(|end| Instant::now() >= end) {
+            let bytes = if let Some(streaming) = &streaming {
+                streaming.bytes.clone()
+            } else {
+                crate::held_output::snapshot(&stdout, CAP as usize)?
+            };
+            overflow |= bytes.len() as u64 > CAP;
+            held = Some(Held {
+                bytes: bytes.len(),
+                alive: status.is_none(),
+                stdout_hex: streaming.as_ref().map(|_| encode(&bytes)),
+            });
+            // Only the observed two-second phase holds EOF back. After its
+            // snapshot the command must finish and match the frozen result.
+            input = None;
+        }
+        if status.is_some() && (input.is_none() || case.hold_stdin || case.observes_held()) {
             break;
         }
         if started.elapsed() >= DEADLINE {
@@ -225,6 +275,7 @@ pub(crate) fn invoke(
     // Kill the whole session's group even if its leader has already exited.
     // A descendant may still hold stdin open or be writing a capture file.
     // The direct child kill also covers launch failure before setsid completes.
+    let stdin_held_until_exit = case.hold_stdin && status.is_some() && input.is_some();
     child.terminate()?;
     drop(input);
     let status = match status {
@@ -232,6 +283,20 @@ pub(crate) fn invoke(
         None => child.child.wait()?,
     };
     child.reaped = true;
+    if let Some(streaming) = &mut streaming {
+        let drain_end = Instant::now() + Duration::from_secs(1);
+        while !streaming.ended() && streaming.bytes.len() as u64 <= CAP {
+            streaming.drain(CAP as usize)?;
+            if Instant::now() >= drain_end {
+                return Err(Error::message(
+                    "held-output pipe did not close after group cleanup",
+                ));
+            }
+            if !streaming.ended() {
+                thread::sleep(Duration::from_millis(2));
+            }
+        }
+    }
     if case.io == "full" {
         full.as_mut()
             .ok_or_else(|| Error::message("missing calibrated full output"))?
@@ -241,7 +306,11 @@ pub(crate) fn invoke(
     stderr.rewind()?;
     let mut out = Vec::new();
     let mut err = Vec::new();
-    stdout.take(CAP + 1).read_to_end(&mut out)?;
+    if let Some(streaming) = streaming {
+        out = streaming.bytes;
+    } else {
+        stdout.take(CAP + 1).read_to_end(&mut out)?;
+    }
     stderr.take(CAP + 1).read_to_end(&mut err)?;
     overflow |= out.len() as u64 > CAP
         || err.len() as u64 > CAP
@@ -262,6 +331,9 @@ pub(crate) fn invoke(
         timed_out,
         overflow,
         cleanup_confirmed: true,
+        stdin_held_until_exit,
+        held,
+        destination: facts,
         stdout_hex: encode(&out),
         stderr_hex: encode(&err),
     })

@@ -30,6 +30,12 @@ pub const FILE_TRANSPORT_REASON: &str =
     "transport case is covered by the default Rust run, not --stdin-file";
 pub const NATIVE_REASON: &str =
     "native missing-header diagnostic replaces Linux system-sort stderr";
+pub const NATIVE_BUFFER_OBSERVATIONS: &[&str] = &[
+    "grouping-reference-r2:held-flush-pipe",
+    "grouping-reference-r2:held-flush-pipe-header",
+    "output-header-lifecycle:held-8192",
+    "header-writer-reference:pipe-large",
+];
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Case {
@@ -65,6 +71,17 @@ pub struct Expected {
     pub returncode: i32,
     pub stdout_hex: String,
     pub stderr_hex: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub held: Option<Held>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Held {
+    pub alive: bool,
+    pub bytes: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stdout_hex: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -174,12 +191,26 @@ impl Fixture {
 }
 
 impl Case {
+    pub fn observes_held(&self) -> bool {
+        self.observe_held == serde_json::Value::Bool(true)
+    }
+
     pub fn ordinary(&self) -> bool {
         self.io == "normal" && !truthy(&self.observe_held) && !self.hold_stdin
     }
 
     pub fn supported(&self, stdin_file: bool) -> bool {
         self.ordinary()
+            || (!stdin_file
+                && self.observes_held()
+                && !self.hold_stdin
+                && !self.input_hex.is_empty()
+                && matches!(self.io.as_str(), "normal" | "pipe" | "pty"))
+            || (!stdin_file
+                && self.io == "normal"
+                && self.hold_stdin
+                && self.input_hex.is_empty()
+                && !truthy(&self.observe_held))
             || (!stdin_file
                 && matches!(self.io.as_str(), "directory" | "closed-pipe" | "full")
                 && !truthy(&self.observe_held)
@@ -191,6 +222,8 @@ impl Case {
             "deferred-transport"
         } else {
             match self.io.as_str() {
+                _ if self.observes_held() => "held-output",
+                "normal" if self.hold_stdin => "held-input-pipe",
                 "directory" => "directory-input",
                 "closed-pipe" => "closed-output-pipe",
                 "full" => "full-output",
@@ -225,7 +258,22 @@ impl Case {
     }
 
     pub fn expected(&self, root: &Path, version: Option<&str>) -> Result<Expected> {
-        if !self.supported(false) || !self.expected.other.is_empty() {
+        let held = if self.observes_held() && self.expected.other.len() == 1 {
+            let value = self.expected.other.get("held").ok_or_else(|| {
+                Error::message(format!("{} has no held-output expectation", self.id))
+            })?;
+            let mut held: Held = serde_json::from_value(value.clone())?;
+            if let Some(bytes) = &mut held.stdout_hex {
+                *bytes = encode(&decode(bytes)?);
+            }
+            Some(held)
+        } else {
+            None
+        };
+        if !self.supported(false)
+            || (held.is_none() && !self.expected.other.is_empty())
+            || (self.observes_held() && held.is_none())
+        {
             return Err(Error::message(format!(
                 "{} is not a supported expectation",
                 self.id
@@ -253,15 +301,69 @@ impl Case {
             returncode: self.expected.returncode,
             stdout_hex: encode(&stdout),
             stderr_hex: encode(&stderr),
+            held,
         })
     }
 
-    pub fn native_dispositions(&self) -> Vec<&'static str> {
-        if NATIVE_SORT_DIAGNOSTICS.contains(&self.id.as_str()) {
-            vec![NATIVE_REASON]
-        } else {
-            Vec::new()
+    pub(crate) fn adapt_native_buffer(
+        &self,
+        expected: &mut Expected,
+        destination: Option<&crate::held_output::Destination>,
+    ) -> Result<()> {
+        if !cfg!(target_os = "macos") {
+            return Ok(());
         }
+        self.adapt_buffer(expected, destination)
+    }
+
+    fn adapt_buffer(
+        &self,
+        expected: &mut Expected,
+        destination: Option<&crate::held_output::Destination>,
+    ) -> Result<()> {
+        if !NATIVE_BUFFER_OBSERVATIONS.contains(&self.id.as_str()) {
+            return Ok(());
+        }
+        let destination = destination.filter(|facts| !facts.isatty).ok_or_else(|| {
+            Error::message("native held output needs nonterminal destination facts")
+        })?;
+        let capacity = if (1..8192).contains(&destination.block_size) {
+            destination.block_size as usize
+        } else {
+            8192
+        };
+        let output = decode(&expected.stdout_hex)?;
+        let before_eof = if self.id.starts_with("grouping-reference-r2:") {
+            let end = output
+                .strip_suffix(b"\n")
+                .ok_or_else(|| Error::message("group output has no final newline"))?;
+            end.iter()
+                .rposition(|byte| *byte == b'\n')
+                .map_or(0, |at| at + 1)
+        } else {
+            output.len()
+        };
+        let size = before_eof / capacity * capacity;
+        let held = expected
+            .held
+            .as_mut()
+            .ok_or_else(|| Error::message("native buffer case has no held expectation"))?;
+        held.bytes = size;
+        if let Some(prefix) = &mut held.stdout_hex {
+            *prefix = encode(&output[..size]);
+        }
+        Ok(())
+    }
+
+    pub fn native_dispositions(&self) -> Vec<&'static str> {
+        let mut reasons = Vec::new();
+        if NATIVE_SORT_DIAGNOSTICS.contains(&self.id.as_str()) {
+            reasons.push(NATIVE_REASON);
+        }
+        if cfg!(target_os = "macos") && NATIVE_BUFFER_OBSERVATIONS.contains(&self.id.as_str()) {
+            reasons.push("held prefix uses native destination block size; completed stdout and status frozen");
+        }
+        reasons
     }
 }
 
@@ -314,6 +416,59 @@ pub fn decode(text: &str) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn native_buffer_prefix_uses_frozen_bytes_and_only_named_destination_facts() {
+        use crate::held_output::Destination;
+        let mut case: Case = serde_json::from_value(serde_json::json!({
+            "id":"grouping-reference-r2:held-flush-pipe", "io":"pipe", "locale":"C",
+            "observe_held":true,"args_hex":["636f756e74","31"],"input_hex":"780a",
+            "expected":{"returncode":0,"stdout_hex":encode(b"first\nlast\n"),"stderr_hex":"",
+                "held":{"alive":true,"bytes":6,"stdout_hex":encode(b"first\n")}}
+        }))
+        .unwrap();
+        let original = case.expected(Path::new("."), None).unwrap();
+        let mut expected = original.clone();
+        let facts = Destination {
+            isatty: false,
+            block_size: 4,
+        };
+        case.adapt_buffer(&mut expected, Some(&facts)).unwrap();
+        assert_eq!(expected.held.as_ref().unwrap().bytes, 4);
+        assert_eq!(
+            expected.held.as_ref().unwrap().stdout_hex,
+            Some(encode(b"firs"))
+        );
+        assert_eq!(expected.stdout_hex, original.stdout_hex);
+        assert_eq!(expected.stderr_hex, original.stderr_hex);
+        assert_eq!(expected.returncode, original.returncode);
+        assert!(case.adapt_buffer(&mut expected, None).is_err());
+        assert!(
+            case.adapt_buffer(
+                &mut expected,
+                Some(&Destination {
+                    isatty: true,
+                    block_size: 4
+                })
+            )
+            .is_err()
+        );
+        for block_size in [0, 8192, 16384] {
+            case.adapt_buffer(
+                &mut expected,
+                Some(&Destination {
+                    isatty: false,
+                    block_size,
+                }),
+            )
+            .unwrap();
+            assert_eq!(expected.held.as_ref().unwrap().bytes, 0);
+        }
+        case.id = "unlisted-buffer-observation".to_owned();
+        let mut unchanged = original.clone();
+        case.adapt_buffer(&mut unchanged, None).unwrap();
+        assert_eq!(unchanged.held, original.held);
+    }
+
     fn fixture() -> Fixture {
         Fixture::load(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/cli/cases-v3.jsonl.gz"),
@@ -337,7 +492,7 @@ mod tests {
                 .iter()
                 .filter(|case| case.supported(false))
                 .count(),
-            3002
+            3134
         );
         assert_eq!(
             fixture

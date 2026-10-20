@@ -25,6 +25,35 @@ fn main() {
         "count" => std::process::exit(17),
         "version" => println!("fastmash 0.2.0"),
         "early-close" => println!("early"),
+        "held-output" | "held-buffered" => {
+            if mode == "held-output" {
+                std::io::stdout().write_all(b"before\n").unwrap();
+                std::io::stdout().flush().unwrap();
+            }
+            let mut bytes = Vec::new();
+            std::io::stdin().read_to_end(&mut bytes).unwrap();
+            assert_eq!(bytes, b"input\n");
+            if mode == "held-buffered" {
+                std::io::stdout().write_all(b"before\n").unwrap();
+            }
+            std::io::stdout().write_all(b"after\n").unwrap();
+        }
+        "held-input" => {
+            use nix::fcntl::{FcntlArg, OFlag, fcntl};
+            use std::os::unix::fs::FileTypeExt;
+            let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
+            assert!(input.metadata().unwrap().file_type().is_fifo());
+            let flags = OFlag::from_bits_truncate(fcntl(&input, FcntlArg::F_GETFL).unwrap());
+            fcntl(&input, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK)).unwrap();
+            // An empty open pipe would block. A prematurely closed writer
+            // instead returns EOF, which must fail this control.
+            match input.read(&mut [0]) {
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    println!("stdin remains open");
+                }
+                _ => std::process::exit(17),
+            }
+        }
         "directory-input" => {
             let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
             if !input.metadata().unwrap().is_dir() {
@@ -50,13 +79,17 @@ fn main() {
             let _ = std::io::stderr().write_all(&bytes);
         }
         "sleep" => std::thread::sleep(Duration::from_secs(60)),
-        "descendant" | "orphan" => {
+        "descendant" | "orphan" | "orphan-output" => {
             // The orphan branch must leave a real descendant after the leader
             // exits so the driver, rather than this fixture, proves cleanup.
             #[allow(clippy::zombie_processes)]
             let mut child = Command::new(std::env::current_exe().unwrap())
                 .arg("sleep")
-                .stdout(Stdio::null())
+                .stdout(if mode == "orphan-output" {
+                    Stdio::inherit()
+                } else {
+                    Stdio::null()
+                })
                 .stderr(Stdio::null())
                 .spawn()
                 .unwrap();
