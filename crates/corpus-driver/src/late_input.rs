@@ -223,7 +223,11 @@ fn stop(running: &mut Running, pid: Pid, started: Instant) -> Result<bool> {
         {
             return Ok(false);
         }
-        Err(error) => return Err(error.into()),
+        Err(error) => {
+            return Err(Error::message(format!(
+                "stop owned candidate group {pid}: {error}"
+            )));
+        }
     }
     loop {
         match crate::child_status::observe(
@@ -601,8 +605,10 @@ fn execute(plan: Plan, data: &[u8], launcher: &Path, root: &Path) -> Result<Obse
     }
     let status = crate::child_status::reap(&mut running.child, &mut running.reaped)?;
     if !status.success() {
+        let diagnostic = bounded_read(&root.join("coordinator.stderr"))?;
         return Err(Error::message(format!(
-            "late-input coordinator failed: {status}; inspect {}",
+            "late-input coordinator failed: {status}; {}; inspect {}",
+            String::from_utf8_lossy(&diagnostic).trim(),
             root.display()
         )));
     }
