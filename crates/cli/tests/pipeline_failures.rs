@@ -1,15 +1,18 @@
+#![forbid(unsafe_code)]
 //! Installed descriptor regressions. The same matrix can retain reference observations.
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
+#[path = "support/descriptor_process.rs"]
+mod descriptor_process;
+#[path = "support/executable.rs"]
+mod executable;
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
 use std::{
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fs,
-    os::unix::{
-        net::UnixStream,
-        process::{CommandExt, ExitStatusExt},
-    },
-    process::{Command, Output, Stdio},
+    os::fd::OwnedFd,
+    os::unix::{net::UnixStream, process::ExitStatusExt},
+    path::{Path, PathBuf},
+    process::Output,
 };
 
 const MODES: &[(&str, &[&str])] = &[
@@ -63,84 +66,147 @@ const FAULTS: &[&str] = &[
     "full-output-closed-error",
 ];
 
-fn invoke(binary: &OsStr, args: &[&str], fault: &str) -> Output {
-    let path = std::env::temp_dir().join(format!(
-        "pipeline-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    fs::write(
-        &path,
-        if args.contains(&"-H") {
-            b"key\tvalue\na\t1\nb\t2\n".as_slice()
-        } else {
-            b"a\t1\nb\t2\n"
-        },
-    )
-    .unwrap();
-    let mut command = Command::new(binary);
-    command
-        .arg0("fastmash")
-        .args(args)
-        .env_clear()
-        .env("LC_ALL", "C")
-        .env("PATH", "/usr/bin:/bin")
-        .stdin(fs::File::open(&path).unwrap())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    match fault {
-        "closed-input"
-        | "closed-output"
-        | "closed-error"
-        | "closed-output-empty"
-        | "full-output-closed-error" => {
-            if fault == "closed-output-empty" {
-                command.stdin(Stdio::null());
-            }
-            if fault == "full-output-closed-error" {
-                command.full_stdout(true);
-            }
-            let fd = match fault {
-                "closed-input" => 0,
-                "closed-output" | "closed-output-empty" => 1,
-                _ => 2,
-            };
-            // SAFETY: only async-signal-safe close runs between fork and exec.
-            unsafe {
-                command.pre_exec(move || {
-                    if libc::close(fd) < 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
-                    Ok(())
-                });
-            }
+struct Program {
+    // Close the full destination before the unrelated capture root on unwind.
+    full: Option<fastmash_corpus_driver::full_output::FullOutput>,
+    fixture: temp_dir::TempDir,
+    full_root: PathBuf,
+    evidence: Option<PathBuf>,
+    binary: OsString,
+    version_prefix: &'static [u8],
+    next: usize,
+}
+
+impl Program {
+    fn new(binary: &OsStr, reference: bool, name: &str) -> Self {
+        let fixture = temp_dir::TempDir::new(name);
+        let evidence = std::env::var_os("FASTMASH_FAILURE_EVIDENCE").map(|root| {
+            let directory = PathBuf::from(root).join(name);
+            fs::create_dir_all(&directory).unwrap();
+            directory
+        });
+        let full_root = evidence.as_ref().map_or_else(
+            || fixture.0.with_extension("full-output"),
+            |root| root.join("full-output"),
+        );
+        Self {
+            full: None,
+            fixture,
+            full_root,
+            evidence,
+            binary: binary.to_owned(),
+            version_prefix: if reference {
+                b"datamash (GNU datamash) 1.9"
+            } else {
+                b"fastmash "
+            },
+            next: 0,
         }
-        "write-only-input" => {
-            command.stdin(fs::File::options().write(true).open("/dev/null").unwrap());
-        }
-        "directory-input" => {
-            command.stdin(fs::File::open("/tmp").unwrap());
-        }
-        "read-only-output" => {
-            command.stdout(fs::File::open("/dev/null").unwrap());
-        }
-        "read-only-error" => {
-            command.stderr(fs::File::open("/dev/null").unwrap());
-        }
-        "full-output" => {
-            command.full_stdout(true);
-        }
-        "broken-output" => {
-            let (writer, reader) = UnixStream::pair().unwrap();
-            drop(reader);
-            command.stdout(Stdio::from(std::os::fd::OwnedFd::from(writer)));
-        }
-        _ => panic!("unknown fault"),
     }
-    let mut output = command.output().unwrap();
-    fs::remove_file(path).unwrap();
-    output.stderr = normalize_sort_name(&output.stderr);
-    output
+
+    fn invoke(&mut self, args: &[&str], fault: &str) -> Output {
+        let full = matches!(fault, "full-output" | "full-output-closed-error");
+        if full && self.full.is_none() {
+            self.full = Some(
+                fastmash_corpus_driver::full_output::FullOutput::with_version_prefix(
+                    Path::new(&self.binary),
+                    &self.full_root,
+                    self.version_prefix,
+                )
+                .unwrap(),
+            );
+        }
+        let directory = self.fixture.0.join(self.next.to_string());
+        self.next += 1;
+        fs::create_dir(&directory).unwrap();
+        fs::write(
+            directory.join("stdin"),
+            if args.contains(&"-H") {
+                b"key\tvalue\na\t1\nb\t2\n".as_slice()
+            } else {
+                b"a\t1\nb\t2\n"
+            },
+        )
+        .unwrap();
+        let mut files: [OwnedFd; 3] = [
+            fs::File::open(directory.join("stdin")).unwrap().into(),
+            fs::File::create_new(directory.join("stdout"))
+                .unwrap()
+                .into(),
+            fs::File::create_new(directory.join("stderr"))
+                .unwrap()
+                .into(),
+        ];
+        let closed = match fault {
+            "closed-input" => 1,
+            "closed-output" | "closed-output-empty" => 2,
+            "closed-error" | "full-output-closed-error" => 4,
+            _ => 0,
+        };
+        match fault {
+            "closed-input" | "closed-output" | "closed-error" => {}
+            "closed-output-empty" => files[0] = fs::File::open("/dev/null").unwrap().into(),
+            "write-only-input" => {
+                files[0] = fs::File::options()
+                    .write(true)
+                    .open("/dev/null")
+                    .unwrap()
+                    .into()
+            }
+            "directory-input" => files[0] = fs::File::open("/tmp").unwrap().into(),
+            "read-only-output" => files[1] = fs::File::open("/dev/null").unwrap().into(),
+            "read-only-error" => files[2] = fs::File::open("/dev/null").unwrap().into(),
+            "full-output" | "full-output-closed-error" => {
+                files[1] = self.full.as_mut().unwrap().destination().unwrap().into()
+            }
+            "broken-output" => {
+                let (writer, reader) = UnixStream::pair().unwrap();
+                drop(reader);
+                files[1] = writer.into();
+            }
+            _ => panic!("unknown fault"),
+        }
+        let observed = descriptor_process::invoke_bound(
+            descriptor_process::BoundCommand {
+                binary: &self.binary,
+                arguments: args,
+                files,
+                closed,
+                environment: &[("LC_ALL", "C"), ("PATH", "/usr/bin:/bin")],
+            },
+            &directory,
+            1 << 20,
+            1 << 20,
+        )
+        .unwrap();
+        if let Some(root) = &self.evidence {
+            use std::io::Write;
+            fs::File::create_new(root.join(format!("{}.observation", self.next - 1)))
+                .unwrap()
+                .write_all(format!("arguments={args:?}\nfault={fault}\n{observed:#?}\n").as_bytes())
+                .unwrap();
+        }
+        let mut output = observed.into_output();
+        if full {
+            self.full.as_mut().unwrap().verify().unwrap();
+        }
+        fs::remove_dir_all(&directory).unwrap();
+        assert!(!directory.try_exists().unwrap());
+        output.stderr = normalize_sort_name(&output.stderr);
+        output
+    }
+
+    fn finish(mut self) {
+        if let Some(full) = self.full.take() {
+            full.finish().unwrap();
+            if self.evidence.is_none() {
+                fs::remove_dir_all(&self.full_root).unwrap();
+            }
+        }
+        let path = self.fixture.0.clone();
+        drop(self);
+        assert!(!path.try_exists().unwrap());
+    }
 }
 
 /// The system sort's diagnostics start with its program name, which older GNU
@@ -185,15 +251,18 @@ fn installed_descriptor_failures_are_not_successful_empty_results() {
     let binary = std::env::var_os("FASTMASH_FAILURE_BINARY")
         .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
+    let mut candidate = Program::new(&binary, false, "pipeline-candidate");
+    let mut reference = std::env::var_os("FASTMASH_FAILURE_REFERENCE")
+        .map(|binary| Program::new(&binary, true, "pipeline-comparator"));
     for &(mode, args) in MODES {
         for &fault in FAULTS {
-            let output = invoke(&binary, args, fault);
+            let output = candidate.invoke(args, fault);
             let name = format!("{mode}-{fault}");
             retain("candidate", &name, &output);
             if matches!(mode, "crosstab" | "round" | "getnum" | "bin" | "strbin")
-                && let Some(reference) = std::env::var_os("FASTMASH_FAILURE_REFERENCE")
+                && let Some(reference) = reference.as_mut()
             {
-                let expected = invoke(&reference, args, fault);
+                let expected = reference.invoke(args, fault);
                 retain("reference", &name, &expected);
                 assert_eq!(output.stdout, expected.stdout, "{name}");
                 assert_eq!(output.stderr, expected.stderr, "{name}");
@@ -201,6 +270,10 @@ fn installed_descriptor_failures_are_not_successful_empty_results() {
             }
             check(mode, fault, &name, &output);
         }
+    }
+    candidate.finish();
+    if let Some(reference) = reference {
+        reference.finish();
     }
 }
 
@@ -304,6 +377,7 @@ fn check(mode: &str, fault: &str, name: &str, output: &Output) {
 fn retain_reference_descriptor_matrix() {
     let binary = std::env::var_os("FASTMASH_FAILURE_REFERENCE").expect("reference path");
     assert!(std::env::var_os("FASTMASH_FAILURE_EVIDENCE").is_some());
+    let mut reference = Program::new(&binary, true, "pipeline-reference");
     for &(mode, args) in MODES {
         for &fault in FAULTS {
             let sorter = std::env::var("FASTMASH_FAILURE_SORT").ok();
@@ -312,10 +386,11 @@ fn retain_reference_descriptor_matrix() {
             if let Some(option) = &option {
                 arguments.insert(0, option);
             }
-            let output = invoke(&binary, &arguments, fault);
+            let output = reference.invoke(&arguments, fault);
             retain("reference", &format!("{mode}-{fault}"), &output);
         }
     }
+    reference.finish();
 }
 
 #[test]
@@ -323,12 +398,11 @@ fn calculation_failure_and_failed_diagnostic_still_finalize_output() {
     let binary = std::env::var_os("FASTMASH_FAILURE_BINARY")
         .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
         .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
+    let mut candidate = Program::new(&binary, false, "pipeline-primary");
+    let mut reference = std::env::var_os("FASTMASH_FAILURE_REFERENCE")
+        .map(|binary| Program::new(&binary, true, "pipeline-primary-reference"));
     for fault in ["full-output", "full-output-closed-error"] {
-        let output = invoke(
-            &binary,
-            &["--header-out", "count", "1", "count", "3"],
-            fault,
-        );
+        let output = candidate.invoke(&["--header-out", "count", "1", "count", "3"], fault);
         retain("candidate", &format!("primary-{fault}"), &output);
         assert_eq!(output.status.code(), Some(1));
         assert!(output.stdout.is_empty());
@@ -338,16 +412,16 @@ fn calculation_failure_and_failed_diagnostic_still_finalize_output() {
             b""
         };
         assert_eq!(output.stderr, expected);
-        if let Some(reference) = std::env::var_os("FASTMASH_FAILURE_REFERENCE") {
-            let reference = invoke(
-                &reference,
-                &["--header-out", "count", "1", "count", "3"],
-                fault,
-            );
+        if let Some(program) = reference.as_mut() {
+            let reference = program.invoke(&["--header-out", "count", "1", "count", "3"], fault);
             retain("reference", &format!("primary-{fault}"), &reference);
             assert_eq!(output.status, reference.status);
             assert_eq!(output.stdout, reference.stdout);
             assert_eq!(output.stderr, reference.stderr);
         }
+    }
+    candidate.finish();
+    if let Some(reference) = reference {
+        reference.finish();
     }
 }

@@ -10,10 +10,14 @@ use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::close;
 use std::{
     error::Error,
-    ffi::CString,
+    ffi::{CString, OsStr},
     fs::{self, File, OpenOptions},
     io::{self, Read},
-    os::{fd::AsRawFd, unix::ffi::OsStrExt, unix::fs::OpenOptionsExt},
+    os::{
+        fd::{AsRawFd, OwnedFd},
+        unix::ffi::OsStrExt,
+        unix::fs::OpenOptionsExt,
+    },
     path::Path,
     thread,
     time::{Duration, Instant},
@@ -47,6 +51,7 @@ pub struct Observed {
     pub stderr: Vec<u8>,
 }
 
+#[allow(dead_code)]
 pub fn invoke(
     arguments: &[&str],
     input: &[u8],
@@ -55,8 +60,6 @@ pub fn invoke(
     stdout_limit: usize,
     stderr_limit: usize,
 ) -> Result<Observed> {
-    let executable = fs::canonicalize(executable::fastmash())?;
-    let executable = CString::new(executable.as_os_str().as_bytes())?;
     fs::write(directory.join("stdin"), input)?;
     for name in ["stdout", "stderr"] {
         drop(
@@ -88,7 +91,6 @@ pub fn invoke(
             File::options().write(true).open(directory.join("stderr"))?
         },
     ];
-    let parent_binding_fds = files.each_ref().map(|file| file.as_raw_fd());
     let parent_binding_flags = [
         fcntl(&files[0], FcntlArg::F_GETFL)?,
         fcntl(&files[1], FcntlArg::F_GETFL)?,
@@ -116,6 +118,54 @@ pub fn invoke(
     if access != expected_access {
         return Err(format!("incorrect parent descriptor access: {parent_binding_flags:?}").into());
     }
+    invoke_bound(
+        BoundCommand {
+            binary: &executable::fastmash(),
+            arguments,
+            files: files.map(OwnedFd::from),
+            closed: match streams {
+                Streams::Closed(mask) => mask,
+                _ => 0,
+            },
+            environment: &[("LC_ALL", "C"), ("PATH", "/usr/bin:/bin")],
+        },
+        directory,
+        stdout_limit,
+        stderr_limit,
+    )
+}
+
+/// Caller-owned real stream bindings. Capture files must exist even when a
+/// selected stream goes elsewhere, so its unselected output remains observable.
+pub struct BoundCommand<'a> {
+    pub binary: &'a OsStr,
+    pub arguments: &'a [&'a str],
+    pub files: [OwnedFd; 3],
+    pub closed: u8,
+    pub environment: &'a [(&'a str, &'a str)],
+}
+
+pub fn invoke_bound(
+    command: BoundCommand<'_>,
+    directory: &Path,
+    stdout_limit: usize,
+    stderr_limit: usize,
+) -> Result<Observed> {
+    let BoundCommand {
+        binary,
+        arguments,
+        files,
+        closed,
+        environment,
+    } = command;
+    let executable = fs::canonicalize(binary)?;
+    let executable = CString::new(executable.as_os_str().as_bytes())?;
+    let parent_binding_fds = files.each_ref().map(|file| file.as_raw_fd());
+    let parent_binding_flags = [
+        fcntl(&files[0], FcntlArg::F_GETFL)?,
+        fcntl(&files[1], FcntlArg::F_GETFL)?,
+        fcntl(&files[2], FcntlArg::F_GETFL)?,
+    ];
     let mut actions = PosixSpawnFileActions::init()?;
     for (target, source) in [0, 1, 2].into_iter().zip(parent_binding_fds) {
         if source < 3 {
@@ -123,11 +173,9 @@ pub fn invoke(
         }
         actions.add_dup2(source, target)?;
     }
-    if let Streams::Closed(mask) = streams {
-        for target in 0..3 {
-            if mask & (1 << target) != 0 {
-                actions.add_close(target)?;
-            }
+    for target in 0..3 {
+        if closed & (1 << target) != 0 {
+            actions.add_close(target)?;
         }
     }
     let arguments = std::iter::once("fastmash")
@@ -135,6 +183,10 @@ pub fn invoke(
         .map(CString::new)
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let attributes = PosixSpawnAttr::init()?;
+    let environment = environment
+        .iter()
+        .map(|(key, value)| CString::new(format!("{key}={value}")))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
     let deadline = Instant::now() + CHILD_LIMIT;
     let cancel_at = deadline - CLEANUP_RESERVE;
     let spawned = posix_spawn(
@@ -142,7 +194,7 @@ pub fn invoke(
         &actions,
         &attributes,
         &arguments,
-        &[c"LC_ALL=C", c"PATH=/usr/bin:/bin"],
+        &environment,
     );
     drop(actions);
     drop(attributes);
@@ -197,11 +249,36 @@ fn read_prefix(path: &Path, limit: usize) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+impl Observed {
+    pub fn into_output(self) -> std::process::Output {
+        use std::os::unix::process::ExitStatusExt;
+        assert!(!self.timed_out, "{self:?}");
+        assert!(self.cancellation.is_none(), "{self:?}");
+        assert!(
+            self.parent_close_results
+                .iter()
+                .all(|result| result.is_ok()),
+            "{self:?}"
+        );
+        assert_eq!(self.stdout_length, self.stdout.len() as u64, "{self:?}");
+        assert_eq!(self.stderr_length, self.stderr.len() as u64, "{self:?}");
+        let raw = match self.status {
+            WaitStatus::Exited(_, code) => code << 8,
+            WaitStatus::Signaled(_, signal, core) => signal as i32 | if core { 128 } else { 0 },
+            status => panic!("unexpected terminal child status: {status:?}"),
+        };
+        std::process::Output {
+            status: std::process::ExitStatus::from_raw(raw),
+            stdout: self.stdout,
+            stderr: self.stderr,
+        }
+    }
+}
+
 /// Run a command with genuinely closed inherited stdin, before Rust startup.
 /// Keep observations bounded and reject incomplete captures or cleanup.
 #[allow(dead_code)]
 pub fn closed_stdin(arguments: &[&str]) -> std::process::Output {
-    use std::os::unix::process::ExitStatusExt;
     use std::sync::atomic::{AtomicU64, Ordering};
     static NEXT: AtomicU64 = AtomicU64::new(0);
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -210,34 +287,7 @@ pub fn closed_stdin(arguments: &[&str]) -> std::process::Output {
     let observed = invoke(arguments, b"", Streams::Closed(1), &path, 1 << 20, 1 << 20);
     drop(directory);
     assert!(!path.try_exists().unwrap(), "temporary cleanup: {path:?}");
-    let observed = observed.unwrap_or_else(|error| panic!("closed stdin: {error}"));
-    assert!(!observed.timed_out, "{observed:?}");
-    assert!(observed.cancellation.is_none(), "{observed:?}");
-    assert!(
-        observed
-            .parent_close_results
-            .iter()
-            .all(|result| result.is_ok()),
-        "{observed:?}"
-    );
-    assert_eq!(
-        observed.stdout_length,
-        observed.stdout.len() as u64,
-        "{observed:?}"
-    );
-    assert_eq!(
-        observed.stderr_length,
-        observed.stderr.len() as u64,
-        "{observed:?}"
-    );
-    let raw = match observed.status {
-        WaitStatus::Exited(_, code) => code << 8,
-        WaitStatus::Signaled(_, signal, core) => signal as i32 | if core { 128 } else { 0 },
-        status => panic!("unexpected terminal child status: {status:?}"),
-    };
-    std::process::Output {
-        status: std::process::ExitStatus::from_raw(raw),
-        stdout: observed.stdout,
-        stderr: observed.stderr,
-    }
+    observed
+        .unwrap_or_else(|error| panic!("closed stdin: {error}"))
+        .into_output()
 }
