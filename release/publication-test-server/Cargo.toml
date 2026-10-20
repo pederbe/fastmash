@@ -6,6 +6,10 @@ rust-version = "1.88"
 publish = false
 license = "MIT OR Apache-2.0"
 
+[[bin]]
+name = "fastmash-test-homebrew"
+path = "../../packaging/homebrew/run_test.rs"
+
 # Also compile the self-contained recipe checker in the maintained tool gates.
 [[bin]]
 name = "fastmash-test-source-package"

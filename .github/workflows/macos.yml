@@ -100,6 +100,11 @@ jobs:
           cargo fmt --all --check 2>&1 | tee "$EVIDENCE/fmt.log"
           cargo clippy --workspace --all-targets --locked -- -D warnings 2>&1 | tee "$EVIDENCE/clippy.log"
           python3 -B -m unittest discover -s scripts -p 'test_check_regressions.py' 2>&1 | tee "$EVIDENCE/corpus-adapters.log"
+      - name: Check retained package tooling
+        run: |
+          cargo fmt --manifest-path release/publication-test-server/Cargo.toml --check
+          cargo clippy --manifest-path release/publication-test-server/Cargo.toml --target-dir target --all-targets --locked -- -D warnings
+          cargo test --manifest-path release/publication-test-server/Cargo.toml --target-dir target --locked --test homebrew --test source_package --test archive --test package_bytes 2>&1 | tee "$EVIDENCE/package-tools.log"
       - name: Execute all applicable release workspace tests
         run: |
           cargo test --release --workspace --locked -- --list 2>&1 | tee "$EVIDENCE/test-inventory.txt"

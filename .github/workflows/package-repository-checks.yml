@@ -16,6 +16,7 @@ on:
       - 'crates/cli/tests/release_installation.rs'
       - 'release/publication-test-server/**'
       - 'packaging/conda-forge/**'
+      - 'packaging/homebrew/**'
   pull_request:
     branches: [main]
     paths:
@@ -30,6 +31,7 @@ on:
       - 'crates/cli/tests/release_installation.rs'
       - 'release/publication-test-server/**'
       - 'packaging/conda-forge/**'
+      - 'packaging/homebrew/**'
 
 permissions:
   contents: read
