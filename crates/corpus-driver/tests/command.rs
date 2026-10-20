@@ -174,6 +174,7 @@ fn timeout_kills_the_whole_group_and_continue_after_failure_still_runs() {
     let pidfile = run.root.join("descendant.pid");
     let mut stalled = case("timeout", "descendant", b"", b"", b"", 0);
     stalled["args"] = json!(["descendant", pidfile]);
+    stalled["hold_stdin"] = json!(true);
     run.write_cases(&[
         stalled,
         case("after", "echo", b"after\n", b"after\n", b"", 0),
@@ -194,6 +195,7 @@ fn timeout_kills_the_whole_group_and_continue_after_failure_still_runs() {
     .unwrap();
     assert_eq!(observed["observed"]["timed_out"], true);
     assert_eq!(observed["observed"]["cleanup_confirmed"], true);
+    assert_eq!(observed["observed"]["stdin_held_until_exit"], false);
     assert_stopped(&pidfile);
 }
 
@@ -230,6 +232,35 @@ fn assert_stopped(pidfile: &Path) {
         assert!(Instant::now() < deadline, "descendant {pid} remained live");
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+#[test]
+fn early_commands_finish_before_stdin_eof_and_file_mode_defers_them() {
+    let mut held = case("held", "held-input", b"", b"stdin remains open\n", b"", 0);
+    held["hold_stdin"] = json!(true);
+    let ordinary = case("ordinary", "echo", b"after\n", b"after\n", b"", 0);
+    for file in [false, true] {
+        let run = TestRun::new(&[held.clone(), ordinary.clone()]);
+        let evidence = run.evidence();
+        let mut args = vec!["--evidence-dir", evidence.to_str().unwrap()];
+        if file {
+            args.push("--stdin-file");
+        }
+        let output = run.run(&args);
+        assert!(output.status.success(), "{output:?}");
+        let result = json_file(&evidence.join("result.json"));
+        assert_eq!(result["passed"], if file { 1 } else { 2 });
+        assert_eq!(result["deferred_cases"], if file { 1 } else { 0 });
+        if !file {
+            let outcomes = fs::read_to_string(evidence.join("observations.jsonl")).unwrap();
+            let observed: Value = serde_json::from_str(outcomes.lines().next().unwrap()).unwrap();
+            assert_eq!(observed["observed"]["stdin_held_until_exit"], true);
+        }
+    }
+    // The same executable must detect the wrong lifecycle when EOF is sent.
+    held["hold_stdin"] = json!(false);
+    let run = TestRun::new(&[held]);
+    assert_eq!(run.run(&[]).status.code(), Some(1));
 }
 
 #[test]
@@ -311,8 +342,8 @@ fn full_output_refuses_a_candidate_that_fails_ordinary_calibration() {
 }
 
 #[test]
-fn transport_dispositions_account_for_held_normal_cases_in_both_modes() {
-    let mut held = case("held", "sleep", b"", b"", b"", 0);
+fn unreviewed_held_combinations_remain_deferred_in_both_modes() {
+    let mut held = case("held", "sleep", b"unexpected input", b"", b"", 0);
     held["hold_stdin"] = json!(true);
     let mut observed = case("observe", "sleep", b"", b"", b"", 0);
     observed["observe_held"] = json!({"bytes":0});

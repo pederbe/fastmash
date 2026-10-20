@@ -25,6 +25,22 @@ fn main() {
         "count" => std::process::exit(17),
         "version" => println!("fastmash 0.2.0"),
         "early-close" => println!("early"),
+        "held-input" => {
+            use nix::fcntl::{FcntlArg, OFlag, fcntl};
+            use std::os::unix::fs::FileTypeExt;
+            let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
+            assert!(input.metadata().unwrap().file_type().is_fifo());
+            let flags = OFlag::from_bits_truncate(fcntl(&input, FcntlArg::F_GETFL).unwrap());
+            fcntl(&input, FcntlArg::F_SETFL(flags | OFlag::O_NONBLOCK)).unwrap();
+            // An empty open pipe would block. A prematurely closed writer
+            // instead returns EOF, which must fail this control.
+            match input.read(&mut [0]) {
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    println!("stdin remains open");
+                }
+                _ => std::process::exit(17),
+            }
+        }
         "directory-input" => {
             let mut input = File::from(std::io::stdin().as_fd().try_clone_to_owned().unwrap());
             if !input.metadata().unwrap().is_dir() {

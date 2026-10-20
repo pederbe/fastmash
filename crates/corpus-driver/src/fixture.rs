@@ -181,6 +181,11 @@ impl Case {
     pub fn supported(&self, stdin_file: bool) -> bool {
         self.ordinary()
             || (!stdin_file
+                && self.io == "normal"
+                && self.hold_stdin
+                && self.input_hex.is_empty()
+                && !truthy(&self.observe_held))
+            || (!stdin_file
                 && matches!(self.io.as_str(), "directory" | "closed-pipe" | "full")
                 && !truthy(&self.observe_held)
                 && !self.hold_stdin)
@@ -191,6 +196,7 @@ impl Case {
             "deferred-transport"
         } else {
             match self.io.as_str() {
+                "normal" if self.hold_stdin => "held-input-pipe",
                 "directory" => "directory-input",
                 "closed-pipe" => "closed-output-pipe",
                 "full" => "full-output",
@@ -337,7 +343,7 @@ mod tests {
                 .iter()
                 .filter(|case| case.supported(false))
                 .count(),
-            3002
+            3067
         );
         assert_eq!(
             fixture

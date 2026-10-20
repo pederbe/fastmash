@@ -37,6 +37,7 @@ pub struct Observed {
     pub timed_out: bool,
     pub overflow: bool,
     pub cleanup_confirmed: bool,
+    pub stdin_held_until_exit: bool,
     pub stdout_hex: String,
     pub stderr_hex: String,
 }
@@ -201,7 +202,7 @@ pub(crate) fn invoke(
                     Err(error) => return Err(error.into()),
                 }
             }
-            if written == data.len() {
+            if written == data.len() && !case.hold_stdin {
                 input = None;
             }
         }
@@ -210,7 +211,7 @@ pub(crate) fn invoke(
             child.reaped = status.is_some();
         }
         overflow |= stdout.metadata()?.len() > CAP || stderr.metadata()?.len() > CAP;
-        if status.is_some() && input.is_none() {
+        if status.is_some() && (input.is_none() || case.hold_stdin) {
             break;
         }
         if started.elapsed() >= DEADLINE {
@@ -225,6 +226,7 @@ pub(crate) fn invoke(
     // Kill the whole session's group even if its leader has already exited.
     // A descendant may still hold stdin open or be writing a capture file.
     // The direct child kill also covers launch failure before setsid completes.
+    let stdin_held_until_exit = case.hold_stdin && status.is_some() && input.is_some();
     child.terminate()?;
     drop(input);
     let status = match status {
@@ -262,6 +264,7 @@ pub(crate) fn invoke(
         timed_out,
         overflow,
         cleanup_confirmed: true,
+        stdin_held_until_exit,
         stdout_hex: encode(&out),
         stderr_hex: encode(&err),
     })

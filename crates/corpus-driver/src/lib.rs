@@ -191,14 +191,15 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
             options.stdin_file,
             full.as_mut(),
         )?;
-        let passed = observed.matches(&expected);
+        let passed =
+            observed.matches(&expected) && (!case.hold_stdin || observed.stdin_held_until_exit);
         if let Some(directory) = &options.evidence_dir {
             let mut outcomes = OpenOptions::new()
                 .append(true)
                 .create(true)
                 .open(directory.join("cases.jsonl"))?;
             write_line(&mut outcomes, &json!({"id":case.id, "passed":passed}))?;
-            if !passed || !case.native_dispositions().is_empty() {
+            if !passed || case.hold_stdin || !case.native_dispositions().is_empty() {
                 let mut observations = OpenOptions::new()
                     .append(true)
                     .create(true)
