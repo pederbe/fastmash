@@ -13,6 +13,21 @@ fn main() {
     let name = args.next().unwrap();
     let mode = args.next().unwrap();
     match mode.to_str().unwrap() {
+        "resource-facts" => {
+            use nix::sys::resource::{Resource, getrlimit};
+            let facts = serde_json::json!({
+                "file_size":getrlimit(Resource::RLIMIT_FSIZE).unwrap(),
+                "private_environment_present":std::env::vars_os().any(|(k,_)|k.as_bytes().starts_with(b"FASTMASH_TEST_PROCESS_")),
+            });
+            #[cfg(target_os = "linux")]
+            let facts = {
+                let mut facts = facts;
+                facts["address_space"] = serde_json::json!(getrlimit(Resource::RLIMIT_AS).unwrap());
+                facts
+            };
+            println!("{facts}");
+        }
+        "alarm-remaining" => println!("{}", nix::unistd::alarm::cancel().unwrap_or(0)),
         "process-facts" => {
             use nix::sys::signal::{SigSet, Signal};
             let mask = SigSet::thread_get_mask().unwrap();

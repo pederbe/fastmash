@@ -1,4 +1,6 @@
 #![forbid(unsafe_code)]
+#[path = "support/full_output.rs"]
+mod full_output;
 #[path = "support/temp_dir.rs"]
 mod temp_dir;
 #[path = "support/test_process.rs"]
@@ -25,18 +27,6 @@ fn command_with_resources(args: &[&str], input: &[u8], full: bool, limited: bool
     let fixture = temp_dir::TempDir::new(&format!("text-{:?}", std::thread::current().id()));
     let path = fixture.0.join("input");
     File::create(&path).unwrap().write_all(input).unwrap();
-    // Keep full-volume evidence outside the ordinary fixture guard. A failed
-    // detach must retain its owned image and observations for diagnosis.
-    #[cfg(target_os = "macos")]
-    let full_root = fixture.0.with_extension("full-output");
-    #[cfg(target_os = "macos")]
-    let mut full_output = full.then(|| {
-        fastmash_corpus_driver::full_output::FullOutput::new(
-            std::path::Path::new(&binary),
-            &full_root,
-        )
-        .unwrap()
-    });
     #[cfg(target_os = "linux")]
     let mut child = {
         let mut child = Command::new("/usr/bin/timeout");
@@ -61,31 +51,35 @@ fn command_with_resources(args: &[&str], input: &[u8], full: bool, limited: bool
         .env("TZ", "UTC")
         .stdin(File::open(&path).unwrap())
         .stderr(Stdio::piped());
-    #[cfg(target_os = "linux")]
-    let destination: Stdio = if full {
-        File::options()
-            .write(true)
-            .open("/dev/full")
-            .unwrap()
-            .into()
-    } else {
-        Stdio::piped()
-    };
-    #[cfg(target_os = "macos")]
-    let destination: Stdio = full_output
-        .as_mut()
-        .map_or_else(Stdio::piped, |full| full.destination().unwrap().into());
-    let out = child.stdout(destination).output().unwrap();
-    // Command retains configured file handles after output(). Close those
-    // copies after the child is reaped and before detaching the full volume.
-    drop(child);
-    #[cfg(target_os = "macos")]
-    if let Some(mut full) = full_output {
-        full.verify().unwrap();
-        full.finish().unwrap();
-        std::fs::remove_dir_all(full_root).unwrap();
-    }
-    out
+    full_output::output(
+        child,
+        &binary,
+        full,
+        &fixture.0.with_extension("full-output"),
+    )
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn failed_child_setup_closes_full_destination_before_unwind_cleanup() {
+    let fixture = temp_dir::TempDir::new("text-full-output-setup-failure");
+    let root = fixture.0.with_extension("full-output");
+    let binary = std::env::var_os("FASTMASH_TEXT_TEST_BINARY")
+        .or_else(|| std::env::var_os("FASTMASH_TEST_BINARY"))
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
+    let result = std::panic::catch_unwind(|| {
+        full_output::output(
+            std::process::Command::new(fixture.0.join("missing")),
+            &binary,
+            true,
+            &root,
+        )
+    });
+    assert!(result.is_err());
+    assert!(root.join("volume/cleanup.ok").is_file());
+    assert!(!root.join("volume/mount").exists());
+    assert!(!root.join("volume/full.dmg").exists());
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

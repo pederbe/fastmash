@@ -3,7 +3,7 @@
 use std::{ffi::OsStr, path::PathBuf, process::Command};
 
 pub fn bounded(binary: impl AsRef<OsStr>, seconds: u32) -> Command {
-    assert!((1..=30).contains(&seconds));
+    assert!((1..=60).contains(&seconds));
     let launcher = std::env::var_os("FASTMASH_TEST_PROCESS")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
