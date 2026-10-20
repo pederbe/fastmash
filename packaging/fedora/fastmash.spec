@@ -9,6 +9,7 @@ URL:            https://fastmash.io
 Source0:        https://github.com/pederbe/fastmash/archive/refs/tags/v%{version}.tar.gz#/fastmash-%{version}.tar.gz
 # Generated from Source0 with prepare-sources.sh and cargo vendor --locked.
 Source1:        fastmash-%{version}-vendor.tar.gz
+Source2:        https://raw.githubusercontent.com/pederbe/fastmash/3da66cc2b825e175535ace106edbd8f73bd5b2fa/packaging/linux-source-test.rs#/fastmash-linux-source-test.rs
 ExclusiveArch:  x86_64
 
 BuildRequires:  cargo-rpm-macros
@@ -33,6 +34,10 @@ tar -xzf %{SOURCE1}
 
 %build
 %cargo_build -- --locked -p fastmash --bins
+# Keep this standalone test's unsafe-code prohibition despite distro lint caps.
+%{__rustc} %{build_rustflags} --cap-lints=forbid --edition=2024 \
+    --crate-name fastmash_source_package_test --target x86_64-unknown-linux-gnu \
+    -C linker=%{__cc} %{SOURCE2} -o fastmash-test-linux-source
 python3 scripts/third_party_licenses.py > THIRD-PARTY-LICENSES.md
 cargo2rpm --path crates/cli/Cargo.toml license-summary
 cargo2rpm --path crates/cli/Cargo.toml license-breakdown > LICENSE.dependencies
@@ -44,25 +49,8 @@ cargo2rpm --path crates/cli/Cargo.toml license-breakdown > LICENSE.dependencies
 
 %check
 %cargo_test -- --locked --workspace
-export LC_ALL=C
 bin=%{buildroot}%{_bindir}
-test -x "$bin/fastmash-sort-supervisor"
-printf 'fastmash %{version}\n' > expected
-"$bin/fastmash" --version > actual
-cmp expected actual
-printf '1\n2\n3\n' | "$bin/fastmash" sum 1 mean 1 > actual
-printf '6\t2\n' > expected
-cmp expected actual
-printf '1\n2\n3\n' | "$bin/fastmash" geomean 1 > actual
-printf '1.8171205928321\n' > expected
-cmp expected actual
-printf 'b\t2\t3\na\t1\t2\na\t3\t6\n' | \
-    env -i PATH=/usr/bin:/bin LC_ALL=C FASTMASH_GROUPING=sort FASTMASH_SORT_TRACE=1 \
-    "$bin/fastmash" -sg1 pcov 2:3 > actual 2> diagnostic
-printf 'a\t2\nb\t0\n' > expected
-cmp expected actual
-printf 'sort route: system sort\n' > expected
-cmp expected diagnostic
+./fastmash-test-linux-source fedora "$bin" '%{version}'
 
 %files
 %license LICENSE-MIT LICENSE-APACHE THIRD-PARTY-LICENSES.md LICENSE.dependencies cargo-vendor.txt
