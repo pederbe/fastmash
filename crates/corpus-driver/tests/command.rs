@@ -217,6 +217,33 @@ fn a_successful_leader_cannot_leave_a_running_descendant() {
     assert_stopped(&pidfile);
 }
 
+#[test]
+fn an_exited_leader_cannot_leave_an_inherited_pipe_writer() {
+    let run = TestRun::new(&[]);
+    let pidfile = run.root.join("inherited-writer.pid");
+    let mut orphan = case("orphan-writer", "orphan-output", b"input\n", b"", b"", 0);
+    orphan["args"] = json!(["orphan-output", pidfile]);
+    orphan["io"] = json!("pipe");
+    orphan["observe_held"] = json!(true);
+    orphan["expected"]["held"] = json!({"bytes":0,"alive":true,"stdout_hex":""});
+    run.write_cases(&[orphan]);
+    let evidence = run.evidence();
+    let started = Instant::now();
+    let output = run.run(&["--evidence-dir", evidence.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    let result = json_file(&evidence.join("result.json"));
+    assert_eq!(result["attempted"], 1);
+    assert_eq!(result["passed"], 0);
+    assert!(started.elapsed() < Duration::from_secs(5));
+    let records = fs::read_to_string(evidence.join("observations.jsonl")).unwrap();
+    let record: Value = serde_json::from_str(records.lines().next().unwrap()).unwrap();
+    assert_eq!(record["observed"]["cleanup_confirmed"], true);
+    assert_eq!(record["observed"]["timed_out"], false);
+    assert_eq!(record["observed"]["overflow"], false);
+    assert_eq!(record["observed"]["held"], Value::Null);
+    assert_stopped(&pidfile);
+}
+
 fn assert_stopped(pidfile: &Path) {
     use nix::errno::Errno;
     use nix::sys::signal::kill;

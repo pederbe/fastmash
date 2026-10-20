@@ -7,7 +7,6 @@ use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, FdFlag, OFlag, fcntl};
 use nix::sys::resource::{Resource, setrlimit};
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, killpg, pthread_sigmask};
-use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -21,7 +20,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -57,25 +56,20 @@ struct Running {
     cleanup: PathBuf,
 }
 impl Running {
-    fn status(&mut self) -> Result<Option<ExitStatus>> {
-        let status = match self.child.try_wait() {
-            Err(error) if error.raw_os_error() == Some(Errno::ECHILD as i32) => {
-                // Ownership loss is an error, not permission to signal an old PID.
-                self.reaped = true;
-                self.group = false;
-                return Err(error.into());
-            }
-            result => result?,
-        };
-        self.reaped |= status.is_some();
+    fn status(&mut self) -> Result<Option<rustix::process::WaitIdStatus>> {
+        let status = crate::child_status::terminal(&self.child, &mut self.reaped);
+        if self.reaped {
+            self.group = false;
+        }
+        let status = status?;
         Ok(status)
     }
 }
 impl Drop for Running {
     fn drop(&mut self) {
-        // A reaped leader may still have descendants holding the terminal.
-        if self.group {
-            let _ = killpg(Pid::from_raw(self.child.id() as i32), Signal::SIGKILL);
+        // Cancel descendants while the leader PID is still owned.
+        if self.group && !self.reaped {
+            let _ = crate::child_status::cancel_group(&self.child, &mut self.reaped);
             self.group = false;
         }
         if self.reaped {
@@ -85,7 +79,11 @@ impl Drop for Running {
             drop(peer);
             let grace = Instant::now() + Duration::from_secs(2);
             while Instant::now() < grace {
-                if self.status().ok().flatten().is_some() || self.reaped {
+                if self.status().ok().flatten().is_some() {
+                    let _ = crate::child_status::reap(&mut self.child, &mut self.reaped);
+                    return;
+                }
+                if self.reaped {
                     return;
                 }
                 thread::sleep(Duration::from_millis(2));
@@ -94,7 +92,11 @@ impl Drop for Running {
         let _ = self.child.kill();
         let deadline = Instant::now() + Duration::from_secs(1);
         while Instant::now() < deadline {
-            if let Ok(Some(status)) = self.status() {
+            if self.status().ok().flatten().is_some() {
+                let Ok(status) = crate::child_status::reap(&mut self.child, &mut self.reaped)
+                else {
+                    return;
+                };
                 let _ = fs::write(
                     &self.cleanup,
                     format!("pid={} reaped=true status={status}\n", self.child.id()),
@@ -290,26 +292,19 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     }
     killpg(pid, Signal::SIGSTOP)?;
     loop {
-        match waitpid(pid, Some(WaitPidFlag::WNOHANG | WaitPidFlag::WUNTRACED)) {
-            Ok(WaitStatus::Stopped(_, Signal::SIGSTOP)) => break,
-            Ok(WaitStatus::StillAlive) | Err(Errno::EINTR) => {}
-            Ok(WaitStatus::Exited(..) | WaitStatus::Signaled(..)) => {
-                running.reaped = true;
-                return Err(Error::message(
-                    "candidate wait ownership ended before stop observation",
-                ));
-            }
-            Err(Errno::ECHILD) => {
-                running.reaped = true;
-                running.group = false;
-                return Err(Error::message(
-                    "candidate wait ownership lost before stop observation",
-                ));
-            }
-            result => {
-                return Err(Error::message(format!(
-                    "unexpected late-input stop result: {result:?}"
-                )));
+        match crate::child_status::observe(
+            &running.child,
+            &mut running.reaped,
+            rustix::process::WaitIdOptions::EXITED | rustix::process::WaitIdOptions::STOPPED,
+        ) {
+            Ok(Some(status)) if status.stopping_signal() == Some(Signal::SIGSTOP as i32) => break,
+            Ok(None) => {}
+            Ok(Some(_)) => return Err(Error::message("candidate ended before stop observation")),
+            Err(error) => {
+                if running.reaped {
+                    running.group = false;
+                }
+                return Err(error.into());
             }
         }
         pause(started)?;
@@ -324,19 +319,17 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     rustix::termios::tcsetpgrp(input, session)?;
     killpg(pid, Signal::SIGCONT)?;
     fs::write(root.join("resumed"), b"resumed after foreground reclaim\n")?;
-    let status = loop {
+    loop {
         collect(&mut stream, &mut sink, &mut copied)?;
-        if let Some(status) = running.status()? {
-            break status;
+        if running.status()?.is_some() {
+            break;
         }
         pause(started)?;
-    };
-    // Stop descendants before waiting for the terminal's last writer to close.
-    match killpg(pid, Signal::SIGKILL) {
-        Ok(()) | Err(Errno::ESRCH) => {}
-        Err(error) => return Err(error.into()),
     }
+    // Stop descendants before waiting for the terminal's last writer to close.
+    crate::child_status::cancel_group(&running.child, &mut running.reaped)?;
     running.group = false;
+    let status = crate::child_status::reap(&mut running.child, &mut running.reaped)?;
     while !stream.ended() {
         collect(&mut stream, &mut sink, &mut copied)?;
         pause(started)?;
@@ -437,9 +430,9 @@ pub fn invoke(
     drop(command);
     let started = Instant::now();
     let mut delivered = 0;
-    let status = loop {
-        if let Some(status) = running.status()? {
-            break status;
+    loop {
+        if running.status()?.is_some() {
+            break;
         }
         if root.join("input-ready").try_exists()? && delivered < data.len() {
             match master.write(&data[delivered..]) {
@@ -460,7 +453,8 @@ pub fn invoke(
             return Err(Error::message("late-input coordinator deadline"));
         }
         thread::sleep(Duration::from_millis(2));
-    };
+    }
+    let status = crate::child_status::reap(&mut running.child, &mut running.reaped)?;
     if !status.success() {
         return Err(Error::message(format!(
             "late-input coordinator failed: {status}; inspect {}",

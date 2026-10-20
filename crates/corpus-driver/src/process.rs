@@ -6,7 +6,7 @@ use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::sys::resource::{Resource, setrlimit};
 #[cfg(not(target_os = "linux"))]
 use nix::sys::signal::SigSet;
-use nix::sys::signal::{Signal, kill, killpg};
+use nix::sys::signal::{Signal, kill};
 use nix::unistd::{Pid, setsid};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -240,8 +240,7 @@ pub(crate) fn invoke(
             }
         }
         if status.is_none() {
-            status = child.child.try_wait()?;
-            child.reaped = status.is_some();
+            status = crate::child_status::terminal(&child.child, &mut child.reaped)?;
         }
         overflow |= stdout.metadata()?.len() > CAP || stderr.metadata()?.len() > CAP;
         if let Some(streaming) = &mut streaming {
@@ -282,11 +281,7 @@ pub(crate) fn invoke(
     let stdin_held_until_exit = case.hold_stdin && status.is_some() && input.is_some();
     child.terminate()?;
     drop(input);
-    let status = match status {
-        Some(status) => status,
-        None => child.child.wait()?,
-    };
-    child.reaped = true;
+    let status = crate::child_status::reap(&mut child.child, &mut child.reaped)?;
     if let Some(streaming) = &mut streaming {
         let drain_end = Instant::now() + Duration::from_secs(1);
         while !streaming.ended() && streaming.bytes.len() as u64 <= CAP {
@@ -353,14 +348,14 @@ struct RunningChild {
 
 impl RunningChild {
     fn terminate(&mut self) -> Result<()> {
+        if self.reaped {
+            return Err(Error::message("cannot cancel a released child PID"));
+        }
         let pid = Pid::from_raw(
             i32::try_from(self.child.id())
                 .map_err(|_| Error::message("child PID exceeds the native process-ID range"))?,
         );
-        match killpg(pid, Signal::SIGKILL) {
-            Ok(()) | Err(Errno::ESRCH) => {}
-            Err(error) => return Err(error.into()),
-        }
+        crate::child_status::cancel_group(&self.child, &mut self.reaped)?;
         // killpg can see no group while the launcher is still before setsid.
         // A live leader is ours until wait has reaped it.
         if !self.reaped {
