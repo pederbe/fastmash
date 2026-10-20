@@ -43,6 +43,10 @@ pub struct Observed {
     pub held: Option<Held>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub destination: Option<Destination>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acknowledged: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_error_mechanism: Option<String>,
     pub stdout_hex: String,
     pub stderr_hex: String,
 }
@@ -334,6 +338,8 @@ pub(crate) fn invoke(
         stdin_held_until_exit,
         held,
         destination: facts,
+        acknowledged: None,
+        input_error_mechanism: None,
         stdout_hex: encode(&out),
         stderr_hex: encode(&err),
     })

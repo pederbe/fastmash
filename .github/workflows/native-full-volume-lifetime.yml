@@ -2,7 +2,7 @@ name: Native full-volume lifetime
 
 on:
   push:
-    branches: [contrib/native-full-volume-lifetime, contrib/native-full-output-controls, contrib/rust-full-output-corpus, contrib/rust-held-stdin-corpus, contrib/rust-held-output-corpus]
+    branches: [contrib/native-full-volume-lifetime, contrib/native-full-output-controls, contrib/rust-full-output-corpus, contrib/rust-held-stdin-corpus, contrib/rust-held-output-corpus, contrib/rust-late-read-corpus]
 
 permissions:
   contents: read

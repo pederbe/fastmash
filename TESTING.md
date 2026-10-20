@@ -25,8 +25,6 @@ cargo clippy --workspace --all-targets -- -D warnings   # lints
 cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 cargo test --release --workspace         # unit and integration tests
 cargo build --release --workspace        # the binaries the corpus runs
-python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version 0.2.0
-python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version 0.2.0 --stdin-file
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --stdin-file
 ```
@@ -285,9 +283,9 @@ differs record Fastmash's documented behavior instead; the
 reasons.
 
 ```sh
-cargo build --release   # fastmash and fastmash-sort-supervisor, side by side
-python3 scripts/check_regressions.py --binary target/release/fastmash --expected-version 0.2.0 --keep-going
-python3 scripts/check_regressions.py --help
+cargo build --release --workspace   # candidate, Sort supervisor and corpus driver
+target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --keep-going
+target/release/fastmash-corpus --help
 ```
 
 A run stops at the first mismatch and prints the case, the expected bytes and
@@ -299,17 +297,16 @@ The frozen fixture and its provenance record stay byte-identical across platform
 The unpublished Rust driver in `crates/corpus-driver/` executes the 2,857 ordinary
 cases in both modes. Its default run also executes 22 directory-input and 51
 closed-output-pipe cases, 72 full-output cases and 65 early commands with stdin
-held open, plus 67 held-output observations. Three late-input cases remain
-deferred. Regular-file mode
-records why each other case belongs to the default Rust run or the full Python
-run. Keep both complete Python runs alongside it until the remaining stream and
-fault transports have migrated. Its `--keep-going` and `--evidence-dir` options
-retain every case's disposition and outcome for comparison with the existing
-driver. CI retains both drivers' evidence on Linux and native macOS 15 and 26.
+held open, plus 67 held-output observations and three acknowledged late-input
+errors. Regular-file mode records why each other case belongs to the default
+Rust run. Its `--keep-going` and `--evidence-dir` options retain every case's
+disposition and outcome. CI runs this same driver on Linux, native macOS 15 and
+26, and the executable installed from the native archive.
 For a development version, pass `--expected-version VERSION`, using the version
 in `crates/cli/Cargo.toml`.
-On macOS, the runner requires no supervisor and uses the native fault transports
-below. `--evidence-dir` retains the executable and fixture hashes, per-case
+On macOS, the corpus driver requires no supervisor. It uses a private full
+filesystem for output faults and controlling-terminal job control for input
+faults. The separate Rust command tests retain the native fault helpers below. `--evidence-dir` retains the executable and fixture hashes, per-case
 dispositions, native observations and mismatches. Regular-file mode records the
 transport cases it leaves to the piped run, instead of silently excluding them.
 
@@ -365,7 +362,7 @@ margins and hardware.
 | --- | --- |
 | OS | Linux x86-64 with glibc, or WSL2 |
 | Kernel | 5.11 or later, for the external sort route |
-| Tools | Stable Rust (see `rust-version` in `Cargo.toml`), Python 3.10 or later, GNU or uutils coreutils `sort` |
+| Tools | Stable Rust (see `rust-version` in `Cargo.toml`), GNU or uutils coreutils `sort`; Python 3.10 or later for website checks |
 | Temporary storage | A writable `TMPDIR`, such as ext4 or tmpfs |
 
 Under WSL, keep the checkout and `TMPDIR` on the Linux filesystem rather than a
@@ -401,8 +398,8 @@ cargo build --locked --manifest-path release/publication-test-server/Cargo.toml 
 cargo test --release --workspace --locked
 cargo build --release --workspace --locked
 version=$(sed -n '\''s/^version = "\([^"]*\)"$/\1/p'\'' crates/cli/Cargo.toml | head -n 1)
-python3 -B scripts/check_regressions.py --binary target/release/fastmash --expected-version "$version"
-python3 -B scripts/check_regressions.py --binary target/release/fastmash --expected-version "$version" --stdin-file
+target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version"
+target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --stdin-file
 '
 ```
 
@@ -411,8 +408,9 @@ These named dispositions adapt observation or diagnostics only:
 
 | Mechanism or frozen case | Native disposition |
 | --- | --- |
-| All 72 `io=full` cases and Rust full-stream tests | A test-only dyld interposer returns `-1` with native `ENOSPC` for the selected stdout or stderr descriptor. A Rust probe checks the actual return and errno, ordinary and unselected writes must remain exact, and the actual candidate must pass calibration before a fault result is accepted. Corpus stdout uses a writable, nonterminal regular capture admitted with an actual 4,096-byte block size, preserving the frozen output buffer boundary and literal diagnostics; observations retain its destination facts. Linux keeps `/dev/full`. |
-| `grouping-next:read-error`, `grouping-next:read-error-header`, `paired-private:grouped-read-error-after-result` | The native late-input fault is armed after the frozen visible completed-group acknowledgement. Its native read fault retains literal final stdout, `EIO` and status 1. Linux keeps its real PTY master read error. |
+| Rust full-stream tests | A test-only dyld interposer returns `-1` with native `ENOSPC` for the selected stdout or stderr descriptor. A Rust probe checks the actual return and errno, ordinary and unselected writes must remain exact, and the actual candidate must pass calibration before a fault result is accepted. Linux keeps `/dev/full`. |
+| All 72 `io=full` corpus cases | The Rust corpus driver uses a private 8 MiB HFS+ image filled to real `ENOSPC`. Actual executable controls calibrate selected and unselected streams, with empty-sink checks before and after each case. Destination facts and owned-image cleanup are retained. Linux uses `/dev/full`. |
+| `grouping-next:read-error`, `grouping-next:read-error-header`, `paired-private:grouped-read-error-after-result` | The corpus driver observes the frozen visible completed-group acknowledgement, stops the candidate, reclaims the controlling terminal foreground and resumes it. The next read produces real `EIO` without wake bytes on both platforms. Final stdout, stderr and status 1 stay frozen. |
 | `sorting/header-empty`, `sorting/header-only-comments`; native calculations in `record_separators::record_intake::missing_headers_keep_native_and_external_full_warning_order`; ordinary aggregates in `weighted_mean::sorted_named_empty_completion_keeps_header_errors_and_legacy_commands` | Native sorting on Linux and macOS reports exactly `fastmash: missing input header for named grouping key`, with empty stdout and status 1. It emits no full warning because the data phase has not begun. The fixture remains frozen; only these two named corpus diagnostics are adapted. |
 | `rms` in `record_separators::record_intake::missing_headers_keep_native_and_external_full_warning_order` | Linux's external route retains the system-sort error, then the full warning and `read error (on close)`. macOS uses the native missing-header diagnostic without a full warning. Both require empty stdout and status 1. |
 | `weighted_mean::weighted_numeric_sort_eligibility_and_system_composition_are_exercised`; mixed paired calculations in `weighted_mean::sorted_named_empty_completion_keeps_header_errors_and_legacy_commands` | Paired-operation composition uses the native Sort route on macOS and retains the system Sort route on Linux. Each platform checks its required route trace while report bytes stay identical. |

@@ -55,14 +55,16 @@ jobs:
         run: |
           cd out/target/release
           sha256sum -c "$GITHUB_WORKSPACE/release/qualified.sha256"
-      - name: Test
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          python3 scripts/check_regressions.py --binary out/target/release/fastmash --expected-version "$version"
-          python3 scripts/check_regressions.py --binary out/target/release/fastmash --expected-version "$version" --stdin-file
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: "1.98.1"
+      - name: Test
+        run: |
+          cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-corpus
+          version="${GITHUB_REF_NAME#v}"
+          target/release/fastmash-corpus --binary out/target/release/fastmash --expected-version "$version"
+          target/release/fastmash-corpus --binary out/target/release/fastmash --expected-version "$version" --stdin-file
+          (cd out/target/release && sha256sum -c "$GITHUB_WORKSPACE/release/qualified.sha256")
       - name: Workspace and exact release command checks
         run: |
           cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins

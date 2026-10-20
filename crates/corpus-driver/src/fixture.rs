@@ -24,8 +24,7 @@ pub const VERSION_CASES: &[&str] = &[
 ];
 pub const NATIVE_SORT_DIAGNOSTICS: &[&str] =
     &["sorting/header-empty", "sorting/header-only-comments"];
-pub const TRANSPORT_REASON: &str =
-    "non-ordinary input transport; covered by the full Python corpus run";
+pub const TRANSPORT_REASON: &str = "unsupported transport combination";
 pub const FILE_TRANSPORT_REASON: &str =
     "transport case is covered by the default Rust run, not --stdin-file";
 pub const NATIVE_REASON: &str =
@@ -45,6 +44,7 @@ pub struct Case {
     pub observe_held: serde_json::Value,
     #[serde(default)]
     pub hold_stdin: bool,
+    pub ack_hex: Option<String>,
     pub args: Option<Vec<Argument>>,
     pub args_hex: Option<Vec<String>>,
     pub input_hex: String,
@@ -202,6 +202,11 @@ impl Case {
     pub fn supported(&self, stdin_file: bool) -> bool {
         self.ordinary()
             || (!stdin_file
+                && self.io == "read-error"
+                && !self.hold_stdin
+                && !truthy(&self.observe_held)
+                && self.ack_hex.as_ref().is_some_and(|ack| !ack.is_empty()))
+            || (!stdin_file
                 && self.observes_held()
                 && !self.hold_stdin
                 && !self.input_hex.is_empty()
@@ -227,6 +232,7 @@ impl Case {
                 "directory" => "directory-input",
                 "closed-pipe" => "closed-output-pipe",
                 "full" => "full-output",
+                "read-error" => "late-input-error",
                 _ if stdin_file => "ordinary-file",
                 _ => "ordinary-pipe",
             }
@@ -492,7 +498,7 @@ mod tests {
                 .iter()
                 .filter(|case| case.supported(false))
                 .count(),
-            3134
+            3137
         );
         assert_eq!(
             fixture

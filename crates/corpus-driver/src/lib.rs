@@ -7,6 +7,7 @@ pub mod fixture;
 pub mod full_output;
 pub mod full_volume;
 mod held_output;
+mod late_input;
 mod process;
 
 use fixture::{Fixture, digest};
@@ -48,6 +49,11 @@ impl From<serde_json::Error> for Error {
 impl From<nix::errno::Errno> for Error {
     fn from(error: nix::errno::Errno) -> Self {
         Self(error.into())
+    }
+}
+impl From<rustix::io::Errno> for Error {
+    fn from(value: rustix::io::Errno) -> Self {
+        Self(value.into())
     }
 }
 impl From<Box<dyn std::error::Error>> for Error {
@@ -184,14 +190,23 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     for case in cases {
         let mut expected = case.expected(&options.root, options.expected_version.as_deref())?;
         result.attempted += 1;
-        let observed = invoke(
-            case,
-            &binary,
-            &launcher,
-            &directory.path,
-            options.stdin_file,
-            full.as_mut(),
-        )?;
+        let observed = if case.io == "read-error" {
+            let root = options
+                .evidence_dir
+                .as_ref()
+                .unwrap_or(&directory.path)
+                .join("late-input");
+            late_input::invoke(case, &expected, &binary, &launcher, &root)?
+        } else {
+            invoke(
+                case,
+                &binary,
+                &launcher,
+                &directory.path,
+                options.stdin_file,
+                full.as_mut(),
+            )?
+        };
         case.adapt_native_buffer(&mut expected, observed.destination.as_ref())?;
         let passed =
             observed.matches(&expected) && (!case.hold_stdin || observed.stdin_held_until_exit);
@@ -204,6 +219,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
             if !passed
                 || case.hold_stdin
                 || case.observes_held()
+                || case.io == "read-error"
                 || !case.native_dispositions().is_empty()
             {
                 let mut observations = OpenOptions::new()
@@ -313,6 +329,14 @@ fn write_line(output: &mut impl Write, value: &impl Serialize) -> Result<()> {
 
 pub fn main_entry(mut args: impl Iterator<Item = OsString>) -> Result<i32> {
     let first = args.next();
+    if first.as_deref() == Some(std::ffi::OsStr::new(late_input::COORDINATE)) {
+        late_input::coordinate(args)?;
+        return Ok(0);
+    }
+    if first.as_deref() == Some(std::ffi::OsStr::new(late_input::EXEC)) {
+        late_input::exec(args)?;
+        return Err(Error::message("late-input exec unexpectedly returned"));
+    }
     if first.as_deref() == Some(std::ffi::OsStr::new(process::EXEC_MODE)) {
         process::exec_target(args)?;
         return Err(Error::message("internal exec unexpectedly returned"));
@@ -328,7 +352,7 @@ pub fn main_entry(mut args: impl Iterator<Item = OsString>) -> Result<i32> {
         match arg.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Run frozen Fastmash commands and supported transports.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n  --fixture PATH          compressed corpus and sibling provenance\n  --match TEXT            select case IDs containing TEXT\n  --expected-version V    successful version-action expectation\n  --stdin-file            ordinary input through a regular file\n  --keep-going            continue after mismatches\n  --evidence-dir PATH     retain one run in an empty directory\n\nHeld stdin and pre-EOF output observations run by default alongside directory input, closed output pipes and full-output cases. Late-input errors remain in the full Python corpus run."
+                    "Run frozen Fastmash commands and supported transports.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n  --fixture PATH          compressed corpus and sibling provenance\n  --match TEXT            select case IDs containing TEXT\n  --expected-version V    successful version-action expectation\n  --stdin-file            ordinary input through a regular file\n  --keep-going            continue after mismatches\n  --evidence-dir PATH     retain one run in an empty directory\n\nHeld stdin, pre-EOF output and late-input error cases run by default alongside directory input, closed output pipes and full-output cases. Both input modes account for every frozen case."
                 );
                 return Ok(0);
             }

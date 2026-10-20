@@ -52,7 +52,7 @@ release is being tagged.
    and `release/build.sh`), twice from a clean checkout. The two builds must
    be byte-identical.
 4. **Qualify the candidate.** Run the regression corpus
-   (`scripts/check_regressions.py --binary ...`, both with and without
+   (`target/release/fastmash-corpus --binary ...`, both with and without
    `--stdin-file`) and the benchmark catalog on
    both measurement hosts, against GNU datamash 1.9 and the previous release,
    with the [acceptance rules](https://fastmash.io/benchmarks/method.html)
@@ -169,8 +169,9 @@ version=$2
 export FASTMASH_TEST_BINARY="$candidate/fastmash"
 cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 cargo test --release --workspace --locked
-python3 -B scripts/check_regressions.py --binary "$FASTMASH_TEST_BINARY" --expected-version "$version"
-python3 -B scripts/check_regressions.py --binary "$FASTMASH_TEST_BINARY" --expected-version "$version" --stdin-file
+cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-corpus
+target/release/fastmash-corpus --binary "$FASTMASH_TEST_BINARY" --expected-version "$version"
+target/release/fastmash-corpus --binary "$FASTMASH_TEST_BINARY" --expected-version "$version" --stdin-file
 ' -- /absolute/path/to/candidate-binaries X.Y.Z
 ```
 
