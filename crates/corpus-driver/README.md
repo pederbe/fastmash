@@ -7,7 +7,12 @@ verifies the frozen fixture and provenance, records executable identities and
 compares exact bytes and status. It preserves byte arguments, the isolated
 environment, the eight-second execution deadline and the 524,288-byte output
 guard. Each invocation owns a process group that is cancelled on completion or
-failure.
+failure. Candidate processes must retain inherited credentials and remain in
+that group and session. Exit is observed without reaping the leader, so its PID
+stays owned until group cancellation finishes. On macOS, signalling a group with
+only zombies can return EPERM. That result is accepted only after a fresh
+terminal-status observation of the still-owned leader. Live-leader permission
+errors remain failures.
 
 Linux admission reads the current thread's kernel `SigBlk` mask, including
 real-time signals, from `/proc/thread-self/status`. macOS uses the native signal

@@ -3,6 +3,30 @@ use rustix::process::{Pid, WaitId, WaitIdOptions, WaitIdStatus, waitid};
 use std::io;
 use std::process::{Child, ExitStatus};
 
+pub(crate) fn cancel_group(child: &Child, reaped: &mut bool) -> io::Result<()> {
+    use nix::errno::Errno;
+    use nix::sys::signal::{Signal, killpg};
+    if *reaped {
+        return Err(io::Error::other("cannot cancel a released child PID"));
+    }
+    let pid = nix::unistd::Pid::from_raw(child.id() as i32);
+    match killpg(pid, Signal::SIGKILL) {
+        Ok(()) | Err(Errno::ESRCH) => Ok(()),
+        // Darwin excludes zombies from group signalling and returns EPERM when
+        // none are eligible. These candidate groups retain inherited credentials
+        // and never daemonize. A live descendant is still sent SIGKILL. Keep the
+        // leader unreaped and verify its terminal status before accepting this
+        // empty-group result. Live or unobserved leaders retain the error.
+        Err(Errno::EPERM) if cfg!(target_os = "macos") && terminal(child, reaped)?.is_some() => {
+            Ok(())
+        }
+        Err(error) => Err(io::Error::new(
+            io::Error::from(error).kind(),
+            format!("cancel owned child group {pid} before reap: {error}"),
+        )),
+    }
+}
+
 pub(crate) fn observe(
     child: &Child,
     reaped: &mut bool,
@@ -85,7 +109,11 @@ mod tests {
         // A normal reaping wait must still find this child. With try_wait-based
         // observation it instead returns ECHILD, exposing the ownership race.
         let pid = nix::unistd::Pid::from_raw(child.id() as i32);
-        killpg(pid, Signal::SIGKILL).unwrap();
+        let native = killpg(pid, Signal::SIGKILL);
+        assert!(
+            native.is_ok() || cfg!(target_os = "macos") && native == Err(nix::errno::Errno::EPERM)
+        );
+        cancel_group(&child, &mut reaped).unwrap();
         assert_eq!(
             waitpid(pid, Some(WaitPidFlag::WNOHANG)).unwrap(),
             WaitStatus::Exited(pid, 17)

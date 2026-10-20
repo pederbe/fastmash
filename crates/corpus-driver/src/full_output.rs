@@ -2,8 +2,6 @@
 
 //! Exercise real ENOSPC against the actual executable, without an interposer.
 use crate::fixture::digest;
-use nix::sys::signal::{Signal, killpg};
-use nix::unistd::Pid;
 use serde_json::json;
 use std::error::Error;
 use std::fs::{self, File, OpenOptions};
@@ -47,16 +45,7 @@ impl Running {
             if crate::child_status::terminal(&self.0, &mut self.1)?.is_some() {
                 // A descendant may still hold a capture or the full sink after
                 // its leader exits. Cancel the owned group before reading it.
-                match killpg(Pid::from_raw(self.0.id() as i32), Signal::SIGKILL) {
-                    Ok(()) | Err(nix::errno::Errno::ESRCH) => {}
-                    Err(error) => {
-                        return Err(format!(
-                            "cancel full-output group {} before reap: {error}",
-                            self.0.id()
-                        )
-                        .into());
-                    }
-                }
+                crate::child_status::cancel_group(&self.0, &mut self.1)?;
                 let status = crate::child_status::reap(&mut self.0, &mut self.1)?;
                 return Ok(status);
             }
@@ -72,7 +61,10 @@ impl Drop for Running {
         if self.1 {
             return;
         }
-        let _ = killpg(Pid::from_raw(self.0.id() as i32), Signal::SIGKILL);
+        let _ = crate::child_status::cancel_group(&self.0, &mut self.1);
+        if self.1 {
+            return;
+        }
         let _ = self.0.kill();
         let started = Instant::now();
         while started.elapsed() < Duration::from_secs(1) {

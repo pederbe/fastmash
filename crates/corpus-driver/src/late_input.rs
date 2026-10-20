@@ -69,7 +69,7 @@ impl Drop for Running {
     fn drop(&mut self) {
         // Cancel descendants while the leader PID is still owned.
         if self.group && !self.reaped {
-            let _ = killpg(Pid::from_raw(self.child.id() as i32), Signal::SIGKILL);
+            let _ = crate::child_status::cancel_group(&self.child, &mut self.reaped);
             self.group = false;
         }
         if self.reaped {
@@ -327,10 +327,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
         pause(started)?;
     }
     // Stop descendants before waiting for the terminal's last writer to close.
-    match killpg(pid, Signal::SIGKILL) {
-        Ok(()) | Err(Errno::ESRCH) => {}
-        Err(error) => return Err(error.into()),
-    }
+    crate::child_status::cancel_group(&running.child, &mut running.reaped)?;
     running.group = false;
     let status = crate::child_status::reap(&mut running.child, &mut running.reaped)?;
     while !stream.ended() {

@@ -6,7 +6,7 @@ use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::sys::resource::{Resource, setrlimit};
 #[cfg(not(target_os = "linux"))]
 use nix::sys::signal::SigSet;
-use nix::sys::signal::{Signal, kill, killpg};
+use nix::sys::signal::{Signal, kill};
 use nix::unistd::{Pid, setsid};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -355,14 +355,7 @@ impl RunningChild {
             i32::try_from(self.child.id())
                 .map_err(|_| Error::message("child PID exceeds the native process-ID range"))?,
         );
-        match killpg(pid, Signal::SIGKILL) {
-            Ok(()) | Err(Errno::ESRCH) => {}
-            Err(error) => {
-                return Err(Error::message(format!(
-                    "cancel owned child group {pid} before reap: {error}"
-                )));
-            }
-        }
+        crate::child_status::cancel_group(&self.child, &mut self.reaped)?;
         // killpg can see no group while the launcher is still before setsid.
         // A live leader is ours until wait has reaped it.
         if !self.reaped {
