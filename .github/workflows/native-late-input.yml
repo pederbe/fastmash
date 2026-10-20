@@ -2,7 +2,7 @@ name: Native late-input mechanism
 
 on:
   push:
-    branches: [contrib/native-late-input-probe]
+    branches: [contrib/native-late-input-probe, contrib/native-stop-resume-read-error]
 
 permissions:
   contents: read
@@ -69,6 +69,10 @@ jobs:
           result=0
           target/release/examples/native-late-input "$PWD/target/release/fastmash" "$CAPTURES/observations" > "$CAPTURES/probe.stdout" 2> "$CAPTURES/probe.stderr" || result=$?
           printf '%s\n' "$result" > "$CAPTURES/probe.exit"
+          test "$result" = 0
+          result=0
+          target/release/examples/native-late-input --stop-resume "$PWD/target/release/fastmash" "$CAPTURES/stop-resume" > "$CAPTURES/stop-resume.stdout" 2> "$CAPTURES/stop-resume.stderr" || result=$?
+          printf '%s\n' "$result" > "$CAPTURES/stop-resume.exit"
           test "$result" = 0
           result=0
           target/release/examples/native-late-input --cancel "$PWD/target/release/fastmash" "$CAPTURES/cancellation" > "$CAPTURES/cancellation.stdout" 2> "$CAPTURES/cancellation.stderr" || result=$?

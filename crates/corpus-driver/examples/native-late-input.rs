@@ -25,6 +25,13 @@ const LIMIT: Duration = Duration::from_secs(10);
 const PREFIX: usize = 32_768;
 const WAKE: &[u8] = b"# wake\n";
 
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Wake,
+    Cancel,
+    StopResume,
+}
+
 fn fresh(path: &Path) -> io::Result<File> {
     OpenOptions::new()
         .write(true)
@@ -150,7 +157,7 @@ fn target(executable: &Path, directory: &Path) -> Result<Command> {
     Ok(command)
 }
 
-fn ordinary(executable: &Path, root: &Path, prefix: &[u8]) -> Result<()> {
+fn ordinary(executable: &Path, root: &Path, prefix: &[u8], mode: Mode) -> Result<()> {
     let directory = root.join("ordinary");
     fs::create_dir(&directory)?;
     let (reader, mut writer) = UnixStream::pair()?;
@@ -170,7 +177,9 @@ fn ordinary(executable: &Path, root: &Path, prefix: &[u8]) -> Result<()> {
     drop(command);
     let started = Instant::now();
     let mut bytes = prefix.to_vec();
-    bytes.extend_from_slice(WAKE);
+    if mode != Mode::StopResume {
+        bytes.extend_from_slice(WAKE);
+    }
     let mut delivered = 0;
     while delivered < bytes.len() {
         match writer.write(&bytes[delivered..]) {
@@ -229,7 +238,7 @@ fn exec_target(executable: &Path, root: &Path) -> Result<()> {
     Err(error.into())
 }
 
-fn coordinate(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
+fn coordinate(executable: &Path, root: &Path, mode: Mode) -> Result<()> {
     let started = Instant::now();
     let session = rustix::process::setsid()?;
     let input = rustix::stdio::stdin();
@@ -295,7 +304,7 @@ fn coordinate(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
             "foreground":rustix::termios::tcgetpgrp(input)?.as_raw_nonzero().get(),
         }))?,
     )?;
-    if cancel {
+    if mode == Mode::Cancel {
         fs::write(
             root.join("cancel-ready"),
             b"live candidate prefix observed\n",
@@ -303,8 +312,57 @@ fn coordinate(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
         let status = running.wait(started)?;
         return Err(format!("candidate exited before cancellation: {status}").into());
     }
+    if mode == Mode::StopResume {
+        // Confirm all supplied bytes have left the kernel queue. This does
+        // not claim a particular userspace buffer or syscall position.
+        while !root.join("input-delivered").try_exists()? || rustix::io::ioctl_fionread(input)? != 0
+        {
+            if cancellation_requested()? {
+                return Err("coordinator cancellation requested".into());
+            }
+            if running.status()?.is_some() {
+                return Err("candidate exited before stop control".into());
+            }
+            pause(started)?;
+        }
+        let pid = nix::unistd::Pid::from_raw(running.child.id() as i32);
+        killpg(pid, Signal::SIGSTOP)?;
+        loop {
+            use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
+            match waitpid(pid, Some(WaitPidFlag::WNOHANG | WaitPidFlag::WUNTRACED)) {
+                Ok(WaitStatus::Stopped(_, Signal::SIGSTOP)) => break,
+                Ok(WaitStatus::StillAlive) | Err(Errno::EINTR) => {}
+                Ok(WaitStatus::Exited(..) | WaitStatus::Signaled(..)) => {
+                    running.reaped = true;
+                    return Err("candidate exited before stopped state was observed".into());
+                }
+                result => return Err(format!("unexpected stop observation: {result:?}").into()),
+            }
+            if cancellation_requested()? {
+                return Err("coordinator cancellation requested".into());
+            }
+            pause(started)?;
+        }
+        fs::write(
+            root.join("stop-observed.json"),
+            serde_json::to_vec_pretty(&json!({
+                "pid":running.child.id(),"signal":"SIGSTOP","kernel_unread":rustix::io::ioctl_fionread(input)?,
+                "prefix_visible_before_stop":true,"reaped":running.reaped,
+            }))?,
+        )?;
+    }
     rustix::termios::tcsetpgrp(input, session)?;
     fs::write(root.join("backgrounded"), b"terminal reclaimed\n")?;
+    if mode == Mode::StopResume {
+        killpg(
+            nix::unistd::Pid::from_raw(running.child.id() as i32),
+            Signal::SIGCONT,
+        )?;
+        fs::write(
+            root.join("resume-requested"),
+            b"SIGCONT after foreground reclaim\n",
+        )?;
+    }
     let status = running.wait(started)?;
     fs::write(
         root.join("candidate-status.json"),
@@ -316,7 +374,7 @@ fn coordinate(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
     Ok(())
 }
 
-fn probe(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
+fn probe(executable: &Path, root: &Path, mode: Mode) -> Result<()> {
     fs::DirBuilder::new().mode(0o700).create(root)?;
     let executable = fs::canonicalize(executable)?;
     let mut prefix = b"alpha\t2\n".repeat(PREFIX);
@@ -331,13 +389,17 @@ fn probe(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
             "candidate":executable, "candidate_sha256":digest(&fs::read(&executable)?),
             "input_sha256":digest(&prefix), "input_bytes":prefix.len(),
         "candidate_arguments":["--skip-comments", "--full", "noop"],
-        "wakeup_comment_bytes":WAKE,
-        "selection":if cancel { "close pre-established cancellation peer after live prefix" } else { "foreground terminal to background group with SIGTTIN blocked" },
+        "wakeup_comment_bytes":if mode == Mode::StopResume { &[][..] } else { WAKE },
+        "selection":match mode {
+            Mode::Cancel => "close pre-established cancellation peer after live prefix",
+            Mode::Wake => "foreground terminal to background group with SIGTTIN blocked",
+            Mode::StopResume => "observe live prefix, stop candidate, reclaim foreground, resume without wake input",
+        },
             "source":"https://pubs.opengroup.org/onlinepubs/007904975/basedefs/xbd_chap11.html",
             "scope":"mechanism probe only; no retained fault test has been replaced",
         }))?,
     )?;
-    ordinary(&executable, root, &prefix)?;
+    ordinary(&executable, root, &prefix, mode)?;
     let directory = root.join("terminal");
     fs::DirBuilder::new().mode(0o700).create(&directory)?;
     let pty = nix::pty::openpty(None, None)?;
@@ -356,10 +418,10 @@ fn probe(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
     cancellation_reader.set_nonblocking(true)?;
     let mut command = Command::new(std::env::current_exe()?);
     command
-        .arg(if cancel {
-            "--coordinate-cancel"
-        } else {
-            "--coordinate"
+        .arg(match mode {
+            Mode::Cancel => "--coordinate-cancel",
+            Mode::Wake => "--coordinate",
+            Mode::StopResume => "--coordinate-stop-resume",
         })
         .arg(&executable)
         .arg(&directory)
@@ -393,12 +455,22 @@ fn probe(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
                     ) => {}
                 Err(e) => return Err(e.into()),
             }
+            if delivered == prefix.len() && mode == Mode::StopResume {
+                fs::write(
+                    directory.join("input-delivered"),
+                    b"exact known prefix supplied\n",
+                )?;
+            }
         }
-        if cancel && directory.join("cancel-ready").try_exists()? && !cancellation_sent {
+        if mode == Mode::Cancel
+            && directory.join("cancel-ready").try_exists()?
+            && !cancellation_sent
+        {
             drop(running.cancellation.take());
             cancellation_sent = true;
         }
-        if delivered == prefix.len()
+        if mode != Mode::StopResume
+            && delivered == prefix.len()
             && directory.join("backgrounded").try_exists()?
             && wake_delivered < WAKE.len()
         {
@@ -419,7 +491,7 @@ fn probe(executable: &Path, root: &Path, cancel: bool) -> Result<()> {
         }
         thread::sleep(Duration::from_millis(2));
     };
-    if cancel {
+    if mode == Mode::Cancel {
         let cleanup: serde_json::Value =
             serde_json::from_slice(&fs::read(directory.join("candidate-cleanup.json"))?)?;
         let started: serde_json::Value =
@@ -481,16 +553,26 @@ fn main() {
             exec_target(Path::new(executable), Path::new(root))
         }
         [mode, executable, root] if mode == "--coordinate" => {
-            coordinate(Path::new(executable), Path::new(root), false)
+            coordinate(Path::new(executable), Path::new(root), Mode::Wake)
         }
         [mode, executable, root] if mode == "--coordinate-cancel" => {
-            coordinate(Path::new(executable), Path::new(root), true)
+            coordinate(Path::new(executable), Path::new(root), Mode::Cancel)
+        }
+        [mode, executable, root] if mode == "--coordinate-stop-resume" => {
+            coordinate(Path::new(executable), Path::new(root), Mode::StopResume)
         }
         [mode, executable, root] if mode == "--cancel" => {
-            probe(Path::new(executable), &PathBuf::from(root), true)
+            probe(Path::new(executable), &PathBuf::from(root), Mode::Cancel)
         }
-        [executable, root] => probe(Path::new(executable), &PathBuf::from(root), false),
-        _ => Err("usage: native-late-input [--cancel] EXECUTABLE FRESH_CAPTURE_DIR".into()),
+        [mode, executable, root] if mode == "--stop-resume" => probe(
+            Path::new(executable),
+            &PathBuf::from(root),
+            Mode::StopResume,
+        ),
+        [executable, root] => probe(Path::new(executable), &PathBuf::from(root), Mode::Wake),
+        _ => Err(
+            "usage: native-late-input [--cancel|--stop-resume] EXECUTABLE FRESH_CAPTURE_DIR".into(),
+        ),
     };
     if let Err(error) = result {
         eprintln!("native-late-input: {error}");
