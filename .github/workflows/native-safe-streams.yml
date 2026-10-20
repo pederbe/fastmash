@@ -81,9 +81,11 @@ jobs:
                  [ "$(grep -c 'test .* \.\.\. FAILED' "$log")" -ne 1 ]; then
                 break
               fi
+              if ! /usr/bin/hdiutil info -plist > "$CAPTURES/after-creation-failure-$attempt.plist"; then break; fi
+              if ! python3 -c 'import pathlib, plistlib, sys; images=plistlib.load(open(sys.argv[1], "rb"))["images"]; owned={str(pathlib.Path(root) / "volume/full.dmg") for root in sys.argv[2:]}; sys.exit(any(image["image-path"] in owned for image in images))' "$CAPTURES/after-creation-failure-$attempt.plist" /private/tmp/fastmash-test-*.full-output; then break; fi
               unclean=0
               for root in /private/tmp/fastmash-test-*.full-output; do
-                if [ ! -f "$root/volume/cleanup.ok" ]; then unclean=1; fi
+                if [ ! -f "$root/volume/cleanup.ok" ] || [ -e "$root/volume/full.dmg" ] || [ -e "$root/volume/mount" ]; then unclean=1; fi
               done
               if [ "$unclean" -ne 0 ]; then break; fi
             fi
