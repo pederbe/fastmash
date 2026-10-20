@@ -1,36 +1,13 @@
 //! Native process primitives used by the standard streams and signal policy.
 use std::io;
 
-#[cfg(target_os = "linux")]
-fn checked(value: isize) -> io::Result<usize> {
-    if value < 0 {
-        Err(io::Error::from_raw_os_error(-value as i32))
-    } else {
-        Ok(value as usize)
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn checked(value: isize) -> io::Result<usize> {
-    if value < 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(value as usize)
-    }
-}
-
 pub(super) use super::standard_stream_io::{flags, read, seek, write};
 
 /// Closes an exclusively owned raw descriptor, without retrying an uncertain
 /// close. Callers must finish every use of the descriptor first.
+#[forbid(unsafe_code)]
 pub(super) fn close(fd: usize) -> io::Result<()> {
-    #[cfg(target_os = "linux")]
-    // SAFETY: close takes no pointers; callers surrender their descriptor.
-    let result = unsafe { super::linux::syscall(3, fd, 0, 0, 0) };
-    #[cfg(target_os = "macos")]
-    // SAFETY: close takes no pointers; callers surrender their descriptor.
-    let result = unsafe { libc::close(fd as libc::c_int) } as isize;
-    checked(result).map(|_| ())
+    nix::unistd::close(fd as std::os::fd::RawFd).map_err(io::Error::from)
 }
 
 pub(super) fn sigpipe_mask() -> io::Result<u64> {

@@ -35,6 +35,8 @@ fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.2.0"
 fastmash-sort-process = { path = "../sort-process", version = "=0.2.0" }
 rustc_apfloat = "=0.2.3"
 libc = "=0.2.189"
+# Safe final descriptor closure retains observable errors without retrying.
+nix = { version = "=0.31.3", default-features = false }
 memchr = "=2.8.3"
 # "unstable" only re-exports CollationKeySink, for sort keys that refuse
 # instead of aborting when they cannot grow; the version is pinned exactly.
