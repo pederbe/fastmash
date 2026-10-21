@@ -367,24 +367,6 @@ impl Kind {
                 | Self::Strbin(_)
         )
     }
-    pub(super) fn uses_borrowed_number(self) -> bool {
-        self.uses_shared_sorted_samples()
-            || self.is_mad()
-            || self.is_dispersion()
-            || matches!(
-                self,
-                Self::Sum
-                    | Self::Rounding(_)
-                    | Self::Bin(_)
-                    | Self::Mean
-                    | Self::Wmean
-                    | Self::Min
-                    | Self::Max
-                    | Self::Absmin
-                    | Self::Absmax
-                    | Self::Range
-            )
-    }
     pub(super) fn is_mad(self) -> bool {
         matches!(self, Self::Madraw | Self::Mad)
     }
