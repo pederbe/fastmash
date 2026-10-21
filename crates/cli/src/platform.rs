@@ -12,16 +12,12 @@ pub(super) fn close(fd: usize) -> io::Result<()> {
 
 #[forbid(unsafe_code)]
 pub(super) fn sigpipe_mask() -> io::Result<u64> {
-    #[cfg(target_os = "linux")]
-    {
-        fastmash_sort_process::linux::mask(None)
-    }
-    #[cfg(target_os = "macos")]
-    {
-        use nix::sys::signal::{SigSet, Signal};
-        let mask = SigSet::thread_get_mask().map_err(io::Error::from)?;
-        Ok(u64::from(mask.contains(Signal::SIGPIPE)) << 12)
-    }
+    use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
+    // The pinned pthread query wrapper misses positive error returns. Use the
+    // native -1/errno interface and initialized storage instead.
+    let mut mask = SigSet::empty();
+    sigprocmask(SigmaskHow::SIG_SETMASK, None, Some(&mut mask)).map_err(io::Error::from)?;
+    Ok(u64::from(mask.contains(Signal::SIGPIPE)) << 12)
 }
 
 pub(super) fn default_sigpipe() -> io::Result<()> {
@@ -86,6 +82,25 @@ fn supported_version(bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sigpipe_observation_preserves_the_calling_threads_mask() {
+        use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
+        let current = || {
+            let mut mask = SigSet::empty();
+            sigprocmask(SigmaskHow::SIG_SETMASK, None, Some(&mut mask)).map(|()| mask)
+        };
+        let original = current().unwrap();
+        let mut blocked = original;
+        blocked.add(Signal::SIGPIPE);
+        blocked.add(Signal::SIGTERM);
+        sigprocmask(SigmaskHow::SIG_SETMASK, Some(&blocked), None).unwrap();
+        let observed = sigpipe_mask();
+        let after = current();
+        sigprocmask(SigmaskHow::SIG_SETMASK, Some(&original), None).unwrap();
+        assert_ne!(observed.unwrap() & (1 << 12), 0);
+        assert_eq!(after.unwrap(), blocked);
+    }
 
     #[test]
     fn native_minimum_is_fifteen_and_unknown_versions_are_refused() {

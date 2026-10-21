@@ -86,6 +86,21 @@ fn blocked_sigpipe_refuses_and_unrelated_masks_allow_ordinary_commands() {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn denied_signal_mask_query_refuses() {
+    let output = command(&["count", "1"])
+        .env("FASTMASH_TEST_PROCESS_DENY_MASK_QUERY", "1")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(77), "{output:?}");
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"fastmash: unable to inspect runtime signal mask\n"
+    );
+}
+
 #[test]
 fn ordinary_broken_pipes_restore_sigpipe_even_when_inherited_ignored() {
     for ignored in [false, true] {
