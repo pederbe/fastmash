@@ -1,12 +1,27 @@
+#![forbid(unsafe_code)]
 //! Failure presentation preserves diagnostic bodies and transport behavior.
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
+#[path = "support/descriptor_process.rs"]
+mod descriptor_process;
+#[path = "support/executable.rs"]
+// The terminal helper selects the same executable through its private module.
+#[allow(clippy::duplicate_mod)]
+mod executable;
+#[path = "support/full_output.rs"]
+mod full_output;
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
 #[path = "support/terminal.rs"]
 mod terminal;
+#[cfg(target_os = "macos")]
+#[path = "support/test_process.rs"]
+mod test_process;
 use std::{
-    fs::File,
-    os::unix::process::{CommandExt, ExitStatusExt},
+    fs::{self, File},
+    os::{
+        fd::OwnedFd,
+        unix::process::{CommandExt, ExitStatusExt},
+    },
+    path::Path,
     process::Stdio,
 };
 
@@ -143,13 +158,28 @@ fn option_failures_keep_the_color_reached_by_the_original_scan() {
 #[test]
 fn help_output_failures_retain_selected_diagnostic_color() {
     for mode in ["--color=always", "--color=never"] {
-        let output = PROGRAM
-            .command(&[mode, "--help"], &[])
-            .stdin(Stdio::null())
-            .full_stdout(true)
-            .stderr(Stdio::piped())
-            .output()
-            .unwrap();
+        let fixture = temp_dir::TempDir::new("diagnostic-help-full");
+        let binary = executable::fastmash();
+        #[cfg(target_os = "linux")]
+        let mut command = std::process::Command::new(&binary);
+        #[cfg(target_os = "macos")]
+        let mut command = test_process::bounded(&binary, 30);
+        #[cfg(target_os = "macos")]
+        command.process_group(0);
+        command
+            .arg0("fastmash")
+            .args([mode, "--help"])
+            .env_clear()
+            .env("LC_ALL", "C")
+            .env("TERM", "xterm")
+            .env("PATH", "/usr/bin:/bin")
+            .stdin(Stdio::null());
+        let output = full_output::output(
+            command,
+            &binary,
+            true,
+            &fixture.0.with_extension("full-output"),
+        );
         assert_eq!(output.status.code(), Some(1));
         assert_eq!(output.stderr.starts_with(PREFIX), mode == "--color=always");
         assert_eq!(
@@ -229,6 +259,12 @@ fn native_missing_header_diagnostic_receives_the_selected_style() {
 
 #[test]
 fn failed_diagnostic_writes_preserve_exit_status_and_sigpipe_behavior() {
+    let fixture = temp_dir::TempDir::new("diagnostic-failed-writes");
+    let binary = executable::fastmash();
+    // This sibling is outside ordinary fixture cleanup if native detach fails.
+    let root = fixture.0.with_extension("full-output");
+    let mut full = None;
+    let mut next = 0;
     for mode in ["--color=always", "--color=never"] {
         for fault in ["closed", "read-only", "full", "broken"] {
             for (action, expected_signal) in [("--bad", None), ("sum", Some(13))] {
@@ -237,34 +273,57 @@ fn failed_diagnostic_writes_preserve_exit_status_and_sigpipe_behavior() {
                 } else {
                     vec![mode, action]
                 };
-                let mut command = PROGRAM.command(&args, &[]);
-                command.stdin(File::open("/tmp").unwrap());
+                let directory = fixture.0.join(next.to_string());
+                next += 1;
+                fs::create_dir(&directory).unwrap();
+                let mut files: [OwnedFd; 3] = [
+                    File::open("/tmp").unwrap().into(),
+                    File::create_new(directory.join("stdout")).unwrap().into(),
+                    File::create_new(directory.join("stderr")).unwrap().into(),
+                ];
                 match fault {
-                    "closed" => {
-                        // SAFETY: only async-signal-safe close runs in the child.
-                        unsafe {
-                            command.pre_exec(|| {
-                                if libc::close(2) < 0 {
-                                    return Err(std::io::Error::last_os_error());
-                                }
-                                Ok(())
-                            });
-                        }
-                    }
-                    "read-only" => {
-                        command.stderr(File::open("/dev/null").unwrap());
-                    }
+                    "closed" => {}
+                    "read-only" => files[2] = File::open("/dev/null").unwrap().into(),
                     "full" => {
-                        command.full_stderr();
+                        let owner = full.get_or_insert_with(|| {
+                            fastmash_corpus_driver::full_output::FullOutput::new(
+                                Path::new(&binary),
+                                &root,
+                            )
+                            .unwrap()
+                        });
+                        files[2] = owner.destination().unwrap().into();
                     }
                     "broken" => {
                         let (reader, writer) = std::io::pipe().unwrap();
                         drop(reader);
-                        command.stderr(writer);
+                        files[2] = writer.into();
                     }
                     _ => unreachable!(),
                 }
-                let output = command.output().unwrap();
+                let output = descriptor_process::invoke_bound(
+                    descriptor_process::BoundCommand {
+                        binary: &binary,
+                        arguments: &args,
+                        files,
+                        closed: if fault == "closed" { 4 } else { 0 },
+                        environment: &[
+                            ("LC_ALL", "C"),
+                            ("TERM", "xterm"),
+                            ("PATH", "/usr/bin:/bin"),
+                        ],
+                    },
+                    &directory,
+                    1 << 20,
+                    1 << 20,
+                )
+                .unwrap()
+                .into_output();
+                if fault == "full" {
+                    full.as_mut().unwrap().verify().unwrap();
+                }
+                fs::remove_dir_all(&directory).unwrap();
+                assert!(!directory.try_exists().unwrap());
                 if fault == "broken" && expected_signal.is_some() {
                     assert_eq!(output.status.signal(), expected_signal, "{args:?}: {fault}");
                 } else {
@@ -275,4 +334,11 @@ fn failed_diagnostic_writes_preserve_exit_status_and_sigpipe_behavior() {
             }
         }
     }
+    if let Some(full) = full {
+        full.finish().unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+    let path = fixture.0.clone();
+    drop(fixture);
+    assert!(!path.try_exists().unwrap());
 }

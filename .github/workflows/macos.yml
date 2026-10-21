@@ -86,14 +86,6 @@ jobs:
           git ls-files tests/cli crates/portable-numerics/testdata crates/cli/src/testdata |
             while IFS= read -r path; do shasum -a 256 "$path"; done > "$EVIDENCE/fixtures.sha256"
           shasum -a 256 Cargo.toml Cargo.lock crates/*/Cargo.toml > "$EVIDENCE/manifests.sha256"
-      - name: Build and identify native fault transports
-        run: |
-          helpers="$RUNNER_TEMP/native-fault-helpers"
-          mkdir -p "$helpers"
-          rustc --edition=2024 --crate-type=cdylib -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_interposer.rs -o "$helpers/full-output.dylib"
-          rustc --edition=2024 -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_probe.rs -o "$helpers/full-output-probe"
-          shasum -a 256 "$helpers/full-output.dylib" "$helpers/full-output-probe" | tee "$EVIDENCE/fault-helpers.sha256"
-          printf 'FASTMASH_TEST_FULL_OUTPUT_LIBRARY=%s\nFASTMASH_TEST_FULL_OUTPUT_PROBE=%s\n' "$helpers/full-output.dylib" "$helpers/full-output-probe" >> "$GITHUB_ENV"
       - name: Check formatting and native lint
         run: |
           cargo fmt --all --check 2>&1 | tee "$EVIDENCE/fmt.log"
