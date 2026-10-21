@@ -275,35 +275,40 @@ fn native_merge_pipe_keeps_diagnostics_and_joins_after_calculation_failure() {
         for _ in 0..800_000 {
             input.extend_from_slice(b"ignored\tz\t3\t4\t0\n");
         }
-        let args = ["-H", "-s", "-g2", "rms", first, "pcov", "3:4"];
-        for file in [false, true] {
-            let invoke = |limit| {
-                let mut command = fixture.command(&args, "33554432");
-                command
-                    .env("FASTMASH_SORT_TRACE", "1")
-                    .env("OMP_NUM_THREADS", "2")
-                    .env("OMP_THREAD_LIMIT", limit);
-                fixture.invoke(&mut command, &input, file)
-            };
-            let serial = invoke("1");
-            let piped = invoke("2");
-            assert_eq!(serial.status.code(), Some(1), "{serial:?}");
-            assert_eq!(piped.status.code(), Some(1), "{piped:?}");
-            assert_eq!(piped.stdout, serial.stdout);
-            let diagnostics = |output: &Output| {
-                output
-                    .stderr
-                    .split(|&byte| byte == b'\n')
-                    .filter(|line| !line.starts_with(b"sort "))
-                    .map(<[u8]>::to_vec)
-                    .collect::<Vec<_>>()
-            };
-            assert_eq!(diagnostics(&piped), diagnostics(&serial));
-            assert!(
-                String::from_utf8_lossy(&piped.stderr)
-                    .contains("sort calculation: native merge pipe\n")
-            );
-            fixture.clean();
+        for args in [
+            vec!["-H", "-s", "-g2", "rms", first, "pcov", "3:4"],
+            vec!["-H", "-s", "-g2", "pcov", "3:4"],
+            vec!["-H", "-s", "-g2", "pcov", "4:3"],
+        ] {
+            for file in [false, true] {
+                let invoke = |limit| {
+                    let mut command = fixture.command(&args, "33554432");
+                    command
+                        .env("FASTMASH_SORT_TRACE", "1")
+                        .env("OMP_NUM_THREADS", "2")
+                        .env("OMP_THREAD_LIMIT", limit);
+                    fixture.invoke(&mut command, &input, file)
+                };
+                let serial = invoke("1");
+                let piped = invoke("2");
+                assert_eq!(serial.status.code(), Some(1), "{serial:?}");
+                assert_eq!(piped.status.code(), Some(1), "{piped:?}");
+                assert_eq!(piped.stdout, serial.stdout);
+                let diagnostics = |output: &Output| {
+                    output
+                        .stderr
+                        .split(|&byte| byte == b'\n')
+                        .filter(|line| !line.starts_with(b"sort "))
+                        .map(<[u8]>::to_vec)
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(diagnostics(&piped), diagnostics(&serial));
+                assert!(
+                    String::from_utf8_lossy(&piped.stderr)
+                        .contains("sort calculation: native merge pipe\n")
+                );
+                fixture.clean();
+            }
         }
     }
 }
