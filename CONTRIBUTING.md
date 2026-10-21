@@ -72,6 +72,8 @@ custom tools in `.github/dependency-pins.json`. The synchronization helper keeps
 release archive hashes and compiler versions together before pushing the PR.
 Only the independent Unicode 15 reference crates in `crates/locale-tools` stay
 fixed. Reconsider those pins when the retained reference contract changes.
+Urgent security fixes may produce separate pull requests outside the daily batch.
+Existing Dependabot security alerts and updates remain enabled.
 Minimum Rust tests remain compatibility baselines. Release identities and
 qualification evidence change through the release process, not dependency updates.
 

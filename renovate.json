@@ -47,6 +47,22 @@
         "icu_properties_data"
       ],
       "enabled": false
+    },
+    {
+      "description": "Rust 1.88 is the supported minimum compiler baseline. Advance it only when minimum supported Rust policy changes.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDatasources": [
+        "rust-version"
+      ],
+      "matchFileNames": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/locale-reference.yml",
+        ".github/workflows/native-*.yml"
+      ],
+      "matchCurrentVersion": "/^1\\.88(?:\\.0)?$/",
+      "enabled": false
     }
   ],
   "customManagers": [
@@ -115,5 +131,8 @@
       "scripts/build_site.sh"
     ],
     "executionMode": "branch"
+  },
+  "vulnerabilityAlerts": {
+    "vulnerabilityFixStrategy": "highest"
   }
 }
