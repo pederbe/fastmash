@@ -418,13 +418,6 @@ pub(super) enum Segments {
     },
 }
 impl Segments {
-    /// The allocation beyond this value's inline storage.
-    pub(super) fn allocated_bytes(&self) -> usize {
-        match self {
-            Self::Inline { .. } => 0,
-            Self::Heap { bytes, .. } => bytes.capacity(),
-        }
-    }
     pub(super) fn new(count: usize, payload: usize) -> Result<Self, Failure> {
         if count
             .checked_add(payload)
