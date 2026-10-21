@@ -532,20 +532,31 @@ fn hash_and_replayed_input_keep_exact_results_before_forced_spill() {
             ("hash", "67108864", false),
             ("hash:restart=1", "65536", true),
         ] {
-            let mut command = fixture.command(&["-s", "-g1", "sum", "2"], memory);
-            command
-                .env("FASTMASH_GROUPING", grouping)
-                .env("FASTMASH_PIPE_GROUPING", "hash")
-                .env("FASTMASH_SORT_TRACE", "1");
-            let output = fixture.invoke(&mut command, &input, file);
-            assert!(output.status.success(), "{output:?}");
-            assert_eq!(output.stdout, b"a\t32000\nb\t48000\n");
-            let trace = String::from_utf8_lossy(&output.stderr);
-            assert!(trace.contains("hash first"), "{output:?}");
-            assert_eq!(trace.contains("holding the input"), !file, "{output:?}");
-            assert_eq!(trace.contains("sorting instead"), restart, "{output:?}");
-            assert_eq!(trace.contains("private run opened"), restart, "{output:?}");
-            fixture.clean();
+            for (requests, expected) in [
+                (vec!["sum", "2"], b"a\t32000\nb\t48000\n".as_slice()),
+                (vec!["sum", "2", "ms", "2"], b"a\t32000\t5\nb\t48000\t13\n"),
+                (
+                    vec!["sum", "2", "dotprod", "2:2"],
+                    b"a\t32000\t80000\nb\t48000\t208000\n",
+                ),
+            ] {
+                let mut args = vec!["-s", "-g1"];
+                args.extend(requests);
+                let mut command = fixture.command(&args, memory);
+                command
+                    .env("FASTMASH_GROUPING", grouping)
+                    .env("FASTMASH_PIPE_GROUPING", "hash")
+                    .env("FASTMASH_SORT_TRACE", "1");
+                let output = fixture.invoke(&mut command, &input, file);
+                assert!(output.status.success(), "{output:?}");
+                assert_eq!(output.stdout, expected);
+                let trace = String::from_utf8_lossy(&output.stderr);
+                assert!(trace.contains("hash first"), "{output:?}");
+                assert_eq!(trace.contains("holding the input"), !file, "{output:?}");
+                assert_eq!(trace.contains("sorting instead"), restart, "{output:?}");
+                assert_eq!(trace.contains("private run opened"), restart, "{output:?}");
+                fixture.clean();
+            }
         }
     }
 }
