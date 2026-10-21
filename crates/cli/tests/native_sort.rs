@@ -454,7 +454,12 @@ impl Drop for Reap {
                 match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
                     Ok(WaitStatus::StillAlive) => {
                         let _ = kill(pid, Signal::SIGKILL);
-                        let _ = waitpid(pid, None);
+                        loop {
+                            match waitpid(pid, None) {
+                                Err(nix::errno::Errno::EINTR) => continue,
+                                _ => break,
+                            }
+                        }
                         break;
                     }
                     Err(nix::errno::Errno::EINTR) => continue,
