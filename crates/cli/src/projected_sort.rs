@@ -540,61 +540,6 @@ fn language_body(
     )
 }
 
-/// Projects a raw Record for a byte-order sort of original records into a
-/// chunk body: its key segments (ASCII-uppercased with `-i`) and the kept
-/// bytes. Returns its key cache.
-#[allow(clippy::too_many_arguments)]
-fn bytes_body(
-    bytes: &[u8],
-    keys: &[u64],
-    order: &[usize],
-    options: &options::Options,
-    last_selected: u64,
-    kept: Kept,
-    scratch: &mut batch::Scratch,
-    out: &mut Vec<u8>,
-) -> Result<KeyCache, Failure> {
-    let spans = &mut scratch.spans;
-    let fields = project_spans::<Original>(
-        bytes,
-        &[],
-        keys,
-        order,
-        options.input,
-        options.vnlog,
-        options.record_end == 0,
-        last_selected,
-        spans,
-        None,
-    )?;
-    let kept = match kept {
-        Kept::Raw => bytes,
-        Kept::Data if options.vnlog => annotated::data(bytes),
-        Kept::Data => bytes,
-    };
-    let segment = |at: usize| -> &[u8] {
-        if at == keys.len() {
-            kept
-        } else {
-            &bytes[spans[at].clone()]
-        }
-    };
-    let mut payload = 0usize;
-    for at in 0..=keys.len() {
-        payload = payload
-            .checked_add(segment(at).len())
-            .ok_or_else(allocation)?;
-    }
-    let fold = if options.ignore_case { keys.len() } else { 0 };
-    spill::encode(
-        out,
-        fields,
-        (keys.len() + 1, payload),
-        (keys.len(), fold),
-        segment,
-    )
-}
-
 /// Sorts the Records `intake` accepts and hands them on raw, each in turn in
 /// the same buffer: rmdup reads a second Input header from them, as GNU does
 /// from its sort pipe.
@@ -647,9 +592,9 @@ pub(super) fn sorted_records(
         None => (spill::Shape::original(keys.len())?, 1),
     };
     let mut sorter = sorter::<Original>(target, threads);
-    let project =
-        |raw: &[u8], scratch: &mut batch::Scratch, out: &mut Vec<u8>| match collator.as_ref() {
-            Some(collator) => language_body(
+    if let Some(collator) = collator.as_ref() {
+        let project = |raw: &[u8], scratch: &mut batch::Scratch, out: &mut Vec<u8>| {
+            language_body(
                 raw,
                 keys,
                 order,
@@ -659,21 +604,50 @@ pub(super) fn sorted_records(
                 Kept::Raw,
                 scratch,
                 out,
-            ),
-            None => bytes_body(raw, keys, order, options, last, Kept::Raw, scratch, out),
+            )
         };
-    let mut batch = batch::Batch::new(threads, target.bytes);
-    let mut accept = |record: batch::Projected<'_>| sorter.push_body(record, shape);
-    while let Some(record) = intake.next(reader, &mut bytes)? {
-        visit(record.data(), intake.line(), RecordPhase::ObserveSource)?;
-        batch.push(record.raw(), &project, &mut accept)?;
+        let mut batch = batch::Batch::new(threads, target.bytes);
+        let mut accept = |record: batch::Projected<'_>| sorter.push_body(record, shape);
+        while let Some(record) = intake.next(reader, &mut bytes)? {
+            visit(record.data(), intake.line(), RecordPhase::ObserveSource)?;
+            batch.push(record.raw(), &project, &mut accept)?;
+        }
+        batch.finish(&project, &mut accept)?;
+    } else {
+        let mut spans = Vec::new();
+        let mut sequence = 0u64;
+        while let Some(record) = intake.next(reader, &mut bytes)? {
+            visit(record.data(), intake.line(), RecordPhase::ObserveSource)?;
+            let raw = record.raw();
+            let fields = project_spans::<Original>(
+                raw,
+                &[],
+                keys,
+                order,
+                options.input,
+                options.vnlog,
+                options.record_end == 0,
+                last,
+                &mut spans,
+                None,
+            )?;
+            let next = sequence.checked_add(1).ok_or_else(allocation)?;
+            sorter.push(
+                raw,
+                raw,
+                &spans,
+                keys.len(),
+                options.ignore_case,
+                fields,
+                sequence,
+            )?;
+            sequence = next;
+        }
     }
-    batch.finish(&project, &mut accept)?;
     // Like the system sort, a sort whose input failed yields no records.
     if intake.read_error().is_some() {
         return intake.finish();
     }
-    drop(batch);
     drop(bytes);
     let mut sorted = sorter.finish();
     sorted.emit(|record| {
@@ -1426,6 +1400,66 @@ mod compact_tests {
         };
         options
     }
+
+    #[test]
+    fn byte_sorted_records_keep_source_positions_and_stable_folded_ties() {
+        let rows: &[&[u8]] = &[
+            b"b\tignored\tC",
+            b"a\tignored\tc",
+            b"A\tignored\tC",
+            b"a\tother\tc",
+            b"\tignored\t",
+        ];
+        let input: Vec<u8> = rows
+            .iter()
+            .flat_map(|row| row.iter().copied().chain(*b"\n"))
+            .collect();
+        for target in ["1", "4096", "1048576"] {
+            for fold in [false, true] {
+                for keys in [&[3, 1][..], &[3, 1, 3][..]] {
+                    let mut options = calculation_options();
+                    options.sort_memory = Some(target.into());
+                    options.ignore_case = fold;
+                    let intake = Intake::new(&options, intake::Header::None).after(7);
+                    let mut observed = Vec::new();
+                    let mut consumed = Vec::new();
+                    sorted_records(
+                        &mut std::io::Cursor::new(&input),
+                        intake,
+                        &options,
+                        keys,
+                        |record, ordinal, phase| {
+                            let next = (record.to_vec(), ordinal);
+                            match phase {
+                                RecordPhase::ObserveSource => observed.push(next),
+                                RecordPhase::Consume => consumed.push(next),
+                            }
+                            Ok(())
+                        },
+                    )
+                    .ok()
+                    .unwrap();
+                    let source: Vec<_> = rows
+                        .iter()
+                        .enumerate()
+                        .map(|(at, row)| (row.to_vec(), at as u64 + 8))
+                        .collect();
+                    assert_eq!(observed, source);
+                    let order = if fold {
+                        [4, 1, 2, 3, 0]
+                    } else {
+                        [4, 2, 0, 1, 3]
+                    };
+                    let expected: Vec<_> = order.iter().map(|&at| source[at].clone()).collect();
+                    assert_eq!(
+                        consumed, expected,
+                        "target={target} fold={fold} keys={keys:?}"
+                    );
+                }
+            }
+        }
+    }
+
     fn language_record(
         bytes: &[u8],
         keys: &[u64],
