@@ -1137,6 +1137,10 @@ fn calculate_records<W: Write, S: spill::Codec>(
     #[cfg(target_os = "linux")]
     let mut pipe_fields = true;
     let texts = operations.native_sort() == operation_set::NativeSort::Packed;
+    #[cfg(target_os = "linux")]
+    if !texts && collator.is_none() {
+        sorter.enable_writeback();
+    }
     match collator.as_ref() {
         // Byte-order sorts: records go straight from the intake into the
         // chunk.

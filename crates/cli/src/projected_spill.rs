@@ -271,6 +271,8 @@ struct RunFile {
 #[cfg(target_os = "linux")]
 impl RunFile {
     fn write_back(&mut self) -> io::Result<()> {
+        #[cfg(test)]
+        RUN_WRITEBACKS.with(|calls| calls.set(calls.get() + 1));
         if let Err(error) = self.file.sync_data() {
             if error
                 .raw_os_error()
@@ -317,7 +319,9 @@ impl From<RunFile> for File {
 }
 impl Encoder<RunWriter<RunFile>> {
     /// A new run file, written through a buffer of `buffer` bytes.
-    fn run(buffer: usize) -> Result<Self, Failure> {
+    fn run(buffer: usize, writeback: bool) -> Result<Self, Failure> {
+        #[cfg(not(target_os = "linux"))]
+        let _ = writeback;
         Ok(Self::new(RunWriter::new(
             buffer,
             RunFile {
@@ -327,7 +331,7 @@ impl Encoder<RunWriter<RunFile>> {
                 #[cfg(target_os = "linux")]
                 synced: 0,
                 #[cfg(target_os = "linux")]
-                writeback: true,
+                writeback,
             },
         )?))
     }
@@ -652,7 +656,12 @@ pub(super) fn chunk_memory(target: usize, share: usize) -> usize {
 
 /// Merges one level's full set of `runs` into a run, through buffers of
 /// `buffer` bytes.
-fn merge<S: Codec>(runs: Vec<File>, shape: Shape, buffer: usize) -> Result<File, Failure> {
+fn merge<S: Codec>(
+    runs: Vec<File>,
+    shape: Shape,
+    buffer: usize,
+    writeback: bool,
+) -> Result<File, Failure> {
     let mut sources = Vec::new();
     sources
         .try_reserve_exact(runs.len())
@@ -660,7 +669,7 @@ fn merge<S: Codec>(runs: Vec<File>, shape: Shape, buffer: usize) -> Result<File,
     for file in runs {
         sources.push(Source::Run(Decoder::new(RunReader::new(buffer, file)?)));
     }
-    let mut output = Encoder::run(buffer)?;
+    let mut output = Encoder::run(buffer, writeback)?;
     merge_into::<S>(sources, |record| {
         #[cfg(test)]
         MERGED_RECORDS.with(|count| count.set(count.get() + 1));
@@ -999,6 +1008,8 @@ pub(super) struct Sorter<S: Codec> {
     /// The memory of the sort's target left to the run buffers and the
     /// producer's share, outside the chunk.
     set_aside: usize,
+    /// Whether numerical runs request bounded writeback. Other sorts keep ordinary I/O.
+    writeback: bool,
     arena: Vec<u8>,
     entries: Vec<Entry>,
     scratch: Vec<Entry>,
@@ -1069,6 +1080,7 @@ impl<S: Codec> Sorter<S> {
             grow: None,
             buffer: run_buffer(target),
             set_aside: target.saturating_sub(limit),
+            writeback: false,
             arena: Vec::new(),
             entries: Vec::new(),
             scratch: Vec::new(),
@@ -1078,6 +1090,11 @@ impl<S: Codec> Sorter<S> {
             unread: None,
             storage: PhantomData,
         }
+    }
+    /// Enables bounded writeback for numerical calculations.
+    #[cfg(target_os = "linux")]
+    pub(super) fn enable_writeback(&mut self) {
+        self.writeback = true;
     }
     /// Leaves room in the chunk's memory for the input a reader still holds
     /// to be read again (`unread`), which shrinks as the sort reads it. The
@@ -1377,7 +1394,7 @@ impl<S: Codec> Sorter<S> {
             }
         }
         self.sort();
-        let mut output = Encoder::run(self.buffer)?;
+        let mut output = Encoder::run(self.buffer, self.writeback)?;
         let (arena, entries) = (&self.arena, &self.entries);
         for (at, entry) in entries.iter().enumerate() {
             if let Some(ahead) = entries.get(at + PREFETCH) {
@@ -1421,7 +1438,12 @@ impl<S: Codec> Sorter<S> {
             if self.levels[at].len() < MERGE_INPUTS {
                 break;
             }
-            run = merge::<S>(std::mem::take(&mut self.levels[at]), shape, self.buffer)?;
+            run = merge::<S>(
+                std::mem::take(&mut self.levels[at]),
+                shape,
+                self.buffer,
+                self.writeback,
+            )?;
             at += 1;
         }
         Ok(())
@@ -1443,6 +1465,7 @@ impl<S: Codec> Sorter<S> {
             shape: self.shape,
             levels: self.levels,
             buffer: self.buffer,
+            writeback: self.writeback,
             storage: PhantomData,
         }
     }
@@ -1458,6 +1481,7 @@ pub(super) struct Finished<S: Codec> {
     levels: Vec<Vec<File>>,
     /// The buffer of each run file (`run_buffer`).
     buffer: usize,
+    writeback: bool,
     storage: PhantomData<S>,
 }
 
@@ -1525,7 +1549,7 @@ impl<S: Codec> Finished<S> {
                 file.rewind().map_err(io_error)?;
                 file
             } else {
-                let mut output = Encoder::run(this.buffer)?;
+                let mut output = Encoder::run(this.buffer, this.writeback)?;
                 merge_into(sources, |record| {
                     #[cfg(test)]
                     MERGED_RECORDS.with(|count| count.set(count.get() + 1));
@@ -1642,11 +1666,42 @@ pub(super) fn decode_one<S: Codec>(bytes: &[u8]) -> Result<Record<S>, Failure> {
     }
 }
 
+#[cfg(all(test, target_os = "linux"))]
+thread_local! {
+    static RUN_WRITEBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::batch::{Batch, Scratch, share};
     use super::*;
     use std::io::{BufReader, BufWriter};
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn run_writeback_is_opt_in() {
+        let payload = vec![b'x'; 9 << 20];
+        for enabled in [false, true] {
+            RUN_WRITEBACKS.with(|calls| calls.set(0));
+            let mut sorter = Sorter::<Packed>::new(64 << 20, 0);
+            if enabled {
+                sorter.enable_writeback();
+            }
+            sorter
+                .push(
+                    &payload,
+                    &payload,
+                    std::slice::from_ref(&(0..payload.len())),
+                    0,
+                    false,
+                    1,
+                    0,
+                )
+                .unwrap_or_else(|_| panic!("record"));
+            sorter.flush().unwrap_or_else(|_| panic!("run"));
+            RUN_WRITEBACKS.with(|calls| assert_eq!(calls.get() != 0, enabled));
+        }
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn large_run_completion_syncs_its_short_final_tail() {
@@ -1694,6 +1749,7 @@ mod tests {
             shape: None,
             levels: vec![vec![File::open("/dev/null").unwrap()]],
             buffer: super::super::calculation_pipe::MEMORY,
+            writeback: false,
             storage: PhantomData,
         };
         let threads = fastmash_sort_process::sort_threads() >= 2;
@@ -2065,7 +2121,7 @@ mod tests {
         );
         let broken = run_file(&encoded[..encoded.len() - 1]);
         let pair = vec![broken, temporary().ok().unwrap()];
-        assert!(merge::<S>(pair, ROW_SHAPE, 1024).is_err());
+        assert!(merge::<S>(pair, ROW_SHAPE, 1024, false).is_err());
     }
     #[test]
     fn streaming_merge_and_truncated_runs_report_failures() {
