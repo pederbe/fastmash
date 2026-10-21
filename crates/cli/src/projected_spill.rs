@@ -109,6 +109,7 @@ fn unzigzag(value: u64) -> u64 {
 }
 /// Reads a LEB128 varint: in one pass when the buffer holds all of it, else
 /// (split across a refill, or cut short) a byte at a time.
+#[inline(always)]
 fn varint(input: &mut impl BufRead) -> Result<u64, Failure> {
     let buffer = input.fill_buf().map_err(io_error)?;
     let mut value = 0u64;
