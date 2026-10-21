@@ -421,6 +421,10 @@ Windows drive: tests are much faster there.
 
 ## Native Apple Silicon development gate
 
+Application changes run this gate through `ci.yml`. Development-only package
+updates use affected-package checks instead. Manual and release calls remain
+available for native qualification.
+
 `macos.yml` requires actual `Darwin`, `arm64`, the expected macOS major version
 and the `aarch64-apple-darwin` compiler host. Both `macos-15` and `macos-26` run
 formatting, warnings-denied Clippy, the complete applicable release workspace
