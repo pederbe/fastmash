@@ -58,7 +58,17 @@ fn check(
     exact(
         &output,
         expected,
-        if trace {
+        if trace
+            && matches!(
+                output.stderr.as_slice(),
+                b"sort route: native sort of the selected fields\n"
+                    | b"sort route: native sort of whole records\n"
+            )
+        {
+            // Older published pairs use the external route. Admit either
+            // generation while still checking the complete diagnostic.
+            &output.stderr
+        } else if trace {
             b"sort route: system sort\n"
         } else {
             b""

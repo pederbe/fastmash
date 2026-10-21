@@ -98,9 +98,14 @@ fn run() -> io::Result<()> {
     }
     let output = pipe(route, b"b\t2\t3\na\t1\t2\na\t3\t6\n")?;
     expect(&output, b"a\t2\nb\t0\n", "paired operation")?;
-    if output.stderr != b"sort route: system sort\n" {
+    if !matches!(
+        output.stderr.as_slice(),
+        b"sort route: system sort\n"
+            | b"sort route: native sort of the selected fields\n"
+            | b"sort route: native sort of whole records\n"
+    ) {
         return Err(io::Error::other(format!(
-            "paired operation did not use the Sort supervisor: {:?}",
+            "paired operation did not report a supported sort route: {:?}",
             String::from_utf8_lossy(&output.stderr)
         )));
     }
