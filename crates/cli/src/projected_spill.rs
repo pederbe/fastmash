@@ -261,7 +261,7 @@ struct RunFile {
     #[cfg(target_os = "linux")]
     written: u64,
     #[cfg(target_os = "linux")]
-    advised: u64,
+    synced: u64,
     #[cfg(target_os = "linux")]
     writeback: bool,
 }
@@ -278,7 +278,7 @@ impl RunFile {
             }
             return Err(error);
         }
-        self.advised = self.written;
+        self.synced = self.written;
         Ok(())
     }
 }
@@ -288,7 +288,7 @@ impl Write for RunFile {
         #[cfg(target_os = "linux")]
         {
             self.written = self.written.saturating_add(count as u64);
-            if self.writeback && self.written.saturating_sub(self.advised) >= 16 << 20 {
+            if self.writeback && self.written.saturating_sub(self.synced) >= 16 << 20 {
                 self.write_back()?;
             }
         }
@@ -296,7 +296,7 @@ impl Write for RunFile {
     }
     fn flush(&mut self) -> io::Result<()> {
         #[cfg(target_os = "linux")]
-        if self.writeback && self.written.saturating_sub(self.advised) >= 8 << 20 {
+        if self.writeback && self.written.saturating_sub(self.synced) >= 8 << 20 {
             self.write_back()?;
         }
         self.file.flush()
@@ -317,7 +317,7 @@ impl Encoder<RunWriter<RunFile>> {
                 #[cfg(target_os = "linux")]
                 written: 0,
                 #[cfg(target_os = "linux")]
-                advised: 0,
+                synced: 0,
                 #[cfg(target_os = "linux")]
                 writeback: true,
             },
@@ -1649,7 +1649,7 @@ mod tests {
                 .open("/dev/null")
                 .unwrap(),
             written: 0,
-            advised: 0,
+            synced: 0,
             writeback: true,
         };
         let chunk = vec![0; 64 << 10];
