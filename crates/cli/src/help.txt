@@ -336,9 +336,8 @@ Runtime and numerical limits:
   GNU's 99-byte format-text limit applies. Output grows with checked allocation.
   Record, command and operation storage grows as needed; allocation can fail.
   GNU identifiers allow 511 decoded bytes.
-  Sorting combinations of count, first, last, unique, countunique, collapse, sum,
-  mean, wmean, min, max, absmin, absmax, range, median, q1, q3, iqr, perc, trimmean,
-  mode, antimode, madraw, mad, pvar, svar, pstdev and sstdev uses native Rust sorting.
+  Every sorted calculation uses native Rust sorting, including mixed operations,
+  paired statistics and rand. Calculations need no system sort or sort supervisor.
   Numerical results follow GNU datamash 1.9 on x86-64 glibc, not every GNU build.
   NaN payload input is accepted. Invalid arithmetic generates positive canonical
   NaN; signs and last digits can differ from GNU (see the differences page).
@@ -357,7 +356,7 @@ Runtime and numerical limits:
   (piped input is held in memory for that) and sorted. FASTMASH_GROUPING=sort
   always sorts; FASTMASH_PIPE_GROUPING=sort sorts piped input, and =hash
   holds it in every locale.
-  On Linux in C/C.UTF-8, other sorted operations use /usr/bin/sort (stable, NUL-capable)
+  On Linux in C/C.UTF-8, sorted rmdup uses /usr/bin/sort (stable, NUL-capable)
   through fastmash-sort-supervisor beside fastmash, where both can run safely:
   HUP/INT/TERM neither ignored (as by nohup) nor blocked, waitable children,
   pidfds and close_range(CLOEXEC) (Linux 5.11+), both executable, sort not

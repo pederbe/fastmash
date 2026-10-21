@@ -194,6 +194,126 @@ fn exact(output: &Output, stdout: &[u8]) {
 }
 
 #[test]
+fn every_c_locale_calculation_sorts_natively_with_or_without_a_supervisor() {
+    let mut fixture = Fixture::new("native-all-calculations");
+    let standalone = fixture.binary.clone();
+    let operations = [
+        ("geomean", "2"),
+        ("harmmean", "2"),
+        ("ms", "2"),
+        ("rms", "2"),
+        ("pskew", "2"),
+        ("sskew", "2"),
+        ("pkurt", "2"),
+        ("skurt", "2"),
+        ("jarque", "2"),
+        ("dpo", "2"),
+        ("pcov", "2:3"),
+        ("scov", "2:3"),
+        ("ppearson", "2:3"),
+        ("spearson", "2:3"),
+        ("dotprod", "2:3"),
+        ("rand", "2"),
+    ];
+    let a = b"a\t1\t4\na\t2\t3\na\t4\t2\na\t8\t1\n".repeat(3);
+    let b = b"b\t3\t1\nb\t6\t2\nb\t9\t3\nb\t12\t4\n".repeat(3);
+    let sorted = [a.as_slice(), b.as_slice()].concat();
+    let input = [b.as_slice(), a.as_slice()].concat();
+    for available in [true, false] {
+        fixture.binary = if available {
+            executable::fastmash().into()
+        } else {
+            standalone.clone()
+        };
+        for locale in ["C", "POSIX", "C.UTF-8", "C.utf8", "POSIX.UTF8"] {
+            for file in [false, true] {
+                for memory in ["67108864", "1"] {
+                    for (operation, field) in operations {
+                        // Mixed text and numerical results exercise stable ties as well
+                        // as each formerly external calculation. The reference reads
+                        // already grouped input in exactly the contribution order.
+                        let args = [
+                            "-g1",
+                            "--seed=42",
+                            operation,
+                            field,
+                            "sum",
+                            "2",
+                            "first",
+                            "3",
+                            "last",
+                            "3",
+                        ];
+                        let mut reference = fixture.command(&args, memory);
+                        reference.env("LC_ALL", locale);
+                        let reference = fixture.invoke(&mut reference, &sorted, file);
+                        assert!(reference.status.success(), "{operation}: {reference:?}");
+                        let mut args = args.to_vec();
+                        args.insert(0, "-s");
+                        let mut command = fixture.command(&args, memory);
+                        command
+                            .env("LC_ALL", locale)
+                            .env("FASTMASH_SORT_TRACE", "1");
+                        let output = fixture.invoke(&mut command, &input, file);
+                        exact(&output, &reference.stdout);
+                        assert_eq!(
+                            output.stderr.windows(SPILL.len()).any(|line| line == SPILL),
+                            memory == "1",
+                            "{operation}: {output:?}"
+                        );
+                        fixture.clean();
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn migrated_calculations_keep_record_formats_and_numeric_crossings() {
+    let fixture = Fixture::new("native-calculation-formats");
+    let cases: &[(&[&str], &[u8], &[u8])] = &[
+        (
+            &["-sCH", "-gkey", "ms", "value"],
+            b"#skip\nkey\tvalue\nb\t2\na\t3\n",
+            b"GroupBy(key)\tms(value)\na\t9\nb\t4\n",
+        ),
+        (
+            &["-sWi", "-g1", "ms", "2", "first", "3", "last", "3"],
+            b"B 2 first\na 3 one\nb 4 last\nA 5 two\n",
+            b"A\t17\tone\ttwo\nb\t10\tfirst\tlast\n",
+        ),
+        (&["-sz", "-g1", "ms", "2"], b"b\t2\0a\t3\0", b"a\t9\0b\t4\0"),
+        (
+            &["-s", "-t.", "-g1", "ms", "2"],
+            b"b.2.5\na.3.5\n",
+            b"a.12.25\nb.6.25\n",
+        ),
+        (
+            &["-s", "-te", "-g1", "ms", "2"],
+            b"b e2e2\na e3e2\n",
+            b"a e90000\nb e40000\n",
+        ),
+        (
+            &["-s", "-t1", "-g1", "ms", "2"],
+            b"b1215\na1315\n",
+            b"a199225\nb146225\n",
+        ),
+    ];
+    for file in [false, true] {
+        for memory in ["67108864", "1"] {
+            for &(args, input, expected) in cases {
+                let mut command = fixture.command(args, memory);
+                command.env("FASTMASH_SORT_TRACE", "1");
+                let output = fixture.invoke(&mut command, input, file);
+                exact(&output, expected);
+                fixture.clean();
+            }
+        }
+    }
+}
+
+#[test]
 fn remaining_calculations_project_fields_without_changing_results() {
     let fixture = Fixture::new("native-advanced-fields");
     let input = include_bytes!("fixtures/native-sort-advanced.tsv");
@@ -439,7 +559,7 @@ fn spill_storage_errors_are_reported_only_when_storage_is_needed() {
     for temporary in [&absent, &not_directory] {
         for csv in [false, true] {
             for memory in ["67108864", "1"] {
-                let mut args = vec!["-s", "-g1", "sum", "2"];
+                let mut args = vec!["-s", "-g1", "ms", "2"];
                 if csv {
                     args.insert(0, "--csv");
                 }
@@ -464,9 +584,9 @@ fn spill_storage_errors_are_reported_only_when_storage_is_needed() {
                     assert_eq!(
                         output.stdout,
                         if csv {
-                            b"a,3\nb,5\n".as_slice()
+                            b"a,9\nb,25\n".as_slice()
                         } else {
-                            b"a\t3\nb\t5\n"
+                            b"a\t9\nb\t25\n"
                         }
                     );
                     assert!(output.stderr.is_empty());
@@ -555,7 +675,7 @@ fn interrupted_spill(fixture: &Fixture, csv: bool, signal: i32) {
     let args = if csv {
         ["--csv", "-s", "-g1", "sum", "2"].as_slice()
     } else {
-        ["-s", "-g1", "sum", "2"].as_slice()
+        ["-s", "-g1", "rms", "2"].as_slice()
     };
     let mut command = fixture.command(args, "1");
     command.env("FASTMASH_SORT_TRACE", "1");

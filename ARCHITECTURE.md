@@ -287,9 +287,12 @@ flowchart TD
   private spill framing preserves complete ragged fields and locations; bounded
   merge heads remain owned. An oversized record and merge heads can exceed the
   chunk target, and statistical samples retain their separate in-memory policy.
-- The **external route** remains, in the C locales, for `rand`, the other means
-  (`geomean`, `harmmean`, `ms`, `rms`), skewness, kurtosis, normality tests,
-  paired statistics and sorted `rmdup`. Its temporary files go in a private
+- Every sorted calculation takes the **native route**, including mixed
+  calculations. `rand`, the other means (`geomean`, `harmmean`, `ms`, `rms`),
+  skewness, kurtosis, normality tests and paired statistics use its selected-field
+  storage where possible, with the same calculation collector and random state.
+- The **external route** remains, in the C locales, for sorted `rmdup`.
+  Its temporary files go in a private
   directory in `TMPDIR`, which the supervisor creates and removes. Where it
   cannot run or work (the conditions are in `sort_route::sort`,
   `sorted_input::available` and `fastmash_sort_process::available`), these

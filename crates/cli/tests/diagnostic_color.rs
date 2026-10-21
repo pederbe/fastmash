@@ -190,37 +190,6 @@ fn help_output_failures_retain_selected_diagnostic_color() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
-fn child_sort_diagnostics_are_forwarded_without_generated_styling() {
-    let args = ["-H", "-s", "-g", "key", "geomean", "value"];
-    let plain = PROGRAM.invoke(&args, b"", &[("FASTMASH_GROUPING", "sort")], false, false);
-    let mut colored_args = vec!["--color=always"];
-    colored_args.extend(args);
-    let colored = PROGRAM.invoke(
-        &colored_args,
-        b"",
-        &[("FASTMASH_GROUPING", "sort")],
-        false,
-        true,
-    );
-    assert_eq!(colored.status.code(), Some(1), "{colored:?}");
-    assert_eq!(colored.status, plain.status);
-    assert_eq!(colored.stdout, plain.stdout);
-    let marker = plain
-        .stderr
-        .windows(b"fastmash: ".len())
-        .position(|bytes| bytes == b"fastmash: ")
-        .unwrap();
-    assert!(marker > 0, "expected the system sort's diagnostic first");
-    assert_eq!(colored.stderr[..marker], plain.stderr[..marker]);
-    assert_eq!(
-        &colored.stderr[marker..],
-        [PREFIX, &plain.stderr[marker + b"fastmash: ".len()..]].concat()
-    );
-}
-
-#[test]
-#[cfg(target_os = "macos")]
 fn native_missing_header_diagnostic_receives_the_selected_style() {
     let plain = PROGRAM.invoke(
         &["-H", "-s", "-g", "key", "geomean", "value"],
