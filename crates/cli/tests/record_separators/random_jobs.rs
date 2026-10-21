@@ -267,9 +267,7 @@ fn random_jobs_unseeded_membership_wide_fields_and_output_failure() {
         let failed = invoke(&candidate(), &a, &input, spill, true);
         assert_eq!(failed.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&failed.stderr).contains("write error"));
-        // C-locale rand sorting uses the external supervisor; its memory
-        // policy is not controlled by FASTMASH_SORT_MEMORY_BYTES. Language
-        // sorting selects the Rust path, where this setting forces spill.
+        // Language sorting also retains random choices through native Spill.
         for locale in ["en_US.UTF-8", "de_DE.UTF-8"] {
             let native =
                 super::locale_delivery::run(&candidate(), &a, &input, &[("LC_ALL", locale)], spill);
