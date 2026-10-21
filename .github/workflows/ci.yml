@@ -56,7 +56,7 @@ jobs:
           # not fail unrelated pull requests; raise it deliberately.
           toolchain: "1.98.1"
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
@@ -73,7 +73,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Prepare installed verification tools
         run: cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
       - run: cargo test --release --workspace --locked
@@ -111,7 +111,7 @@ jobs:
         with:
           toolchain: "1.98.1"
           components: clippy
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo clippy -p fastmash --all-targets --features hotpath-alloc --locked -- -D warnings
       - run: cargo test --profile profiling -p fastmash --features hotpath-alloc --test profiling --locked
       - run: cargo build --profile profiling -p fastmash --features hotpath-alloc --bin fastmash --example profile-jobs --locked
@@ -127,7 +127,7 @@ jobs:
           printf '61875daad67888798690dea3cb2748279df6ac299c5c6a857d67eed7642473d9  %s\n' "$RUNNER_TEMP/samply.tar.xz" | sha256sum -c -
           tar -xJf "$RUNNER_TEMP/samply.tar.xz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/samply-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
-          cargo install hotpath --version 0.28.6 --bin hotpath-samply --no-default-features --locked
+          cargo install hotpath --version 0.28.7 --bin hotpath-samply --no-default-features --locked
           sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.yama.ptrace_scope=0 kernel.kptr_restrict=0
       - name: Capture attributed CPU samples
         if: runner.os == 'Linux'

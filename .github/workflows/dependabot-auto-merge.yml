@@ -42,7 +42,7 @@ jobs:
             length > 0 and all(
               (.updateType == "version-update:semver-patch" or
                .updateType == "version-update:semver-minor") and
-              (.dependencyName | test("^(icu_collator.*|icu_locale_core|icu_properties.*|rust_icu_.*|unicode-(case-mapping|normalization|general-category)|unicode_names2)$") | not)
+              (.dependencyName | test("^(icu_collator|icu_properties(_data)?|unicode-case-mapping)$") | not)
             )' <<< "$DEPENDENCIES"; then
             gh pr merge --auto --merge --match-head-commit "$PR_HEAD" "$PR_URL"
           fi

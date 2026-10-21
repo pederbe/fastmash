@@ -4,6 +4,7 @@
 use fastmash_locale_tools::glibc_generation::{
     Common, decomposition_ranges, decompositions, letters,
 };
+use sha2::{Digest, Sha256};
 
 #[allow(dead_code)]
 #[path = "../../cli/src/collation_glibc.rs"]
@@ -13,7 +14,6 @@ mod retained;
 fn unicode_sixteen_normalization_matches_every_retained_decomposition_range() {
     // A newer normalization library is compatible when its actual decompositions
     // still match the retained data. Check those ranges below, not its version.
-    assert_eq!(unicode_general_category::UNICODE_VERSION, (16, 0, 0));
     let actual = decomposition_ranges(&decompositions());
     let expected: Vec<_> = retained::DECOMPOSED
         .iter()
@@ -21,6 +21,24 @@ fn unicode_sixteen_normalization_matches_every_retained_decomposition_range() {
         .collect();
     assert_eq!(actual, expected);
     let candidates = letters();
+    // UnicodeData 16.0.0: U+0080..U+FFFF in Lu/Ll/Lt/Lm/Lo/Nd/Nl/No,
+    // encoded as ascending big-endian u32 values. Check the selected data,
+    // allowing newer libraries whose results still match this reference.
+    // https://www.unicode.org/Public/16.0.0/ucd/UnicodeData.txt
+    assert_eq!(candidates.len(), 49_646);
+    let mut digest = Sha256::new();
+    for point in &candidates {
+        digest.update(point.to_be_bytes());
+    }
+    let digest: String = digest
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    assert_eq!(
+        digest,
+        "53e3d4588aca81f8729b296af2bad14d88d26daff6de3f53a3ad0e7ad48b0544"
+    );
     assert!(candidates.contains(&0x1C89));
     assert!(!candidates.contains(&0xD800));
     assert!(!candidates.contains(&0x20AC));

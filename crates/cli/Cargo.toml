@@ -28,36 +28,36 @@ path = "src/bin/fastmash-sort-supervisor.rs"
 
 [dependencies]
 # Optional diagnostics only. Ordinary builds do not compile or link hotpath.
-hotpath = { version = "=0.28.6", optional = true, default-features = false }
+hotpath = { version = "0.28.7", optional = true, default-features = false }
 fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.2.0" }
 fastmash-conversion = { path = "../conversion", version = "=0.2.0" }
 fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.2.0" }
 fastmash-sort-process = { path = "../sort-process", version = "=0.2.0" }
-rustc_apfloat = "=0.2.3"
-libc = "=0.2.189"
+rustc_apfloat = "0.2.3"
+libc = "0.2.191"
 # Safe descriptor observations, closure, resource-limit and signal-mask queries.
-nix = { version = "=0.31.3", default-features = false, features = ["fs", "resource", "signal"] }
-memchr = "=2.8.3"
+nix = { version = "0.31.3", default-features = false, features = ["fs", "resource", "signal"] }
+memchr = "2.8.3"
 # "unstable" only re-exports CollationKeySink, for sort keys that refuse
 # instead of aborting when they cannot grow; the version is pinned exactly.
 icu_collator = { version = "=2.3.1", features = ["unstable"] }
-icu_locale_core = "=2.3.0"
-astro-float-num = { version = "=0.3.7", default-features = false, features = ["std"] }
-base64 = { version = "=0.23.1", default-features = false }
-md-5 = { version = "=0.11.0", default-features = false }
-sha1 = { version = "=0.11.0", default-features = false }
-sha2 = { version = "=0.11.0", default-features = false }
+icu_locale_core = "2.3.0"
+astro-float-num = { version = "0.3.7", default-features = false, features = ["std"] }
+base64 = { version = "0.23.1", default-features = false }
+md-5 = { version = "0.11.0", default-features = false }
+sha1 = { version = "0.11.0", default-features = false }
+sha2 = { version = "0.11.1", default-features = false }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-mem_prefetch = { version = "=0.1.1", default-features = false }
+mem_prefetch = { version = "0.1.1", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rustix = { version = "=1.1.5", default-features = false, features = ["std", "rand", "stdio", "fs"] }
+rustix = { version = "1.1.5", default-features = false, features = ["std", "rand", "stdio", "fs"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Borrow standard descriptors without initializing an additional I/O buffer.
-rustix = { version = "=1.1.5", default-features = false, features = ["std", "stdio", "fs", "termios"] }
-getrandom = { version = "=0.4.3", default-features = false, features = ["std"] }
+rustix = { version = "1.1.5", default-features = false, features = ["std", "stdio", "fs", "termios"] }
+getrandom = { version = "0.4.3", default-features = false, features = ["std"] }
 
 [features]
 default = []
@@ -67,12 +67,12 @@ hotpath-cpu = ["hotpath", "hotpath/hotpath-cpu"]
 
 [dev-dependencies]
 # Independent byte-reader check for canonical CSV output, not the input parser.
-csv-core = "=0.1.13"
+csv-core = "0.1.13"
 # Safe descriptor file actions, access checks and bounded child reaping in tests.
 # Owned pseudo-terminals and raw mode setup use the term feature.
-nix = { version = "=0.31.3", default-features = false, features = ["fs", "signal", "term", "poll"] }
+nix = { version = "0.31.3", default-features = false, features = ["fs", "signal", "term", "poll"] }
 # Exact arithmetic for the generated decimal power table and its tests.
-num-bigint = { version = "=0.5.1", default-features = false }
+num-bigint = { version = "0.5.1", default-features = false }
 
 # Reuse owned full-output and terminal-input transports in integration tests.
 fastmash-corpus-driver = { path = "../corpus-driver" }

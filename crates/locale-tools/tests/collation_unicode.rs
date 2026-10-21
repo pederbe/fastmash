@@ -235,6 +235,20 @@ fn filler_filters_each_full_transform_by_unicode15_letter_or_number_category() {
 }
 
 #[test]
+fn unicode_fifteen_casing_retains_mixed_string_variants() {
+    // Unicode 16 assigns new uppercase partners to these Unicode 15 letters.
+    // The retained producer uppercases the ASCII suffix without changing them.
+    let alphabet = strings(&["\u{19b}a", "\u{264}a"]);
+    let words = alphabet_words(Some(&alphabet), None, "en");
+    for expected in ["\u{19b}A", "\u{264}A"] {
+        assert!(contains(&words, expected), "missing {expected:?}");
+    }
+    for excluded in ["\u{a7dc}A", "\u{a7cb}A"] {
+        assert!(!contains(&words, excluded), "unexpected {excluded:?}");
+    }
+}
+
+#[test]
 fn whole_string_casing_expands_and_uses_original_sigma_context() {
     let auxiliary = strings(&["ΟΣ", "AΣ", "Σ", "AΣB", "AΣ1", "ΣA", "ΑΣΣ"]);
     let words = alphabet_words(None, Some(&auxiliary), "en");
