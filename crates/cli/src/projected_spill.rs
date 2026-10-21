@@ -253,12 +253,89 @@ impl<W: Write> Encoder<W> {
         Ok(())
     }
 }
-impl Encoder<RunWriter<File>> {
+/// Write back completed portions of large anonymous runs before dirty-page
+/// throttling stalls the writer. Unsupported synchronization leaves ordinary
+/// run I/O intact; actual writeback errors still fail the run.
+struct RunFile {
+    file: File,
+    #[cfg(target_os = "linux")]
+    written: u64,
+    #[cfg(target_os = "linux")]
+    advised: u64,
+    #[cfg(target_os = "linux")]
+    writeback: bool,
+}
+#[cfg(target_os = "linux")]
+impl RunFile {
+    fn write_back(&mut self) -> io::Result<()> {
+        if let Err(error) = self.file.sync_data() {
+            if error
+                .raw_os_error()
+                .is_some_and(|code| [libc::EINVAL, libc::ENOSYS, libc::EOPNOTSUPP].contains(&code))
+            {
+                self.writeback = false;
+                return Ok(());
+            }
+            return Err(error);
+        }
+        if let (Ok(offset), Ok(length)) = (
+            i64::try_from(self.advised),
+            i64::try_from(self.written - self.advised),
+        ) {
+            let _ = nix::fcntl::posix_fadvise(
+                &self.file,
+                offset,
+                length,
+                nix::fcntl::PosixFadviseAdvice::POSIX_FADV_DONTNEED,
+            );
+        }
+        self.advised = self.written;
+        Ok(())
+    }
+}
+impl Write for RunFile {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let count = self.file.write(bytes)?;
+        #[cfg(target_os = "linux")]
+        {
+            self.written = self.written.saturating_add(count as u64);
+            if self.writeback && self.written.saturating_sub(self.advised) >= 16 << 20 {
+                self.write_back()?;
+            }
+        }
+        Ok(count)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        #[cfg(target_os = "linux")]
+        if self.writeback && self.written.saturating_sub(self.advised) >= 8 << 20 {
+            self.write_back()?;
+        }
+        self.file.flush()
+    }
+}
+impl From<RunFile> for File {
+    fn from(run: RunFile) -> Self {
+        run.file
+    }
+}
+impl Encoder<RunWriter<RunFile>> {
     /// A new run file, written through a buffer of `buffer` bytes.
     fn run(buffer: usize) -> Result<Self, Failure> {
-        Ok(Self::new(RunWriter::new(buffer, temporary()?)?))
+        Ok(Self::new(RunWriter::new(
+            buffer,
+            RunFile {
+                file: temporary()?,
+                #[cfg(target_os = "linux")]
+                written: 0,
+                #[cfg(target_os = "linux")]
+                advised: 0,
+                #[cfg(target_os = "linux")]
+                writeback: true,
+            },
+        )?))
     }
-    fn finish(self) -> Result<File, Failure> {
+    fn finish(mut self) -> Result<File, Failure> {
+        self.output.flush().map_err(io_error)?;
         complete(self.output)
     }
 }
@@ -536,8 +613,8 @@ impl<R: BufRead> Decoder<R> {
         Ok(Shape { keys, segments })
     }
 }
-fn complete(writer: RunWriter<File>) -> Result<File, Failure> {
-    let mut file = writer.into_inner().map_err(io_error)?;
+fn complete<W: Write + Into<File>>(writer: RunWriter<W>) -> Result<File, Failure> {
+    let mut file = writer.into_inner().map_err(io_error)?.into();
     file.rewind().map_err(io_error)?;
     Ok(file)
 }
@@ -1573,6 +1650,25 @@ mod tests {
     use super::super::batch::{Batch, Scratch, share};
     use super::*;
     use std::io::{BufReader, BufWriter};
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn run_writeback_preserves_io_when_synchronization_is_unsupported() {
+        // This descriptor accepts writes but rejects fdatasync with EINVAL.
+        let mut writer = RunFile {
+            file: std::fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/null")
+                .unwrap(),
+            written: 0,
+            advised: 0,
+            writeback: true,
+        };
+        let chunk = vec![0; 64 << 10];
+        for _ in 0..513 {
+            writer.write_all(&chunk).unwrap();
+        }
+        writer.flush().unwrap();
+    }
     #[cfg(target_os = "linux")]
     #[test]
     fn merge_pipe_requires_final_merge_buffer_allowance() {

@@ -218,6 +218,7 @@ fn native_merge_pipe_preserves_numerics_seeded_draws_headers_and_full_records() 
         }
         args.extend([
             "--seed", "17", "-s", "-g1", "rms", "2", "pcov", "2:3", "last", "5", "rand", "5",
+            "rms", "5",
         ]);
         for file in [false, true] {
             let invoke = |limit| {
@@ -264,13 +265,17 @@ fn native_merge_pipe_preserves_numerics_seeded_draws_headers_and_full_records() 
 #[cfg(target_os = "linux")]
 fn native_merge_pipe_keeps_diagnostics_and_joins_after_calculation_failure() {
     let fixture = Fixture::new("native-merge-pipe-errors");
-    for bad in [b"ignored\t!\tbad\t4\t0\n".as_slice(), b"!\n"] {
+    for (bad, first) in [
+        (b"ignored\t!\tbad\t4\t0\n".as_slice(), "3"),
+        (b"!\n".as_slice(), "3"),
+        (b"ignored\t!\tbad\tbad\t0\n".as_slice(), "4"),
+    ] {
         let mut input = b"id\tkey\tx\ty\tsequence\n".to_vec();
         input.extend_from_slice(bad);
         for _ in 0..800_000 {
             input.extend_from_slice(b"ignored\tz\t3\t4\t0\n");
         }
-        let args = ["-H", "-s", "-g2", "rms", "3", "pcov", "3:4"];
+        let args = ["-H", "-s", "-g2", "rms", first, "pcov", "3:4"];
         for file in [false, true] {
             let invoke = |limit| {
                 let mut command = fixture.command(&args, "33554432");

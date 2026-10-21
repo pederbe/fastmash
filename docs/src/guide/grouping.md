@@ -95,8 +95,9 @@ the 64 MiB.
 `FASTMASH_SORT_TRACE` (set to anything) reports each decision on standard
 error. Neither is a limit on Fastmash's total memory use.
 
-In language locales, records are prepared for sorting on up to 8 threads,
-chosen as GNU `sort` chooses its default: the processors available to
+In language locales, records are prepared for sorting on up to 8 threads.
+On Linux, numerical calculations can merge spilled records and calculate in
+parallel on two threads. Both use the processors available to
 Fastmash, or `OMP_NUM_THREADS` if it is set, capped by `OMP_THREAD_LIMIT`.
 Set `OMP_NUM_THREADS=1` to sort on one thread.
 
