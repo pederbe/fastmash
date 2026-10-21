@@ -194,6 +194,116 @@ fn exact(output: &Output, stdout: &[u8]) {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn native_merge_pipe_preserves_numerics_seeded_draws_headers_and_full_records() {
+    let fixture = Fixture::new("native-merge-pipe-results");
+    for (flags, header, end) in [
+        (&[][..], true, b'\n'),
+        (&["-z", "-i", "--full"][..], true, 0),
+        (&["--header-out"][..], false, b'\n'),
+    ] {
+        let mut input = Vec::new();
+        if header {
+            input.extend_from_slice(b"key\tx\ty\tunused\tsequence");
+            input.push(end);
+        }
+        for row in 0..800_000 {
+            let key = ["B", "a", "b", "A"][row % 4];
+            write!(&mut input, "{key}\t3\t4\tretained by full\t{row}").unwrap();
+            input.push(end);
+        }
+        let mut args = flags.to_vec();
+        if header {
+            args.push("-H");
+        }
+        args.extend([
+            "--seed", "17", "-s", "-g1", "rms", "2", "pcov", "2:3", "last", "5", "rand", "5",
+        ]);
+        for file in [false, true] {
+            let invoke = |limit| {
+                let mut command = fixture.command(&args, "33554432");
+                command
+                    .env("FASTMASH_SORT_TRACE", "1")
+                    .env("OMP_NUM_THREADS", "2")
+                    .env("OMP_THREAD_LIMIT", limit);
+                fixture.invoke(&mut command, &input, file)
+            };
+            let serial = invoke("1");
+            assert!(serial.status.success(), "{serial:?}");
+            let result_at = if flags.contains(&"--full") { 5 } else { 1 };
+            for row in serial
+                .stdout
+                .split(|&byte| byte == end)
+                .skip(1)
+                .filter(|row| !row.is_empty())
+            {
+                // Constant x=3 and y=4 give RMS 3 and covariance 0 exactly.
+                assert_eq!(
+                    row.split(|&byte| byte == b'\t').nth(result_at),
+                    Some(b"3".as_slice())
+                );
+                assert_eq!(
+                    row.split(|&byte| byte == b'\t').nth(result_at + 1),
+                    Some(b"0".as_slice())
+                );
+            }
+            let piped = invoke("2");
+            exact(&piped, &serial.stdout);
+            assert!(piped.stderr.windows(SPILL.len()).any(|part| part == SPILL));
+            assert!(
+                String::from_utf8_lossy(&piped.stderr)
+                    .contains("sort calculation: native merge pipe\n")
+            );
+            assert!(!String::from_utf8_lossy(&serial.stderr).contains("native merge pipe"));
+            fixture.clean();
+        }
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn native_merge_pipe_keeps_diagnostics_and_joins_after_calculation_failure() {
+    let fixture = Fixture::new("native-merge-pipe-errors");
+    for bad in [b"ignored\t!\tbad\t4\t0\n".as_slice(), b"!\n"] {
+        let mut input = b"id\tkey\tx\ty\tsequence\n".to_vec();
+        input.extend_from_slice(bad);
+        for _ in 0..800_000 {
+            input.extend_from_slice(b"ignored\tz\t3\t4\t0\n");
+        }
+        let args = ["-H", "-s", "-g2", "rms", "3", "pcov", "3:4"];
+        for file in [false, true] {
+            let invoke = |limit| {
+                let mut command = fixture.command(&args, "33554432");
+                command
+                    .env("FASTMASH_SORT_TRACE", "1")
+                    .env("OMP_NUM_THREADS", "2")
+                    .env("OMP_THREAD_LIMIT", limit);
+                fixture.invoke(&mut command, &input, file)
+            };
+            let serial = invoke("1");
+            let piped = invoke("2");
+            assert_eq!(serial.status.code(), Some(1), "{serial:?}");
+            assert_eq!(piped.status.code(), Some(1), "{piped:?}");
+            assert_eq!(piped.stdout, serial.stdout);
+            let diagnostics = |output: &Output| {
+                output
+                    .stderr
+                    .split(|&byte| byte == b'\n')
+                    .filter(|line| !line.starts_with(b"sort "))
+                    .map(<[u8]>::to_vec)
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(diagnostics(&piped), diagnostics(&serial));
+            assert!(
+                String::from_utf8_lossy(&piped.stderr)
+                    .contains("sort calculation: native merge pipe\n")
+            );
+            fixture.clean();
+        }
+    }
+}
+
+#[test]
 fn every_c_locale_calculation_sorts_natively_with_or_without_a_supervisor() {
     let mut fixture = Fixture::new("native-all-calculations");
     let standalone = fixture.binary.clone();

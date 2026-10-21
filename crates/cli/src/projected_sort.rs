@@ -16,6 +16,9 @@ pub(super) use decoded::{RunFault, fail_run};
 #[path = "projected_hash.rs"]
 mod hash;
 pub(super) use hash::{Setting as Grouping, eligible as hash_eligible, setting as grouping};
+#[cfg(target_os = "linux")]
+#[path = "projected_calculation_pipe.rs"]
+mod calculation_pipe;
 #[path = "projected_memory.rs"]
 mod memory;
 #[path = "projected_spill.rs"]
@@ -98,7 +101,6 @@ impl<S: Storage> Record<S> {
             keys.then(self.sequence.cmp(&other.sequence))
         })
     }
-    #[inline(always)]
     fn field<'a>(
         &'a self,
         layout: &[u64],
@@ -116,7 +118,6 @@ impl<S: Storage> Record<S> {
     }
     /// [`Record::field`], locating the fields of an original record through
     /// `fields`, its index.
-    #[inline(always)]
     fn indexed_field<'a>(
         &'a self,
         layout: &[u64],
@@ -1133,6 +1134,8 @@ fn calculate_records<W: Write, S: spill::Codec>(
     let mut sorter = sorter::<S>(target, threads);
     sorter.leave_room(unread);
     let mut crossings = Crossings::default();
+    #[cfg(target_os = "linux")]
+    let mut pipe_fields = true;
     let texts = operations.native_sort() == operation_set::NativeSort::Packed;
     match collator.as_ref() {
         // Byte-order sorts: records go straight from the intake into the
@@ -1177,6 +1180,12 @@ fn calculate_records<W: Write, S: spill::Codec>(
                     &mut spans,
                     None,
                 )?;
+                #[cfg(target_os = "linux")]
+                {
+                    // Reconstructing very sparse, wide records would cost more
+                    // than consuming their selected fields directly.
+                    pipe_fields &= fields <= layout.len().saturating_mul(2) as u64;
+                }
                 if let Some(separator) = separator {
                     record_crossings(
                         data,
@@ -1234,14 +1243,37 @@ fn calculate_records<W: Write, S: spill::Codec>(
     }
     drop(bytes);
     let mut sorted = sorter.finish();
+    #[cfg(target_os = "linux")]
+    if !texts
+        && pipe_fields
+        && crossings.is_empty()
+        && !options.vnlog
+        && collator.is_none()
+        && matches!(options.input, records::Separator::Literal(b'\t'))
+        && sorted.can_pipe()
+        && intake.read_error().is_none()
+    {
+        let mut context = grouping::Context::new(
+            &mut operations,
+            &keys,
+            options,
+            arithmetic,
+            random.as_deref_mut(),
+            output,
+        );
+        let piped = calculation_pipe::calculate(&mut sorted, &layout, &mut context)?;
+        if piped.is_some() {
+            return intake.finish();
+        }
+    }
     let mut calculation = grouping::Calculation::new(&keys, options);
     // Line numbers follow the sorted order, as GNU counts the Records it reads
     // back from its sort pipe, so the intake's count (input order) would name
     // the wrong Record; only the Input header keeps its place.
     let mut line = u64::from(options.header_in);
-    // Reuse the current adapter, moving it only when it becomes the Group's
-    // representative. The empty record is replaced before it is consumed.
-    let mut current: Option<Sorted<'_, storage::Mixed<'_, S>>> = None;
+    // The field index for the next record: that of a record grouping no
+    // longer holds, else a fresh one.
+    let mut spare = None;
     // Like the system sort, a sort whose input failed yields no records.
     if intake.read_error().is_none() {
         sorted.emit(|record| {
@@ -1257,40 +1289,18 @@ fn calculate_records<W: Write, S: spill::Codec>(
                 random.as_deref_mut(),
                 output,
             );
-            let sorted = match current.as_mut() {
-                Some(sorted) => {
-                    sorted.record = record;
-                    sorted
-                }
-                None => current.insert(Sorted {
-                    record,
-                    layout: &layout,
-                    fields: index.fresh(),
-                    crossings: &crossings,
-                    texts,
-                }),
+            let mut fields = spare.take().unwrap_or_else(|| index.fresh());
+            fields.clear();
+            let sorted = Sorted {
+                record,
+                layout: &layout,
+                fields,
+                crossings: &crossings,
+                texts,
             };
-            sorted.fields.clear();
-            calculation.push_in_place(
-                sorted,
-                || {
-                    let segments =
-                        storage::Segments::with_lengths(usize::from(S::ORIGINAL), || Ok(0))?;
-                    Ok(Sorted {
-                        record: Record::new(
-                            storage::Mixed::Owned(S::from_segments(segments, 0)),
-                            0,
-                            0,
-                        ),
-                        layout: &layout,
-                        fields: index.fresh(),
-                        crossings: &crossings,
-                        texts,
-                    })
-                },
-                line,
-                &mut context,
-            )?;
+            if let Some(unused) = calculation.push(sorted, line, &mut context)? {
+                spare = Some(unused.fields);
+            }
             Ok(())
         })?;
     }
@@ -1832,8 +1842,8 @@ mod compact_tests {
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn short_key_cache_preserves_record_footprint() {
-        assert_eq!(std::mem::size_of::<Record<Original>>(), 88);
-        assert_eq!(std::mem::size_of::<Record<Packed>>(), 96);
+        assert_eq!(std::mem::size_of::<Record<Original>>(), 64);
+        assert_eq!(std::mem::size_of::<Record<Packed>>(), 72);
     }
     fn stored_group_equivalence<S: Build>() {
         let options::Action::Calculate(mut options) =

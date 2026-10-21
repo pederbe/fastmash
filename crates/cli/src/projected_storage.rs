@@ -253,7 +253,7 @@ impl<S: Storage> Keys for Mixed<'_, S> {
             Self::View(view) => view.key_count(),
         }
     }
-    #[inline(always)]
+    #[inline]
     fn segment(&self, at: usize) -> &[u8] {
         match self {
             Self::Owned(storage) => storage.segment(at),
@@ -387,12 +387,12 @@ fn compose(text: &str, out: &mut String) -> Result<bool, Failure> {
 }
 
 /// Short records keep their bytes inline, with one-byte end offsets, so the
-/// common small projected record needs no allocation of its own, including
-/// paired fields and mixed calculations. Only decoded run heads use this
-/// storage, so its larger inline form does not enlarge sort chunks.
-const INLINE: usize = 46;
+/// common small projected record needs no allocation of its own. On 64-bit
+/// targets the inline form fits around the heap form's `Vec` capacity niche,
+/// so `Segments` stays as small as the heap form alone.
+const INLINE: usize = 22;
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<Segments>() == 56);
+const _: () = assert!(std::mem::size_of::<Segments>() == 32);
 
 fn heap_end(bytes: &[u8], at: usize) -> usize {
     let start = at * std::mem::size_of::<usize>();
@@ -819,7 +819,7 @@ mod tests {
         };
         let a = build(b"ab", &[0..1, 1..2], 1);
         let b = build(b"b", &[0..1], 1);
-        let long = build(&[b'a'; 80], &[0..1, 1..80], 1);
+        let long = build(&[b'a'; 40], &[0..1, 1..40], 1);
         let two_keys = build(b"ab", &[0..1, 1..2], 2);
         assert!(matches!(long.segments, Segments::Heap { .. }));
         assert_eq!(a.compare_keys(&b), Ordering::Less);
