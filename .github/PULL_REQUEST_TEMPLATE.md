@@ -1,25 +1,16 @@
 ## What and why
 
-<!-- What does this change, and why? Link the issue: Fixes #123 -->
+<!-- What this changes and why. Link the issue, for example "Fixes #123". -->
 
-## How it was tested
+## How you tested it
 
-<!-- Commands run, new tests added. -->
+<!-- New or changed tests, or how you checked the result by hand.
+     CI runs formatting, Clippy and the full test suite, so no need to list those. -->
 
-- [ ] `cargo fmt --all --check`
-- [ ] `cargo build`
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo test --release --workspace`
-- [ ] `cargo build --release`
-- [ ] Regression corpus with piped input and `--stdin-file`
+## Worth knowing
 
-## Effects
-
-<!-- Tick all that apply and explain below. -->
-
-- [ ] Changes output, diagnostics or exit statuses
-- [ ] Can change numerical results (needs a new numerical profile version)
-- [ ] Intentional difference from GNU datamash (differences page updated)
-- [ ] Performance change (before/after measurements included)
-- [ ] Adds `unsafe` code or a dependency
-- [ ] Documentation and `CHANGELOG.md` updated
+<!-- Delete what doesn't apply:
+     - Changes output, diagnostics or exit status: show the output before and after.
+     - Adds a dependency: say why.
+     - Changes speed: include before and after timings.
+     - Changes user-visible behavior: update the docs and CHANGELOG.md. -->
