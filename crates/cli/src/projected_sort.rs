@@ -676,13 +676,14 @@ pub(super) fn sorted_records(
     drop(batch);
     drop(bytes);
     let mut sorted = sorter.finish();
-    sorted.emit(|record| {
+    sorted.emit_reusing(|record| {
         let ordinal = preceding
             .checked_add(record.sequence)
             .and_then(|n| n.checked_add(1))
             .ok_or_else(|| unsupported("record count exceeds u64 limit"))?;
         let original = record.data.original().unwrap_or_default();
-        visit(original, ordinal, RecordPhase::Consume)
+        visit(original, ordinal, RecordPhase::Consume)?;
+        Ok(spill::owned(record.data))
     })
 }
 
@@ -1272,7 +1273,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
     let mut spare = None;
     // Like the system sort, a sort whose input failed yields no records.
     if intake.read_error().is_none() {
-        sorted.emit(|record| {
+        sorted.emit_reusing(|record| {
             line = line.checked_add(1).ok_or_else(allocation)?;
             if line == 1 && options.header_out && !options.header_in {
                 generated_header(&record, &layout, &keys, &operations, options, output)?;
@@ -1296,8 +1297,9 @@ fn calculate_records<W: Write, S: spill::Codec>(
             };
             if let Some(unused) = calculation.push(sorted, line, &mut context)? {
                 spare = Some(unused.fields);
+                return Ok(spill::owned(unused.record.data));
             }
-            Ok(())
+            Ok(None)
         })?;
     }
     let mut context =
