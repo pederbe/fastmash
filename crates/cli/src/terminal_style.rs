@@ -22,10 +22,11 @@ pub(super) struct Detection {
 }
 
 impl Detection {
+    #[forbid(unsafe_code)]
     pub(super) fn from_env() -> Self {
         Self {
-            stdout_terminal: is_terminal(1),
-            stderr_terminal: is_terminal(2),
+            stdout_terminal: nix::unistd::isatty(rustix::stdio::stdout()).unwrap_or(false),
+            stderr_terminal: nix::unistd::isatty(rustix::stdio::stderr()).unwrap_or(false),
             suppressed: environment_suppresses(),
         }
     }
@@ -41,12 +42,6 @@ impl Detection {
             ColorMode::Never => false,
         })
     }
-}
-
-fn is_terminal(fd: libc::c_int) -> bool {
-    // SAFETY: isatty only inspects this inherited descriptor. An invalid or
-    // nonterminal destination returns something other than 1 and stays plain.
-    unsafe { libc::isatty(fd) == 1 }
 }
 
 fn environment_suppresses() -> bool {

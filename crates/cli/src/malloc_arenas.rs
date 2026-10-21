@@ -25,15 +25,11 @@ const MOST: u64 = 8;
 #[cfg_attr(test, allow(dead_code))]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 pub(super) fn cap() {
-    let mut limit = libc::rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    // SAFETY: getrlimit writes one `rlimit` through a pointer valid for it.
-    if unsafe { libc::getrlimit(libc::RLIMIT_AS, &mut limit) } != 0 {
+    let Ok((limit, _)) = nix::sys::resource::getrlimit(nix::sys::resource::Resource::RLIMIT_AS)
+    else {
         return;
-    }
-    let Some(arenas) = arenas(limit.rlim_cur) else {
+    };
+    let Some(arenas) = arenas(limit) else {
         return;
     };
     let tunables = std::env::var_os("GLIBC_TUNABLES");
