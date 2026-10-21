@@ -15,6 +15,7 @@ const FILE_SIZE: &str = "FASTMASH_TEST_PROCESS_FILE_SIZE";
 const ADDRESS_SPACE: &str = "FASTMASH_TEST_PROCESS_ADDRESS_SPACE";
 const STACK: &str = "FASTMASH_TEST_PROCESS_STACK";
 const CLOSE_RANGE: &str = "FASTMASH_TEST_PROCESS_CLOSE_RANGE_ERRNO";
+const DENY_MASK_QUERY: &str = "FASTMASH_TEST_PROCESS_DENY_MASK_QUERY";
 
 fn limit(name: &str, resource: Resource) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(value) = std::env::var_os(name) {
@@ -80,6 +81,40 @@ fn close_range_filter() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+fn mask_query_filter() -> Result<(), Box<dyn std::error::Error>> {
+    if !selected(DENY_MASK_QUERY)? {
+        return Ok(());
+    }
+    #[cfg(target_os = "linux")]
+    {
+        use seccompiler::{
+            BpfProgram, SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition,
+            SeccompFilter, SeccompRule,
+        };
+        // A null new-set pointer selects observation. Keep mask changes and
+        // exec's signal setup available, denying only the actual kernel query.
+        let query = SeccompRule::new(vec![SeccompCondition::new(
+            1,
+            SeccompCmpArgLen::Qword,
+            SeccompCmpOp::Eq,
+            0,
+        )?])?;
+        let filter = SeccompFilter::new(
+            [(nix::libc::SYS_rt_sigprocmask, vec![query])].into(),
+            SeccompAction::Allow,
+            SeccompAction::Errno(nix::libc::EPERM as u32),
+            std::env::consts::ARCH.try_into()?,
+        )?;
+        let program: BpfProgram = filter.try_into()?;
+        seccompiler::apply_filter(&program)?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err("test-process denied mask-query fixture requires Linux".into())
+    }
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args_os().skip(1);
     let seconds: u32 = args
@@ -121,6 +156,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     stack_limit()?;
     close_range_filter()?;
+    mask_query_filter()?;
     alarm::set(seconds);
     if broken {
         // This fresh process owns both endpoints. No other test can retain a
@@ -151,6 +187,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ADDRESS_SPACE,
                 STACK,
                 CLOSE_RANGE,
+                DENY_MASK_QUERY,
             ]
             .iter()
             .any(|name| key == *name)
@@ -175,6 +212,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .env_remove(ADDRESS_SPACE)
         .env_remove(STACK)
         .env_remove(CLOSE_RANGE)
+        .env_remove(DENY_MASK_QUERY)
         .exec();
     Err(error.into())
 }

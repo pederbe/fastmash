@@ -21,6 +21,7 @@ numerical profile version that introduced it.
 
 ### Fixed
 
+- Refuse safely when the operating system denies the runtime signal-mask query.
 - Prepare apt and dnf repository updates without replacing metadata that
   clients are still reading, using retained apt By-Hash indexes and signed
   dnf snapshots.
