@@ -1,0 +1,39 @@
+name: Dependabot auto-merge
+
+# This privileged workflow reads metadata only. Never check out or run PR code here.
+on:
+  pull_request_target:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  enable:
+    name: Queue patch updates
+    if: >-
+      github.repository == 'pederbe/fastmash' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Read verified Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Queue the merge after required checks pass
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
+        run: |
+          # Reject missing or unclassified updates, including those in mixed groups.
+          jq -e 'length > 0 and all(.updateType == "version-update:semver-patch")' <<< "$DEPENDENCIES"
+          gh pr merge --auto --merge --match-head-commit "$PR_HEAD" "$PR_URL"
