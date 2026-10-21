@@ -10,12 +10,13 @@ updates:
     schedule:
       interval: monthly
     groups:
-      # Review changes to the retained Unicode reference data and the unstable
-      # CollationKeySink API. Other ICU and Unicode updates use normal checks.
+      # Review retained Unicode reference data, production collation data and
+      # the unstable CollationKeySink API. Other updates use normal checks.
       # Keep the same exclusions in dependabot-auto-merge.yml for security PRs.
       cargo-pinned:
         patterns:
           - "icu_collator"
+          - "icu_collator_data"
           - "icu_properties"
           - "icu_properties_data"
           - "unicode-case-mapping"

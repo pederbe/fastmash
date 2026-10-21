@@ -60,9 +60,10 @@ Before closing an implementation ticket, update its acceptance checklist and
 check whether its parent issue is complete.
 
 Dependabot patch and minor updates merge automatically after required CI checks
-pass. Major updates, retained Unicode 15 reference data and the unstable ICU
-collation-key API need a deliberate merge. Other ICU and Unicode packages follow
-the routine update rules. These exceptions also apply to security updates.
+pass. Major updates, retained Unicode 15 reference data, production ICU collation
+data and the unstable collation-key API need a deliberate merge. Other ICU and
+Unicode packages follow the routine update rules. These exceptions also apply to
+security updates.
 The groups in `.github/dependabot.yml` and the merge workflow record the exceptions.
 
 Use current stable dependencies with compatible version ranges and commit the
@@ -76,6 +77,10 @@ lockfiles. The remaining exact external pins have these purposes:
   containing U+019B or U+0264, and newer properties assign previously unassigned
   characters such as U+1C89. Reconsider these pins when an upgrade preserves the
   reference behavior or the reference is deliberately migrated.
+
+Review `icu_collator_data` updates against the locale-order verification in
+[TESTING.md](TESTING.md). This data determines production sort keys, and the
+ordinary corpus covers only part of the supported locale alphabets.
 
 The npm KaTeX and lodash-es overrides select patched releases that the diagram
 tool's dependency ranges exclude. Keep compatible ranges on these overrides and
