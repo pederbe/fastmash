@@ -1419,7 +1419,7 @@ impl<S: Codec> Finished<S> {
             }
             sources.extend(tail.take());
             if levels.peek().is_none() {
-                return merge_into(sources, consume);
+                return emit_final(sources, this.buffer, consume);
             }
             let file = if let [Source::Run(_)] = sources.as_slice()
                 && let Some(Source::Run(decoder)) = sources.pop()
@@ -1491,6 +1491,46 @@ impl<'a, S: Codec> Source<'a, S> {
             Self::Tail(tail, _) => Ok(tail.next()),
         }
     }
+}
+
+/// Only the final merge can hand its records to calculation. Intermediate
+/// merges still need their reserved output buffer; after they finish, that
+/// same reservation can pay for the handoff's three batches.
+fn emit_final<'a, S: Codec>(
+    sources: Vec<Source<'a, S>>,
+    buffer: usize,
+    mut consume: impl FnMut(Record<Mixed<'a, S>>) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    let overlap = fastmash_sort_process::sort_threads() > 1
+        && sources.iter().any(|source| match source {
+            Source::Run(decoder) => decoder
+                .input
+                .inner
+                .metadata()
+                .is_ok_and(|metadata| metadata.len() >= 1 << 20),
+            Source::Tail(..) => false,
+        });
+    if overlap {
+        let work = std::sync::Mutex::new(Some(sources));
+        if super::handoff::run(
+            buffer,
+            |sender| {
+                let sources = work.lock().expect("merge work").take().unwrap();
+                merge_into(sources, |record| {
+                    let heap = match &record.data {
+                        Mixed::Owned(storage) => storage.segments().allocated_bytes(),
+                        Mixed::View(_) => 0,
+                    };
+                    sender.push(record, heap)
+                })
+            },
+            &mut consume,
+        )? {
+            return Ok(());
+        }
+        return merge_into(work.into_inner().unwrap().unwrap(), consume);
+    }
+    merge_into(sources, consume)
 }
 
 /// Merges the sources into `consume`. Each source is dropped as soon as it is
@@ -1719,6 +1759,89 @@ mod tests {
     fn final_merge_preserves_keys_ties_and_payloads_across_levels() {
         levels::<Packed>();
         levels::<Original>();
+    }
+
+    fn large_spill<S: Codec + Build>(tail: usize, corrupt: bool) -> (Finished<S>, Vec<Described>) {
+        let rows: Vec<_> = (0..1024 + tail)
+            .map(|index| {
+                let mut row = format!("g{}\t{index:04}:", index % 7).into_bytes();
+                row.resize(row.len() + 2048, b'x');
+                row
+            })
+            .collect();
+        let mut sorter = Sorter::<S>::new(64 << 20, 0);
+        for (index, row) in rows[..1024].iter().enumerate() {
+            ROW_JOB.push(&mut sorter, row, index as u64);
+        }
+        sorter.flush().ok().unwrap();
+        let run = &sorter.levels[0][0];
+        let length = run.metadata().unwrap().len();
+        assert!(length >= 1 << 20);
+        if corrupt {
+            run.set_len(length - 1).unwrap();
+        }
+        for (offset, row) in rows[1024..].iter().enumerate() {
+            ROW_JOB.push(&mut sorter, row, (1024 + offset) as u64);
+        }
+        (sorter.finish(), ROW_JOB.reference::<S>(&rows))
+    }
+
+    fn large_merge<S: Codec + Build>() {
+        let (mut finished, expected) = large_spill::<S>(3, false);
+        let mut output = Vec::new();
+        finished
+            .emit(|record| {
+                output.push(describe(&record, ROW_JOB.segments::<S>()));
+                Ok(())
+            })
+            .ok()
+            .unwrap();
+        assert!(output == expected);
+    }
+
+    #[test]
+    fn large_final_merge_preserves_owned_records_and_borrowed_tail() {
+        large_merge::<Packed>();
+        large_merge::<Original>();
+    }
+
+    #[test]
+    fn large_final_merge_delivers_earlier_records_before_real_read_failure() {
+        let (mut finished, mut expected) = large_spill::<Packed>(0, true);
+        expected.pop();
+        let mut output = Vec::new();
+        let error = finished
+            .emit(|record| {
+                output.push(describe(&record, ROW_JOB.segments::<Packed>()));
+                Ok(())
+            })
+            .err()
+            .unwrap();
+        assert_eq!(error.status, 1);
+        assert!(error.message.starts_with(b"sort temporary I/O error:"));
+        assert!(output == expected);
+    }
+
+    #[test]
+    fn large_final_merge_returns_consumer_failure_after_worker_cleanup() {
+        let (mut finished, _) = large_spill::<Packed>(3, false);
+        let mut consumed = 0;
+        let error = finished
+            .emit(|_| {
+                consumed += 1;
+                if consumed == 7 {
+                    Err(Failure {
+                        status: 1,
+                        message: b"consumer failed".to_vec(),
+                    })
+                } else {
+                    Ok(())
+                }
+            })
+            .err()
+            .unwrap();
+        assert_eq!(consumed, 7);
+        assert_eq!(error.message, b"consumer failed");
     }
     #[test]
     fn final_folding_does_not_rewrite_a_larger_run_with_the_smaller_level() {

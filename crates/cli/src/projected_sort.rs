@@ -13,6 +13,8 @@ pub(super) use decoded::Sorting as DecodedSorting;
 pub(super) use decoded::calculate as calculate_decoded;
 #[cfg(test)]
 pub(super) use decoded::{RunFault, fail_run};
+#[path = "projected_handoff.rs"]
+mod handoff;
 #[path = "projected_hash.rs"]
 mod hash;
 pub(super) use hash::{Setting as Grouping, eligible as hash_eligible, setting as grouping};
