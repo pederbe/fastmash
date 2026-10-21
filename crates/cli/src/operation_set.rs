@@ -346,6 +346,7 @@ impl OperationSet {
         line: u64,
         options: &options::Options,
         arithmetic: &mut numerics::Numerics,
+        mut random: Option<&mut random::RandomState>,
     ) -> Result<bool, Failure> {
         if texts {
             let mut keep = false;
@@ -354,11 +355,11 @@ impl OperationSet {
                     unreachable!("text Operations select single fields")
                 };
                 let bytes = record.text(field, line, options)?;
-                keep |= collect_text(plan, state, bytes, options.narm, None)?;
+                keep |= collect_text(plan, state, bytes, options.narm, random.as_deref_mut())?;
             }
             return Ok(keep);
         }
-        self.collect_selected(record, line, options, arithmetic)
+        self.collect_selected(record, line, options, arithmetic, random)
     }
 
     /// [`OperationSet::collect_fields`] for Operations that read numbers: the
@@ -370,6 +371,7 @@ impl OperationSet {
         line: u64,
         options: &options::Options,
         arithmetic: &mut numerics::Numerics,
+        random: Option<&mut random::RandomState>,
     ) -> Result<bool, Failure> {
         collect(
             record,
@@ -378,7 +380,7 @@ impl OperationSet {
             line,
             options,
             arithmetic,
-            None,
+            random,
         )
     }
 
