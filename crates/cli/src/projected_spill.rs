@@ -48,13 +48,9 @@ pub(super) fn temporary() -> Result<File, Failure> {
 }
 pub(super) trait Codec: Storage + Send {
     fn segments(&self) -> &Segments;
-    fn into_segments(self) -> Segments;
     fn from_segments(segments: Segments, keys: usize) -> Self;
 }
 impl Codec for Packed {
-    fn into_segments(self) -> Segments {
-        self.segments
-    }
     fn segments(&self) -> &Segments {
         &self.segments
     }
@@ -63,9 +59,6 @@ impl Codec for Packed {
     }
 }
 impl Codec for Original {
-    fn into_segments(self) -> Segments {
-        self.segments
-    }
     fn segments(&self) -> &Segments {
         &self.segments
     }
@@ -497,11 +490,7 @@ impl<R: BufRead> Decoder<R> {
             previous: 0,
         }
     }
-    #[cfg(test)]
     fn next<S: Codec>(&mut self) -> Result<Option<Record<S>>, Failure> {
-        self.next_reusing(None)
-    }
-    fn next_reusing<S: Codec>(&mut self, spare: Option<S>) -> Result<Option<Record<S>>, Failure> {
         if self.input.fill_buf().map_err(io_error)?.is_empty() {
             return Ok(None);
         }
@@ -518,11 +507,7 @@ impl<R: BufRead> Decoder<R> {
             .wrapping_add(unzigzag(varint(&mut self.input)?));
         let fields = varint(&mut self.input)?;
         let input = &mut self.input;
-        let mut segments = Segments::with_lengths(
-            shape.segments,
-            || size(input),
-            spare.map(Codec::into_segments),
-        )?;
+        let mut segments = Segments::with_lengths(shape.segments, || size(input))?;
         self.input
             .read_exact(segments.payload_mut())
             .map_err(io_error)?;
@@ -602,11 +587,10 @@ fn merge<S: Codec>(runs: Vec<File>, shape: Shape, buffer: usize) -> Result<File,
         sources.push(Source::Run(Decoder::new(RunReader::new(buffer, file)?)));
     }
     let mut output = Encoder::run(buffer)?;
-    merge_reusing::<S>(sources, |record| {
+    merge_into::<S>(sources, |record| {
         #[cfg(test)]
         MERGED_RECORDS.with(|count| count.set(count.get() + 1));
-        output.write_mixed(&record, shape).map_err(io_error)?;
-        Ok(owned(record.data))
+        output.write_mixed(&record, shape).map_err(io_error)
     })?;
     output.finish()
 }
@@ -1390,21 +1374,14 @@ pub(super) struct Finished<S: Codec> {
 }
 
 impl<S: Codec> Finished<S> {
-    #[cfg(test)]
-    pub(super) fn emit<'a>(
-        &'a mut self,
-        mut consume: impl FnMut(Record<Mixed<'a, S>>) -> Result<(), Failure>,
-    ) -> Result<(), Failure> {
-        self.emit_reusing(|record| consume(record).map(|()| None))
-    }
     /// Hands every record to `consume` in order: the chunk's records as
     /// views, merged with the runs. The final level and the folded smaller
     /// levels stream to the consumer, with at most `MERGE_INPUTS` decoded
     /// heads; the chunk joins the first merge from memory, never as a run.
     #[cfg_attr(feature = "hotpath", hotpath::measure(impl_type = "Finished<S>"))]
-    pub(super) fn emit_reusing<'a>(
+    pub(super) fn emit<'a>(
         &'a mut self,
-        mut consume: impl FnMut(Record<Mixed<'a, S>>) -> Result<Option<S>, Failure>,
+        mut consume: impl FnMut(Record<Mixed<'a, S>>) -> Result<(), Failure>,
     ) -> Result<(), Failure> {
         let levels = std::mem::take(&mut self.levels);
         let this: &'a Self = self;
@@ -1442,7 +1419,7 @@ impl<S: Codec> Finished<S> {
             }
             sources.extend(tail.take());
             if levels.peek().is_none() {
-                return merge_reusing(sources, consume);
+                return merge_into(sources, consume);
             }
             let file = if let [Source::Run(_)] = sources.as_slice()
                 && let Some(Source::Run(decoder)) = sources.pop()
@@ -1453,11 +1430,10 @@ impl<S: Codec> Finished<S> {
                 file
             } else {
                 let mut output = Encoder::run(this.buffer)?;
-                merge_reusing(sources, |record| {
+                merge_into(sources, |record| {
                     #[cfg(test)]
                     MERGED_RECORDS.with(|count| count.set(count.get() + 1));
-                    output.write_mixed(&record, shape).map_err(io_error)?;
-                    Ok(owned(record.data))
+                    output.write_mixed(&record, shape).map_err(io_error)
                 })?;
                 output.finish()?
             };
@@ -1503,9 +1479,9 @@ enum Source<'a, S: Codec> {
     Tail(Tail<'a>, PhantomData<S>),
 }
 impl<'a, S: Codec> Source<'a, S> {
-    fn next(&mut self, spare: Option<S>) -> Result<Option<Record<Mixed<'a, S>>>, Failure> {
+    fn next(&mut self) -> Result<Option<Record<Mixed<'a, S>>>, Failure> {
         match self {
-            Self::Run(decoder) => Ok(decoder.next_reusing(spare)?.map(|record| Record {
+            Self::Run(decoder) => Ok(decoder.next::<S>()?.map(|record| Record {
                 data: Mixed::Owned(record.data),
                 prefix: record.prefix,
                 fields: record.fields,
@@ -1517,30 +1493,13 @@ impl<'a, S: Codec> Source<'a, S> {
     }
 }
 
-pub(super) fn owned<S>(storage: Mixed<'_, S>) -> Option<S> {
-    match storage {
-        Mixed::Owned(storage) => Some(storage),
-        Mixed::View(_) => None,
-    }
-}
-
-#[cfg(test)]
-fn merge_into<'a, S: Codec>(
-    sources: Vec<Source<'a, S>>,
-    mut consume: impl FnMut(Record<Mixed<'a, S>>) -> Result<(), Failure>,
-) -> Result<(), Failure> {
-    merge_reusing(sources, |record| consume(record).map(|()| None))
-}
-
-/// Merges the sources into `consume`, reusing any returned storage for the
-/// winning source's next record. No spare survives beside a decoded head.
-/// Each source is dropped as soon as it is
+/// Merges the sources into `consume`. Each source is dropped as soon as it is
 /// exhausted, which closes (and so frees) an anonymous run file, before the
 /// merge ends.
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-fn merge_reusing<'a, S: Codec>(
+fn merge_into<'a, S: Codec>(
     sources: Vec<Source<'a, S>>,
-    mut consume: impl FnMut(Record<Mixed<'a, S>>) -> Result<Option<S>, Failure>,
+    mut consume: impl FnMut(Record<Mixed<'a, S>>) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
     debug_assert!(sources.len() <= MERGE_INPUTS);
     let mut streams = Vec::new();
@@ -1548,7 +1507,7 @@ fn merge_reusing<'a, S: Codec>(
         .try_reserve_exact(sources.len())
         .map_err(|_| allocation())?;
     for mut source in sources {
-        if let Some(head) = source.next(None)? {
+        if let Some(head) = source.next()? {
             streams.push((source, Some(head)));
         }
     }
@@ -1559,8 +1518,8 @@ fn merge_reusing<'a, S: Codec>(
         .min_by(|(_, left), (_, right)| left.compare(right))
         .map(|(at, _)| at)
     {
-        let spare = consume(streams[at].1.take().unwrap())?;
-        match streams[at].0.next(spare)? {
+        consume(streams[at].1.take().unwrap())?;
+        match streams[at].0.next()? {
             Some(next) => streams[at].1 = Some(next),
             // `remove` keeps the remaining streams in order.
             None => drop(streams.remove(at)),
@@ -1760,96 +1719,6 @@ mod tests {
     fn final_merge_preserves_keys_ties_and_payloads_across_levels() {
         levels::<Packed>();
         levels::<Original>();
-    }
-
-    fn reused_records<S: Codec + Build>() {
-        let mut sorter = Sorter::<S>::new(usize::MAX, 0);
-        let rows: Vec<_> = (0..197)
-            .map(|sequence| {
-                let mut raw = vec![b'a' + (sequence % 3) as u8, b'\t'];
-                raw.resize(2 + [1, 25, 24, 5000, 28][sequence % 5], sequence as u8);
-                raw
-            })
-            .collect();
-        for (sequence, raw) in rows.iter().enumerate() {
-            ROW_JOB.push(&mut sorter, raw, sequence as u64);
-            if (sequence + 1).is_multiple_of(3) {
-                sorter.flush().ok().unwrap();
-            }
-        }
-        let expected = ROW_JOB.reference::<S>(&rows);
-        let mut seen = Vec::new();
-        let mut representative = None;
-        sorter
-            .finish()
-            .emit_reusing(|record| {
-                seen.push(describe(&record, ROW_JOB.segments::<S>()));
-                // Mimic grouping retaining one record and later returning an older
-                // representative, including transitions between runs and the tail.
-                let unused = if seen.len() % 7 == 1 {
-                    representative.replace(record)
-                } else {
-                    Some(record)
-                };
-                Ok(unused.and_then(|record| owned(record.data)))
-            })
-            .ok()
-            .unwrap();
-        assert!(seen == expected);
-    }
-    #[test]
-    fn reused_run_storage_preserves_full_merge_with_retained_representatives() {
-        reused_records::<Packed>();
-        reused_records::<Original>();
-    }
-
-    fn reused_decoder<S: Codec + Build>() {
-        let rows: Vec<_> = (0..3)
-            .map(|sequence| {
-                let mut raw = vec![b'a', b'\t'];
-                raw.resize(62, b'x' + sequence as u8);
-                super::super::project::<S>(
-                    &raw,
-                    &[2],
-                    &[1],
-                    ROW_JOB.input,
-                    sequence,
-                    false,
-                    false,
-                    super::super::last_selected::<S>(&[2], &[1]),
-                )
-                .ok()
-                .unwrap()
-            })
-            .collect();
-        let bytes = encode_all(&rows);
-        for end in 1..=bytes.len() {
-            let mut decoder = Decoder::new(&bytes[..end]);
-            let mut spare = None;
-            let mut count = 0;
-            loop {
-                match decoder.next_reusing(spare.take()) {
-                    Ok(Some(record)) => {
-                        assert_same(&record, &rows[count]);
-                        count += 1;
-                        spare = Some(record.data);
-                    }
-                    Ok(None) => break,
-                    Err(_) => {
-                        assert!(end < bytes.len());
-                        break;
-                    }
-                }
-            }
-            if end == bytes.len() {
-                assert_eq!(count, rows.len());
-            }
-        }
-    }
-    #[test]
-    fn reused_decoder_overwrites_payload_and_reports_truncation() {
-        reused_decoder::<Packed>();
-        reused_decoder::<Original>();
     }
     #[test]
     fn final_folding_does_not_rewrite_a_larger_run_with_the_smaller_level() {

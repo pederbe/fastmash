@@ -445,16 +445,12 @@ impl Segments {
         Ok(Self::Heap { bytes, count })
     }
     /// Storage for `count` segments whose lengths `length` yields in order, with
-    /// a payload for `payload_mut` to overwrite completely. Small records
-    /// without spare heap storage stay inline. A record of more than `INLINE`
-    /// segments is always on the heap and takes its ends directly.
-    /// Reuses a consumed run record where its allocation fits this record.
-    /// Retained capacity never exceeds twice the new record's heap size, so
-    /// an unusually large record cannot inflate all later decoded heads.
+    /// a zeroed payload for `payload_mut` to fill. Small records stay inline, so
+    /// decoding them allocates nothing; a record of more than `INLINE` segments
+    /// is always on the heap and takes its ends directly.
     pub(super) fn with_lengths(
         count: usize,
         mut length: impl FnMut() -> Result<usize, Failure>,
-        spare: Option<Self>,
     ) -> Result<Self, Failure> {
         let mut segments = if count <= INLINE {
             let mut lengths = [0; INLINE];
@@ -463,27 +459,8 @@ impl Segments {
                 *slot = length()?;
                 total = total.checked_add(*slot).ok_or_else(allocation)?;
             }
-            let header = count
-                .checked_mul(std::mem::size_of::<usize>())
-                .ok_or_else(allocation)?;
-            let required = header.checked_add(total).ok_or_else(allocation)?;
-            let mut segments = match spare {
-                Some(Self::Heap { mut bytes, .. })
-                    if required != 0 && bytes.capacity() <= required.saturating_mul(2) =>
-                {
-                    bytes
-                        .try_reserve_exact(required.saturating_sub(bytes.len()))
-                        .map_err(|_| allocation())?;
-                    if bytes.len() < header {
-                        bytes.resize(header, 0);
-                    }
-                    Self::Heap { bytes, count }
-                }
-                discarded => {
-                    drop(discarded);
-                    Self::new(count, total)?
-                }
-            };
+            // `new` checks that the offsets and payload fit, inline or on the heap.
+            let mut segments = Self::new(count, total)?;
             let mut end = segments.header();
             for (at, slot) in lengths[..count].iter().enumerate() {
                 end += slot;
@@ -491,7 +468,6 @@ impl Segments {
             }
             segments
         } else {
-            drop(spare);
             let mut segments = Self::heap(count, 0)?;
             let mut end = segments.header();
             for at in 0..count {
@@ -509,7 +485,7 @@ impl Segments {
             Self::Inline { len, .. } => *len = end as u8,
             Self::Heap { bytes, .. } => {
                 bytes
-                    .try_reserve_exact(end.saturating_sub(bytes.len()))
+                    .try_reserve_exact(end - bytes.len())
                     .map_err(|_| allocation())?;
                 bytes.resize(end, 0);
             }
@@ -703,54 +679,6 @@ impl Build for Original {
 #[allow(clippy::single_range_in_vec_init)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn decoded_storage_reuses_similar_capacity_and_releases_oversized_capacity() {
-        let mut segments = Segments::with_lengths(2, || Ok(20), None).ok().unwrap();
-        let pointer = segments.payload_mut().as_ptr();
-        segments.payload_mut().fill(0xff);
-        let mut lengths = [1, 19].into_iter();
-        let mut segments =
-            Segments::with_lengths(2, || Ok(lengths.next().unwrap()), Some(segments))
-                .ok()
-                .unwrap();
-        assert_eq!(segments.payload_mut().as_ptr(), pointer);
-        assert_eq!(segments.segment(0).len(), 1);
-        assert_eq!(segments.segment(1).len(), 19);
-        segments
-            .payload_mut()
-            .copy_from_slice(b"abcdefghijklmnopqrst");
-        assert_eq!(segments.segment(0), b"a");
-        assert_eq!(segments.segment(1), b"bcdefghijklmnopqrst");
-        // A large predecessor is released even if the next record could fit
-        // inside it. This also covers a change in segment count.
-        let segments = Segments::with_lengths(1, || Ok(1), Some(segments))
-            .ok()
-            .unwrap();
-        assert!(matches!(segments, Segments::Inline { .. }));
-        let segments = Segments::with_lengths(0, || unreachable!(), Some(segments))
-            .ok()
-            .unwrap();
-        assert_eq!(segments.count(), 0);
-        assert!(segments.payload().is_empty());
-    }
-
-    #[test]
-    fn reused_decoding_checks_growth_lengths_and_overflow() {
-        let segments = Segments::heap(2, 40).ok().unwrap();
-        let mut lengths = [usize::MAX, 1].into_iter();
-        assert!(Segments::with_lengths(2, || Ok(lengths.next().unwrap()), Some(segments)).is_err());
-        let segments = Segments::heap(2, 40).ok().unwrap();
-        assert!(Segments::with_lengths(2, || Err(allocation()), Some(segments)).is_err());
-        let segments = Segments::heap(2, 40).ok().unwrap();
-        let segments = Segments::with_lengths(INLINE + 1, || Ok(3), Some(segments))
-            .ok()
-            .unwrap();
-        assert_eq!(segments.count(), INLINE + 1);
-        for at in 0..segments.count() {
-            assert_eq!(segments.segment(at).len(), 3);
-        }
-    }
 
     #[test]
     fn a_sort_key_that_cannot_grow_refuses_and_otherwise_is_the_collators() {
