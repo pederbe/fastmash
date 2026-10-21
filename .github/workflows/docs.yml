@@ -6,8 +6,6 @@ name: Documentation
 # Automatic checks start once the repository is public.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 

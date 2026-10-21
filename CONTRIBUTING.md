@@ -56,6 +56,11 @@ local checks below pass, and link the issue when there is one.
 The maintainer reviews and merges the pull request after the required CI checks
 pass. Update the branch with `main` when intervening changes could affect it.
 A branch does not need an update solely because unrelated changes have merged.
+Validation runs before merge. Merging the tested result does not start another
+validation suite. Development-only dependency changes run checks for the affected
+workspace packages. Shared dependency or feature changes retain application checks.
+Workflow-only changes run the check-selection tests. Use the manual CI run when
+a workflow change also needs application or platform execution.
 Before closing an implementation ticket, update its acceptance checklist and
 check whether its parent issue is complete.
 
