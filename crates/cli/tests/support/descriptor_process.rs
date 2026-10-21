@@ -145,27 +145,12 @@ pub struct BoundCommand<'a> {
     pub environment: &'a [(&'a str, &'a str)],
 }
 
-pub fn invoke_bound(
-    command: BoundCommand<'_>,
-    directory: &Path,
-    stdout_limit: usize,
-    stderr_limit: usize,
-) -> Result<Observed> {
-    let BoundCommand {
-        binary,
-        arguments,
-        files,
-        closed,
-        environment,
-    } = command;
-    let executable = fs::canonicalize(binary)?;
+/// Spawn with real stream bindings and child-only signal defaults.
+/// The caller owns the bindings through this call and must reap the returned PID.
+pub fn spawn_bound(command: &BoundCommand<'_>, signals: &[Signal]) -> Result<nix::unistd::Pid> {
+    let executable = fs::canonicalize(command.binary)?;
     let executable = CString::new(executable.as_os_str().as_bytes())?;
-    let parent_binding_fds = files.each_ref().map(|file| file.as_raw_fd());
-    let parent_binding_flags = [
-        fcntl(&files[0], FcntlArg::F_GETFL)?,
-        fcntl(&files[1], FcntlArg::F_GETFL)?,
-        fcntl(&files[2], FcntlArg::F_GETFL)?,
-    ];
+    let parent_binding_fds = command.files.each_ref().map(|file| file.as_raw_fd());
     let mut actions = PosixSpawnFileActions::init()?;
     for (target, source) in [0, 1, 2].into_iter().zip(parent_binding_fds) {
         if source < 3 {
@@ -174,12 +159,12 @@ pub fn invoke_bound(
         actions.add_dup2(source, target)?;
     }
     for target in 0..3 {
-        if closed & (1 << target) != 0 {
+        if command.closed & (1 << target) != 0 {
             actions.add_close(target)?;
         }
     }
     let arguments = std::iter::once("fastmash")
-        .chain(arguments.iter().copied())
+        .chain(command.arguments.iter().copied())
         .map(CString::new)
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let mut attributes = PosixSpawnAttr::init()?;
@@ -187,14 +172,16 @@ pub fn invoke_bound(
     // an executed reference must receive the ordinary child disposition.
     let mut defaults = SigSet::empty();
     defaults.add(Signal::SIGPIPE);
+    for signal in signals {
+        defaults.add(*signal);
+    }
     attributes.set_sigdefault(&defaults)?;
     attributes.set_flags(PosixSpawnFlags::POSIX_SPAWN_SETSIGDEF)?;
-    let environment = environment
+    let environment = command
+        .environment
         .iter()
         .map(|(key, value)| CString::new(format!("{key}={value}")))
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    let deadline = Instant::now() + CHILD_LIMIT;
-    let cancel_at = deadline - CLEANUP_RESERVE;
     let spawned = posix_spawn(
         executable.as_c_str(),
         &actions,
@@ -204,9 +191,28 @@ pub fn invoke_bound(
     );
     drop(actions);
     drop(attributes);
+    Ok(spawned?)
+}
+
+pub fn invoke_bound(
+    command: BoundCommand<'_>,
+    directory: &Path,
+    stdout_limit: usize,
+    stderr_limit: usize,
+) -> Result<Observed> {
+    let files = &command.files;
+    let parent_binding_fds = files.each_ref().map(|file| file.as_raw_fd());
+    let parent_binding_flags = [
+        fcntl(&files[0], FcntlArg::F_GETFL)?,
+        fcntl(&files[1], FcntlArg::F_GETFL)?,
+        fcntl(&files[2], FcntlArg::F_GETFL)?,
+    ];
+    let deadline = Instant::now() + CHILD_LIMIT;
+    let cancel_at = deadline - CLEANUP_RESERVE;
+    let spawned = spawn_bound(&command, &[]);
     // Keep every source descriptor owned through spawn, then consume it once.
     // A close error is recorded without retrying an uncertain descriptor number.
-    let parent_close_results = files.map(close);
+    let parent_close_results = command.files.map(close);
     let pid = spawned?;
     let mut timed_out = false;
     let mut cancellation = None;

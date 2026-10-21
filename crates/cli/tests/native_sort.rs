@@ -1,18 +1,31 @@
+#![forbid(unsafe_code)]
 //! Built-in sorting, replay and private spill storage at the command boundary.
+#[path = "support/descriptor_process.rs"]
+mod descriptor_process;
+#[path = "support/executable.rs"]
+#[allow(clippy::duplicate_mod)]
+mod executable;
 #[path = "support/temp_dir.rs"]
 mod temp_dir;
 #[path = "support/terminal.rs"]
 mod terminal;
+#[path = "support/test_process.rs"]
+mod test_process;
 
 use nix::sys::signal::{Signal, kill};
+use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::Pid;
 use std::{
     fs::{self, File},
     io::{BufRead, BufReader, Read, Write},
-    os::unix::process::{CommandExt, ExitStatusExt},
+    os::fd::OwnedFd,
     path::PathBuf,
-    process::{Child, Command, Output, Stdio},
-    sync::{OnceLock, mpsc},
+    process::{Command, Output, Stdio},
+    sync::{
+        Arc, Mutex, Weak,
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -20,32 +33,48 @@ use std::{
 const SPILL: &[u8] = b"sort spill: private run opened\n";
 const FULL_WARNING: &[u8] = b"fastmash: Using -f/--full with non-linewise operations is deprecated and will be disabled in a future release.\n";
 
-static EXECUTABLE: OnceLock<temp_dir::TempDir> = OnceLock::new();
+static EXECUTABLE: Mutex<Weak<temp_dir::TempDir>> = Mutex::new(Weak::new());
 
-extern "C" fn cleanup_executable() {
-    if let Some(root) = EXECUTABLE.get() {
-        let _ = fs::remove_dir_all(&root.0);
+fn standalone(pool: &Mutex<Weak<temp_dir::TempDir>>) -> Arc<temp_dir::TempDir> {
+    let mut owner = pool.lock().unwrap();
+    if let Some(root) = owner.upgrade() {
+        return root;
     }
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let id = NEXT.fetch_add(1, Ordering::Relaxed);
+    let root = Arc::new(temp_dir::TempDir::new(&format!(
+        "native-sort-executable-{id}"
+    )));
+    // Publish only after copying closes its writable descriptor. Every live
+    // fixture retains this owner, so another copy cannot overlap its children.
+    fs::copy(executable::fastmash(), root.0.join("fastmash")).unwrap();
+    *owner = Arc::downgrade(&root);
+    root
 }
 
-fn standalone() -> &'static temp_dir::TempDir {
-    EXECUTABLE.get_or_init(|| {
-        let root = temp_dir::TempDir::new("native-sort-executable");
-        let binary = std::env::var_os("FASTMASH_TEST_BINARY")
-            .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into());
-        // Finish the copy before any fixture can spawn. An unrelated fork can
-        // inherit its writable descriptor, keeping the executable busy until exec.
-        fs::copy(binary, root.0.join("fastmash")).unwrap();
-        // SAFETY: this zero-argument callback removes only our owned root and
-        // does not panic. Register it before publishing the immutable executable.
-        assert_eq!(unsafe { libc::atexit(cleanup_executable) }, 0);
-        root
-    })
+#[test]
+fn staged_executable_lives_until_its_last_fixture_owner() {
+    let pool = Mutex::new(Weak::new());
+    let first = standalone(&pool);
+    let second = standalone(&pool);
+    assert!(Arc::ptr_eq(&first, &second));
+    let path = first.0.clone();
+    assert!(path.join("fastmash").is_file());
+    drop(first);
+    assert!(path.join("fastmash").is_file());
+    drop(second);
+    assert!(!path.try_exists().unwrap());
+    let fresh = standalone(&pool);
+    assert_ne!(fresh.0, path);
+    let path = fresh.0.clone();
+    drop(fresh);
+    assert!(!path.try_exists().unwrap());
 }
 
 struct Fixture {
     root: temp_dir::TempDir,
     binary: PathBuf,
+    _executable: Arc<temp_dir::TempDir>,
 }
 
 impl Fixture {
@@ -53,15 +82,19 @@ impl Fixture {
         let root = temp_dir::TempDir::new(name);
         // A standalone executable also exercises the built-in fallback on
         // Linux for Operations that ordinarily use the Sort supervisor.
-        let binary = standalone().0.join("fastmash");
+        let executable = standalone(&EXECUTABLE);
+        let binary = executable.0.join("fastmash");
         fs::create_dir(root.0.join("spill")).unwrap();
-        Self { root, binary }
+        Self {
+            root,
+            binary,
+            _executable: executable,
+        }
     }
 
     fn command(&self, args: &[&str], memory: &str) -> Command {
-        let mut command = Command::new(&self.binary);
+        let mut command = test_process::bounded(&self.binary, 15);
         command
-            .arg0("fastmash")
             .args(args)
             .env_clear()
             .env("PATH", "/nonexistent")
@@ -72,28 +105,59 @@ impl Fixture {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        // SAFETY: alarm is async-signal-safe and bounds the executed command
-        // if a regression leaves it waiting for input or a child process.
-        unsafe {
-            command.pre_exec(|| {
-                libc::alarm(15);
-                Ok(())
-            });
-        }
         command
     }
 
-    fn close_stdout(command: &mut Command) {
-        // SAFETY: close is async-signal-safe and changes only the child's
-        // standard output after Command installs its pipe.
-        unsafe {
-            command.pre_exec(|| {
-                if libc::close(1) != 0 {
-                    return Err(std::io::Error::last_os_error());
+    fn invoke_closed(&self, command: &Command, input: &[u8], file: bool) -> Output {
+        let capture = temp_dir::TempDir::create(self.root.0.join("closed-output")).unwrap();
+        let (reader, mut writer) = std::io::pipe().unwrap();
+        let stdin: OwnedFd = if file {
+            let path = self.root.0.join("input");
+            fs::write(&path, input).unwrap();
+            File::open(path).unwrap().into()
+        } else {
+            reader.into()
+        };
+        let files = [
+            stdin,
+            File::create_new(capture.0.join("stdout")).unwrap().into(),
+            File::create_new(capture.0.join("stderr")).unwrap().into(),
+        ];
+        // Bind directly to the candidate. A Rust launcher before it could
+        // repair closed standard descriptors during its own startup.
+        let arguments: Vec<_> = command
+            .get_args()
+            .skip(2)
+            .map(|s| s.to_str().unwrap())
+            .collect();
+        let environment = child_environment(command);
+        thread::scope(|scope| {
+            let writer = scope.spawn(move || {
+                if file {
+                    Ok(())
+                } else {
+                    writer.write_all(input)
                 }
-                Ok(())
             });
-        }
+            let output = descriptor_process::invoke_bound(
+                descriptor_process::BoundCommand {
+                    binary: self.binary.as_os_str(),
+                    arguments: &arguments,
+                    files,
+                    closed: 2,
+                    environment: &environment,
+                },
+                &capture.0,
+                1 << 20,
+                1 << 20,
+            )
+            .unwrap()
+            .into_output();
+            if let Err(error) = writer.join().unwrap() {
+                assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+            }
+            output
+        })
     }
 
     fn invoke(&self, command: &mut Command, input: &[u8], file: bool) -> Output {
@@ -374,13 +438,29 @@ fn text_and_csv_spill_keep_exact_reports_with_terminal_output() {
     }
 }
 
-struct Reap(Option<Child>);
+fn child_environment(command: &Command) -> Vec<(&str, &str)> {
+    command
+        .get_envs()
+        .map(|(key, value)| (key.to_str().unwrap(), value.unwrap().to_str().unwrap()))
+        .collect()
+}
+
+struct Reap(Option<Pid>);
 
 impl Drop for Reap {
     fn drop(&mut self) {
-        if let Some(child) = self.0.as_mut() {
-            let _ = child.kill();
-            let _ = child.wait();
+        if let Some(pid) = self.0.take() {
+            loop {
+                match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
+                    Ok(WaitStatus::StillAlive) => {
+                        let _ = kill(pid, Signal::SIGKILL);
+                        let _ = waitpid(pid, None);
+                        break;
+                    }
+                    Err(nix::errno::Errno::EINTR) => continue,
+                    _ => break,
+                }
+            }
         }
     }
 }
@@ -393,24 +473,23 @@ fn interrupted_spill(fixture: &Fixture, csv: bool, signal: i32) {
     };
     let mut command = fixture.command(args, "1");
     command.env("FASTMASH_SORT_TRACE", "1");
-    if signal != libc::SIGKILL {
-        // SAFETY: sigaction is async-signal-safe. The initialized action
-        // installs the default in the child before the executable starts.
-        unsafe {
-            command.pre_exec(move || {
-                let mut action: libc::sigaction = std::mem::zeroed();
-                action.sa_sigaction = libc::SIG_DFL;
-                libc::sigemptyset(&mut action.sa_mask);
-                if libc::sigaction(signal, &action, std::ptr::null_mut()) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
-    }
-    let mut child = Reap(Some(command.spawn().unwrap()));
-    let child_ref = child.0.as_mut().unwrap();
-    let stderr = child_ref.stderr.take().unwrap();
+    let (stdin, mut input_pipe) = std::io::pipe().unwrap();
+    let (mut stdout, child_stdout) = std::io::pipe().unwrap();
+    let (stderr, child_stderr) = std::io::pipe().unwrap();
+    let arguments: Vec<_> = command.get_args().map(|s| s.to_str().unwrap()).collect();
+    let environment = child_environment(&command);
+    let bindings = descriptor_process::BoundCommand {
+        binary: command.get_program(),
+        arguments: &arguments,
+        files: [stdin.into(), child_stdout.into(), child_stderr.into()],
+        closed: 0,
+        environment: &environment,
+    };
+    let mut child = Reap(Some(
+        descriptor_process::spawn_bound(&bindings, &[Signal::SIGINT, Signal::SIGTERM]).unwrap(),
+    ));
+    drop(bindings);
+    let pid = child.0.unwrap();
     let (sender, receiver) = mpsc::channel();
     let diagnostic = thread::spawn(move || {
         let mut reader = BufReader::new(stderr);
@@ -431,34 +510,36 @@ fn interrupted_spill(fixture: &Fixture, csv: bool, signal: i32) {
     let input = if csv { b"b,5\n".as_slice() } else { b"b\t5\n" };
     // This oversized record spills immediately. Keep input open so the child
     // waits for the next record without starting another create/unlink window.
-    let mut input_pipe = child_ref.stdin.take().unwrap();
     input_pipe.write_all(input).unwrap();
     assert_eq!(receiver.recv_timeout(Duration::from_secs(5)), Ok(()));
     fixture.clean();
-    assert!(child_ref.try_wait().unwrap().is_none());
-    let pid = i32::try_from(child_ref.id()).unwrap();
-    // The reaping guard still holds this live child.
     assert_eq!(
-        kill(Pid::from_raw(pid), Signal::try_from(signal).unwrap()),
-        Ok(())
+        waitpid(pid, Some(WaitPidFlag::WNOHANG)),
+        Ok(WaitStatus::StillAlive)
     );
+    // The reaping guard still holds this live child.
+    assert_eq!(kill(pid, Signal::try_from(signal).unwrap()), Ok(()));
     let deadline = Instant::now() + Duration::from_secs(5);
     let status = loop {
-        if let Some(status) = child_ref.try_wait().unwrap() {
-            break status;
+        match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
+            Ok(status @ (WaitStatus::Exited(..) | WaitStatus::Signaled(..))) => {
+                child.0.take();
+                break status;
+            }
+            Ok(WaitStatus::StillAlive) | Err(nix::errno::Errno::EINTR) => {}
+            status => panic!("unexpected interrupted child status: {status:?}"),
         }
         assert!(Instant::now() < deadline, "interrupted child did not exit");
         thread::sleep(Duration::from_millis(5));
     };
-    assert_eq!(status.signal(), Some(signal));
+    let WaitStatus::Signaled(_, actual_signal, _) = status else {
+        panic!("{status:?}");
+    };
+    assert_eq!(actual_signal as i32, signal);
     drop(input_pipe);
-    let mut stdout = Vec::new();
-    child_ref
-        .stdout
-        .take()
-        .unwrap()
-        .read_to_end(&mut stdout)
-        .unwrap();
+    let mut output = Vec::new();
+    stdout.read_to_end(&mut output).unwrap();
+    let stdout = output;
     assert!(stdout.is_empty());
     let trace = diagnostic.join().unwrap();
     assert!(trace.windows(SPILL.len()).any(|line| line == SPILL));
@@ -476,6 +557,31 @@ fn interrupting_established_text_and_csv_spill_leaves_no_named_files() {
 }
 
 #[test]
+fn interrupted_spill_restores_defaults_from_an_ignoring_parent() {
+    let launcher = test_process::bounded(std::env::current_exe().unwrap(), 30);
+    let output = Command::new("/bin/sh")
+        .args([
+            "-c",
+            r#"trap '' INT TERM && exec "$@""#,
+            "native-sort-ignored-signals",
+        ])
+        .arg(launcher.get_program())
+        .args(launcher.get_args())
+        .args([
+            "--exact",
+            "interrupting_established_text_and_csv_spill_leaves_no_named_files",
+            "--nocapture",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("test result: ok. 1 passed; 0 failed;"),
+        "{output:?}"
+    );
+}
+
+#[test]
 fn native_missing_header_reports_input_failures_without_external_sort() {
     let fixture = Fixture::new("native-missing-header");
     for locale in ["C", "C.UTF-8", "en_US.UTF-8", "de_DE.UTF-8"] {
@@ -486,10 +592,11 @@ fn native_missing_header_reports_input_failures_without_external_sort() {
                         let mut command =
                             fixture.command(&["-CH", "-s", "-g", "key", operation, "value"], "1");
                         command.env("LC_ALL", locale);
-                        if closed_stdout {
-                            Fixture::close_stdout(&mut command);
-                        }
-                        let output = fixture.invoke(&mut command, input, file);
+                        let output = if closed_stdout {
+                            fixture.invoke_closed(&command, input, file)
+                        } else {
+                            fixture.invoke(&mut command, input, file)
+                        };
                         assert_eq!(output.status.code(), Some(1), "{output:?}");
                         assert!(output.stdout.is_empty());
                         assert_eq!(
@@ -542,10 +649,11 @@ fn native_sorted_rmdup_missing_header_reports_input_failures_without_external_so
                 for closed_stdout in [false, true] {
                     let mut command = fixture.command(&["-sCH", "rmdup", "key"], "1");
                     command.env("LC_ALL", locale);
-                    if closed_stdout {
-                        Fixture::close_stdout(&mut command);
-                    }
-                    let output = fixture.invoke(&mut command, input, file);
+                    let output = if closed_stdout {
+                        fixture.invoke_closed(&command, input, file)
+                    } else {
+                        fixture.invoke(&mut command, input, file)
+                    };
                     assert_eq!(output.status.code(), Some(1), "{output:?}");
                     assert!(output.stdout.is_empty());
                     assert_eq!(
