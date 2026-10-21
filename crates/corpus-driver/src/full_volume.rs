@@ -222,6 +222,32 @@ fn request_detach(
     Ok(())
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum CreationStatus {
+    Complete,
+    BusyTeardown,
+}
+
+// One setup retry is allowed only after a confirmed busy native teardown has
+// been recovered. Candidate execution never starts in the rejected image.
+fn create_recover_once(
+    mut create: impl FnMut(usize) -> io::Result<CreationStatus>,
+    recover: impl FnOnce() -> io::Result<()>,
+) -> io::Result<()> {
+    match create(0)? {
+        CreationStatus::Complete => Ok(()),
+        CreationStatus::BusyTeardown => {
+            recover()?;
+            match create(1)? {
+                CreationStatus::Complete => Ok(()),
+                CreationStatus::BusyTeardown => Err(io::Error::from_raw_os_error(
+                    nix::errno::Errno::EBUSY as i32,
+                )),
+            }
+        }
+    }
+}
+
 pub struct FullVolume {
     root: PathBuf,
     image: PathBuf,
@@ -249,19 +275,19 @@ impl FullVolume {
 
     pub fn new(root: &Path) -> io::Result<Self> {
         let mut volume = Self::create(root, |root, image| {
-            utility(
-                root,
-                "create",
-                &[
-                    OsStr::new("create"),
-                    OsStr::new("-size"),
-                    OsStr::new("8m"),
-                    OsStr::new("-fs"),
-                    OsStr::new("HFS+"),
-                    OsStr::new("-volname"),
-                    OsStr::new("FastmashFault"),
-                    image.as_os_str(),
-                ],
+            create_recover_once(
+                |attempt| {
+                    create_image(
+                        root,
+                        image,
+                        if attempt == 0 {
+                            "create"
+                        } else {
+                            "create-retry"
+                        },
+                    )
+                },
+                || Self::recover_creation(root, image),
             )
         })?;
         fs::create_dir(&volume.mount)?;
@@ -286,6 +312,29 @@ impl FullVolume {
             volume.current_device(&format!("attach-info-{attempt}"), deadline)
         })?;
         Ok(volume)
+    }
+
+    fn recover_creation(root: &Path, image: &Path) -> io::Result<()> {
+        let receipts = root.join("create-recovery");
+        fs::DirBuilder::new().mode(0o700).create(&receipts)?;
+        // Explicit cleanup gets one attempt. On an error, retain the image and
+        // receipts rather than running a second cleanup from Drop. This owner
+        // contains only paths, with no file handles or child processes to drop.
+        let mut rejected = std::mem::ManuallyDrop::new(Self {
+            root: receipts,
+            image: image.to_owned(),
+            mount: root.join("mount"),
+            attached: true,
+        });
+        let deadline = Instant::now() + Duration::from_secs(15);
+        if rejected.current_device("initial-info", deadline)?.is_none() {
+            return Err(io::Error::other(
+                "busy creation has no confirmed owned attachment; state retained",
+            ));
+        }
+        // Cleanup obtains another fresh association before any detach. It must
+        // prove successful detach and fresh native absence before a new create.
+        rejected.cleanup()
     }
     pub fn mount(&self) -> &Path {
         &self.mount
@@ -371,6 +420,35 @@ impl FullVolume {
         error
     }
 }
+
+fn create_image(root: &Path, image: &Path, name: &str) -> io::Result<CreationStatus> {
+    let status = bounded(
+        Command::new("/usr/bin/hdiutil").env("LC_ALL", "C").args([
+            OsStr::new("create"),
+            OsStr::new("-size"),
+            OsStr::new("8m"),
+            OsStr::new("-fs"),
+            OsStr::new("HFS+"),
+            OsStr::new("-volname"),
+            OsStr::new("FastmashFault"),
+            image.as_os_str(),
+        ]),
+        root,
+        name,
+        Duration::from_secs(15),
+    )?;
+    creation_status(status, &fs::read(root.join(format!("{name}.stderr")))?)
+}
+
+fn creation_status(status: ExitStatus, stderr: &[u8]) -> io::Result<CreationStatus> {
+    if status.success() {
+        Ok(CreationStatus::Complete)
+    } else if status.code() == Some(1) && stderr == b"hdiutil: create failed - Resource busy\n" {
+        Ok(CreationStatus::BusyTeardown)
+    } else {
+        Err(io::Error::other(format!("hdiutil create: {status}")))
+    }
+}
 impl Drop for FullVolume {
     fn drop(&mut self) {
         if let Err(error) = self.cleanup() {
@@ -387,6 +465,166 @@ impl Drop for FullVolume {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn native_creation_recovery_releases_an_unlinked_owned_image() {
+        let temporary = crate::process::Scratch::new().unwrap();
+        let evidence = std::env::var_os("FASTMASH_VOLUME_RECOVERY_EVIDENCE");
+        let root = evidence.as_ref().map_or_else(
+            || temporary.path.with_extension("create-recovery-control"),
+            PathBuf::from,
+        );
+        // Keep uncertain native state outside Scratch's automatic cleanup.
+        let volume = std::mem::ManuallyDrop::new(FullVolume::new(&root).unwrap());
+        if root.join("create-recovery").exists() {
+            fs::rename(root.join("create-recovery"), root.join("initial-recovery")).unwrap();
+        }
+        // The observed failed create left this exact shape: an attached owned
+        // native image whose backing pathname has already been removed.
+        fs::remove_file(&volume.image).unwrap();
+        FullVolume::recover_creation(&root, &volume.image).unwrap();
+        assert!(root.join("create-recovery/cleanup.ok").is_file());
+        assert!(!volume.image.try_exists().unwrap());
+        assert!(!volume.mount.try_exists().unwrap());
+        assert_eq!(
+            create_image(&root, &volume.image, "control-create").unwrap(),
+            CreationStatus::Complete
+        );
+        assert!(volume.image.is_file());
+        // Require the successful retry's fresh native absence before removing
+        // its owned, unmounted backing file.
+        assert!(
+            volume
+                .current_device(
+                    "retry-absence-info",
+                    Instant::now() + Duration::from_secs(15)
+                )
+                .unwrap()
+                .is_none()
+        );
+        fs::remove_file(&volume.image).unwrap();
+        fs::write(
+            root.join("control.finished"),
+            b"owned creation recovery and fresh retry completed\n",
+        )
+        .unwrap();
+        if evidence.is_none() {
+            fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn only_the_explicit_native_busy_creation_is_recoverable() {
+        use std::os::unix::process::ExitStatusExt;
+        for (raw, stderr, busy) in [
+            (
+                1 << 8,
+                b"hdiutil: create failed - Resource busy\n".as_slice(),
+                true,
+            ),
+            (2 << 8, b"hdiutil: create failed - Resource busy\n", false),
+            (
+                1 << 8,
+                b"hdiutil: create failed - Permission denied\n",
+                false,
+            ),
+            (1 << 8, b"Resource busy\n", false),
+            (9, b"hdiutil: create failed - Resource busy\n", false),
+        ] {
+            let result = creation_status(ExitStatus::from_raw(raw), stderr);
+            assert_eq!(matches!(result, Ok(CreationStatus::BusyTeardown)), busy);
+            if !busy {
+                assert!(result.is_err());
+            }
+        }
+        assert!(creation_status(ExitStatus::from_raw(0), b"").is_ok());
+        assert!(
+            create_recover_once(
+                |attempt| {
+                    assert_eq!(attempt, 0);
+                    Ok(CreationStatus::Complete)
+                },
+                || panic!("successful creation needs no recovery")
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn busy_creation_retries_only_after_owned_cleanup() {
+        let calls = std::cell::RefCell::new(Vec::new());
+        let result = create_recover_once(
+            |attempt| {
+                calls.borrow_mut().push(format!("create-{attempt}"));
+                Ok(if attempt == 0 {
+                    CreationStatus::BusyTeardown
+                } else {
+                    CreationStatus::Complete
+                })
+            },
+            || {
+                calls.borrow_mut().push("owned-cleanup".to_owned());
+                Ok(())
+            },
+        );
+        assert!(result.is_ok());
+        assert_eq!(*calls.borrow(), ["create-0", "owned-cleanup", "create-1"]);
+    }
+
+    #[test]
+    fn failed_cleanup_and_other_creation_errors_never_retry() {
+        for native_busy in [false, true] {
+            let calls = std::cell::RefCell::new(Vec::new());
+            let result = create_recover_once(
+                |attempt| {
+                    calls.borrow_mut().push(format!("create-{attempt}"));
+                    if native_busy {
+                        Ok(CreationStatus::BusyTeardown)
+                    } else {
+                        Err(io::Error::from_raw_os_error(
+                            nix::errno::Errno::EBUSY as i32,
+                        ))
+                    }
+                },
+                || {
+                    calls.borrow_mut().push("owned-cleanup".to_owned());
+                    Err(io::Error::other("cleanup unconfirmed"))
+                },
+            );
+            assert!(result.is_err());
+            assert_eq!(
+                *calls.borrow(),
+                if native_busy {
+                    vec!["create-0", "owned-cleanup"]
+                } else {
+                    vec!["create-0"]
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn second_creation_failure_exhausts_the_single_retry() {
+        let attempts = std::cell::Cell::new(0);
+        let cleanups = std::cell::Cell::new(0);
+        let result = create_recover_once(
+            |_| {
+                attempts.set(attempts.get() + 1);
+                Ok(CreationStatus::BusyTeardown)
+            },
+            || {
+                cleanups.set(cleanups.get() + 1);
+                Ok(())
+            },
+        );
+        assert_eq!(
+            result.unwrap_err().raw_os_error(),
+            Some(nix::errno::Errno::EBUSY as i32)
+        );
+        assert_eq!(attempts.get(), 2);
+        assert_eq!(cleanups.get(), 1);
+    }
 
     #[test]
     fn failed_creation_preserves_partial_image_without_a_cleanup_claim() {
