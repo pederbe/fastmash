@@ -63,6 +63,23 @@
       ],
       "matchCurrentVersion": "/^1\\.88(?:\\.0)?$/",
       "enabled": false
+    },
+    {
+      "description": "The macOS archive is built on the supported macOS 15 baseline and installed unchanged on 15 and 26. Advance this runner only when the archive compatibility contract changes (ADR 0011).",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDatasources": [
+        "github-runners"
+      ],
+      "matchPackageNames": [
+        "macos"
+      ],
+      "matchFileNames": [
+        ".github/workflows/macos.yml"
+      ],
+      "matchCurrentVersion": "/^15$/",
+      "enabled": false
     }
   ],
   "customManagers": [
@@ -128,7 +145,9 @@
     "fileFilters": [
       ".github/**",
       "release/Containerfile",
-      "scripts/build_site.sh"
+      "scripts/build_site.sh",
+      "PROFILING.md",
+      "TESTING.md"
     ],
     "executionMode": "branch"
   },

@@ -70,11 +70,12 @@ review.
 The daily self-hosted run updates Cargo, npm, Actions, container digests and the
 custom tools in `.github/dependency-pins.json`. The synchronization helper keeps
 release archive hashes and compiler versions together before pushing the PR.
-Only the independent Unicode 15 reference crates in `crates/locale-tools` stay
+The independent Unicode 15 reference crates in `crates/locale-tools` stay
 fixed. Reconsider those pins when the retained reference contract changes.
 Urgent security fixes may produce separate pull requests outside the daily batch.
 Existing Dependabot security alerts and updates remain enabled.
-Minimum Rust tests remain compatibility baselines. Release identities and
+Minimum Rust tests and the macOS 15 archive builder remain compatibility
+baselines. The same archive must run unchanged on macOS 15 and 26. Release identities and
 qualification evidence change through the release process, not dependency updates.
 
 Use current stable dependencies with compatible version ranges and commit the
