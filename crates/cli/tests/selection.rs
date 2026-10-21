@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 use std::{
     fs,
     io::Write,
@@ -10,6 +11,9 @@ mod executable;
 
 #[path = "support/temp_dir.rs"]
 mod temp_dir;
+
+#[path = "support/test_process.rs"]
+mod test_process;
 
 fn invoke(args: &[&str], input: &[u8], file: bool) -> Output {
     invoke_ctype(args, input, file, None)
@@ -1323,31 +1327,16 @@ fn sorted_selection_temporary_write_failures_reclaim_runs() {
         if csv {
             args.push("--csv");
         }
-        let mut command = Command::new(executable::fastmash());
+        let mut command = test_process::ignoring_file_size_signal(executable::fastmash(), 30);
         command
             .arg0("fastmash")
             .args(&args)
             .env_clear()
             .env("LC_ALL", "C")
             .env("FASTMASH_SORT_MEMORY_BYTES", "1")
+            .env("FASTMASH_TEST_PROCESS_FILE_SIZE", "0")
             .env("TMPDIR", &directory.0)
             .stdin(fs::File::open(&input).unwrap());
-        // SAFETY: these async-signal-safe calls only constrain the child process.
-        unsafe {
-            command.pre_exec(|| {
-                let limit = libc::rlimit {
-                    rlim_cur: 0,
-                    rlim_max: 0,
-                };
-                if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                if libc::signal(libc::SIGXFSZ, libc::SIG_IGN) == libc::SIG_ERR {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
         let failed = command.output().unwrap();
         assert_eq!(failed.status.code(), Some(1), "{failed:?}");
         assert!(failed.stdout.is_empty());

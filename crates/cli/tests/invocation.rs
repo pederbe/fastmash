@@ -1,7 +1,12 @@
+#![forbid(unsafe_code)]
 //! Installed-command coverage for GNU option scanning, independent of operation grammar.
-#[path = "support/output_fault.rs"]
-mod output_fault;
-use output_fault::OutputFault;
+#[path = "support/full_output.rs"]
+mod full_output;
+#[path = "support/temp_dir.rs"]
+mod temp_dir;
+#[cfg(target_os = "macos")]
+#[path = "support/test_process.rs"]
+mod test_process;
 use std::{
     ffi::OsString,
     fs,
@@ -97,14 +102,25 @@ fn useful_argument_sizes_have_no_private_raw_cap() {
 #[test]
 fn information_output_failure_is_an_error() {
     for arg in ["-h", "-V"] {
-        let output = Command::new(candidate())
+        let fixture = temp_dir::TempDir::new("invocation-full-output");
+        let binary = candidate();
+        #[cfg(target_os = "linux")]
+        let mut command = Command::new(&binary);
+        #[cfg(target_os = "macos")]
+        let mut command = test_process::bounded(&binary, 30);
+        #[cfg(target_os = "macos")]
+        command.process_group(0);
+        command
             .arg(arg)
             .env_clear()
             .env("LC_ALL", "C")
-            .stdin(Stdio::null())
-            .full_stdout(true)
-            .output()
-            .unwrap();
+            .stdin(Stdio::null());
+        let output = full_output::output(
+            command,
+            &binary,
+            true,
+            &fixture.0.with_extension("full-output"),
+        );
         assert_eq!(output.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&output.stderr).contains("No space left on device"));
     }

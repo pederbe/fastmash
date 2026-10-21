@@ -262,9 +262,9 @@ separators or pipeline failures (closed pipes, unreadable input, full disks).
 
 For a focused `native_streams` or `grouping` run, or
 `text_summaries`, `quantiles`, `dispersion`, `extrema`, `sum_mean`,
-`presentation` or `selectors` on macOS, first build the child-only launcher with
+`presentation`, `selectors` or `invocation` on macOS, first build the child-only launcher with
 `cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-test-process`.
-The `weighted_mean` and `csv_input` resource fixtures also need this launcher on
+The `weighted_mean`, `csv_input` and `selection` resource fixtures also need this launcher on
 both platforms.
 Workspace tests build it automatically. Set `FASTMASH_TEST_PROCESS` to use a
 prepared launcher elsewhere. It sets alarms and selected signal masks in a fresh
@@ -274,7 +274,7 @@ the tested executable. The tests retain its PID and actual signal status.
 The macOS full-output checks in these suites own a calibrated full destination
 until the tested child has been reaped and its parent-side handles are closed.
 They then verify cleanup. Failed cleanup retains the private image and evidence.
-The weighted-mean and CSV zero-file-size fixtures use child-only POSIX shell
+The weighted-mean, CSV and selection zero-file-size fixtures use child-only POSIX shell
 setup to ignore SIGXFSZ before the Rust launcher applies the actual limit. A native
 control raises the unblocked signal across exec and verifies the limit and PID.
 The quantile suite retains a 60-second bound for ordinary Commands and a
