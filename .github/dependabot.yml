@@ -1,4 +1,4 @@
-# Keep routine updates separate from major updates and intentional data/API pins.
+# Keep routine updates separate from major updates and intentional data and API pins.
 # Security updates remain immediate and are classified by the same merge workflow.
 version: 2
 updates:
