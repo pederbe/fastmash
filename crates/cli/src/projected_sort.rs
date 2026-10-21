@@ -1268,9 +1268,18 @@ fn calculate_records<W: Write, S: spill::Codec>(
     // back from its sort pipe, so the intake's count (input order) would name
     // the wrong Record; only the Input header keeps its place.
     let mut line = u64::from(options.header_in);
-    // The field index for the next record: that of a record grouping no
-    // longer holds, else a fresh one.
-    let mut spare = None;
+    // Keep the adapter in place between records. Only a retained Group
+    // representative needs to move it, and its returned storage can feed the
+    // next run read. The vacant record is never collected or compared.
+    let vacant = || storage::Mixed::View(storage::View::new(&[0], 1, 1, 0));
+    let fresh = || Sorted {
+        record: Record::new(vacant(), 0, 0),
+        layout: &layout,
+        fields: index.fresh(),
+        crossings: &crossings,
+        texts,
+    };
+    let mut current = fresh();
     // Like the system sort, a sort whose input failed yields no records.
     if intake.read_error().is_none() {
         sorted.emit_reusing(|record| {
@@ -1286,20 +1295,13 @@ fn calculate_records<W: Write, S: spill::Codec>(
                 random.as_deref_mut(),
                 output,
             );
-            let mut fields = spare.take().unwrap_or_else(|| index.fresh());
-            fields.clear();
-            let sorted = Sorted {
-                record,
-                layout: &layout,
-                fields,
-                crossings: &crossings,
-                texts,
-            };
-            if let Some(unused) = calculation.push(sorted, line, &mut context)? {
-                spare = Some(unused.fields);
-                return Ok(spill::owned(unused.record.data));
-            }
-            Ok(None)
+            current.record = record;
+            current.fields.clear();
+            calculation.push_in_place(&mut current, || Ok(fresh()), line, &mut context)?;
+            Ok(spill::owned(std::mem::replace(
+                &mut current.record.data,
+                vacant(),
+            )))
         })?;
     }
     let mut context =
