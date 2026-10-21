@@ -278,17 +278,6 @@ impl RunFile {
             }
             return Err(error);
         }
-        if let (Ok(offset), Ok(length)) = (
-            i64::try_from(self.advised),
-            i64::try_from(self.written - self.advised),
-        ) {
-            let _ = nix::fcntl::posix_fadvise(
-                &self.file,
-                offset,
-                length,
-                nix::fcntl::PosixFadviseAdvice::POSIX_FADV_DONTNEED,
-            );
-        }
         self.advised = self.written;
         Ok(())
     }
