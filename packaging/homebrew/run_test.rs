@@ -102,6 +102,13 @@ fn run() -> io::Result<()> {
             "Linux package is missing its supervisor or a supported sort route",
         ));
     }
+    if !cfg!(target_os = "macos") {
+        expect(
+            &pipe(&binary, &["-s", "rmdup", "1"], b"b\t2\na\t1\nb\t3\n")?,
+            b"a\t1\nb\t2\n",
+            "sorted rmdup",
+        )?;
+    }
     Ok(())
 }
 

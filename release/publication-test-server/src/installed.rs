@@ -162,6 +162,18 @@ pub(crate) fn verify_with_receipts(
             b"",
         )?;
         successful(&output, "native archive must not contain a supervisor")?;
+    } else {
+        // Calculations no longer exercise the Linux supervisor. Sorted rmdup
+        // still does, so keep checking that the installed pair works together.
+        check(
+            &target,
+            bin,
+            &["-s", "rmdup", "1"],
+            b"b\t2\na\t1\nb\t3\n",
+            b"a\t1\nb\t2\n",
+            false,
+            receipts,
+        )?;
     }
     check(
         &target,

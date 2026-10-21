@@ -109,6 +109,14 @@ fn run() -> io::Result<()> {
             String::from_utf8_lossy(&output.stderr)
         )));
     }
+    expect(
+        &pipe(
+            command(&binary, &["-s", "rmdup", "1"]),
+            b"b\t2\na\t1\nb\t3\n",
+        )?,
+        b"a\t1\nb\t2\n",
+        "sorted rmdup",
+    )?;
     Ok(())
 }
 
