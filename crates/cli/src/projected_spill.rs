@@ -483,6 +483,18 @@ struct Decoder<R: BufRead> {
     shape: Option<Shape>,
     previous: u64,
 }
+
+/// A record's sequence delta, field count and segment lengths. This also runs
+/// on a borrowed input buffer, where the individual varints advance only a
+/// slice rather than the run reader's state.
+#[inline(always)]
+fn record_header(input: &mut impl BufRead, shape: Shape) -> Result<(u64, u64, Segments), Failure> {
+    let delta = varint(input)?;
+    let fields = varint(input)?;
+    let segments = Segments::with_lengths(shape.segments, || size(input))?;
+    Ok((delta, fields, segments))
+}
+
 impl<R: BufRead> Decoder<R> {
     fn new(input: R) -> Self {
         Self {
@@ -503,12 +515,25 @@ impl<R: BufRead> Decoder<R> {
                 shape
             }
         };
-        let sequence = self
-            .previous
-            .wrapping_add(unzigzag(varint(&mut self.input)?));
-        let fields = varint(&mut self.input)?;
-        let input = &mut self.input;
-        let mut segments = Segments::with_lengths(shape.segments, || size(input))?;
+        let buffer = self.input.fill_buf().map_err(io_error)?;
+        let maximum = shape
+            .segments
+            .checked_add(2)
+            .and_then(|n| n.checked_mul(VARINT));
+        let (delta, fields, mut segments) = if maximum.is_some_and(|n| buffer.len() >= n) {
+            // Even the longest legal header fits without a refill. Retain
+            // the original varint checks, then advance the reader once,
+            // including any completed fields before a malformed varint.
+            let before = buffer.len();
+            let mut remaining = buffer;
+            let result = record_header(&mut remaining, shape);
+            let consumed = before - remaining.len();
+            self.input.consume(consumed);
+            result?
+        } else {
+            record_header(&mut self.input, shape)?
+        };
+        let sequence = self.previous.wrapping_add(unzigzag(delta));
         self.input
             .read_exact(segments.payload_mut())
             .map_err(io_error)?;
@@ -2136,6 +2161,70 @@ mod tests {
     fn truncated_and_corrupt_runs_are_errors_not_panics() {
         truncation::<Packed>();
         truncation::<Original>();
+    }
+
+    fn header_trace<S: Codec + Build>(
+        bytes: &[u8],
+        capacity: usize,
+    ) -> (Vec<Described>, Option<(i32, Vec<u8>)>) {
+        let mut decoder = Decoder::new(BufReader::with_capacity(capacity, bytes));
+        let mut seen = Vec::new();
+        loop {
+            match decoder.next::<S>() {
+                Ok(Some(record)) => seen.push(describe(&record, record.data.segments().count())),
+                Ok(None) => return (seen, None),
+                Err(error) => return (seen, Some((error.status, error.message))),
+            }
+        }
+    }
+
+    fn buffered_headers<S: Codec + Build>() {
+        let rows: Vec<_> = (0..6)
+            .map(|sequence| {
+                let mut raw = vec![b'a' + sequence as u8, b'\t'];
+                raw.resize(2 + [1, 20, 22, 30, 127, 128][sequence as usize], b'x');
+                super::super::project::<S>(
+                    &raw,
+                    &[2],
+                    &[1],
+                    ROW_JOB.input,
+                    sequence,
+                    false,
+                    false,
+                    super::super::last_selected::<S>(&[2], &[1]),
+                )
+                .ok()
+                .unwrap()
+            })
+            .collect();
+        let bytes = encode_all(&rows);
+        for end in 0..=bytes.len() {
+            let expected = header_trace::<S>(&bytes[..end], 1);
+            for capacity in [2, 9, 20, 39, 40, 256, 4096] {
+                assert_eq!(
+                    header_trace::<S>(&bytes[..end], capacity),
+                    expected,
+                    "end={end} capacity={capacity}"
+                );
+            }
+        }
+        // Malformed metadata must retain both the preceding complete records
+        // and the error, whether the buffer admits the header fast path or not.
+        for at in 0..bytes.len() {
+            let mut changed = bytes.clone();
+            changed[at] ^= 0x80;
+            assert_eq!(
+                header_trace::<S>(&changed, 4096),
+                header_trace::<S>(&changed, 1),
+                "byte={at}"
+            );
+        }
+    }
+
+    #[test]
+    fn buffered_headers_preserve_records_and_errors_across_every_refill_boundary() {
+        buffered_headers::<Packed>();
+        buffered_headers::<Original>();
     }
     /// One chunk of the grouped count and collapse memory job, as a run:
     /// rows of a key among 50,000 and two values, from a linear congruential
