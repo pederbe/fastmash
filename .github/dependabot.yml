@@ -1,4 +1,4 @@
-# Keep routine updates separate from major updates and intentional data and API pins.
+# Separate routine updates from major updates and reference qualification.
 # Security updates remain immediate and are classified by the same merge workflow.
 version: 2
 updates:
@@ -10,19 +10,16 @@ updates:
     schedule:
       interval: monthly
     groups:
-      # These versions retain Unicode reference data, locale behavior and the
-      # unstable ICU API or installed ICU reference used by the tooling.
+      # Review retained Unicode reference data and production collation engine
+      # and data changes against locale qualification. Other updates use normal checks.
       # Keep the same exclusions in dependabot-auto-merge.yml for security PRs.
       cargo-pinned:
         patterns:
-          - "icu_collator*"
-          - "icu_locale_core"
-          - "icu_properties*"
-          - "rust_icu_*"
+          - "icu_collator"
+          - "icu_collator_data"
+          - "icu_properties"
+          - "icu_properties_data"
           - "unicode-case-mapping"
-          - "unicode-normalization"
-          - "unicode-general-category"
-          - "unicode_names2"
       cargo-routine:
         patterns: ["*"]
         update-types: ["patch", "minor"]

@@ -36,13 +36,13 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
         run: |
-          # Match the intentional data and API pins in dependabot.yml. Check names
+          # Match the deliberate-review exceptions in dependabot.yml. Check names
           # directly so ungrouped security updates respect the same exceptions.
           if jq -e '
             length > 0 and all(
               (.updateType == "version-update:semver-patch" or
                .updateType == "version-update:semver-minor") and
-              (.dependencyName | test("^(icu_collator.*|icu_locale_core|icu_properties.*|rust_icu_.*|unicode-(case-mapping|normalization|general-category)|unicode_names2)$") | not)
+              (.dependencyName | test("^(icu_collator(_data)?|icu_properties(_data)?|unicode-case-mapping)$") | not)
             )' <<< "$DEPENDENCIES"; then
             gh pr merge --auto --merge --match-head-commit "$PR_HEAD" "$PR_URL"
           fi

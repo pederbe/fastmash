@@ -8,7 +8,7 @@ publish = false
 description = "Archive notices for Fastmash's locked normal dependencies"
 
 [dependencies]
-serde_json = "=1.0.154"
+serde_json = "1.0.154"
 
 [lints]
 workspace = true
