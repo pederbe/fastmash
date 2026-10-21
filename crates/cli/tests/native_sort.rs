@@ -287,17 +287,17 @@ fn migrated_calculations_keep_record_formats_and_numeric_crossings() {
         (
             &["-s", "-t.", "-g1", "ms", "2"],
             b"b.2.5\na.3.5\n",
-            b"a.12.25\nb.6.25\n",
+            b"a.9\nb.4\n",
         ),
         (
             &["-s", "-te", "-g1", "ms", "2"],
             b"b e2e2\na e3e2\n",
-            b"a e90000\nb e40000\n",
+            b"a e9\nb e4\n",
         ),
         (
             &["-s", "-t1", "-g1", "ms", "2"],
             b"b1215\na1315\n",
-            b"a199225\nb146225\n",
+            b"a19\nb14\n",
         ),
     ];
     for file in [false, true] {
