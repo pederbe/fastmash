@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 //! Source-routing checks. These run in the unit-test executable, not the CLI.
 use super::*;
 use std::cell::RefCell;
@@ -198,6 +199,9 @@ impl random::SeedSource for NoEntropy {
     }
 }
 
+#[cfg(target_os = "linux")]
+const SIGPIPE_READY: &[u8] = b"sigpipe fixture ready\n";
+
 #[test]
 #[cfg(target_os = "linux")]
 fn sigpipe_policy_in_isolated_test_processes() {
@@ -223,6 +227,13 @@ fn sigpipe_policy_in_isolated_test_processes() {
             .unwrap();
         if ["default", "ignored", "stderr", "sort-mask"].contains(&case) {
             assert_eq!(output.status.signal(), Some(13), "{case}: {:?}", output);
+            assert!(
+                output
+                    .stdout
+                    .windows(SIGPIPE_READY.len())
+                    .any(|part| part == SIGPIPE_READY),
+                "{case}: child must complete setup before the real failed write: {output:?}"
+            );
         } else {
             assert!(output.status.success(), "{case}: {:?}", output);
         }
@@ -235,6 +246,7 @@ fn sigpipe_child() {
     let Ok(case) = std::env::var("FASTMASH_UNIT_SIGNAL_CASE") else {
         return;
     };
+    nix::unistd::alarm::set(10);
     let old = fastmash_sort_process::linux::mask(None).unwrap();
     if [
         "blocked",
@@ -329,13 +341,21 @@ fn sigpipe_child() {
         std::process::exit(0);
     }
     fastmash_sort_process::linux::mask(Some(old & !(1 << 12))).unwrap();
-    let action = [u64::from(case == "ignored"), 0, 0, 0];
-    // This test owns an isolated subprocess, so no concurrent test sees signal changes.
+    // The Rust test runtime starts with ignored SIGPIPE. Calibrate that state
+    // using a real pipe with no reader, before the production initializer.
+    let (reader, writer) = nix::unistd::pipe().unwrap();
+    drop(reader);
     assert_eq!(
-        // SAFETY: rt_sigaction reads the 32-byte `action` and writes nothing.
-        unsafe { linux::syscall(13, 13, action.as_ptr() as usize, 0, 8) },
-        0
+        nix::unistd::write(&writer, b"x"),
+        Err(nix::errno::Errno::EPIPE)
     );
+    drop(writer);
+    if case != "ignored" {
+        // The ignored case independently tests the transition to default.
+        // The other cases also require initialization to preserve a default
+        // disposition that has already been established.
+        assert!(setup_sigpipe().is_ok());
+    }
     assert!(setup_sigpipe().is_ok());
     if case == "sort-mask" {
         // The same mask transition used by Session::start, with no candidate launch.
@@ -345,23 +365,16 @@ fn sigpipe_child() {
         fastmash_sort_process::linux::restore_mask(admitted);
         assert_eq!(fastmash_sort_process::linux::mask(None).unwrap(), admitted);
     }
-    let mut fds = [0i32; 2];
-    assert_eq!(
-        // SAFETY: pipe2 writes two descriptors into `fds`.
-        unsafe { linux::syscall(293, fds.as_mut_ptr() as usize, 0, 0, 0) },
-        0
-    );
-    // SAFETY: closes this test's own new read end, which nothing owns.
-    assert_eq!(unsafe { linux::syscall(3, fds[0] as usize, 0, 0, 0) }, 0);
-    let target = if case == "stderr" { 2 } else { 1 };
-    assert_eq!(
-        // SAFETY: dup2 onto a standard stream of this isolated subprocess.
-        unsafe { linux::syscall(33, fds[1] as usize, target, 0, 0) },
-        target as isize
-    );
-    // SAFETY: write reads one byte from a static string.
-    unsafe {
-        linux::syscall(1, target, b"x".as_ptr() as usize, 1, 0);
+    std::io::Write::write_all(&mut std::io::stdout(), SIGPIPE_READY).unwrap();
+    std::io::Write::flush(&mut std::io::stdout()).unwrap();
+    let (reader, writer) = nix::unistd::pipe().unwrap();
+    drop(reader);
+    if case == "stderr" {
+        nix::unistd::dup2_stderr(&writer).unwrap();
+        let _ = nix::unistd::write(std::io::stderr(), b"x");
+    } else {
+        nix::unistd::dup2_stdout(&writer).unwrap();
+        let _ = nix::unistd::write(std::io::stdout(), b"x");
     }
     panic!("default SIGPIPE must terminate before returning from write");
 }
