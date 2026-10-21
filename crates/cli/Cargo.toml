@@ -39,8 +39,8 @@ libc = "0.2.191"
 nix = { version = "0.31.3", default-features = false, features = ["fs", "resource", "signal"] }
 memchr = "2.8.3"
 # "unstable" only re-exports CollationKeySink, for sort keys that refuse
-# instead of aborting when they cannot grow; the version is pinned exactly.
-icu_collator = { version = "=2.3.1", features = ["unstable"] }
+# instead of aborting when they cannot grow.
+icu_collator = { version = "2.3.1", features = ["unstable"] }
 icu_locale_core = "2.3.0"
 astro-float-num = { version = "0.3.7", default-features = false, features = ["std"] }
 base64 = { version = "0.23.1", default-features = false }

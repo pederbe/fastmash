@@ -258,7 +258,7 @@ version = "0.0.0"
 dependencies = [
  "fastmash-conversion",
  "icu_properties 1.3.2",
- "icu_properties_data 1.3.2",
+ "icu_properties_data 1.3.4",
  "nix",
  "serde",
  "serde_json",
@@ -569,7 +569,7 @@ dependencies = [
  "displaydoc",
  "icu_collections 1.3.2",
  "icu_locid_transform",
- "icu_properties_data 1.3.2",
+ "icu_properties_data 1.3.4",
  "icu_provider 1.3.2",
  "tinystr 0.7.6",
  "zerovec 0.10.4",
@@ -592,9 +592,9 @@ dependencies = [
 
 [[package]]
 name = "icu_properties_data"
-version = "1.3.2"
+version = "1.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c8bb3b67a8347e94d580434369e5c7ee89999b9309d04b7cfc88dfaa0f31b59"
+checksum = "98507b488098f45eb95ef495612a2012e4d8ad6095dda86cb2f1728aa2204a60"
 
 [[package]]
 name = "icu_properties_data"

@@ -60,27 +60,23 @@ Before closing an implementation ticket, update its acceptance checklist and
 check whether its parent issue is complete.
 
 Dependabot patch and minor updates merge automatically after required CI checks
-pass. Major updates, retained Unicode 15 reference data, production ICU collation
-data and the unstable collation-key API need a deliberate merge. Other ICU and
+pass. Major updates, retained Unicode 15 reference data, and the production ICU
+collation engine and data need a deliberate merge. Other ICU and
 Unicode packages follow the routine update rules. These exceptions also apply to
 security updates.
 The groups in `.github/dependabot.yml` and the merge workflow record the exceptions.
 
 Use current stable dependencies with compatible version ranges and commit the
-lockfiles. The remaining exact external pins have these purposes:
+lockfiles. The remaining exact external pins, `unicode-case-mapping` 0.5.0,
+`icu_properties` 1.3.2 and its data crate at 1.3.4, reproduce the independent
+Unicode 15 producer. New casing changes mixed strings containing U+019B or
+U+0264, and newer properties assign previously unassigned characters such as
+U+1C89. Reconsider these pins when an upgrade preserves the reference behavior
+or the reference is deliberately migrated.
 
-- `icu_collator` exposes the unstable `CollationKeySink` API used for checked
-  allocation. Exact versions protect published installs from upstream API breaks.
-  Upgrade after checking that interface and remove the pin when it becomes stable.
-- `unicode-case-mapping` 0.5.0 and the ICU properties and data crates at 1.3.2
-  reproduce the independent Unicode 15 producer. New casing changes mixed strings
-  containing U+019B or U+0264, and newer properties assign previously unassigned
-  characters such as U+1C89. Reconsider these pins when an upgrade preserves the
-  reference behavior or the reference is deliberately migrated.
-
-Review `icu_collator_data` updates against the locale-order verification in
-[TESTING.md](TESTING.md). This data determines production sort keys, and the
-ordinary corpus covers only part of the supported locale alphabets.
+Review `icu_collator` and `icu_collator_data` updates against the locale-order
+verification in [TESTING.md](TESTING.md). The engine and data determine production
+sort keys, and the ordinary corpus covers only part of the supported alphabets.
 
 The npm KaTeX and lodash-es overrides select patched releases that the diagram
 tool's dependency ranges exclude. Keep compatible ranges on these overrides and

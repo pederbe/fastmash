@@ -36,7 +36,7 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
         run: |
-          # Match the intentional data and API pins in dependabot.yml. Check names
+          # Match the deliberate-review exceptions in dependabot.yml. Check names
           # directly so ungrouped security updates respect the same exceptions.
           if jq -e '
             length > 0 and all(

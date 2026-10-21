@@ -1,4 +1,4 @@
-# Keep routine updates separate from major updates and intentional data and API pins.
+# Separate routine updates from major updates and reference qualification.
 # Security updates remain immediate and are classified by the same merge workflow.
 version: 2
 updates:
@@ -10,8 +10,8 @@ updates:
     schedule:
       interval: monthly
     groups:
-      # Review retained Unicode reference data, production collation data and
-      # the unstable CollationKeySink API. Other updates use normal checks.
+      # Review retained Unicode reference data and production collation engine
+      # and data changes against locale qualification. Other updates use normal checks.
       # Keep the same exclusions in dependabot-auto-merge.yml for security PRs.
       cargo-pinned:
         patterns:
