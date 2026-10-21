@@ -2,6 +2,7 @@
 //! Every command sets FASTMASH_GROUPING=sort: hash grouping would otherwise
 //! group input from a file without the system sort.
 #![cfg(target_os = "linux")]
+#![forbid(unsafe_code)]
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use std::{
@@ -14,6 +15,9 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+#[path = "support/test_process.rs"]
+mod test_process;
 
 #[path = "support/executable.rs"]
 mod executable;
@@ -89,23 +93,20 @@ fn exec_sort_accepts_only_its_own_temporary_root() {
 /// 20000 key options do not (`E2BIG`).
 #[test]
 fn the_exec_role_exits_77_whatever_its_standard_error() {
-    use std::os::unix::process::CommandExt;
     let parent = std::process::id().to_string();
     let root = "/tmp/fastmash-sort-0123456789abcdef0123456789abcdef";
     let keys = format!("1{}", ",1".repeat(19999));
     let rejected = ["--exec-sort", &parent, "/tmp", "0", "9", "1", "1"];
     let unexecutable = ["--exec-sort", &parent, root, "0", "9", &keys, "1"];
     let run = |args: &[&str], stderr: Stdio| {
-        let mut command = Command::new(executable::supervisor());
+        let mut command = test_process::bounded(executable::supervisor(), 15);
         command
             .args(args)
             .env_clear()
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(stderr);
-        // SAFETY: the hook runs in the forked child before exec and makes
-        // only getrlimit and setrlimit calls, which are async-signal-safe.
-        unsafe { command.pre_exec(small_stack) };
+        command.env("FASTMASH_TEST_PROCESS_STACK", (512 << 10).to_string());
         command.output().unwrap()
     };
     let full = || {
@@ -131,26 +132,6 @@ fn the_exec_role_exits_77_whatever_its_standard_error() {
             let status = run(args, stderr).status;
             assert_eq!(status.code(), Some(77), "{reason}, {sink}: {status:?}");
         }
-    }
-}
-
-/// Lowers the stack limit to 512 KiB (or the hard limit, if lower).
-fn small_stack() -> std::io::Result<()> {
-    let mut limit = libc::rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    // SAFETY: getrlimit and setrlimit only access `limit`, live for both calls.
-    let set = unsafe {
-        libc::getrlimit(libc::RLIMIT_STACK, &mut limit) == 0 && {
-            limit.rlim_cur = limit.rlim_max.min(512 << 10);
-            libc::setrlimit(libc::RLIMIT_STACK, &limit) == 0
-        }
-    };
-    if set {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
     }
 }
 
@@ -450,16 +431,15 @@ fn a_missing_supervisor_sorts_in_process() {
 /// seccomp filter, the jobs that would use the system `sort` sort in process.
 #[test]
 fn without_close_range_cloexec_jobs_sort_in_process() {
-    use std::os::unix::process::CommandExt;
     let cwd = Scratch::new("no-close-range");
     let input = cwd.0.join("input");
     fs::write(&input, b"b\t1\na\t2\nb\t7\n").unwrap();
-    for errno in [libc::EINVAL, libc::ENOSYS] {
-        for (job, expected) in [
-            (&["-s", "-g", "1", "rms", "2"][..], "a\t2\nb\t5\n"),
-            (&["-s", "rmdup", "1"], "a\t2\nb\t1\n"),
-        ] {
-            let mut command = Command::new(executable::fastmash());
+    for (job, expected) in [
+        (&["-s", "-g", "1", "rms", "2"][..], "a\t2\nb\t5\n"),
+        (&["-s", "rmdup", "1"], "a\t2\nb\t1\n"),
+    ] {
+        let run = |errno: Option<i32>, trace: bool| {
+            let mut command = test_process::bounded(executable::fastmash(), 15);
             command
                 .args(job)
                 .env_clear()
@@ -467,55 +447,48 @@ fn without_close_range_cloexec_jobs_sort_in_process() {
                 .env("FASTMASH_GROUPING", "sort")
                 .current_dir(&cwd.0)
                 .stdin(fs::File::open(&input).unwrap());
-            // SAFETY: the hook runs in the forked child before exec and makes
-            // only prctl calls, which are async-signal-safe.
-            unsafe { command.pre_exec(move || deny_close_range(errno)) };
-            let output = command.output().unwrap();
+            if let Some(errno) = errno {
+                command.env("FASTMASH_TEST_PROCESS_CLOSE_RANGE_ERRNO", errno.to_string());
+            }
+            if trace {
+                command.env("FASTMASH_SORT_TRACE", "1");
+            }
+            command.output().unwrap()
+        };
+        // Grouped calculations report their route. Selection commands do
+        // not, so their original byte and status assertions remain below.
+        let reports_route = job.contains(&"-g");
+        let ordinary = run(None, true);
+        assert!(ordinary.status.success(), "{job:?}: {ordinary:?}");
+        assert_eq!(ordinary.stdout, expected.as_bytes());
+        assert_eq!(
+            ordinary.stderr,
+            if reports_route {
+                b"sort route: system sort\n".as_slice()
+            } else {
+                b""
+            },
+            "{job:?}"
+        );
+        for errno in [libc::EINVAL, libc::ENOSYS] {
+            let output = run(Some(errno), false);
             assert!(output.status.success(), "{errno} {job:?}: {output:?}");
             assert_eq!(output.stdout, expected.as_bytes(), "{errno} {job:?}");
             assert!(output.stderr.is_empty(), "{errno} {job:?}: {output:?}");
+            let traced = run(Some(errno), true);
+            assert!(traced.status.success(), "{errno} {job:?}: {traced:?}");
+            assert_eq!(traced.stdout, expected.as_bytes());
+            assert!(
+                [
+                    b"sort route: native sort of the selected fields\n".as_slice(),
+                    b"sort route: native sort of whole records\n".as_slice(),
+                ]
+                .contains(&traced.stderr.as_slice())
+                    && reports_route
+                    || !reports_route && traced.stderr.is_empty(),
+                "{errno} {job:?}: {traced:?}"
+            );
         }
-    }
-}
-
-/// Makes `close_range` fail with `errno` in this process and every process
-/// it starts, through a seccomp filter.
-fn deny_close_range(errno: i32) -> std::io::Result<()> {
-    const LOAD: u16 = 0x20; // BPF_LD | BPF_W | BPF_ABS
-    const EQUAL: u16 = 0x15; // BPF_JMP | BPF_JEQ | BPF_K
-    const RETURN: u16 = 0x06; // BPF_RET | BPF_K
-    const X86_64: u32 = 0xc000_003e; // AUDIT_ARCH_X86_64
-    let step = |code, jt, jf, k| libc::sock_filter { code, jt, jf, k };
-    let filter = [
-        // seccomp_data: nr at offset 0, arch at offset 4.
-        step(LOAD, 0, 0, 4),
-        step(EQUAL, 0, 3, X86_64),
-        step(LOAD, 0, 0, 0),
-        step(EQUAL, 0, 1, libc::SYS_close_range as u32),
-        step(RETURN, 0, 0, libc::SECCOMP_RET_ERRNO | errno as u32),
-        step(RETURN, 0, 0, libc::SECCOMP_RET_ALLOW),
-    ];
-    let program = libc::sock_fprog {
-        len: filter.len() as u16,
-        filter: filter.as_ptr().cast_mut(),
-    };
-    // prctl reads its variadic arguments as unsigned long.
-    let (one, zero): (libc::c_ulong, libc::c_ulong) = (1, 0);
-    let mode = libc::c_ulong::from(libc::SECCOMP_MODE_FILTER);
-    // SAFETY: prctl reads `program` and the filter it points to, both live
-    // for the call; the kernel copies the filter.
-    let installed = unsafe {
-        libc::prctl(libc::PR_SET_NO_NEW_PRIVS, one, zero, zero, zero) == 0
-            && libc::prctl(
-                libc::PR_SET_SECCOMP,
-                mode,
-                &program as *const libc::sock_fprog,
-            ) == 0
-    };
-    if installed {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
     }
 }
 

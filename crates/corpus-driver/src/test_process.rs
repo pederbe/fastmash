@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 //! Child-only native stream setup, followed by exec in the same process.
-use nix::sys::resource::{Resource, setrlimit};
+use nix::sys::resource::{Resource, getrlimit, setrlimit};
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, pthread_sigmask};
 use nix::unistd::{alarm, dup2_stdout, execve, pipe, write};
 use std::ffi::{CString, OsString};
@@ -13,6 +13,8 @@ const IGNORE_PIPE: &str = "FASTMASH_TEST_PROCESS_IGNORE_PIPE";
 const BROKEN_OUTPUT: &str = "FASTMASH_TEST_PROCESS_BROKEN_OUTPUT";
 const FILE_SIZE: &str = "FASTMASH_TEST_PROCESS_FILE_SIZE";
 const ADDRESS_SPACE: &str = "FASTMASH_TEST_PROCESS_ADDRESS_SPACE";
+const STACK: &str = "FASTMASH_TEST_PROCESS_STACK";
+const CLOSE_RANGE: &str = "FASTMASH_TEST_PROCESS_CLOSE_RANGE_ERRNO";
 
 fn limit(name: &str, resource: Resource) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(value) = std::env::var_os(name) {
@@ -30,6 +32,51 @@ fn selected(name: &str) -> Result<bool, Box<dyn std::error::Error>> {
         None => Ok(false),
         Some(value) if value == "1" => Ok(true),
         _ => Err("invalid test-process switch".into()),
+    }
+}
+
+fn stack_limit() -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(value) = std::env::var_os(STACK) {
+        let requested = value
+            .to_str()
+            .ok_or("invalid test-process stack limit")?
+            .parse::<u64>()?;
+        let (_, hard) = getrlimit(Resource::RLIMIT_STACK)?;
+        setrlimit(Resource::RLIMIT_STACK, requested.min(hard), hard)?;
+    }
+    Ok(())
+}
+
+fn close_range_filter() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(value) = std::env::var_os(CLOSE_RANGE) else {
+        return Ok(());
+    };
+    #[cfg(target_os = "linux")]
+    {
+        use seccompiler::{BpfProgram, SeccompAction, SeccompFilter};
+        let errno = value
+            .to_str()
+            .ok_or("invalid test-process close-range errno")?
+            .parse::<u32>()?;
+        if ![nix::libc::EINVAL as u32, nix::libc::ENOSYS as u32].contains(&errno) {
+            return Err("unsupported test-process close-range errno".into());
+        }
+        // Only this fresh process and its descendants receive the real kernel
+        // denial. Other syscalls retain their ordinary behavior.
+        let filter = SeccompFilter::new(
+            [(nix::libc::SYS_close_range, Vec::new())].into(),
+            SeccompAction::Allow,
+            SeccompAction::Errno(errno),
+            std::env::consts::ARCH.try_into()?,
+        )?;
+        let program: BpfProgram = filter.try_into()?;
+        seccompiler::apply_filter(&program)?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = value;
+        Err("test-process close-range fixture requires Linux".into())
     }
 }
 
@@ -72,6 +119,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var_os(ADDRESS_SPACE).is_some() {
         return Err("test-process address-space fixture requires Linux".into());
     }
+    stack_limit()?;
+    close_range_filter()?;
     alarm::set(seconds);
     if broken {
         // This fresh process owns both endpoints. No other test can retain a
@@ -100,6 +149,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 BROKEN_OUTPUT,
                 FILE_SIZE,
                 ADDRESS_SPACE,
+                STACK,
+                CLOSE_RANGE,
             ]
             .iter()
             .any(|name| key == *name)
@@ -122,6 +173,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .env_remove(BROKEN_OUTPUT)
         .env_remove(FILE_SIZE)
         .env_remove(ADDRESS_SPACE)
+        .env_remove(STACK)
+        .env_remove(CLOSE_RANGE)
         .exec();
     Err(error.into())
 }
