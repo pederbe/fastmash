@@ -428,21 +428,13 @@ tests, and all 3,137 frozen cases with piped input plus the ordinary-input cases
 with regular-file input. Successful version actions use the explicit development
 version; their error and transport expectations stay frozen.
 
-The jobs build the native Rust test transports explicitly and record their
-hashes. To run the same gate locally on a native supported Mac, create those
-helpers outside the checkout and name them before running the quick-start
-commands. This shell block uses Bash:
+The workspace builds the Rust test tools used by these gates. To run the same
+gate locally on a supported native Mac, use this Bash block:
 
 ```bash
 bash -c '
 set -euo pipefail
-helpers=$(mktemp -d)
-trap '\''rm -rf "$helpers"'\'' EXIT
-rustc --edition=2024 --crate-type=cdylib -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_interposer.rs -o "$helpers/full-output.dylib"
-rustc --edition=2024 -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_probe.rs -o "$helpers/full-output-probe"
 export MACOSX_DEPLOYMENT_TARGET=15.0
-export FASTMASH_TEST_FULL_OUTPUT_LIBRARY="$helpers/full-output.dylib"
-export FASTMASH_TEST_FULL_OUTPUT_PROBE="$helpers/full-output-probe"
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
@@ -459,8 +451,7 @@ These named dispositions adapt observation or diagnostics only:
 
 | Mechanism or frozen case | Native disposition |
 | --- | --- |
-| Rust full-stream tests | A test-only dyld interposer returns `-1` with native `ENOSPC` for the selected stdout or stderr descriptor. A Rust probe checks the actual return and errno, ordinary and unselected writes must remain exact, and the actual candidate must pass calibration before a fault result is accepted. Linux keeps `/dev/full`. |
-| All 72 `io=full` corpus cases | The Rust corpus driver uses a private 8 MiB HFS+ image filled to real `ENOSPC`. Actual executable controls calibrate selected and unselected streams, with empty-sink checks before and after each case. Destination facts and owned-image cleanup are retained. Linux uses `/dev/full`. |
+| Rust full-stream tests and all 72 `io=full` corpus cases | Shared Rust test support uses a private 8 MiB HFS+ image filled to real `ENOSPC`. Actual executable controls calibrate selected and unselected streams, with empty-sink checks before and after each case. Destination facts and owned-image cleanup are retained. Linux uses `/dev/full`. |
 | `grouping-next:read-error`, `grouping-next:read-error-header`, `paired-private:grouped-read-error-after-result` | The corpus driver observes the frozen visible completed-group acknowledgement, stops the candidate, reclaims the controlling terminal foreground and resumes it. The next read produces real `EIO` without wake bytes on both platforms. Final stdout, stderr and status 1 stay frozen. |
 | `sorting/header-empty`, `sorting/header-only-comments`; native calculations in `record_separators::record_intake::missing_headers_keep_native_and_external_full_warning_order`; ordinary aggregates in `weighted_mean::sorted_named_empty_completion_keeps_header_errors_and_legacy_commands` | Native sorting on Linux and macOS reports exactly `fastmash: missing input header for named grouping key`, with empty stdout and status 1. It emits no full warning because the data phase has not begun. The fixture remains frozen; only these two named corpus diagnostics are adapted. |
 | `rms` in `record_separators::record_intake::missing_headers_keep_native_and_external_full_warning_order` | Linux's external route retains the system-sort error, then the full warning and `read error (on close)`. macOS uses the native missing-header diagnostic without a full warning. Both require empty stdout and status 1. |

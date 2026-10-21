@@ -109,14 +109,6 @@ jobs:
           for key in FASTMASH_TEST_BINARY FASTMASH_GROUP_TEST_BINARY FASTMASH_RECORD_BINARY FASTMASH_QUANTILE_TEST_BINARY FASTMASH_TEXT_TEST_BINARY FASTMASH_SUM_MEAN_TEST_BINARY FASTMASH_EXTREMA_BINARY FASTMASH_SELECTOR_BINARY FASTMASH_DISPERSION_BINARY FASTMASH_PRESENTATION_BINARY FASTMASH_INVOCATION_BINARY FASTMASH_FAILURE_BINARY; do
             printf '%s=%s\n' "$key" "$binary" >> "$GITHUB_ENV"
           done
-      - name: Build and identify native fault transports
-        run: |
-          helpers="$RUNNER_TEMP/native-fault-helpers"
-          mkdir -p "$helpers"
-          rustc --edition=2024 --crate-type=cdylib -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_interposer.rs -o "$helpers/full-output.dylib"
-          rustc --edition=2024 -C panic=abort -C opt-level=2 crates/cli/tests/support/full_output_probe.rs -o "$helpers/full-output-probe"
-          shasum -a 256 "$helpers/full-output.dylib" "$helpers/full-output-probe" | tee "$EVIDENCE/fault-helpers.sha256"
-          printf 'FASTMASH_TEST_FULL_OUTPUT_LIBRARY=%s\nFASTMASH_TEST_FULL_OUTPUT_PROBE=%s\n' "$helpers/full-output.dylib" "$helpers/full-output-probe" >> "$GITHUB_ENV"
       - name: Execute the installed command contract and both corpus modes
         run: |
           cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-corpus --bin fastmash-test-process 2>&1 | tee "$EVIDENCE/corpus-build.log"
