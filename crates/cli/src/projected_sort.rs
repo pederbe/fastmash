@@ -937,6 +937,7 @@ impl<S: Storage> grouping::GroupRecord for Sorted<'_, S> {
             line,
             options,
             arithmetic,
+            random,
         )
     }
 }
@@ -1083,8 +1084,11 @@ pub(crate) fn packed(options: &options::Options, native: operation_set::NativeSo
         && !options.locale.language()
         && match native {
             operation_set::NativeSort::Packed => true,
-            operation_set::NativeSort::Original => packs_numbers(options),
-            operation_set::NativeSort::Unsupported => false,
+            // Default-route eligibility does not limit fallback storage: all
+            // numeric Operations use the same checked field conversion.
+            operation_set::NativeSort::Original | operation_set::NativeSort::Unsupported => {
+                packs_numbers(options)
+            }
         }
 }
 fn calculate_records<W: Write, S: spill::Codec>(
@@ -2235,10 +2239,15 @@ mod packed_number_tests {
             let mut options = options(separator, false);
             assert_eq!(packed(&options, NativeSort::Original), packs, "{separator}");
             assert!(packed(&options, NativeSort::Packed));
-            assert!(!packed(&options, NativeSort::Unsupported));
+            assert_eq!(
+                packed(&options, NativeSort::Unsupported),
+                packs,
+                "{separator}"
+            );
             options.full = true;
             assert!(!packed(&options, NativeSort::Original));
             assert!(!packed(&options, NativeSort::Packed));
+            assert!(!packed(&options, NativeSort::Unsupported));
         }
     }
 

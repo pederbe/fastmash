@@ -194,6 +194,92 @@ fn exact(output: &Output, stdout: &[u8]) {
 }
 
 #[test]
+fn remaining_calculations_project_fields_without_changing_results() {
+    let fixture = Fixture::new("native-advanced-fields");
+    let input = include_bytes!("fixtures/native-sort-advanced.tsv");
+    // Numeric rows: GNU 1.9, Linux x86-64, LC_ALL=C. Dot product is the
+    // exact sum of x * (2*x), for x=1..8 and x=2..9. Seeded random choices
+    // preserve the preceding implementation's results and contribution order.
+    let cases: &[(&str, &str, &[u8])] = &[
+        ("geomean", "2", b"a\t3.7643505995031\nb\t4.9541639996482\n"),
+        ("harmmean", "2", b"a\t2.9434954007884\nb\t4.3740507702322\n"),
+        ("ms", "2", b"a\t25.5\nb\t35.5\n"),
+        ("rms", "2", b"a\t5.049752469181\nb\t5.9581876439065\n"),
+        ("pskew", "2", b"a\t0\nb\t0\n"),
+        ("sskew", "2", b"a\t0\nb\t0\n"),
+        ("pkurt", "2", b"a\t-1.2380952380952\nb\t-1.2380952380952\n"),
+        ("skurt", "2", b"a\t-1.2\nb\t-1.2\n"),
+        ("jarque", "2", b"a\t0.77454465071599\nb\t0.77454465071599\n"),
+        ("dpo", "2", b"a\t0.72013518580735\nb\t0.72013518580735\n"),
+        ("pcov", "2:3", b"a\t10.5\nb\t10.5\n"),
+        ("scov", "2:3", b"a\t12\nb\t12\n"),
+        ("ppearson", "2:3", b"a\t1\nb\t1\n"),
+        ("spearson", "2:3", b"a\t1\nb\t1\n"),
+        ("dotprod", "2:3", b"a\t408\nb\t568\n"),
+        ("rand", "2", b"a\t8\nb\t4\n"),
+    ];
+    for file in [false, true] {
+        for memory in ["1048576", "1"] {
+            for &(operation, selector, expected) in cases {
+                let mut command =
+                    fixture.command(&["--seed", "17", "-s", "-g1", operation, selector], memory);
+                command.env("FASTMASH_SORT_TRACE", "1");
+                let output = fixture.invoke(&mut command, input, file);
+                exact(&output, expected);
+                assert!(
+                    output
+                        .stderr
+                        .starts_with(b"sort route: native sort of the selected fields\n"),
+                    "{operation}: {output:?}"
+                );
+                assert_eq!(
+                    output.stderr.windows(SPILL.len()).any(|line| line == SPILL),
+                    memory == "1",
+                    "{operation}: {output:?}"
+                );
+                fixture.clean();
+            }
+        }
+    }
+}
+
+#[test]
+fn projected_random_operations_share_draws_in_request_order() {
+    let fixture = Fixture::new("native-projected-random");
+    let input = include_bytes!("fixtures/native-sort-advanced.tsv");
+    // The preceding implementation's fixed-seed result, with two random
+    // Operations sharing draws and a numeric Operation reading the same field.
+    for file in [false, true] {
+        for memory in ["1048576", "1"] {
+            let mut command = fixture.command(
+                &[
+                    "--seed", "17", "-s", "-g1", "rand", "2", "rand", "3", "rms", "2",
+                ],
+                memory,
+            );
+            command.env("FASTMASH_SORT_TRACE", "1");
+            let output = fixture.invoke(&mut command, input, file);
+            exact(
+                &output,
+                b"a\t8\t16\t5.049752469181\nb\t8\t12\t5.9581876439065\n",
+            );
+            assert!(
+                output
+                    .stderr
+                    .starts_with(b"sort route: native sort of the selected fields\n"),
+                "{output:?}"
+            );
+            assert_eq!(
+                output.stderr.windows(SPILL.len()).any(|line| line == SPILL),
+                memory == "1",
+                "{output:?}"
+            );
+            fixture.clean();
+        }
+    }
+}
+
+#[test]
 fn native_sort_keeps_stable_contributions_through_multiple_spill_levels() {
     let fixture = Fixture::new("native-stable-spill");
     let mut input = Vec::new();
@@ -205,7 +291,7 @@ fn native_sort_keeps_stable_contributions_through_multiple_spill_levels() {
         for memory in ["67108864", "1"] {
             let mut command = fixture.command(
                 &[
-                    "-s", "-g1", "count", "2", "sum", "2", "first", "3", "last", "3",
+                    "-s", "-g1", "count", "2", "sum", "2", "rms", "2", "first", "3", "last", "3",
                 ],
                 memory,
             );
@@ -213,7 +299,7 @@ fn native_sort_keeps_stable_contributions_through_multiple_spill_levels() {
             let output = fixture.invoke(&mut command, &input, file);
             exact(
                 &output,
-                b"a\t32\t32\trecord01\trecord63\nb\t32\t32\trecord00\trecord62\n",
+                b"a\t32\t32\t1\trecord01\trecord63\nb\t32\t32\t1\trecord00\trecord62\n",
             );
             assert_eq!(
                 output.stderr.windows(SPILL.len()).any(|line| line == SPILL),
