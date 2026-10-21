@@ -253,6 +253,9 @@ impl<W: Write> Encoder<W> {
         Ok(())
     }
 }
+#[cfg(target_os = "linux")]
+const WRITEBACK_WINDOW: u64 = 16 << 20;
+
 /// Write back completed portions of large anonymous runs before dirty-page
 /// throttling stalls the writer. Unsupported synchronization leaves ordinary
 /// run I/O intact; actual writeback errors still fail the run.
@@ -288,7 +291,7 @@ impl Write for RunFile {
         #[cfg(target_os = "linux")]
         {
             self.written = self.written.saturating_add(count as u64);
-            if self.writeback && self.written.saturating_sub(self.synced) >= 16 << 20 {
+            if self.writeback && self.written.saturating_sub(self.synced) >= WRITEBACK_WINDOW {
                 self.write_back()?;
             }
         }
@@ -296,7 +299,12 @@ impl Write for RunFile {
     }
     fn flush(&mut self) -> io::Result<()> {
         #[cfg(target_os = "linux")]
-        if self.writeback && self.written.saturating_sub(self.synced) >= 8 << 20 {
+        // Once a run needs writeback, finish its entire dirty tail. Leaving
+        // sub-window tails on several completed runs accumulates dirty pages.
+        if self.writeback
+            && self.written >= WRITEBACK_WINDOW.min(8 << 20)
+            && self.written != self.synced
+        {
             self.write_back()?;
         }
         self.file.flush()
@@ -1639,6 +1647,24 @@ mod tests {
     use super::super::batch::{Batch, Scratch, share};
     use super::*;
     use std::io::{BufReader, BufWriter};
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn large_run_completion_syncs_its_short_final_tail() {
+        let mut run = RunFile {
+            file: temporary().ok().unwrap(),
+            written: 0,
+            synced: 0,
+            writeback: true,
+        };
+        let block = vec![1; 1 << 20];
+        for _ in 0..17 {
+            run.write_all(&block).unwrap();
+        }
+        assert!(run.synced < run.written);
+        run.flush().unwrap();
+        assert_eq!(run.synced, run.written);
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn run_writeback_preserves_io_when_synchronization_is_unsupported() {
