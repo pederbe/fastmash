@@ -55,6 +55,8 @@ mem_prefetch = { version = "=0.1.1", default-features = false }
 rustix = { version = "=1.1.5", default-features = false, features = ["std", "rand", "stdio", "fs"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# Observe the calling thread's signal mask without changing it.
+nix = { version = "=0.31.3", default-features = false, features = ["signal"] }
 # Borrow standard descriptors without initializing an additional I/O buffer.
 rustix = { version = "=1.1.5", default-features = false, features = ["std", "stdio", "fs", "termios"] }
 getrandom = { version = "=0.4.3", default-features = false, features = ["std"] }

@@ -10,6 +10,7 @@ pub(super) fn close(fd: usize) -> io::Result<()> {
     nix::unistd::close(fd as std::os::fd::RawFd).map_err(io::Error::from)
 }
 
+#[forbid(unsafe_code)]
 pub(super) fn sigpipe_mask() -> io::Result<u64> {
     #[cfg(target_os = "linux")]
     {
@@ -17,18 +18,9 @@ pub(super) fn sigpipe_mask() -> io::Result<u64> {
     }
     #[cfg(target_os = "macos")]
     {
-        let mut mask = 0;
-        // SAFETY: the null set leaves the mask unchanged and the live output
-        // pointer receives one native sigset_t.
-        if unsafe { libc::sigprocmask(libc::SIG_SETMASK, std::ptr::null(), &mut mask) } != 0 {
-            return Err(io::Error::last_os_error());
-        }
-        // SAFETY: mask was initialized and SIGPIPE is a valid native signal.
-        match unsafe { libc::sigismember(&mask, libc::SIGPIPE) } {
-            0 => Ok(0),
-            1 => Ok(1 << 12),
-            _ => Err(io::Error::last_os_error()),
-        }
+        use nix::sys::signal::{SigSet, Signal};
+        let mask = SigSet::thread_get_mask().map_err(io::Error::from)?;
+        Ok(u64::from(mask.contains(Signal::SIGPIPE)) << 12)
     }
 }
 
