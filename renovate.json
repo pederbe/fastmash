@@ -1,0 +1,138 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "cargo",
+    "npm",
+    "github-actions",
+    "dockerfile",
+    "custom.regex"
+  ],
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/target/**"
+  ],
+  "rangeStrategy": "bump",
+  "ignoreUnstable": true,
+  "minimumReleaseAge": "0 days",
+  "separateMajorMinor": false,
+  "separateMinorPatch": false,
+  "prConcurrentLimit": 1,
+  "prHourlyLimit": 0,
+  "dependencyDashboard": false,
+  "pinDigests": true,
+  "automerge": false,
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "*"
+      ],
+      "groupName": "daily dependencies",
+      "groupSlug": "daily-dependencies",
+      "separateMajorMinor": false
+    },
+    {
+      "description": "Unicode 15 independent reference tables. Reconsider when the retained Unicode reference contract changes.",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchFileNames": [
+        "crates/locale-tools/Cargo.toml"
+      ],
+      "matchPackageNames": [
+        "unicode-case-mapping",
+        "icu_properties",
+        "icu_properties_data"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Rust 1.88 is the supported minimum compiler baseline. Advance it only when minimum supported Rust policy changes.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDatasources": [
+        "rust-version"
+      ],
+      "matchFileNames": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/locale-reference.yml",
+        ".github/workflows/native-*.yml"
+      ],
+      "matchCurrentVersion": "/^1\\.88(?:\\.0)?$/",
+      "enabled": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/dependency-pins\\.json$/"
+      ],
+      "matchStrings": [
+        "\"rust\":\\s*\"(?<currentValue>[^\"\\s]+)\""
+      ],
+      "depNameTemplate": "rust",
+      "packageNameTemplate": "rust",
+      "datasourceTemplate": "rust-version",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/dependency-pins\\.json$/"
+      ],
+      "matchStrings": [
+        "\"mdbook\":\\s*\"(?<currentValue>[^\"\\s]+)\""
+      ],
+      "depNameTemplate": "mdbook",
+      "packageNameTemplate": "rust-lang/mdBook",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/dependency-pins\\.json$/"
+      ],
+      "matchStrings": [
+        "\"samply\":\\s*\"(?<currentValue>[^\"\\s]+)\""
+      ],
+      "depNameTemplate": "samply",
+      "packageNameTemplate": "mstange/samply",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^samply-v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/dependency-pins\\.json$/"
+      ],
+      "matchStrings": [
+        "\"hotpath\":\\s*\"(?<currentValue>[^\"\\s]+)\""
+      ],
+      "depNameTemplate": "hotpath",
+      "packageNameTemplate": "hotpath",
+      "datasourceTemplate": "crate",
+      "versioningTemplate": "semver"
+    }
+  ],
+  "postUpgradeTasks": {
+    "commands": [
+      "bash .github/scripts/renovate-sync.sh"
+    ],
+    "fileFilters": [
+      ".github/**",
+      "release/Containerfile",
+      "scripts/build_site.sh"
+    ],
+    "executionMode": "branch"
+  },
+  "vulnerabilityAlerts": {
+    "vulnerabilityFixStrategy": "highest"
+  }
+}

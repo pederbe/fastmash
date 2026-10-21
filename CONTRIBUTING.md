@@ -64,12 +64,18 @@ a workflow change also needs application or platform execution.
 Before closing an implementation ticket, update its acceptance checklist and
 check whether its parent issue is complete.
 
-Dependabot patch and minor updates merge automatically after required CI checks
-pass. Major updates, retained Unicode 15 reference data, and the production ICU
-collation engine and data need a deliberate merge. Other ICU and
-Unicode packages follow the routine update rules. These exceptions also apply to
-security updates.
-The groups in `.github/dependabot.yml` and the merge workflow record the exceptions.
+Renovate prepares one combined daily dependency update, including stable major
+releases. Merge follows required checks and an independent Spec and Standards
+review.
+The daily self-hosted run updates Cargo, npm, Actions, container digests and the
+custom tools in `.github/dependency-pins.json`. The synchronization helper keeps
+release archive hashes and compiler versions together before pushing the PR.
+Only the independent Unicode 15 reference crates in `crates/locale-tools` stay
+fixed. Reconsider those pins when the retained reference contract changes.
+Urgent security fixes may produce separate pull requests outside the daily batch.
+Existing Dependabot security alerts and updates remain enabled.
+Minimum Rust tests remain compatibility baselines. Release identities and
+qualification evidence change through the release process, not dependency updates.
 
 Use current stable dependencies with compatible version ranges and commit the
 lockfiles. The remaining exact external pins, `unicode-case-mapping` 0.5.0,
