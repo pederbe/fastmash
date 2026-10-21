@@ -254,7 +254,7 @@ impl<W: Write> Encoder<W> {
     }
 }
 #[cfg(target_os = "linux")]
-const WRITEBACK_WINDOW: u64 = 16 << 20;
+const WRITEBACK_WINDOW: u64 = 8 << 20;
 
 /// Write back completed portions of large anonymous runs before dirty-page
 /// throttling stalls the writer. Unsupported synchronization leaves ordinary
