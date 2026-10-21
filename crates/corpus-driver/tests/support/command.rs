@@ -34,7 +34,9 @@ fn main() {
         "resource-facts" => {
             use nix::sys::resource::{Resource, getrlimit};
             let facts = serde_json::json!({
+                "pid":std::process::id(),
                 "file_size":getrlimit(Resource::RLIMIT_FSIZE).unwrap(),
+                "stack":getrlimit(Resource::RLIMIT_STACK).unwrap(),
                 "private_environment_present":std::env::vars_os().any(|(k,_)|k.as_bytes().starts_with(b"FASTMASH_TEST_PROCESS_")),
             });
             #[cfg(target_os = "linux")]
@@ -44,6 +46,29 @@ fn main() {
                 facts
             };
             println!("{facts}");
+        }
+        #[cfg(target_os = "linux")]
+        "seccomp-facts" => {
+            let status = fs::read_to_string("/proc/thread-self/status").unwrap();
+            let field = |name: &str| -> u64 {
+                status
+                    .lines()
+                    .find_map(|line| line.strip_prefix(name))
+                    .unwrap()
+                    .trim()
+                    .parse()
+                    .unwrap()
+            };
+            println!(
+                "{}",
+                serde_json::json!({
+                    "pid":std::process::id(),
+                    "no_new_privs":field("NoNewPrivs:"),
+                    "seccomp":field("Seccomp:"),
+                    "filters":field("Seccomp_filters:"),
+                    "private_environment_present":std::env::vars_os().any(|(k,_)|k.as_bytes().starts_with(b"FASTMASH_TEST_PROCESS_")),
+                })
+            );
         }
         "alarm-remaining" => println!("{}", nix::unistd::alarm::cancel().unwrap_or(0)),
         "process-facts" => {

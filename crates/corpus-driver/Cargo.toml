@@ -44,3 +44,8 @@ nix = { version = "=0.31.3", default-features = false, features = ["term"] }
 
 [lints]
 workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Safe kernel-filter installation preserves real inherited syscall failures in
+# Linux development fixtures. This tool dependency does not enter product archives.
+seccompiler = { version = "=0.5.0", default-features = false }

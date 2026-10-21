@@ -94,3 +94,12 @@ Private setup variables are removed from the candidate environment. Ordinary
 execution uses `Command::exec`; the inherited-ignored-SIGPIPE control uses safe
 POSIX `execve` to retain Rust's ignored disposition, calibrated by an actual
 failed pipe write. The launcher and migrated stream suite forbid unsafe code.
+
+The stack-limit fixture lowers the soft limit while preserving the inherited
+hard limit. On Linux, the pinned Apache-2.0 OR BSD-3-Clause
+[seccompiler dependency](https://docs.rs/seccompiler/0.5.0/seccompiler/fn.apply_filter.html)
+installs a filter in the fresh launcher that makes the actual `close_range`
+syscall return `EINVAL` or `ENOSYS`. This exercises native fallback on older
+kernels without affecting other syscalls. The filter survives target execution
+and applies to its descendants. It belongs to this unpublished development
+crate and does not enter product archives.

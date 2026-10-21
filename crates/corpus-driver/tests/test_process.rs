@@ -131,6 +131,135 @@ fn resource_limits_apply_to_the_target_without_private_environment() {
 }
 
 #[test]
+fn stack_limit_preserves_the_inherited_hard_limit_and_target_pid() {
+    use nix::sys::resource::{Resource, getrlimit};
+    let inherited = getrlimit(Resource::RLIMIT_STACK).unwrap();
+    let ordinary = command(5, "resource-facts").output().unwrap();
+    assert!(ordinary.status.success(), "{ordinary:?}");
+    assert!(ordinary.stderr.is_empty());
+    let facts: serde_json::Value = serde_json::from_slice(&ordinary.stdout).unwrap();
+    assert_eq!(facts["stack"], serde_json::json!(inherited));
+    for ignored in [false, true] {
+        let mut command = command(5, "resource-facts");
+        command.env("FASTMASH_TEST_PROCESS_STACK", (512 << 10).to_string());
+        if ignored {
+            command.env("FASTMASH_TEST_PROCESS_IGNORE_PIPE", "1");
+        }
+        let child = command.spawn().unwrap();
+        let pid = child.id();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert!(output.stderr.is_empty());
+        let facts: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(facts["pid"], pid);
+        assert_eq!(
+            facts["stack"],
+            serde_json::json!([(512 << 10).min(inherited.1), inherited.1])
+        );
+        assert_eq!(facts["private_environment_present"], false);
+    }
+    let output = command(5, "resource-facts")
+        .env("FASTMASH_TEST_PROCESS_STACK", "invalid")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
+fn stack_limit_does_not_raise_a_lower_inherited_hard_limit() {
+    let launcher = command(5, "resource-facts");
+    let mut command = Command::new("/bin/sh");
+    command
+        .args([
+            "-c",
+            r#"ulimit -s 256 && exec "$@""#,
+            "test-stack-hard-limit",
+        ])
+        .arg(launcher.get_program())
+        .args(launcher.get_args())
+        .env_clear()
+        .env("PATH", "/usr/bin:/bin")
+        .env("FASTMASH_TEST_PROCESS_STACK", (512 << 10).to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let child = command.spawn().unwrap();
+    let pid = child.id();
+    let output = child.wait_with_output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty());
+    let facts: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(facts["pid"], pid);
+    assert_eq!(facts["stack"], serde_json::json!([256 << 10, 256 << 10]));
+    assert_eq!(facts["private_environment_present"], false);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn close_range_filter_is_real_inherited_and_does_not_change_other_io() {
+    use std::io::Write;
+    let ordinary = command(5, "seccomp-facts").output().unwrap();
+    assert!(ordinary.status.success(), "{ordinary:?}");
+    assert!(ordinary.stderr.is_empty());
+    let ordinary: serde_json::Value = serde_json::from_slice(&ordinary.stdout).unwrap();
+    for errno in [nix::libc::EINVAL, nix::libc::ENOSYS] {
+        for ignored in [false, true] {
+            let mut command = command(5, "seccomp-facts");
+            command.env("FASTMASH_TEST_PROCESS_CLOSE_RANGE_ERRNO", errno.to_string());
+            if ignored {
+                command.env("FASTMASH_TEST_PROCESS_IGNORE_PIPE", "1");
+            }
+            let child = command.spawn().unwrap();
+            let pid = child.id();
+            let output = child.wait_with_output().unwrap();
+            assert!(output.status.success(), "{output:?}");
+            assert!(output.stderr.is_empty());
+            let facts: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(facts["pid"], pid);
+            assert_eq!(facts["seccomp"], 2);
+            assert_eq!(facts["no_new_privs"], 1);
+            assert_eq!(facts["filters"], ordinary["filters"].as_u64().unwrap() + 1);
+            assert_eq!(facts["private_environment_present"], false);
+        }
+        let mut child = command(5, "echo")
+            .env("FASTMASH_TEST_PROCESS_CLOSE_RANGE_ERRNO", errno.to_string())
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(b"ordinary input/output\n")
+            .unwrap();
+        let output = child.wait_with_output().unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(output.stdout, b"ordinary input/output\n");
+        assert!(output.stderr.is_empty());
+    }
+    for value in ["0", "invalid"] {
+        let output = command(5, "echo")
+            .env("FASTMASH_TEST_PROCESS_CLOSE_RANGE_ERRNO", value)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn close_range_filter_rejects_an_unsupported_platform() {
+    let output = command(5, "echo")
+        .env("FASTMASH_TEST_PROCESS_CLOSE_RANGE_ERRNO", "22")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("requires Linux"));
+}
+
+#[test]
 fn file_size_signal_ignore_survives_exec_with_actual_limit_and_pid() {
     for ignored in [false, true] {
         let script = if ignored {
