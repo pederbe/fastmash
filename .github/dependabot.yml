@@ -1,13 +1,42 @@
+# Keep patch updates separate so larger updates do not block their auto-merge.
+# Security updates remain immediate and are classified by the same merge workflow.
 version: 2
 updates:
   - package-ecosystem: cargo
-    directory: /
+    directories:
+      - "/"
+      - "/release/publication-test-server"
+      - "/tools/icu-exemplars"
     schedule:
       interval: monthly
     groups:
-      cargo:
+      cargo-patch:
         patterns: ["*"]
-  - package-ecosystem: github-actions
-    directory: /
+        update-types: ["patch"]
+      cargo-review:
+        patterns: ["*"]
+        update-types: ["minor", "major"]
+
+  - package-ecosystem: npm
+    directory: "/"
     schedule:
       interval: monthly
+    groups:
+      npm-patch:
+        patterns: ["*"]
+        update-types: ["patch"]
+      npm-review:
+        patterns: ["*"]
+        update-types: ["minor", "major"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions-patch:
+        patterns: ["*"]
+        update-types: ["patch"]
+      actions-review:
+        patterns: ["*"]
+        update-types: ["minor", "major"]
