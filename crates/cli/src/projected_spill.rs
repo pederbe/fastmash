@@ -1238,6 +1238,7 @@ impl<S: Codec> Sorter<S> {
         self.end(offset, (record.prefix, record.key_len))
     }
     /// Sorts the chunk's entries.
+    #[cfg_attr(feature = "hotpath", hotpath::measure(impl_type = "Sorter<S>"))]
     fn sort(&mut self) {
         let n = self.entries.len();
         // The scratch takes the entries' capacity, so the two keep equal
@@ -1271,6 +1272,7 @@ impl<S: Codec> Sorter<S> {
         }
     }
     /// Writes the chunk as a run and files the run in the levels.
+    #[cfg_attr(feature = "hotpath", hotpath::measure(impl_type = "Sorter<S>"))]
     fn flush(&mut self) -> Result<(), Failure> {
         let Some(shape) = self.shape else {
             return Ok(());
@@ -1494,6 +1496,7 @@ impl<'a, S: Codec> Source<'a, S> {
 /// Merges the sources into `consume`. Each source is dropped as soon as it is
 /// exhausted, which closes (and so frees) an anonymous run file, before the
 /// merge ends.
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 fn merge_into<'a, S: Codec>(
     sources: Vec<Source<'a, S>>,
     mut consume: impl FnMut(Record<Mixed<'a, S>>) -> Result<(), Failure>,
