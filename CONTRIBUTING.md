@@ -54,9 +54,16 @@ create a branch in their fork. Open the pull request against `main` after the
 local checks below pass, and link the issue when there is one.
 
 The maintainer reviews and merges the pull request after the required CI checks
-pass. Keep the branch current with `main` so that the checks cover the changes
-being merged. Before closing an implementation ticket, update its acceptance
-checklist and check whether its parent issue is complete.
+pass. Update the branch with `main` when intervening changes could affect it.
+A branch does not need an update solely because unrelated changes have merged.
+Before closing an implementation ticket, update its acceptance checklist and
+check whether its parent issue is complete.
+
+Dependabot patch and minor updates merge automatically after required CI checks
+pass. Major updates and intentionally pinned Unicode data, ICU locale behavior
+and ICU reference bindings need a deliberate merge. These exceptions also apply
+to security updates. The groups in `.github/dependabot.yml` and the merge
+workflow record the pinned dependencies.
 
 ## Before you open a pull request
 

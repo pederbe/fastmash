@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   enable:
-    name: Queue patch updates
+    name: Queue routine updates
     if: >-
       github.repository == 'pederbe/fastmash' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
@@ -27,13 +27,22 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Queue the merge after required checks pass
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
           DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
         run: |
-          # Reject missing or unclassified updates, including those in mixed groups.
-          jq -e 'length > 0 and all(.updateType == "version-update:semver-patch")' <<< "$DEPENDENCIES"
-          gh pr merge --auto --merge --match-head-commit "$PR_HEAD" "$PR_URL"
+          # Match the intentional data and API pins in dependabot.yml. Check names
+          # directly so ungrouped security updates respect the same exceptions.
+          if jq -e '
+            length > 0 and all(
+              (.updateType == "version-update:semver-patch" or
+               .updateType == "version-update:semver-minor") and
+              (.dependencyName | test("^(icu_collator.*|icu_locale_core|icu_properties.*|rust_icu_.*|unicode-(case-mapping|normalization|general-category)|unicode_names2)$") | not)
+            )' <<< "$DEPENDENCIES"; then
+            gh pr merge --auto --merge --match-head-commit "$PR_HEAD" "$PR_URL"
+          fi

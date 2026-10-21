@@ -1,4 +1,4 @@
-# Keep patch updates separate so larger updates do not block their auto-merge.
+# Keep routine updates separate from major updates and intentional data and API pins.
 # Security updates remain immediate and are classified by the same merge workflow.
 version: 2
 updates:
@@ -10,33 +10,46 @@ updates:
     schedule:
       interval: monthly
     groups:
-      cargo-patch:
+      # These versions retain Unicode reference data, locale behavior and the
+      # unstable ICU API or installed ICU reference used by the tooling.
+      # Keep the same exclusions in dependabot-auto-merge.yml for security PRs.
+      cargo-pinned:
+        patterns:
+          - "icu_collator*"
+          - "icu_locale_core"
+          - "icu_properties*"
+          - "rust_icu_*"
+          - "unicode-case-mapping"
+          - "unicode-normalization"
+          - "unicode-general-category"
+          - "unicode_names2"
+      cargo-routine:
         patterns: ["*"]
-        update-types: ["patch"]
+        update-types: ["patch", "minor"]
       cargo-review:
         patterns: ["*"]
-        update-types: ["minor", "major"]
+        update-types: ["major"]
 
   - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: monthly
     groups:
-      npm-patch:
+      npm-routine:
         patterns: ["*"]
-        update-types: ["patch"]
+        update-types: ["patch", "minor"]
       npm-review:
         patterns: ["*"]
-        update-types: ["minor", "major"]
+        update-types: ["major"]
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
     groups:
-      actions-patch:
+      actions-routine:
         patterns: ["*"]
-        update-types: ["patch"]
+        update-types: ["patch", "minor"]
       actions-review:
         patterns: ["*"]
-        update-types: ["minor", "major"]
+        update-types: ["major"]
