@@ -46,8 +46,22 @@ rpmkeys --dbpath "$rpmdb" --import "$public_key"
 rpm_signed() { # RPM: signed by the release key, with intact digests
     rpmkeys --dbpath "$rpmdb" --checksig "$1" | grep -q ': digests signatures OK$'
 }
+# RPM 6 renamed PAYLOADDIGEST to PAYLOADSHA256. Query the installed tool's
+# supported tags so both current and older supported RPMs check real digests.
+rpm_tags=$(rpm --querytags)
+rpm_payload_tag=PAYLOADSHA256
+if ! grep -qx "$rpm_payload_tag" <<< "$rpm_tags"; then
+    rpm_payload_tag=PAYLOADDIGEST
+    grep -qx "$rpm_payload_tag" <<< "$rpm_tags" ||
+        { echo 'rpm has no supported SHA256 payload digest tag' >&2; exit 1; }
+fi
 rpm_identity() { # RPM: the digests that header signing must not change
-    rpm --dbpath "$rpmdb" -qp --nosignature --qf '%{SHA256HEADER} %{PAYLOADDIGEST}\n' "$1"
+    local identity
+    identity=$(rpm --dbpath "$rpmdb" -qp --nosignature \
+        --qf "%{SHA256HEADER} %{$rpm_payload_tag}\n" "$1") || return
+    [[ $identity =~ ^[[:xdigit:]]{64}\ [[:xdigit:]]{64}$ ]] ||
+        { echo "$1 has no valid SHA256 header and payload identity" >&2; return 1; }
+    printf '%s\n' "$identity"
 }
 
 pool=$repository/apt/pool/main/f/fastmash

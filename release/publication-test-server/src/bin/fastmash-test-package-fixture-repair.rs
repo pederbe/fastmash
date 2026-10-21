@@ -53,7 +53,11 @@ mod unix {
     fn find_primary(directory: &Path) -> io::Result<Option<PathBuf>> {
         for entry in fs::read_dir(directory)? {
             let entry = entry?;
-            if entry.file_name().as_bytes().ends_with(b"-primary.xml.gz") {
+            let name = entry.file_name();
+            let is_primary = |name: &OsStr| name.as_bytes().ends_with(b"-primary.xml");
+            // Native indexers choose their compression format. The repair fixture
+            // copies these bytes unchanged, so it need not assume or decode gzip.
+            if is_primary(&name) || Path::new(&name).file_stem().is_some_and(is_primary) {
                 return Ok(Some(entry.path()));
             }
             if entry.file_type()?.is_dir()
@@ -188,7 +192,7 @@ mod unix {
 
     #[cfg(test)]
     mod tests {
-        use super::PartialSnapshot;
+        use super::{PartialSnapshot, find_primary};
         use std::fs;
         use std::os::unix::ffi::OsStrExt;
         use std::os::unix::fs::{DirBuilderExt, PermissionsExt, symlink};
@@ -213,6 +217,27 @@ mod unix {
         impl Drop for Fixture {
             fn drop(&mut self) {
                 let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        #[test]
+        fn primary_metadata_follows_native_indexer_compression() {
+            for name in [
+                "frozen-primary.xml.gz",
+                "frozen-primary.xml.zst",
+                "frozen-primary.xml.xz",
+                "frozen-primary.xml.bz2",
+                "frozen-primary.xml",
+            ] {
+                let fixture = Fixture::new();
+                let metadata = fixture.0.join(name);
+                fs::write(&metadata, b"opaque frozen metadata").unwrap();
+                fs::write(
+                    fixture.0.join("frozen-filelists.xml.zst"),
+                    b"other metadata",
+                )
+                .unwrap();
+                assert_eq!(find_primary(&fixture.0).unwrap(), Some(metadata), "{name}");
             }
         }
 
