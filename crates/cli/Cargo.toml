@@ -34,7 +34,7 @@ fastmash-conversion = { path = "../conversion", version = "=0.2.0" }
 fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.2.0" }
 fastmash-sort-process = { path = "../sort-process", version = "=0.2.0" }
 rustc_apfloat = "=0.2.3"
-libc = "=0.2.189"
+libc = "=0.2.191"
 # Safe descriptor observations, closure, resource-limit and signal-mask queries.
 nix = { version = "=0.31.3", default-features = false, features = ["fs", "resource", "signal"] }
 memchr = "=2.8.3"
@@ -46,7 +46,7 @@ astro-float-num = { version = "=0.3.7", default-features = false, features = ["s
 base64 = { version = "=0.23.1", default-features = false }
 md-5 = { version = "=0.11.0", default-features = false }
 sha1 = { version = "=0.11.0", default-features = false }
-sha2 = { version = "=0.11.0", default-features = false }
+sha2 = { version = "=0.11.1", default-features = false }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 mem_prefetch = { version = "=0.1.1", default-features = false }
