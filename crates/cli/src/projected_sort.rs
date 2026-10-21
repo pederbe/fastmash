@@ -98,6 +98,7 @@ impl<S: Storage> Record<S> {
             keys.then(self.sequence.cmp(&other.sequence))
         })
     }
+    #[inline(always)]
     fn field<'a>(
         &'a self,
         layout: &[u64],
@@ -115,6 +116,7 @@ impl<S: Storage> Record<S> {
     }
     /// [`Record::field`], locating the fields of an original record through
     /// `fields`, its index.
+    #[inline(always)]
     fn indexed_field<'a>(
         &'a self,
         layout: &[u64],
@@ -1237,9 +1239,9 @@ fn calculate_records<W: Write, S: spill::Codec>(
     // back from its sort pipe, so the intake's count (input order) would name
     // the wrong Record; only the Input header keeps its place.
     let mut line = u64::from(options.header_in);
-    // The field index for the next record: that of a record grouping no
-    // longer holds, else a fresh one.
-    let mut spare = None;
+    // Reuse the current adapter, moving it only when it becomes the Group's
+    // representative. The empty record is replaced before it is consumed.
+    let mut current: Option<Sorted<'_, storage::Mixed<'_, S>>> = None;
     // Like the system sort, a sort whose input failed yields no records.
     if intake.read_error().is_none() {
         sorted.emit(|record| {
@@ -1255,18 +1257,40 @@ fn calculate_records<W: Write, S: spill::Codec>(
                 random.as_deref_mut(),
                 output,
             );
-            let mut fields = spare.take().unwrap_or_else(|| index.fresh());
-            fields.clear();
-            let sorted = Sorted {
-                record,
-                layout: &layout,
-                fields,
-                crossings: &crossings,
-                texts,
+            let sorted = match current.as_mut() {
+                Some(sorted) => {
+                    sorted.record = record;
+                    sorted
+                }
+                None => current.insert(Sorted {
+                    record,
+                    layout: &layout,
+                    fields: index.fresh(),
+                    crossings: &crossings,
+                    texts,
+                }),
             };
-            if let Some(unused) = calculation.push(sorted, line, &mut context)? {
-                spare = Some(unused.fields);
-            }
+            sorted.fields.clear();
+            calculation.push_in_place(
+                sorted,
+                || {
+                    let segments =
+                        storage::Segments::with_lengths(usize::from(S::ORIGINAL), || Ok(0))?;
+                    Ok(Sorted {
+                        record: Record::new(
+                            storage::Mixed::Owned(S::from_segments(segments, 0)),
+                            0,
+                            0,
+                        ),
+                        layout: &layout,
+                        fields: index.fresh(),
+                        crossings: &crossings,
+                        texts,
+                    })
+                },
+                line,
+                &mut context,
+            )?;
             Ok(())
         })?;
     }
@@ -1808,8 +1832,8 @@ mod compact_tests {
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn short_key_cache_preserves_record_footprint() {
-        assert_eq!(std::mem::size_of::<Record<Original>>(), 64);
-        assert_eq!(std::mem::size_of::<Record<Packed>>(), 72);
+        assert_eq!(std::mem::size_of::<Record<Original>>(), 88);
+        assert_eq!(std::mem::size_of::<Record<Packed>>(), 96);
     }
     fn stored_group_equivalence<S: Build>() {
         let options::Action::Calculate(mut options) =

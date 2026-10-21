@@ -253,10 +253,60 @@ impl<W: Write> Encoder<W> {
         Ok(())
     }
 }
-impl Encoder<RunWriter<File>> {
+/// Write back completed portions of large anonymous runs before dirty-page
+/// throttling stalls the writer. Advice is optional and never changes I/O errors.
+struct RunFile {
+    file: File,
+    #[cfg(target_os = "linux")]
+    written: u64,
+    #[cfg(target_os = "linux")]
+    advised: u64,
+}
+impl Write for RunFile {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let count = self.file.write(bytes)?;
+        #[cfg(target_os = "linux")]
+        {
+            self.written = self.written.saturating_add(count as u64);
+            if self.written.saturating_sub(self.advised) >= 1 << 20 {
+                if let (Ok(offset), Ok(length)) = (
+                    i64::try_from(self.advised),
+                    i64::try_from(self.written - self.advised),
+                ) {
+                    let _ = nix::fcntl::posix_fadvise(
+                        &self.file,
+                        offset,
+                        length,
+                        nix::fcntl::PosixFadviseAdvice::POSIX_FADV_DONTNEED,
+                    );
+                }
+                self.advised = self.written;
+            }
+        }
+        Ok(count)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        self.file.flush()
+    }
+}
+impl From<RunFile> for File {
+    fn from(run: RunFile) -> Self {
+        run.file
+    }
+}
+impl Encoder<RunWriter<RunFile>> {
     /// A new run file, written through a buffer of `buffer` bytes.
     fn run(buffer: usize) -> Result<Self, Failure> {
-        Ok(Self::new(RunWriter::new(buffer, temporary()?)?))
+        Ok(Self::new(RunWriter::new(
+            buffer,
+            RunFile {
+                file: temporary()?,
+                #[cfg(target_os = "linux")]
+                written: 0,
+                #[cfg(target_os = "linux")]
+                advised: 0,
+            },
+        )?))
     }
     fn finish(self) -> Result<File, Failure> {
         complete(self.output)
@@ -536,8 +586,8 @@ impl<R: BufRead> Decoder<R> {
         Ok(Shape { keys, segments })
     }
 }
-fn complete(writer: RunWriter<File>) -> Result<File, Failure> {
-    let mut file = writer.into_inner().map_err(io_error)?;
+fn complete<W: Write + Into<File>>(writer: RunWriter<W>) -> Result<File, Failure> {
+    let mut file = writer.into_inner().map_err(io_error)?.into();
     file.rewind().map_err(io_error)?;
     Ok(file)
 }
