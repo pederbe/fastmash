@@ -154,6 +154,7 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
     let (options, keys) = (context.options, context.keys);
     // Leave one conversion on the caller for a lone paired Operation. With
     // several numeric Operations, parsing two fields balances the extra work.
+    // Cache the later field of a lone pair, leaving the caller a shorter scan.
     let width = context
         .operations
         .requests()
@@ -171,6 +172,7 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
         }
         let selected = match selector {
             Selector::Single(field) => [Some(field), None],
+            Selector::Pair { left, right } if width == 1 => [Some(left.max(right)), None],
             Selector::Pair { left, right } => [Some(left), Some(right)],
         };
         for field in selected.into_iter().flatten() {

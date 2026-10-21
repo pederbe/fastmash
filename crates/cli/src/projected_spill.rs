@@ -1008,7 +1008,7 @@ pub(super) struct Sorter<S: Codec> {
     /// The memory of the sort's target left to the run buffers and the
     /// producer's share, outside the chunk.
     set_aside: usize,
-    /// Whether numerical runs request bounded writeback. Other sorts keep ordinary I/O.
+    /// Whether this sort requests bounded writeback rather than ordinary I/O.
     writeback: bool,
     arena: Vec<u8>,
     entries: Vec<Entry>,
@@ -1091,7 +1091,7 @@ impl<S: Codec> Sorter<S> {
             storage: PhantomData,
         }
     }
-    /// Enables bounded writeback for numerical calculations.
+    /// Enables bounded writeback for this sort.
     #[cfg(target_os = "linux")]
     pub(super) fn enable_writeback(&mut self) {
         self.writeback = true;
