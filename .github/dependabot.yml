@@ -9,6 +9,15 @@ updates:
       - "/tools/icu-exemplars"
     schedule:
       interval: monthly
+    # This generator must retain Unicode 16 data. Upgrade normalization only
+    # with its reference data and fixtures, even for a crate patch release.
+    # Ignore version updates by type so security updates remain eligible.
+    ignore:
+      - dependency-name: "unicode-normalization"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
     groups:
       # These versions retain Unicode reference data, locale behavior and the
       # unstable ICU API or installed ICU reference used by the tooling.
