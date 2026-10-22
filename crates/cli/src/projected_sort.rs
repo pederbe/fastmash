@@ -1273,9 +1273,9 @@ fn calculate_records<W: Write, S: spill::Codec>(
                         &raw[spans[at].clone()]
                     })
                 };
-                // End offsets exist even for absent fields. Charge their
-                // widest encoding and the Record header separately from raw bytes.
-                let overhead = shape.body_overhead()?;
+                // Absent fields still need end offsets and projection ranges.
+                // Charge both, with the Record header, separately from raw bytes.
+                let overhead = shape.preparation_overhead()?;
                 let mut batch =
                     batch::Batch::new(threads, target.bytes).with_projected_overhead(overhead);
                 let mut accept = |record: batch::Projected<'_>| sorter.push_body(record, shape);

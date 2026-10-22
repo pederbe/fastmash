@@ -76,11 +76,12 @@ pub(super) struct Shape {
 impl Shape {
     /// The shape of original records with `keys` keys: the keys, then the
     /// original.
-    /// Largest per-record chunk header, excluding payload bytes: field
-    /// count, offset width and one widest end offset per segment.
-    pub(super) fn body_overhead(self) -> Result<usize, Failure> {
+    /// Per-record preparation metadata, excluding payload: the chunk header,
+    /// widest end offsets and one worker's projection ranges. Charging scratch
+    /// per record conservatively covers every active worker, even tiny parts.
+    pub(super) fn preparation_overhead(self) -> Result<usize, Failure> {
         self.segments
-            .checked_mul(8)
+            .checked_mul(8 + std::mem::size_of::<std::ops::Range<usize>>())
             .and_then(|bytes| bytes.checked_add(VARINT + 1))
             .ok_or_else(allocation)
     }
