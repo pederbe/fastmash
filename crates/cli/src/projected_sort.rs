@@ -1184,7 +1184,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
     let index = records::FieldIndex::selecting(projection.selected.iter().copied());
     // Language sorts project on several threads: collation keys make that
     // worth its batches.
-    let threads = if collator.is_some() || (share_keys && keys.len() == 1) {
+    let threads = if collator.is_some() || (share_keys && !texts && keys.len() == 1) {
         fastmash_sort_process::sort_threads() as usize
     } else {
         1
@@ -1273,7 +1273,11 @@ fn calculate_records<W: Write, S: spill::Codec>(
                         &raw[spans[at].clone()]
                     })
                 };
-                let mut batch = batch::Batch::new(threads, target.bytes);
+                // End offsets exist even for absent fields. Charge their
+                // widest encoding and the Record header separately from raw bytes.
+                let overhead = shape.body_overhead()?;
+                let mut batch =
+                    batch::Batch::new(threads, target.bytes).with_projected_overhead(overhead);
                 let mut accept = |record: batch::Projected<'_>| sorter.push_body(record, shape);
                 while let Some(record) = intake.next(reader, &mut bytes)? {
                     batch.push(record.raw(), &project, &mut accept)?;

@@ -76,6 +76,14 @@ pub(super) struct Shape {
 impl Shape {
     /// The shape of original records with `keys` keys: the keys, then the
     /// original.
+    /// Largest per-record chunk header, excluding payload bytes: field
+    /// count, offset width and one widest end offset per segment.
+    pub(super) fn body_overhead(self) -> Result<usize, Failure> {
+        self.segments
+            .checked_mul(8)
+            .and_then(|bytes| bytes.checked_add(VARINT + 1))
+            .ok_or_else(allocation)
+    }
     pub(super) fn packed(keys: usize, fields: usize) -> Result<Self, Failure> {
         Ok(Self {
             keys,
