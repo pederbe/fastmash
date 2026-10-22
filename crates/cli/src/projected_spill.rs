@@ -76,6 +76,12 @@ pub(super) struct Shape {
 impl Shape {
     /// The shape of original records with `keys` keys: the keys, then the
     /// original.
+    pub(super) fn packed(keys: usize, fields: usize) -> Result<Self, Failure> {
+        Ok(Self {
+            keys,
+            segments: keys.checked_add(fields).ok_or_else(allocation)?,
+        })
+    }
     pub(super) fn original(keys: usize) -> Result<Self, Failure> {
         let segments = keys.checked_add(1).ok_or_else(allocation)?;
         Ok(Self { keys, segments })

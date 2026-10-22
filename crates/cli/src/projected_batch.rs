@@ -38,6 +38,8 @@ pub(super) fn share(threads: usize, target: usize) -> usize {
 /// Per-thread scratch space for projection.
 #[derive(Default)]
 pub(super) struct Scratch {
+    /// Accepted record sequence, for projections with deferred field outcomes.
+    pub sequence: u64,
     pub spans: Vec<Range<usize>>,
     pub sort_keys: storage::SortKeys,
     pub language: storage::LanguageScratch,
@@ -117,6 +119,7 @@ impl Batch {
     ) -> Result<(), Failure> {
         if self.threads == 1 {
             self.single.clear();
+            self.scratch.sequence = self.next_sequence;
             let (prefix, key_len) = project(record, &mut self.scratch, &mut self.single)?;
             let sequence = self.next_sequence;
             self.next_sequence = sequence.checked_add(1).ok_or_else(allocation)?;
@@ -154,6 +157,7 @@ impl Batch {
     ) -> Result<(), Failure> {
         let count = self.ends.len();
         let first = self.next_sequence;
+        let next = first.checked_add(count as u64).ok_or_else(allocation)?;
         let (bytes, ends) = (&self.bytes, &self.ends);
         let record = |at: usize| -> &[u8] {
             let start = if at == 0 { 0 } else { ends[at - 1] };
@@ -168,6 +172,7 @@ impl Batch {
                 return out;
             }
             for at in from..to {
+                scratch.sequence = first + at as u64;
                 match project(record(at), &mut scratch, &mut out.bytes) {
                     Ok((prefix, key_len)) => out.records.push((prefix, key_len, out.bytes.len())),
                     Err(failure) => {
@@ -222,7 +227,7 @@ impl Batch {
                 return Err(failure);
             }
         }
-        self.next_sequence = first.checked_add(count as u64).ok_or_else(allocation)?;
+        self.next_sequence = next;
         self.bytes.clear();
         self.ends.clear();
         // A batch that a large record grew gives its memory back.

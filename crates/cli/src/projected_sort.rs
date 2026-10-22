@@ -425,6 +425,7 @@ fn language_keys(
         spans,
         sort_keys,
         language,
+        ..
     } = scratch;
     let storage::LanguageScratch {
         identities,
@@ -1183,7 +1184,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
     let index = records::FieldIndex::selecting(projection.selected.iter().copied());
     // Language sorts project on several threads: collation keys make that
     // worth its batches.
-    let threads = if collator.is_some() {
+    let threads = if collator.is_some() || (share_keys && keys.len() == 1) {
         fastmash_sort_process::sort_threads() as usize
     } else {
         1
@@ -1219,52 +1220,117 @@ fn calculate_records<W: Write, S: spill::Codec>(
             let mut spans = Vec::new();
             let mut sequence = 0u64;
             // Skipped Records never reach key projection.
-            while let Some(record) = intake.next(reader, &mut bytes)? {
-                let raw = record.raw();
-                let data = if options.vnlog {
-                    annotated::data(raw)
-                } else {
-                    raw
+            if threads > 1 {
+                // Projection uses the same bounded batches as language keys.
+                // Only exact one-key layouts enter here, so projected payload
+                // bytes are a subset of the input, without duplicated keys.
+                let shape = spill::Shape::packed(keys.len(), projection.stored.len())?;
+                let crossings = std::sync::Mutex::new(&mut crossings);
+                #[cfg(target_os = "linux")]
+                let narrow = std::sync::atomic::AtomicBool::new(true);
+                let project = |raw: &[u8], scratch: &mut batch::Scratch, out: &mut Vec<u8>| {
+                    let spans = &mut scratch.spans;
+                    let fields = project_spans::<S>(
+                        raw,
+                        projection.stored,
+                        &keys,
+                        &order,
+                        options.input,
+                        false,
+                        options.record_end == 0,
+                        last,
+                        spans,
+                        None,
+                    )?;
+                    #[cfg(target_os = "linux")]
+                    if fields > projection.selected.len().saturating_mul(2) as u64 {
+                        narrow.store(false, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    if let Some(separator) = separator
+                        && positions
+                            .iter()
+                            .any(|&(_, at)| runs_on(&raw[spans[at].clone()], separator))
+                    {
+                        // Only exceptional numeric crossings need shared state.
+                        // Store their original ordinal, regardless of worker order.
+                        let mut crossings = crossings
+                            .lock()
+                            .map_err(|_| unsupported("native projection thread failed"))?;
+                        record_crossings(
+                            raw,
+                            spans,
+                            &positions,
+                            separator,
+                            scratch.sequence,
+                            options,
+                            &mut crossings,
+                        )?;
+                    }
+                    let payload = spans.iter().try_fold(0usize, |size, span| {
+                        size.checked_add(span.len()).ok_or_else(allocation)
+                    })?;
+                    spill::encode(out, fields, (spans.len(), payload), (keys.len(), 0), |at| {
+                        &raw[spans[at].clone()]
+                    })
                 };
-                let fields = project_spans::<S>(
-                    raw,
-                    projection.stored,
-                    &keys,
-                    &order,
-                    options.input,
-                    options.vnlog,
-                    options.record_end == 0,
-                    last,
-                    &mut spans,
-                    None,
-                )?;
+                let mut batch = batch::Batch::new(threads, target.bytes);
+                let mut accept = |record: batch::Projected<'_>| sorter.push_body(record, shape);
+                while let Some(record) = intake.next(reader, &mut bytes)? {
+                    batch.push(record.raw(), &project, &mut accept)?;
+                }
+                batch.finish(&project, &mut accept)?;
                 #[cfg(target_os = "linux")]
                 {
-                    // Reconstructing very sparse, wide records would cost more
-                    // than consuming their selected fields directly.
-                    pipe_fields &= fields <= layout.len().saturating_mul(2) as u64;
+                    pipe_fields &= narrow.load(std::sync::atomic::Ordering::Relaxed);
                 }
-                if let Some(separator) = separator {
-                    record_crossings(
+            } else {
+                while let Some(record) = intake.next(reader, &mut bytes)? {
+                    let raw = record.raw();
+                    let data = if options.vnlog {
+                        annotated::data(raw)
+                    } else {
+                        raw
+                    };
+                    let fields = project_spans::<S>(
+                        raw,
+                        projection.stored,
+                        &keys,
+                        &order,
+                        options.input,
+                        options.vnlog,
+                        options.record_end == 0,
+                        last,
+                        &mut spans,
+                        None,
+                    )?;
+                    #[cfg(target_os = "linux")]
+                    {
+                        // Reconstructing very sparse, wide records would cost more
+                        // than consuming their selected fields directly.
+                        pipe_fields &= fields <= layout.len().saturating_mul(2) as u64;
+                    }
+                    if let Some(separator) = separator {
+                        record_crossings(
+                            data,
+                            &spans,
+                            &positions,
+                            separator,
+                            sequence,
+                            options,
+                            &mut crossings,
+                        )?;
+                    }
+                    sorter.push(
+                        raw,
                         data,
                         &spans,
-                        &positions,
-                        separator,
+                        keys.len(),
+                        options.ignore_case,
+                        fields,
                         sequence,
-                        options,
-                        &mut crossings,
                     )?;
+                    sequence = sequence.checked_add(1).ok_or_else(allocation)?;
                 }
-                sorter.push(
-                    raw,
-                    data,
-                    &spans,
-                    keys.len(),
-                    options.ignore_case,
-                    fields,
-                    sequence,
-                )?;
-                sequence = sequence.checked_add(1).ok_or_else(allocation)?;
             }
         }
         // Language sorts: batches of records are projected on `threads`

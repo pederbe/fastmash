@@ -345,6 +345,25 @@ fn shared_key_segments_keep_requested_fields_and_numeric_crossings() {
 }
 
 #[test]
+fn parallel_preparation_keeps_numeric_crossings_at_their_original_sequence() {
+    let fixture = Fixture::new("native-parallel-crossings");
+    let input = b" \t3\n \t4\n".repeat(10_000);
+    for threads in ["1", "2", "4"] {
+        for file in [false, true] {
+            let mut command =
+                fixture.command(&["-s", "-g1", "dotprod", "1:2", "ms", "1"], "67108864");
+            command
+                .env("FASTMASH_SORT_TRACE", "1")
+                .env("OMP_NUM_THREADS", threads)
+                .env("OMP_THREAD_LIMIT", threads);
+            let output = fixture.invoke(&mut command, &input, file);
+            exact(&output, b" \t250000\t12.5\n");
+            fixture.clean();
+        }
+    }
+}
+
+#[test]
 fn every_c_locale_calculation_sorts_natively_with_or_without_a_supervisor() {
     let mut fixture = Fixture::new("native-all-calculations");
     let standalone = fixture.binary.clone();
