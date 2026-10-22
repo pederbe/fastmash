@@ -314,7 +314,7 @@ fn native_merge_pipe_keeps_diagnostics_and_joins_after_calculation_failure() {
 }
 
 #[test]
-fn shared_key_segments_keep_requested_fields_and_numeric_crossings() {
+fn shared_key_segments_keep_requested_fields_and_original_bytes() {
     let fixture = Fixture::new("native-shared-key-segments");
     for (args, input, expected) in [
         (
@@ -325,7 +325,6 @@ fn shared_key_segments_keep_requested_fields_and_numeric_crossings() {
             b"3\t4\t10\n1\t2\t20\n3\t4\t30\n".as_slice(),
             b"2\t1\t2\t1\t0\t2\t20\t20\n4\t3\t4\t9\t0\t4\t10\t30\n".as_slice(),
         ),
-        (vec!["-s", "-g1", "ms", "1"], b" \t3\n \t4\n", b" \t12.5\n"),
         (
             vec!["-i", "-s", "-g1", "first", "1", "ms", "2"],
             b"a\t3\nA\t4\nb\t1\nB\t2\n",
@@ -345,19 +344,29 @@ fn shared_key_segments_keep_requested_fields_and_numeric_crossings() {
 }
 
 #[test]
-fn parallel_preparation_keeps_numeric_crossings_at_their_original_sequence() {
+fn parallel_preparation_keeps_numeric_crossing_errors_at_their_original_sequence() {
     let fixture = Fixture::new("native-parallel-crossings");
-    let input = b" \t3\n \t4\n".repeat(10_000);
+    let mut input = b"1-1\n".repeat(20_000);
+    // This later input Record sorts first. Parsing through the separator
+    // diagnoses its 514-byte field as too long, rather than merely invalid.
+    input.extend(std::iter::repeat_n(b' ', 512));
+    input.extend_from_slice(b"1e-1\n");
     for threads in ["1", "2", "4"] {
         for file in [false, true] {
-            let mut command =
-                fixture.command(&["-s", "-g1", "dotprod", "1:2", "ms", "1"], "67108864");
+            let mut command = fixture.command(&["-s", "-t-", "-g1", "ms", "1"], "67108864");
             command
                 .env("FASTMASH_SORT_TRACE", "1")
                 .env("OMP_NUM_THREADS", threads)
                 .env("OMP_THREAD_LIMIT", threads);
             let output = fixture.invoke(&mut command, &input, file);
-            exact(&output, b" \t250000\t12.5\n");
+            assert_eq!(output.status.code(), Some(1), "{output:?}");
+            assert!(output.stdout.is_empty(), "{output:?}");
+            assert!(
+                output
+                    .stderr
+                    .ends_with(b"fastmash: internal error: input field too long (514)\n"),
+                "{output:?}"
+            );
             fixture.clean();
         }
     }
