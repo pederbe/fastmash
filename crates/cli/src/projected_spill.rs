@@ -74,8 +74,6 @@ pub(super) struct Shape {
     segments: usize,
 }
 impl Shape {
-    /// The shape of original records with `keys` keys: the keys, then the
-    /// original.
     /// Per-record preparation metadata, excluding payload: the chunk header,
     /// widest end offsets and one worker's projection ranges. Charging scratch
     /// per record conservatively covers every active worker, even tiny parts.
@@ -91,6 +89,8 @@ impl Shape {
             segments: keys.checked_add(fields).ok_or_else(allocation)?,
         })
     }
+    /// The shape of original records with `keys` keys: the keys, then the
+    /// original.
     pub(super) fn original(keys: usize) -> Result<Self, Failure> {
         let segments = keys.checked_add(1).ok_or_else(allocation)?;
         Ok(Self { keys, segments })

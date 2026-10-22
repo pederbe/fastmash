@@ -1182,9 +1182,26 @@ fn calculate_records<W: Write, S: spill::Codec>(
         FieldLayout::separate(&layout)
     };
     let index = records::FieldIndex::selecting(projection.selected.iter().copied());
-    // Language sorts project on several threads: collation keys make that
-    // worth its batches.
-    let threads = if collator.is_some() || (share_keys && !texts && keys.len() == 1) {
+    // Parallel preparation trades CPU for elapsed time. Keep basic numeric
+    // reductions serial: the AMD sum guard regressed with preparation batches.
+    let parallel_numeric = operations.requests().any(|(kind, selector)| {
+        matches!(selector, Selector::Pair { .. })
+            || matches!(
+                kind,
+                Kind::Geomean
+                    | Kind::Harmmean
+                    | Kind::Ms
+                    | Kind::Rms
+                    | Kind::Pskew
+                    | Kind::Sskew
+                    | Kind::Pkurt
+                    | Kind::Skurt
+                    | Kind::Jarque
+                    | Kind::Dpo
+            )
+    });
+    // Collation keys also make parallel language preparation worthwhile.
+    let threads = if collator.is_some() || (share_keys && parallel_numeric && keys.len() == 1) {
         fastmash_sort_process::sort_threads() as usize
     } else {
         1
