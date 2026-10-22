@@ -1487,8 +1487,8 @@ pub(super) struct Finished<S: Codec> {
 
 impl<S: Codec> Finished<S> {
     #[cfg(target_os = "linux")]
-    pub(super) fn can_batch(&self) -> bool {
-        self.buffer >= super::calculation_batch::MEMORY
+    pub(super) fn can_pipe(&self) -> bool {
+        self.buffer >= super::calculation_pipe::MEMORY
             // Intermediate folds still need their own writer allowance.
             && self.levels.iter().filter(|runs| !runs.is_empty()).count() == 1
             && fastmash_sort_process::sort_threads() >= 2
@@ -1741,28 +1741,28 @@ mod tests {
     }
     #[cfg(target_os = "linux")]
     #[test]
-    fn merge_batches_require_final_merge_buffer_allowance() {
+    fn merge_pipe_requires_final_merge_buffer_allowance() {
         let mut finished = Finished::<super::super::storage::Packed> {
             arena: Vec::new(),
             entries: Vec::new(),
             base: 0,
             shape: None,
             levels: vec![vec![File::open("/dev/null").unwrap()]],
-            buffer: super::super::calculation_batch::MEMORY,
+            buffer: super::super::calculation_pipe::MEMORY,
             writeback: false,
             storage: PhantomData,
         };
         let threads = fastmash_sort_process::sort_threads() >= 2;
-        assert_eq!(finished.can_batch(), threads);
+        assert_eq!(finished.can_pipe(), threads);
         finished.levels.push(Vec::new());
-        assert_eq!(finished.can_batch(), threads);
+        assert_eq!(finished.can_pipe(), threads);
         finished.levels[1].push(File::open("/dev/null").unwrap());
-        assert!(!finished.can_batch());
+        assert!(!finished.can_pipe());
         finished.levels[1].clear();
         finished.buffer -= 1;
-        assert!(!finished.can_batch());
+        assert!(!finished.can_pipe());
         finished.levels[0].clear();
-        assert!(!finished.can_batch());
+        assert!(!finished.can_pipe());
     }
     fn rejected_run_writer() -> File {
         #[cfg(target_os = "linux")]

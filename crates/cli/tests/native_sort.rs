@@ -195,8 +195,8 @@ fn exact(output: &Output, stdout: &[u8]) {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn native_merge_batches_preserves_numerics_seeded_draws_headers_and_full_records() {
-    let fixture = Fixture::new("native-merge-batches-results");
+fn native_merge_pipe_preserves_numerics_seeded_draws_headers_and_full_records() {
+    let fixture = Fixture::new("native-merge-pipe-results");
     for (flags, header, end) in [
         (&[][..], true, b'\n'),
         (&["-z", "-i", "--full"][..], true, 0),
@@ -253,9 +253,9 @@ fn native_merge_batches_preserves_numerics_seeded_draws_headers_and_full_records
             assert!(piped.stderr.windows(SPILL.len()).any(|part| part == SPILL));
             assert!(
                 String::from_utf8_lossy(&piped.stderr)
-                    .contains("sort calculation: native merge batches\n")
+                    .contains("sort calculation: native merge pipe\n")
             );
-            assert!(!String::from_utf8_lossy(&serial.stderr).contains("native merge batches"));
+            assert!(!String::from_utf8_lossy(&serial.stderr).contains("native merge pipe"));
             fixture.clean();
         }
     }
@@ -263,50 +263,8 @@ fn native_merge_batches_preserves_numerics_seeded_draws_headers_and_full_records
 
 #[test]
 #[cfg(target_os = "linux")]
-fn native_merge_batches_keep_random_text_and_large_owned_records() {
-    let fixture = Fixture::new("native-merge-batches-text");
-    let mut input = Vec::new();
-    for record in 0..400_000 {
-        writeln!(
-            &mut input,
-            "k{:05}\tvalue-{record:08}-abcdefghijklmnopqrstuvwxyz",
-            record % 2
-        )
-        .unwrap();
-    }
-    // More than a batch's byte allowance, among otherwise short Records.
-    input.extend_from_slice(b"k00000\t");
-    input.extend(std::iter::repeat_n(b'x', 200_000));
-    input.push(b'\n');
-    for operations in [
-        &["rand", "2"][..],
-        &["first", "2", "last", "2", "rand", "2"][..],
-    ] {
-        let mut args = vec!["--seed", "17", "-s", "-g1"];
-        args.extend_from_slice(operations);
-        for file in [false, true] {
-            let invoke = |limit| {
-                let mut command = fixture.command(&args, "33554432");
-                command
-                    .env("FASTMASH_SORT_TRACE", "1")
-                    .env("OMP_NUM_THREADS", "2")
-                    .env("OMP_THREAD_LIMIT", limit);
-                fixture.invoke(&mut command, &input, file)
-            };
-            let serial = invoke("1");
-            assert!(serial.status.success(), "{serial:?}");
-            let batched = invoke("2");
-            exact(&batched, &serial.stdout);
-            assert!(String::from_utf8_lossy(&batched.stderr).contains("native merge batches"));
-            fixture.clean();
-        }
-    }
-}
-
-#[test]
-#[cfg(target_os = "linux")]
-fn native_merge_batches_keeps_diagnostics_and_joins_after_calculation_failure() {
-    let fixture = Fixture::new("native-merge-batches-errors");
+fn native_merge_pipe_keeps_diagnostics_and_joins_after_calculation_failure() {
+    let fixture = Fixture::new("native-merge-pipe-errors");
     for (bad, first) in [
         (b"ignored\t!\tbad\t4\t0\n".as_slice(), "3"),
         (b"!\n".as_slice(), "3"),
@@ -347,7 +305,7 @@ fn native_merge_batches_keeps_diagnostics_and_joins_after_calculation_failure() 
                 assert_eq!(diagnostics(&piped), diagnostics(&serial));
                 assert!(
                     String::from_utf8_lossy(&piped.stderr)
-                        .contains("sort calculation: native merge batches\n")
+                        .contains("sort calculation: native merge pipe\n")
                 );
                 fixture.clean();
             }

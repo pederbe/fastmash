@@ -418,13 +418,6 @@ pub(super) enum Segments {
     },
 }
 impl Segments {
-    #[cfg(target_os = "linux")]
-    pub(super) fn heap_bytes(&self) -> usize {
-        match self {
-            Self::Inline { .. } => 0,
-            Self::Heap { bytes, .. } => bytes.capacity(),
-        }
-    }
     pub(super) fn new(count: usize, payload: usize) -> Result<Self, Failure> {
         if count
             .checked_add(payload)
