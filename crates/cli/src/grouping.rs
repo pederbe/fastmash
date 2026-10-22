@@ -332,13 +332,6 @@ impl Raw {
     pub(super) fn bytes(&self) -> &[u8] {
         &self.bytes
     }
-    #[cfg(target_os = "linux")]
-    pub(super) fn whole(&mut self) -> super::operation_set::Whole<'_, '_> {
-        super::operation_set::Whole {
-            record: &self.bytes,
-            index: &mut self.fields,
-        }
-    }
     /// The record's storage, to read the next record into; the cached key
     /// positions and field spans no longer apply.
     pub(super) fn bytes_mut(&mut self) -> &mut Vec<u8> {

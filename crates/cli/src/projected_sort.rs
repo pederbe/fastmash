@@ -17,8 +17,8 @@ pub(super) use decoded::{RunFault, fail_run};
 mod hash;
 pub(super) use hash::{Setting as Grouping, eligible as hash_eligible, setting as grouping};
 #[cfg(target_os = "linux")]
-#[path = "projected_calculation_pipe.rs"]
-mod calculation_pipe;
+#[path = "projected_calculation_batch.rs"]
+mod calculation_batch;
 #[path = "projected_memory.rs"]
 mod memory;
 #[path = "projected_spill.rs"]
@@ -1248,13 +1248,13 @@ fn calculate_records<W: Write, S: spill::Codec>(
     drop(bytes);
     let mut sorted = sorter.finish();
     #[cfg(target_os = "linux")]
-    if !texts
+    if (!texts || operations.requests().any(|(kind, _)| kind == Kind::Rand))
         && pipe_fields
         && crossings.is_empty()
         && !options.vnlog
         && collator.is_none()
         && matches!(options.input, records::Separator::Literal(b'\t'))
-        && sorted.can_pipe()
+        && sorted.can_batch()
         && intake.read_error().is_none()
     {
         let mut context = grouping::Context::new(
@@ -1265,8 +1265,8 @@ fn calculate_records<W: Write, S: spill::Codec>(
             random.as_deref_mut(),
             output,
         );
-        let piped = calculation_pipe::calculate(&mut sorted, &layout, &mut context)?;
-        if piped.is_some() {
+        let batched = calculation_batch::calculate(&mut sorted, &layout, &mut context)?;
+        if batched.is_some() {
             return intake.finish();
         }
     }
