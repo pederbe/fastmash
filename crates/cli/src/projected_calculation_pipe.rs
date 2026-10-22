@@ -148,7 +148,7 @@ fn pipe_error(error: impl std::fmt::Display) -> Failure {
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
     sorted: &mut spill::Finished<S>,
-    layout: &[u64],
+    layout: super::FieldLayout<'_>,
     context: &mut grouping::Context<'_, O>,
 ) -> Result<Option<()>, Failure> {
     let (options, keys) = (context.options, context.keys);
@@ -196,7 +196,7 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
     }
     let mut reader = spill::RunReader::new(BUFFER, reader)?;
     let mut writer = spill::RunWriter::new(BUFFER, writer)?;
-    let index = records::FieldIndex::selecting(layout.iter().copied());
+    let index = records::FieldIndex::selecting(layout.selected.iter().copied());
     let mut spare = Prepared::new(keys.len(), index.fresh(), fields)?;
     std::thread::scope(|scope| {
         let merge = std::thread::Builder::new()
@@ -249,15 +249,17 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
                     if let Some(bytes) = record.original() {
                         writer.write_all(bytes).map_err(pipe_error)?;
                     } else {
-                        let mut selected = layout.iter().enumerate().peekable();
+                        let mut selected = layout.selected.iter().peekable();
                         for field in 1..=record.fields {
                             if field > 1 {
                                 writer.write_all(b"\t").map_err(pipe_error)?;
                             }
-                            if selected.peek().is_some_and(|(_, number)| **number == field) {
-                                let (at, _) = selected.next().unwrap();
+                            if selected.peek().is_some_and(|number| **number == field) {
+                                selected.next();
                                 writer
-                                    .write_all(record.segment(record.key_count() + at))
+                                    .write_all(
+                                        record.segment(layout.segment(field, record.key_count())),
+                                    )
                                     .map_err(pipe_error)?;
                             } else if record.fields == 1 {
                                 // An empty byte string has zero fields. Keep

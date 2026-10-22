@@ -60,6 +60,34 @@ fn key_cache(first: Option<&[u8]>, key_count: usize) -> KeyCache {
     (u64::from_be_bytes(prefix), short_key_len)
 }
 
+/// Field selection and physical segments can differ when an exact key also
+/// serves an Operation. Keep its bytes once, in the key segments.
+#[derive(Clone, Copy)]
+struct FieldLayout<'a> {
+    selected: &'a [u64],
+    stored: &'a [u64],
+    aliases: &'a [u64],
+}
+impl<'a> FieldLayout<'a> {
+    fn separate(fields: &'a [u64]) -> Self {
+        Self {
+            selected: fields,
+            stored: fields,
+            aliases: &[],
+        }
+    }
+    fn segment(self, field: u64, keys: usize) -> usize {
+        match self.stored.binary_search(&field) {
+            Ok(at) => keys + at,
+            Err(_) => self
+                .aliases
+                .iter()
+                .position(|&key| key == field)
+                .expect("selected field in projection"),
+        }
+    }
+}
+
 struct Record<S: Storage> {
     data: S,
     prefix: u64,
@@ -101,9 +129,19 @@ impl<S: Storage> Record<S> {
             keys.then(self.sequence.cmp(&other.sequence))
         })
     }
+    #[cfg(test)]
     fn field<'a>(
         &'a self,
         layout: &[u64],
+        field: u64,
+        line: u64,
+        input: records::Separator,
+    ) -> Result<&'a [u8], Failure> {
+        self.projected_field(FieldLayout::separate(layout), field, line, input)
+    }
+    fn projected_field<'a>(
+        &'a self,
+        layout: FieldLayout<'_>,
         field: u64,
         line: u64,
         input: records::Separator,
@@ -116,11 +154,11 @@ impl<S: Storage> Record<S> {
             input,
         )
     }
-    /// [`Record::field`], locating the fields of an original record through
+    /// [`Record::projected_field`], locating original record fields through
     /// `fields`, its index.
     fn indexed_field<'a>(
         &'a self,
-        layout: &[u64],
+        layout: FieldLayout<'_>,
         fields: &mut records::FieldIndex,
         field: u64,
         line: u64,
@@ -133,12 +171,7 @@ impl<S: Storage> Record<S> {
             let span = indexed_field(bytes, fields, field, line, input)?;
             Ok(&bytes[span.start..span.start + span.length])
         } else {
-            Ok(self.segment(
-                self.key_count()
-                    + layout
-                        .binary_search(&field)
-                        .expect("selected field in projection"),
-            ))
+            Ok(self.segment(layout.segment(field, self.key_count())))
         }
     }
 }
@@ -794,7 +827,7 @@ fn record_crossings(
 /// field alone, except those in `crossings`.
 struct Projected<'a, S: Storage> {
     record: &'a Record<S>,
-    layout: &'a [u64],
+    layout: FieldLayout<'a>,
     crossings: &'a Crossings,
     separator: Option<u8>,
 }
@@ -807,7 +840,8 @@ impl<'a, S: Storage> operation_set::Fields<'a> for Projected<'a, S> {
         line: u64,
         options: &options::Options,
     ) -> Result<&'a [u8], Failure> {
-        self.record.field(self.layout, field, line, options.input)
+        self.record
+            .projected_field(self.layout, field, line, options.input)
     }
     #[inline]
     fn number(
@@ -845,7 +879,7 @@ impl<'a, S: Storage> operation_set::Fields<'a> for Projected<'a, S> {
 /// packed field (`Crossings`).
 struct Sorted<'l, S: Storage> {
     record: Record<S>,
-    layout: &'l [u64],
+    layout: FieldLayout<'l>,
     fields: records::FieldIndex,
     crossings: &'l Crossings,
     /// Whether every Operation reads one field's text (`NativeSort::Packed`).
@@ -923,7 +957,7 @@ impl<S: Storage> grouping::GroupRecord for Sorted<'_, S> {
 /// selected field of the original record as it names it.
 fn generated_header<W: Write, S: Storage>(
     record: &Record<S>,
-    layout: &[u64],
+    layout: FieldLayout<'_>,
     keys: &[u64],
     operations: &OperationSet,
     options: &options::Options,
@@ -934,7 +968,7 @@ fn generated_header<W: Write, S: Storage>(
         return output.first(bytes, operations, keys);
     }
     output.first_projected(
-        |field| record.field(layout, field, 1, options.input),
+        |field| record.projected_field(layout, field, 1, options.input),
         operations,
         keys,
     )
@@ -1123,7 +1157,30 @@ fn calculate_records<W: Write, S: spill::Codec>(
     layout.dedup();
     let order = key_order(&keys)?;
     // Original records' fields are looked up for keys and Operations.
-    let index = records::FieldIndex::selecting(layout.iter().copied());
+    let texts = operations.native_sort() == operation_set::NativeSort::Packed;
+    let share_keys = !S::ORIGINAL
+        && !options.ignore_case
+        && !options.vnlog
+        && collator.is_none()
+        && matches!(options.input, records::Separator::Literal(_))
+        && (!texts || operations.requests().any(|(kind, _)| kind == Kind::Rand));
+    let mut stored = Vec::new();
+    if share_keys {
+        stored
+            .try_reserve_exact(layout.len())
+            .map_err(|_| allocation())?;
+        stored.extend(layout.iter().copied().filter(|field| !keys.contains(field)));
+    }
+    let projection = if share_keys {
+        FieldLayout {
+            selected: &layout,
+            stored: &stored,
+            aliases: &keys,
+        }
+    } else {
+        FieldLayout::separate(&layout)
+    };
+    let index = records::FieldIndex::selecting(projection.selected.iter().copied());
     // Language sorts project on several threads: collation keys make that
     // worth its batches.
     let threads = if collator.is_some() {
@@ -1136,7 +1193,6 @@ fn calculate_records<W: Write, S: spill::Codec>(
     let mut crossings = Crossings::default();
     #[cfg(target_os = "linux")]
     let mut pipe_fields = true;
-    let texts = operations.native_sort() == operation_set::NativeSort::Packed;
     #[cfg(target_os = "linux")]
     if collator.is_none() && (!texts || operations.requests().any(|(kind, _)| kind == Kind::Rand)) {
         sorter.enable_writeback();
@@ -1152,11 +1208,9 @@ fn calculate_records<W: Write, S: spill::Codec>(
             let separator = match options.input {
                 records::Separator::Literal(byte) if !S::ORIGINAL => {
                     for field in operations.numeric_fields() {
-                        let at = layout
-                            .binary_search(&field)
-                            .expect("numeric field in projection");
+                        let at = projection.segment(field, keys.len());
                         positions.try_reserve(1).map_err(|_| allocation())?;
-                        positions.push((field, keys.len() + at));
+                        positions.push((field, at));
                     }
                     (!positions.is_empty()).then_some(byte)
                 }
@@ -1174,7 +1228,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
                 };
                 let fields = project_spans::<S>(
                     raw,
-                    &layout,
+                    projection.stored,
                     &keys,
                     &order,
                     options.input,
@@ -1265,7 +1319,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
             random.as_deref_mut(),
             output,
         );
-        let piped = calculation_pipe::calculate(&mut sorted, &layout, &mut context)?;
+        let piped = calculation_pipe::calculate(&mut sorted, projection, &mut context)?;
         if piped.is_some() {
             return intake.finish();
         }
@@ -1283,7 +1337,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
         sorted.emit(|record| {
             line = line.checked_add(1).ok_or_else(allocation)?;
             if line == 1 && options.header_out && !options.header_in {
-                generated_header(&record, &layout, &keys, &operations, options, output)?;
+                generated_header(&record, projection, &keys, &operations, options, output)?;
             }
             let mut context = grouping::Context::new(
                 &mut operations,
@@ -1297,7 +1351,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
             fields.clear();
             let sorted = Sorted {
                 record,
-                layout: &layout,
+                layout: projection,
                 fields,
                 crossings: &crossings,
                 texts,
@@ -1910,7 +1964,7 @@ mod compact_tests {
                             for keep in [false, true] {
                                 let sorted = |bytes| Sorted {
                                     record: make(bytes),
-                                    layout: &layout,
+                                    layout: FieldLayout::separate(&layout),
                                     fields: if keep {
                                         records::FieldIndex::always_keeping(layout.iter().copied())
                                     } else {
@@ -2428,7 +2482,7 @@ mod packed_number_tests {
                         assert_eq!(packed.fields, fields);
                         let got = Projected {
                             record: &packed,
-                            layout: &layout,
+                            layout: FieldLayout::separate(&layout),
                             crossings: &crossings,
                             separator: Some(separator),
                         }

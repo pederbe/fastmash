@@ -314,6 +314,36 @@ fn native_merge_pipe_keeps_diagnostics_and_joins_after_calculation_failure() {
 }
 
 #[test]
+fn shared_key_segments_keep_requested_fields_and_numeric_crossings() {
+    let fixture = Fixture::new("native-shared-key-segments");
+    for (args, input, expected) in [
+        (
+            vec![
+                "--seed", "17", "-s", "-g2,1,2", "ms", "1", "pcov", "1:2", "rand", "2", "first",
+                "3", "last", "3",
+            ],
+            b"3\t4\t10\n1\t2\t20\n3\t4\t30\n".as_slice(),
+            b"2\t1\t2\t1\t0\t2\t20\t20\n4\t3\t4\t9\t0\t4\t10\t30\n".as_slice(),
+        ),
+        (vec!["-s", "-g1", "ms", "1"], b" \t3\n \t4\n", b" \t12.5\n"),
+        (
+            vec!["-i", "-s", "-g1", "first", "1", "ms", "2"],
+            b"a\t3\nA\t4\nb\t1\nB\t2\n",
+            b"a\ta\t12.5\nb\tb\t2.5\n",
+        ),
+    ] {
+        for memory in ["1", "67108864"] {
+            for file in [false, true] {
+                let mut command = fixture.command(&args, memory);
+                let output = fixture.invoke(&mut command, input, file);
+                exact(&output, expected);
+                fixture.clean();
+            }
+        }
+    }
+}
+
+#[test]
 fn every_c_locale_calculation_sorts_natively_with_or_without_a_supervisor() {
     let mut fixture = Fixture::new("native-all-calculations");
     let standalone = fixture.binary.clone();
