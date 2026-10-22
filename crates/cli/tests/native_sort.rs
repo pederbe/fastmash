@@ -335,6 +335,7 @@ fn shared_key_segments_keep_requested_fields_and_numeric_crossings() {
         for memory in ["1", "67108864"] {
             for file in [false, true] {
                 let mut command = fixture.command(&args, memory);
+                command.env("FASTMASH_SORT_TRACE", "1");
                 let output = fixture.invoke(&mut command, input, file);
                 exact(&output, expected);
                 fixture.clean();
