@@ -370,15 +370,32 @@ impl Intake {
                 let tail = &available[consumed..];
                 // Closed quotes and pending CR always validate the next byte.
                 // Quoted commas and CR are data; LF still changes the location.
+                // Most fields are short. Scan their prefix directly before
+                // paying for the wider searches used by long fields.
                 let ordinary = match state {
-                    State::Start | State::Unquoted => tail
-                        .iter()
-                        .position(|&byte| matches!(byte, b',' | b'"' | b'\r' | b'\n'))
-                        .unwrap_or(tail.len()),
-                    State::Quoted => tail
-                        .iter()
-                        .position(|&byte| matches!(byte, b'"' | b'\n'))
-                        .unwrap_or(tail.len()),
+                    State::Start | State::Unquoted => {
+                        let prefix = tail.len().min(16);
+                        tail[..prefix]
+                            .iter()
+                            .position(|&byte| matches!(byte, b',' | b'"' | b'\r' | b'\n'))
+                            .unwrap_or_else(|| {
+                                let rest = &tail[prefix..];
+                                let end =
+                                    memchr::memchr3(b',', b'"', b'\n', rest).unwrap_or(rest.len());
+                                prefix + memchr::memchr(b'\r', &rest[..end]).unwrap_or(end)
+                            })
+                    }
+                    State::Quoted => {
+                        let prefix = tail.len().min(16);
+                        tail[..prefix]
+                            .iter()
+                            .position(|&byte| matches!(byte, b'"' | b'\n'))
+                            .unwrap_or_else(|| {
+                                prefix
+                                    + memchr::memchr2(b'"', b'\n', &tail[prefix..])
+                                        .unwrap_or(tail.len() - prefix)
+                            })
+                    }
                     State::Closed | State::Cr { .. } => 0,
                 };
                 if ordinary != 0 {

@@ -22,7 +22,7 @@ struct Job {
 
 fn jobs() -> Vec<Job> {
     let grouped = b"b\t1\na\t1\n".repeat(32);
-    vec![
+    let mut jobs = vec![
         Job {
             name: "small",
             args: &["sum", "1"],
@@ -71,7 +71,31 @@ fn jobs() -> Vec<Job> {
             stderr: b"fastmash: FASTMASH_GROUPING must be sort or hash\n",
             status: 77,
         },
-    ]
+    ];
+    for (name, record) in [
+        ("csv-short", b"a,b,c,1\n".to_vec()),
+        ("csv-long", [vec![b'x'; 1024], b",1\n".to_vec()].concat()),
+        (
+            "csv-quoted",
+            [
+                b"\"".to_vec(),
+                vec![b'x'; 1024],
+                b",\r\nend\",1\r\n".to_vec(),
+            ]
+            .concat(),
+        ),
+        ("csv-escaped", b"\"a\"\"b\",\"c\"\"d\",,1\n".to_vec()),
+    ] {
+        jobs.push(Job {
+            name,
+            args: &["--csv-in", "count", "2"],
+            input: record.repeat(4096),
+            stdout: b"4096\n",
+            stderr: b"",
+            status: 0,
+        });
+    }
+    jobs
 }
 
 fn capture(root: &Path, binary: &Path, job: Job) -> Result<(), Box<dyn Error>> {
@@ -145,7 +169,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .filter(|job| selected.as_ref().is_none_or(|name| name == job.name))
         .collect();
     if jobs.is_empty() {
-        return Err("unknown job, use small, decimal, grouping, spill, error or refusal".into());
+        return Err("unknown job, use small, decimal, grouping, spill, error, refusal, csv-short, csv-long, csv-quoted or csv-escaped".into());
     }
     fs::create_dir(&destination)?;
     let root = fs::canonicalize(destination)?;

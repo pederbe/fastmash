@@ -3,6 +3,57 @@ use super::command_test_support::{Input, Output, command};
 use super::*;
 
 #[test]
+fn csv_scans_preserve_control_order_and_binary_fields_at_search_boundaries() {
+    let binary: Vec<_> = (0..=255)
+        .filter(|byte| !matches!(byte, b',' | b'"' | b'\r' | b'\n'))
+        .collect();
+    for width in [0, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129] {
+        let field = [vec![b'x'; width], binary.clone()].concat();
+        let quoted = [&field[..], b",\r\n\"end"].concat();
+        let bytes = [&field[..], b",\"", &field, b",\r\n\"\"end\",,\r\n"].concat();
+        for segment in [1, 7, 16, 31, 32, 64, 8192] {
+            let mut input = Input {
+                bytes: &bytes,
+                segment,
+                error: None,
+            };
+            let mut intake = csv_input::Intake::new();
+            let mut record = csv_input::Record::default();
+            assert!(matches!(intake.next(&mut input, &mut record), Ok(true)));
+            assert_eq!(
+                record.fields().collect::<Vec<_>>(),
+                [&field[..], &quoted, b"", b""]
+            );
+            assert!(matches!(intake.next(&mut input, &mut record), Ok(false)));
+            assert!(intake.finish().is_ok());
+        }
+        // CR must win over a later comma, quote or LF, including when the
+        // search spans a buffer. Its original byte position is the diagnostic.
+        for after in [b"x,tail\n".as_slice(), b"x\"tail\n", b"x\n"] {
+            let bytes = [vec![b'x'; width], b"\r".to_vec(), after.to_vec()].concat();
+            for segment in [1, 7, 32, 8192] {
+                let mut input = Input {
+                    bytes: &bytes,
+                    segment,
+                    error: None,
+                };
+                let error = csv_input::Intake::new()
+                    .next(&mut input, &mut csv_input::Record::default())
+                    .unwrap_err();
+                assert_eq!(error.status, 1);
+                assert_eq!(
+                    error.message,
+                    format!(
+                        "invalid CSV: bare CR outside quoted field at physical line 1 byte {}; record 1 starts at physical line 1\n",
+                        width + 1
+                    ).as_bytes()
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn csv_decoded_long_fields_preserve_bytes_empty_fields_and_original_locations() {
     let span = vec![b'x'; 257];
     let unquoted = [b"\xef\xbb\xbf\xff\0".as_slice(), &span].concat();
