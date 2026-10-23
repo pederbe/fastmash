@@ -149,6 +149,23 @@ impl Samples {
         self.sorted = false;
         let n = self.values.len();
         if n > 1 {
+            // Without NaNs, ordered adjacent values prove the stable merge
+            // would preserve every value, including equal signed zeros.
+            let is_nan = |value| {
+                matches!(
+                    super::numerics::Numerics::value80(value).classify(),
+                    fastmash_numeric_contract::ValueClass::Nan { .. }
+                )
+            };
+            if !is_nan(self.values[0])
+                && self
+                    .values
+                    .windows(2)
+                    .all(|pair| !is_nan(pair[1]) && compare(pair[0], pair[1]) != Ordering::Greater)
+            {
+                self.sorted = true;
+                return Ok(&self.values);
+            }
             let mut scratch = Vec::new();
             scratch
                 .try_reserve_exact(n)
@@ -256,12 +273,25 @@ mod tests {
     #[test]
     fn alternating_buffers_preserve_original_raw_order() {
         fn check(mut actual: Vec<Value>) {
+            let original = actual.clone();
             let mut expected = actual.clone();
             let mut scratch = actual.clone();
             original_merge(&mut expected, &mut scratch);
             scratch.copy_from_slice(&actual);
             merge_initialized(&mut actual, &mut scratch);
             assert!(actual.iter().zip(&expected).all(|(a, b)| a.same_bits(*b)));
+            let mut samples = Samples {
+                values: original,
+                sorted: false,
+            };
+            assert!(
+                samples
+                    .sorted()
+                    .unwrap()
+                    .iter()
+                    .zip(&expected)
+                    .all(|(a, b)| a.same_bits(*b))
+            );
         }
         let values = [
             value(0, 0),
@@ -295,6 +325,28 @@ mod tests {
                 })
                 .collect();
             check(input);
+        }
+        let ordered = [
+            value(0xffff, 1 << 63),
+            value(0xbfff, 1 << 63),
+            value(0x8000, 0),
+            value(0, 0),
+            value(0, 1),
+            one(),
+            value(0x7fff, 1 << 63),
+        ];
+        for repeats in [1, 7, 128] {
+            let input: Vec<_> = ordered
+                .iter()
+                .flat_map(|&value| std::iter::repeat_n(value, repeats))
+                .collect();
+            check(input.clone());
+            for position in [0, input.len() / 2, input.len()] {
+                let mut with_nan = input.clone();
+                with_nan.insert(position, nan());
+                check(with_nan);
+            }
+            check(input.into_iter().rev().collect());
         }
     }
 

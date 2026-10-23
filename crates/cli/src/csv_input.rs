@@ -185,16 +185,17 @@ impl<'r> super::operation_set::Fields<'r> for Fields<'r> {
         options: &options::Options,
     ) -> Result<Option<numerics::Value>, Failure> {
         let bytes = self.0.field(field)?;
-        decimal::number(
+        decimal::field(
             bytes,
             field_policy::FieldRange {
                 start: 0,
                 length: bytes.len(),
             },
+            field,
+            self.0.location.record,
             options.narm,
             options.presentation.profile,
         )
-        .map_err(|error| error.report(bytes, field, self.0.location.record))
     }
 }
 
