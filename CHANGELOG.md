@@ -29,6 +29,8 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Speed up plain-number conversion in CSV calculations and reduce sorting work
+  and memory for already ordered numerical samples, preserving numerical results.
 - Advance the Numerical profile to `portable-binary80-v4` with ICU4X 2.4's
   Unicode 18 and CLDR 49 collation. Updated Group ordering can change seeded
   `rand` selections. Arithmetic, conversion and the random sequence retain
