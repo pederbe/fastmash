@@ -144,7 +144,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, macos-26]
+        os: [ubuntu-26.04, macos-15, macos-26]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -177,6 +177,24 @@ jobs:
           cargo build --profile profiling -p fastmash --features hotpath-cpu --bin fastmash --example profile-jobs --locked
           setsid -w target/profiling/examples/profile-jobs "$RUNNER_TEMP/fastmash-cpu" decimal
           jq -e '.functions_cpu.attributed_samples > 0' "$RUNNER_TEMP/fastmash-cpu/decimal.json"
+      - name: Capture instruction counts
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -qy --no-install-recommends valgrind
+          cargo build --profile profiling -p fastmash --features hotpath-callgrind --bin fastmash --locked
+          capture="$RUNNER_TEMP/fastmash-callgrind"
+          mkdir "$capture"
+          printf '1\n2\n3\n' > "$capture/input"
+          HOTPATH_METRICS_SERVER_OFF=1 HOTPATH_OUTPUT_PATH="$capture/report.json" \
+            HOTPATH_CALLGRIND_OUT_FILE="$capture/callgrind.%p" \
+            valgrind --tool=callgrind --callgrind-out-file="$capture/callgrind.%p" \
+            target/profiling/fastmash sum 1 < "$capture/input" > "$capture/stdout"
+          printf '6\n' | cmp - "$capture/stdout"
+          jq -e '.functions_icount.tool | startswith("callgrind-")' "$capture/report.json"
+          jq -e '.functions_icount.data | any(.total | tonumber > 0)' "$capture/report.json"
+          jq -e '.functions_timing == null' "$capture/report.json"
       - name: Retain diagnostic reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -191,6 +209,7 @@ jobs:
             ${{ runner.temp }}/fastmash-cpu/*.json
             ${{ runner.temp }}/fastmash-cpu/*.command
             ${{ runner.temp }}/fastmash-cpu/*.status
+            ${{ runner.temp }}/fastmash-callgrind/
             ${{ runner.temp }}/fastmash-cpu/identity.txt
             /tmp/hotpath/**/hp.json.gz
 

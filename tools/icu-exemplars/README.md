@@ -41,4 +41,5 @@ cargo deny --manifest-path tools/icu-exemplars/Cargo.toml check
 
 Tests cover inherited and unknown locales, string ordering, unsupported syntax,
 output preservation and all retained independent exemplar arrays. CI also
-builds with Ubuntu's ICU version and checks the required version refusal.
+builds on Ubuntu 26.04 with ICU 78 and on Ubuntu 24.04 with ICU 74, checking
+both generation and the required version refusal.

@@ -80,6 +80,23 @@
       ],
       "matchCurrentVersion": "/^15$/",
       "enabled": false
+    },
+    {
+      "description": "Ubuntu 24.04 supplies ICU 74 to exercise refusal of an unsupported reference version. Keep until another maintained environment covers that path.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDatasources": [
+        "github-runners"
+      ],
+      "matchPackageNames": [
+        "ubuntu"
+      ],
+      "matchFileNames": [
+        ".github/workflows/locale-reference.yml"
+      ],
+      "matchCurrentVersion": "/^24\\.04$/",
+      "enabled": false
     }
   ],
   "customManagers": [

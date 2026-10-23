@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-23",
+  "baseline": {
+    "commit": "162c691b539021a0f668c460d155e12e327b1691",
+    "icu_collator": "2.3.1",
+    "binary_sha256": "727abcabe0af042b0abfc5acd7f2cd1867dd8c81377dfe82f98a737a0fe62fe1"
+  },
+  "candidate": {
+    "ordinary_source_commit": "b3be17c603e57bd933f16223ccf2d467651f70ff",
+    "icu_collator": "2.4.0",
+    "binary_sha256": "1e69526b858d824667fa736eea313d3c906964d14a6dd1d9fb31f211ffa04be5"
+  },
+  "build": {
+    "host": "Linux x86-64",
+    "rust": "1.99.1",
+    "profile": "release",
+    "profiling": false
+  },
+  "reference": {
+    "command": "GNU datamash 1.9",
+    "command_sha256": "e18d94511c3d8a196ba111bbaadc1cc6902d01c3f813065b82d73a689e940444",
+    "sort": "GNU coreutils 9.7",
+    "sort_program": "/usr/bin/gnusort",
+    "sort_sha256": "b0f4d5cfb6075cdc51962cb3abc93fa76cb842e9bbeeec44189992749af8c4ea",
+    "glibc": "Ubuntu GLIBC 2.43-2ubuntu2.4",
+    "locale_source_sha256": "e1941ce316bb5b1a987553e67728089475453a5225c24f8a88e8df2c1dccbfc5",
+    "exemplars": "retained ICU 78",
+    "word_planning": "retained Unicode 15.0.0"
+  },
+  "selection": {
+    "rule": "Nonempty final tags from collation-verification.json, with each tag as its locale's only candidate",
+    "retained_verification_sha256": "6d67ad32312906c4557a87f78bb2b40bfef3300387d80f71fd6127d5b43b8f00",
+    "selected_candidates_sha256": "a7e8c4725492cdd752dcfe93aa6cf6b877684ff07485c17b47e2e72defd5f454",
+    "locales": 194
+  },
+  "alphabet_digits_scripts": {
+    "cases_per_locale": 31,
+    "cases_per_build": 6014,
+    "verified_locales_baseline": 194,
+    "verified_locales_candidate": 194,
+    "baseline_candidate_stream_differences": 0,
+    "failed_candidate_or_baseline_invocations": 0,
+    "identical_report_sha256": "cc16ad465744ffda7cdecc04bbf403648c7947cee70d8e916bdc75d5888c2639"
+  },
+  "punctuation": {
+    "words_per_locale": 1983,
+    "baseline_candidate_stream_differences": 0,
+    "failed_candidate_or_baseline_invocations": 0,
+    "gnu_displaced_words": {"11": 193, "13": 1},
+    "identical_report_sha256": "7c63d8b0c69cebcac6b54500704690051a7805c960b541974314c59c8f756d0e"
+  },
+  "scope": "Fixed retained workloads, including existing documented punctuation differences. This does not establish identical ordering for every Unicode string or claim a performance improvement."
+}

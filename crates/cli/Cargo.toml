@@ -64,6 +64,7 @@ default = []
 hotpath = ["dep:hotpath", "hotpath/hotpath"]
 hotpath-alloc = ["hotpath", "hotpath/hotpath-alloc"]
 hotpath-cpu = ["hotpath", "hotpath/hotpath-cpu"]
+hotpath-callgrind = ["hotpath", "hotpath/hotpath-callgrind"]
 
 [dev-dependencies]
 # Independent byte-reader check for canonical CSV output, not the input parser.

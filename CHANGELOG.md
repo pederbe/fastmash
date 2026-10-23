@@ -13,7 +13,8 @@ numerical profile version that introduced it.
 ### Added
 
 - Optional local timing, allocation and CPU profiling with reproducible Command
-  jobs and separate static reports. Ordinary builds keep profiling disabled.
+  jobs and separate static reports, plus Callgrind instruction counts on Linux
+  x86-64. Ordinary builds keep profiling disabled.
 
 - Signed apt and dnf repositories at `packages.fastmash.io`, with package-manager
   updates on Linux x86-64. Installation, upgrade from 0.1.0 to 0.2.0 and removal

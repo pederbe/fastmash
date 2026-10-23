@@ -91,6 +91,36 @@ viewer is wanted. Loading that viewer is separate from static capture.
 CPU instrumentation prevents measured functions from being inlined. Use its
 samples to locate work, then verify the hypothesis in an ordinary build.
 
+## Instruction counts on Linux x86-64
+
+Hotpath 0.29 can attribute executed instructions to the existing instrumented
+functions using Valgrind's Callgrind tool. This helps distinguish extra work
+from noisy elapsed times when investigating a small Command. Install Valgrind
+in the development environment, then use a fresh directory for each capture.
+This block explicitly uses Bash.
+
+```bash
+bash -c '
+set -euo pipefail
+cargo +1.99.1 build --profile profiling --features hotpath-callgrind --bin fastmash
+capture=$(mktemp -d)
+printf "1\n2\n3\n" > "$capture/input"
+measure-lock build -- env HOTPATH_METRICS_SERVER_OFF=1 \
+  HOTPATH_OUTPUT_PATH="$capture/report.json" \
+  HOTPATH_CALLGRIND_OUT_FILE="$capture/callgrind.%p" \
+  valgrind --tool=callgrind --callgrind-out-file="$capture/callgrind.%p" \
+  target/profiling/fastmash sum 1 < "$capture/input" > "$capture/stdout"
+test "$(cat "$capture/stdout")" = 6
+jq -e '\''.functions_icount.tool | startswith("callgrind-")'\'' "$capture/report.json"
+jq -e '\''.functions_icount.data | any(.total | tonumber > 0)'\'' "$capture/report.json"
+printf "Capture: %s\n" "$capture"
+'
+```
+
+Keep the JSON report and raw Callgrind files together. Instruction counts are
+diagnostic evidence. Hotpath disables function timing in Callgrind mode because
+Valgrind changes execution time. Use an ordinary build for performance claims.
+
 ## Validation and measurements
 
 Run the ordinary application and website checks in [TESTING.md](TESTING.md).

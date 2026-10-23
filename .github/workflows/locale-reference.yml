@@ -20,7 +20,11 @@ concurrency:
 jobs:
   reference:
     if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
-    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        # ICU 78 exercises generation. ICU 74 exercises the real CLI refusal.
+        os: [ubuntu-26.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -47,5 +51,6 @@ jobs:
       - name: Check minimum supported Rust
         run: cargo test --manifest-path tools/icu-exemplars/Cargo.toml --target-dir target --locked
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        if: matrix.os == 'ubuntu-26.04'
         with:
           manifest-path: tools/icu-exemplars/Cargo.toml

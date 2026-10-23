@@ -21,7 +21,7 @@ for key in rust mdbook samply hotpath; do
   if [[ $old == "$new" ]]; then continue; fi
   case $key in
     rust)
-      replace "$old" "$new" .github/workflows/*.yml release/Containerfile PROFILING.md
+      replace "$old" "$new" .github/workflows/*.yml release/Containerfile PROFILING.md crates/corpus-driver/examples/*.md
       # Version-addressed dist URLs need no separately pinned release date.
       sed -i -E 's@https://static.rust-lang.org/dist/[0-9]{4}-[0-9]{2}-[0-9]{2}/@https://static.rust-lang.org/dist/@g' .github/workflows/release.yml
       for component in rustc cargo rust-std; do

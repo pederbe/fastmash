@@ -227,6 +227,15 @@ generator's Unicode 16.0.0 decomposition data. Native ordering differences remai
 report observations. Capture or input failures leave partial evidence and no
 completed report. The report and capture paths must be new.
 
+For a production ICU upgrade, select the currently advertised final tags from
+the retained verification data and compare both the baseline and updated
+executables against the same native reference. The
+[ICU4X 2.4 qualification](https://github.com/pederbe/fastmash/blob/main/data/locales/icu4x-2.4-qualification.json)
+records identical streams and exit statuses across 6,014 cases in all 194
+advertised locales. Select GNU sort explicitly and record its version. Ubuntu
+26.04's default `sort` is uutils, while `gnusort` is GNU sort. This is bounded
+upgrade evidence, not a claim that every Unicode string has unchanged ordering.
+
 To compare the fixed punctuation workload against an identified native reference,
 use explicit executables, GNU sort and matching compiled locale data:
 
