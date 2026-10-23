@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # The signing key and storage credentials live only in this environment,
     # which requires the maintainer's approval.
     environment: packages
@@ -79,7 +79,7 @@ jobs:
           sudo apt-get install -qy --no-install-recommends apt-utils createrepo-c rpm
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: '1.98.1'
+          toolchain: '1.99.1'
       - name: Prepare installed verification tools
         run: cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
       - name: Import the signing key

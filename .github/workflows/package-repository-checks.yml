@@ -32,14 +32,14 @@ jobs:
   publication:
     name: Package publication consistency
     if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: '1.98.1'
+          toolchain: '1.99.1'
           components: rustfmt, clippy
       - name: Install repository tools
         run: |

@@ -2,7 +2,7 @@
 
 Use hotpath-rs for local diagnosis of startup, decimal calculations, Grouping
 and Spill. Ordinary builds have no profiling dependency or instrumentation.
-The optional dependency uses MIT-licensed hotpath 0.28.7. Its transitive
+The optional dependency uses MIT-licensed hotpath 0.29.0. Its transitive
 dependencies are checked by the repository's `cargo deny check licenses` policy.
 CPU report decoding also brings in the permissive Zlib-licensed `zlib-rs`.
 
@@ -16,13 +16,13 @@ aborts cannot promise a final report.
 
 ## Build and capture
 
-Normal builds retain Rust 1.88 compatibility. Use Rust 1.98.1 for profiling.
+Normal builds retain Rust 1.88 compatibility. Use Rust 1.99.1 for profiling.
 Reuse installed tools and the normal build cache. These commands run from the
 repository root on Linux x86-64 or Apple Silicon macOS 15 or later.
 
 ```sh
-cargo +1.98.1 build --profile profiling --features hotpath-alloc --bin fastmash --example profile-jobs
-measure-lock build -- cargo +1.98.1 run --profile profiling --features hotpath-alloc --example profile-jobs -- /tmp/fastmash-profiling
+cargo +1.99.1 build --profile profiling --features hotpath-alloc --bin fastmash --example profile-jobs
+measure-lock build -- cargo +1.99.1 run --profile profiling --features hotpath-alloc --example profile-jobs -- /tmp/fastmash-profiling
 ```
 
 Choose a fresh destination. The Rust example creates repeatable datasets and
@@ -59,13 +59,13 @@ records or arithmetic primitives.
 
 ## CPU sampling
 
-Reuse `samply` 0.13.x, `hotpath-samply` 0.28.7 and the hotpath CLI/TUI when
+Reuse `samply` 0.13.x, `hotpath-samply` 0.29.0 and the hotpath CLI/TUI when
 installed. If missing, upstream installation commands are
 
 ```sh
 cargo install samply --locked
-cargo install hotpath --version 0.28.7 --bin hotpath-samply
-cargo install hotpath --version 0.28.7 --features tui --bin hotpath
+cargo install hotpath --version 0.29.0 --bin hotpath-samply
+cargo install hotpath --version 0.29.0 --features tui --bin hotpath
 ```
 
 Build with symbols and CPU support, then capture only the decimal job. On Linux
@@ -74,7 +74,7 @@ use a separate session as required by upstream. This block explicitly uses Bash.
 ```bash
 bash -c '
 set -euo pipefail
-cargo +1.98.1 build --profile profiling --features hotpath-cpu --bin fastmash --example profile-jobs
+cargo +1.99.1 build --profile profiling --features hotpath-cpu --bin fastmash --example profile-jobs
 measure-lock build -- setsid -w target/profiling/examples/profile-jobs /tmp/fastmash-cpu decimal
 '
 ```
@@ -98,9 +98,9 @@ Also check the profiling configuration on Linux and native macOS
 
 ```sh
 cargo +1.88 check --workspace --locked
-cargo +1.98.1 clippy -p fastmash --all-targets --features hotpath-alloc --locked -- -D warnings
-cargo +1.98.1 test --release -p fastmash --features hotpath-alloc --test profiling --locked
-cargo +1.98.1 check -p fastmash --all-targets --features hotpath-cpu --locked
+cargo +1.99.1 clippy -p fastmash --all-targets --features hotpath-alloc --locked -- -D warnings
+cargo +1.99.1 test --release -p fastmash --features hotpath-alloc --test profiling --locked
+cargo +1.99.1 check -p fastmash --all-targets --features hotpath-cpu --locked
 cargo deny check licenses
 ```
 
