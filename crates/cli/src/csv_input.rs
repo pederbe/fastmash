@@ -370,23 +370,15 @@ impl Intake {
                 let tail = &available[consumed..];
                 // Closed quotes and pending CR always validate the next byte.
                 // Quoted commas and CR are data; LF still changes the location.
-                // Most fields are short. Scan their prefix directly before
-                // paying for the wider searches used by long fields.
                 let ordinary = match state {
-                    State::Start | State::Unquoted => {
-                        let prefix = tail.len().min(16);
-                        tail[..prefix]
-                            .iter()
-                            .position(|&byte| matches!(byte, b',' | b'"' | b'\r' | b'\n'))
-                            .unwrap_or_else(|| {
-                                let rest = &tail[prefix..];
-                                let end =
-                                    memchr::memchr3(b',', b'"', b'\n', rest).unwrap_or(rest.len());
-                                prefix + memchr::memchr(b'\r', &rest[..end]).unwrap_or(end)
-                            })
-                    }
+                    State::Start | State::Unquoted => tail
+                        .iter()
+                        .position(|&byte| matches!(byte, b',' | b'"' | b'\r' | b'\n'))
+                        .unwrap_or(tail.len()),
                     State::Quoted => {
-                        let prefix = tail.len().min(16);
+                        // Keep short fields and escaped quotes on the scalar
+                        // path before paying for a wider search.
+                        let prefix = tail.len().min(64);
                         tail[..prefix]
                             .iter()
                             .position(|&byte| matches!(byte, b'"' | b'\n'))
