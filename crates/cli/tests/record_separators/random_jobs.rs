@@ -2,6 +2,38 @@
 use super::*;
 
 #[test]
+fn collation_v4_assigns_seeded_draws_in_updated_group_order() {
+    // The independent seed-zero vectors select row 3 in the first four
+    // draws and row 4 in the next four. ICU4X 2.4 reverses these two Groups
+    // relative to v3, changing which numeric value each Group receives.
+    let group = |key: char| {
+        (1..=4)
+            .map(|value| format!("{key}\t{value}\n"))
+            .collect::<String>()
+    };
+    let input = format!("{}{}", group('\u{10efb}'), group('\u{10ec9}'));
+    let ordered = format!("{}{}", group('\u{10ec9}'), group('\u{10efb}'));
+    let expected = "\u{10ec9}\t3\n\u{10efb}\t4\n";
+    for (options, data) in [
+        (vec!["-S0", "-g1", "rand", "2"], ordered.as_bytes()),
+        (vec!["-S0", "-sg1", "rand", "2"], input.as_bytes()),
+    ] {
+        for spill in [false, true] {
+            let output = super::locale_delivery::run(
+                &candidate(),
+                &args(&options),
+                data,
+                &[("LC_ALL", "en_US.UTF-8")],
+                spill,
+            );
+            assert!(output.status.success(), "{output:?}");
+            assert!(output.stderr.is_empty(), "{output:?}");
+            assert_eq!(output.stdout, expected.as_bytes());
+        }
+    }
+}
+
+#[test]
 #[ignore = "requires named GNU reference and fresh evidence directory"]
 fn random_jobs_reference() {
     let reference = std::env::var_os("FASTMASH_RECORD_REFERENCE").unwrap();

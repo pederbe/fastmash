@@ -33,7 +33,7 @@ The research workflow creates an 8 MiB HFS+ disk image, attaches it at a private
 mount point and passes that mount point to the probe. Its exit trap detaches the
 image on failure. Successful execution also detaches it and removes the image.
 It retains setup, calibration, candidate and cleanup observations on macOS 15
-and 26 with Rust 1.88 and 1.98.1.
+and 26 with Rust 1.88 and 1.99.1.
 
 This establishes a development mechanism. Existing full-output transports remain
 in place until the retained fault cases have been ported and qualified. It does

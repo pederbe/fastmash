@@ -20,7 +20,11 @@ concurrency:
 jobs:
   reference:
     if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        # ICU 78 exercises generation. ICU 74 exercises the real CLI refusal.
+        os: [ubuntu-26.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -31,10 +35,12 @@ jobs:
           sudo apt-get install -qy --no-install-recommends libicu-dev libclang-dev pkg-config
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: '1.98.1'
+          toolchain: '1.99.1'
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
+          # Native ICU bindings must match this runner's system libraries.
+          key: ${{ matrix.os }}
           workspaces: tools/icu-exemplars -> ../../target
       - name: Check safe ICU resource tool and version refusal
         run: |
@@ -47,5 +53,6 @@ jobs:
       - name: Check minimum supported Rust
         run: cargo test --manifest-path tools/icu-exemplars/Cargo.toml --target-dir target --locked
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        if: matrix.os == 'ubuntu-26.04'
         with:
           manifest-path: tools/icu-exemplars/Cargo.toml

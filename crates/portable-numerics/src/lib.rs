@@ -1,4 +1,7 @@
-//! Software arithmetic for the `portable-binary80-v3` numerical contract.
+//! Software arithmetic for the `portable-binary80-v4` numerical contract.
+//!
+//! V4 retains V3 arithmetic. Its updated CLI collation can change the order
+//! in which Groups consume the shared seeded random stream.
 //!
 //! The production CLI uses this crate for its remaining wider arithmetic. Its
 //! public surface is the numerical seam; the fixed-limb substrate and
@@ -16,7 +19,7 @@ use arena::Arena;
 use fastmash_numeric_contract::{Value80, ValueClass};
 use std::cmp::Ordering;
 
-pub const PROFILE: &str = "portable-binary80-v3";
+pub const PROFILE: &str = "portable-binary80-v4";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ValueAdmissionFailure {

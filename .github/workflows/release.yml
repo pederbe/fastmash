@@ -20,7 +20,7 @@ jobs:
 
   build:
     if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The tag's CHANGELOG section, dated, becomes the release notes.
@@ -39,8 +39,8 @@ jobs:
           mkdir builder
           cp release/Containerfile builder/
           for component in rustc cargo rust-std; do
-            curl --proto '=https' -fsSLo "builder/$component-1.98.1-x86_64-unknown-linux-gnu.tar.xz" \
-              "https://static.rust-lang.org/dist/2026-09-03/$component-1.98.1-x86_64-unknown-linux-gnu.tar.xz"
+            curl --proto '=https' -fsSLo "builder/$component-1.99.1-x86_64-unknown-linux-gnu.tar.xz" \
+              "https://static.rust-lang.org/dist/$component-1.99.1-x86_64-unknown-linux-gnu.tar.xz"
           done
           docker build -f builder/Containerfile -t fastmash-release-builder builder
       # The same recipe that built the benchmarked binaries.
@@ -57,7 +57,7 @@ jobs:
           sha256sum -c "$GITHUB_WORKSPACE/release/qualified.sha256"
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: "1.98.1"
+          toolchain: "1.99.1"
       - name: Test
         run: |
           cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-corpus
@@ -116,7 +116,7 @@ jobs:
 
   draft:
     needs: [build, macos]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:

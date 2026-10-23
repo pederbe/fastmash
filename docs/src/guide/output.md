@@ -70,6 +70,15 @@ The rules for reading, computing and printing numbers are versioned together
 as a **numerical profile**. A Fastmash release that changes any numerical
 output says so in its changelog.
 
+The current profile is `portable-binary80-v4`. It retains v3 arithmetic,
+conversion and random-number generation, and uses ICU4X 2.4's Unicode 18 and
+CLDR 49 collation. Changed Group ordering can assign the shared seeded random
+draws to different Groups, so `rand` may select another number even with the
+same seed. For example, with four values `1` through `4` in each of the Groups
+U+10EFB and U+10EC9, `LC_ALL=en_US.UTF-8 fastmash -S0 -sg1 rand 2` selected `3`
+for U+10EFB and `4` for U+10EC9 under v3. V4 puts U+10EC9 first and selects `3`
+for it and `4` for U+10EFB.
+
 ## Locales
 
 The locale decides how numbers are written and the order of sorted keys.

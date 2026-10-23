@@ -13,7 +13,8 @@ numerical profile version that introduced it.
 ### Added
 
 - Optional local timing, allocation and CPU profiling with reproducible Command
-  jobs and separate static reports. Ordinary builds keep profiling disabled.
+  jobs and separate static reports, plus Callgrind instruction counts on Linux
+  x86-64. Ordinary builds keep profiling disabled.
 
 - Signed apt and dnf repositories at `packages.fastmash.io`, with package-manager
   updates on Linux x86-64. Installation, upgrade from 0.1.0 to 0.2.0 and removal
@@ -28,8 +29,12 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Advance the Numerical profile to `portable-binary80-v4` with ICU4X 2.4's
+  Unicode 18 and CLDR 49 collation. Updated Group ordering can change seeded
+  `rand` selections. Arithmetic, conversion and the random sequence retain
+  their v3 rules.
 - Use checked Rust storage for numerical workspaces and safe integer division
-  for decimal parsing, preserving the `portable-binary80-v3` Numerical profile.
+  for decimal parsing, preserving the v3 arithmetic rules inherited by v4.
 - Read sorted Records and Spill buffers through checked Rust slices, retaining
   x86-64 cache hints through a safe interface.
 

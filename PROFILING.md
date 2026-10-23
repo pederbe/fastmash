@@ -2,7 +2,7 @@
 
 Use hotpath-rs for local diagnosis of startup, decimal calculations, Grouping
 and Spill. Ordinary builds have no profiling dependency or instrumentation.
-The optional dependency uses MIT-licensed hotpath 0.28.7. Its transitive
+The optional dependency uses MIT-licensed hotpath 0.29.0. Its transitive
 dependencies are checked by the repository's `cargo deny check licenses` policy.
 CPU report decoding also brings in the permissive Zlib-licensed `zlib-rs`.
 
@@ -16,13 +16,13 @@ aborts cannot promise a final report.
 
 ## Build and capture
 
-Normal builds retain Rust 1.88 compatibility. Use Rust 1.98.1 for profiling.
+Normal builds retain Rust 1.88 compatibility. Use Rust 1.99.1 for profiling.
 Reuse installed tools and the normal build cache. These commands run from the
 repository root on Linux x86-64 or Apple Silicon macOS 15 or later.
 
 ```sh
-cargo +1.98.1 build --profile profiling --features hotpath-alloc --bin fastmash --example profile-jobs
-measure-lock build -- cargo +1.98.1 run --profile profiling --features hotpath-alloc --example profile-jobs -- /tmp/fastmash-profiling
+cargo +1.99.1 build --profile profiling --features hotpath-alloc --bin fastmash --example profile-jobs
+measure-lock build -- cargo +1.99.1 run --profile profiling --features hotpath-alloc --example profile-jobs -- /tmp/fastmash-profiling
 ```
 
 Choose a fresh destination. The Rust example creates repeatable datasets and
@@ -59,13 +59,13 @@ records or arithmetic primitives.
 
 ## CPU sampling
 
-Reuse `samply` 0.13.x, `hotpath-samply` 0.28.7 and the hotpath CLI/TUI when
+Reuse `samply` 0.13.x, `hotpath-samply` 0.29.0 and the hotpath CLI/TUI when
 installed. If missing, upstream installation commands are
 
 ```sh
 cargo install samply --locked
-cargo install hotpath --version 0.28.7 --bin hotpath-samply
-cargo install hotpath --version 0.28.7 --features tui --bin hotpath
+cargo install hotpath --version 0.29.0 --bin hotpath-samply
+cargo install hotpath --version 0.29.0 --features tui --bin hotpath
 ```
 
 Build with symbols and CPU support, then capture only the decimal job. On Linux
@@ -74,7 +74,7 @@ use a separate session as required by upstream. This block explicitly uses Bash.
 ```bash
 bash -c '
 set -euo pipefail
-cargo +1.98.1 build --profile profiling --features hotpath-cpu --bin fastmash --example profile-jobs
+cargo +1.99.1 build --profile profiling --features hotpath-cpu --bin fastmash --example profile-jobs
 measure-lock build -- setsid -w target/profiling/examples/profile-jobs /tmp/fastmash-cpu decimal
 '
 ```
@@ -91,6 +91,36 @@ viewer is wanted. Loading that viewer is separate from static capture.
 CPU instrumentation prevents measured functions from being inlined. Use its
 samples to locate work, then verify the hypothesis in an ordinary build.
 
+## Instruction counts on Linux x86-64
+
+Hotpath 0.29 can attribute executed instructions to the existing instrumented
+functions using Valgrind's Callgrind tool. This helps distinguish extra work
+from noisy elapsed times when investigating a small Command. Install Valgrind
+in the development environment, then use a fresh directory for each capture.
+This block explicitly uses Bash.
+
+```bash
+bash -c '
+set -euo pipefail
+cargo +1.99.1 build --profile profiling --features hotpath-callgrind --bin fastmash
+capture=$(mktemp -d)
+printf "1\n2\n3\n" > "$capture/input"
+measure-lock build -- env HOTPATH_METRICS_SERVER_OFF=1 \
+  HOTPATH_OUTPUT_PATH="$capture/report.json" \
+  HOTPATH_CALLGRIND_OUT_FILE="$capture/callgrind.%p" \
+  valgrind --tool=callgrind --callgrind-out-file="$capture/callgrind.%p" \
+  target/profiling/fastmash sum 1 < "$capture/input" > "$capture/stdout"
+test "$(cat "$capture/stdout")" = 6
+jq -e '\''.functions_icount.tool | startswith("callgrind-")'\'' "$capture/report.json"
+jq -e '\''.functions_icount.data | any(.total | tonumber > 0)'\'' "$capture/report.json"
+printf "Capture: %s\n" "$capture"
+'
+```
+
+Keep the JSON report and raw Callgrind files together. Instruction counts are
+diagnostic evidence. Hotpath disables function timing in Callgrind mode because
+Valgrind changes execution time. Use an ordinary build for performance claims.
+
 ## Validation and measurements
 
 Run the ordinary application and website checks in [TESTING.md](TESTING.md).
@@ -98,9 +128,9 @@ Also check the profiling configuration on Linux and native macOS
 
 ```sh
 cargo +1.88 check --workspace --locked
-cargo +1.98.1 clippy -p fastmash --all-targets --features hotpath-alloc --locked -- -D warnings
-cargo +1.98.1 test --release -p fastmash --features hotpath-alloc --test profiling --locked
-cargo +1.98.1 check -p fastmash --all-targets --features hotpath-cpu --locked
+cargo +1.99.1 clippy -p fastmash --all-targets --features hotpath-alloc --locked -- -D warnings
+cargo +1.99.1 test --release -p fastmash --features hotpath-alloc --test profiling --locked
+cargo +1.99.1 check -p fastmash --all-targets --features hotpath-cpu --locked
 cargo deny check licenses
 ```
 

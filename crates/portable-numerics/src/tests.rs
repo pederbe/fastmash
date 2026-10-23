@@ -22,7 +22,7 @@ fn allocation_failure_is_closed_before_an_arena_exists() {
 
 #[test]
 fn profile_and_exact_u64_promotion_are_stable() {
-    assert_eq!(PortableNumerics::profile(), "portable-binary80-v3");
+    assert_eq!(PortableNumerics::profile(), "portable-binary80-v4");
     assert_eq!(
         crate::machine::STAGES,
         [(160, 58), (224, 79), (288, 99), (416, 140), (544, 181)]

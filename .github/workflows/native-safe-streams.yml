@@ -28,7 +28,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-15, macos-26]
-        rust: ['1.88.0', '1.98.1']
+        rust: ['1.88.0', '1.99.1']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,7 +50,7 @@ jobs:
           { git rev-parse HEAD; git status --porcelain; uname -a; sw_vers; rustc -Vv; cargo -V; } > "$captures/identity.txt"
           shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/cli/tests/native_streams.rs crates/cli/tests/text_summaries.rs crates/cli/tests/quantiles.rs crates/cli/tests/grouping.rs crates/cli/tests/dispersion.rs crates/cli/tests/extrema.rs crates/cli/tests/sum_mean.rs crates/cli/tests/presentation.rs crates/cli/tests/selectors.rs crates/cli/tests/weighted_mean.rs crates/cli/tests/csv_input.rs crates/cli/tests/record_separators.rs crates/cli/tests/record_separators/*.rs crates/cli/tests/support/process.rs crates/cli/tests/support/test_process.rs crates/cli/tests/support/temp_dir.rs crates/cli/tests/support/full_output.rs crates/corpus-driver/Cargo.toml crates/corpus-driver/src/*.rs crates/corpus-driver/tests/test_process.rs crates/corpus-driver/tests/command.rs crates/corpus-driver/tests/support/command.rs > "$captures/inputs.sha256"
       - name: Lint with the maintained compiler
-        if: matrix.rust == '1.98.1'
+        if: matrix.rust == '1.99.1'
         run: |
           cargo clippy --locked -p fastmash-corpus-driver --bins --test test_process --test command -p fastmash --test native_streams --test text_summaries --test quantiles --test grouping --test dispersion --test extrema --test sum_mean --test presentation --test selectors --test weighted_mean --test csv_input --test record_separators -- -D warnings > "$CAPTURES/clippy.log" 2>&1
       - name: Build candidate and safe launcher

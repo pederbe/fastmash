@@ -227,6 +227,15 @@ generator's Unicode 16.0.0 decomposition data. Native ordering differences remai
 report observations. Capture or input failures leave partial evidence and no
 completed report. The report and capture paths must be new.
 
+For a production ICU upgrade, select the currently advertised final tags from
+the retained verification data and compare both the baseline and updated
+executables against the same native reference. The
+[ICU4X 2.4 qualification](https://github.com/pederbe/fastmash/blob/main/data/locales/icu4x-2.4-qualification.json)
+records identical streams and exit statuses across 6,014 cases in all 194
+advertised locales. Select GNU sort explicitly and record its version. Ubuntu
+26.04's default `sort` is uutils, while `gnusort` is GNU sort. This is bounded
+upgrade evidence, not a claim that every Unicode string has unchanged ordering.
+
 To compare the fixed punctuation workload against an identified native reference,
 use explicit executables, GNU sort and matching compiled locale data:
 
@@ -390,7 +399,10 @@ fixtures in the CLI. `record_separators::reproducibility` executes representativ
 portable expectations through the command itself, including extreme exponents,
 ordered numerical calculations and fixed random vectors. The installed command
 run repeats those CLI expectations. No host GNU result replaces a fixture or
-changes the `portable-binary80-v3` profile. Generating new MPFR reference data and
+changes the `portable-binary80-v4` profile. V4 retains these v3 arithmetic
+fixtures unchanged and advances locale collation to ICU4X 2.4. The seeded
+Group-order regression separately checks the resulting numerical selection.
+Generating new MPFR reference data and
 running optional reference-host measurements are separate from consuming these
 already retained independent fixtures.
 
