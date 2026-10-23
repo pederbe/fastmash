@@ -251,6 +251,27 @@ fn csv_numeric_conversion_is_isolated_and_missing_sides_compact_independently() 
 }
 
 #[test]
+fn csv_plain_numbers_and_fallbacks_keep_isolated_conversion() {
+    for (input, expected) in [
+        (&b"\"0.125\",e99999999\n0.375,.5\n"[..], &b"0.5\n"[..]),
+        (
+            b"\"+0.125\",ignored\n1.25e-1,ignored\n0x1p-2,ignored\n",
+            b"0.5\n",
+        ),
+        (b"-0,ignored\n0,ignored\n", b"0\n"),
+        (b"9999999999999999999,ignored\n1,ignored\n", b"1e+19\n"),
+        (b"NA,ignored\n0.125,ignored\nN/A,ignored\n", b"0.125\n"),
+    ] {
+        reports(&["--csv", "--narm", "sum", "1"], input, expected);
+    }
+    errors(
+        &["--csv", "sum", "2"],
+        b"\"first\nrecord\",1\nnext,\"1e99999999\"\n",
+        b"invalid numeric value in line 2 field 2: '1e99999999'\nCSV record 2 starts at physical line 3\n",
+    );
+}
+
+#[test]
 fn csv_all_aggregate_families_match_unambiguous_text_calculations() {
     let operations = [
         "count",
