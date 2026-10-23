@@ -399,7 +399,10 @@ fixtures in the CLI. `record_separators::reproducibility` executes representativ
 portable expectations through the command itself, including extreme exponents,
 ordered numerical calculations and fixed random vectors. The installed command
 run repeats those CLI expectations. No host GNU result replaces a fixture or
-changes the `portable-binary80-v3` profile. Generating new MPFR reference data and
+changes the `portable-binary80-v4` profile. V4 retains these v3 arithmetic
+fixtures unchanged and advances locale collation to ICU4X 2.4. The seeded
+Group-order regression separately checks the resulting numerical selection.
+Generating new MPFR reference data and
 running optional reference-host measurements are separate from consuming these
 already retained independent fixtures.
 

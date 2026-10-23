@@ -147,8 +147,8 @@ fn merge_sort_with(values: &mut [ArithmeticValue], scratch: &mut [ArithmeticValu
 }
 
 #[test]
-fn v3_profile_and_public_bit_helpers_match_the_contract() {
-    assert_eq!(PortableNumerics::profile(), "portable-binary80-v3");
+fn current_profile_and_inherited_bit_helpers_match_the_contract() {
+    assert_eq!(PortableNumerics::profile(), "portable-binary80-v4");
     let original = arithmetic("ffffc000000000000042");
     assert_eq!(bits(Value80::from(original)), "ffffc000000000000042");
     assert_eq!(

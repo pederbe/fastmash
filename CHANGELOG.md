@@ -29,8 +29,12 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Advance the Numerical profile to `portable-binary80-v4` with ICU4X 2.4's
+  Unicode 18 and CLDR 49 collation. Updated Group ordering can change seeded
+  `rand` selections. Arithmetic, conversion and the random sequence retain
+  their v3 rules.
 - Use checked Rust storage for numerical workspaces and safe integer division
-  for decimal parsing, preserving the `portable-binary80-v3` Numerical profile.
+  for decimal parsing, preserving the v3 arithmetic rules inherited by v4.
 - Read sorted Records and Spill buffers through checked Rust slices, retaining
   x86-64 cache hints through a safe interface.
 

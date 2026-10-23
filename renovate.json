@@ -163,6 +163,7 @@
       ".github/**",
       "release/Containerfile",
       "scripts/build_site.sh",
+      "crates/corpus-driver/examples/*.md",
       "PROFILING.md",
       "TESTING.md"
     ],
