@@ -29,6 +29,8 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Reduce decoding work for long quoted CSV fields while preserving strict
+  validation and original error locations.
 - Speed up plain-number conversion in CSV calculations and reduce sorting work
   and memory for already ordered numerical samples, preserving numerical results.
 - Advance the Numerical profile to `portable-binary80-v4` with ICU4X 2.4's

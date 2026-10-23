@@ -42,6 +42,12 @@ Use `--features hotpath` instead for timing without allocation tracking.
 For a single job, add its name after the destination, for example `decimal`
 or `spill`. The other names are `small`, `grouping`, `error` and `refusal`.
 
+The CSV decoding jobs are `csv-short`, `csv-long`, `csv-quoted` and
+`csv-escaped`. Each counts 4,096 Records and checks the exact result. They cover
+short fields, 1,024-byte fields, quoted fields with embedded CRLF, and escaped
+quotes with empty fields. Use their retained `.input` files with the Callgrind
+command below, replacing `sum 1` with `--csv-in count 2`.
+
 The example configures `HOTPATH_OUTPUT_PATH`, `HOTPATH_OUTPUT_FORMAT=json`, and
 `HOTPATH_METRICS_SERVER_OFF=1` on each child. No static capture starts a network
 listener. Without `HOTPATH_OUTPUT_PATH`, an instrumented binary runs without a

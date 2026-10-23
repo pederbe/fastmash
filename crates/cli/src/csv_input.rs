@@ -293,6 +293,19 @@ enum State {
     Cr { line: u64, byte: u64 },
 }
 
+// Keep the wider search out of the generic intake loop so unquoted fields
+// do not pay for its code size. Short quoted fields stay on the scalar path.
+#[inline(never)]
+fn quoted_span(tail: &[u8]) -> usize {
+    let prefix = tail.len().min(64);
+    tail[..prefix]
+        .iter()
+        .position(|&byte| matches!(byte, b'"' | b'\n'))
+        .unwrap_or_else(|| {
+            prefix + memchr::memchr2(b'"', b'\n', &tail[prefix..]).unwrap_or(tail.len() - prefix)
+        })
+}
+
 /// Reads one logical Record at a time without holding the dataset or raw CSV.
 pub(super) struct Intake {
     record: u64,
@@ -375,10 +388,13 @@ impl Intake {
                         .iter()
                         .position(|&byte| matches!(byte, b',' | b'"' | b'\r' | b'\n'))
                         .unwrap_or(tail.len()),
-                    State::Quoted => tail
-                        .iter()
-                        .position(|&byte| matches!(byte, b'"' | b'\n'))
-                        .unwrap_or(tail.len()),
+                    State::Quoted => {
+                        if matches!(tail[0], b'"' | b'\n') {
+                            0
+                        } else {
+                            quoted_span(tail)
+                        }
+                    }
                     State::Closed | State::Cr { .. } => 0,
                 };
                 if ordinary != 0 {
