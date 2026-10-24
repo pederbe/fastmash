@@ -98,7 +98,8 @@ Some systems limit a process's address space rather than its memory, for
 example `ulimit -v` or a batch scheduler's virtual-memory limit such as
 `h_vmem`. The C library's memory allocator (glibc `malloc`) gives each thread
 that allocates an arena of its own, which reserves 64 MiB of address space,
-more as it grows, and sorts in language locales run on up to eight threads.
+more as it grows, and sorts in language locales, like the heavier
+calculations in the C locales, run on up to eight threads.
 Under such a limit, Fastmash therefore keeps the allocator to one arena for
 each 512 MiB of the limit, from one (below 1 GiB) to eight. Threads that share
 an arena wait for each other, so a sort that would also fit without the cap

@@ -111,6 +111,15 @@ pub(super) fn native(language: bool, covered: bool, available: impl FnOnce() -> 
     language || covered || !available()
 }
 
+/// Reports a Command's Sort route on standard error under
+/// `FASTMASH_SORT_TRACE`.
+pub(super) fn trace(route: &str) {
+    if std::env::var_os("FASTMASH_SORT_TRACE").is_some() {
+        let message = format!("sort route: {route}\n");
+        let _ = std::io::Write::write_all(&mut std::io::stderr(), message.as_bytes());
+    }
+}
+
 /// Runs a Command by its Sort route: hash grouping, then the sort where it
 /// gives up. `cleared` is the external route's startup check
 /// (`sorted_input::admit`), which the startup order gives before input is
@@ -143,8 +152,7 @@ pub(super) fn run(
             Sort::Native { packed: false } => "native sort of whole records",
             Sort::External => "system sort",
         };
-        let message = format!("sort route: {first}{sort}\n");
-        let _ = std::io::Write::write_all(&mut std::io::stderr(), message.as_bytes());
+        trace(&format!("{first}{sort}"));
     }
     let reader = &mut input;
     if let Some(setting) = route.hash

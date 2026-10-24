@@ -359,6 +359,23 @@ fn stat(text: &str, name: &str) -> Option<u64> {
         .ok()
 }
 
+/// Whether a cgroup memory limit applies to this process, so that its dirty
+/// pages count against it.
+pub(super) fn cgroup_limited() -> bool {
+    #[cfg(test)]
+    if let Some(limited) = CGROUP_LIMITED.with(std::cell::Cell::get) {
+        return limited;
+    }
+    cgroups(Path::new("/")).is_some_and(|levels| !levels.is_empty())
+}
+
+#[cfg(test)]
+thread_local! {
+    /// A test's answer for `cgroup_limited`, instead of reading the host.
+    pub(super) static CGROUP_LIMITED: std::cell::Cell<Option<bool>> =
+        const { std::cell::Cell::new(None) };
+}
+
 /// The memory limits of the process's cgroups under `root`, each with the
 /// memory its cgroup uses that reclaim cannot free: in cgroup v2, each
 /// level's lower of `memory.max` and `memory.high`, against `memory.current`

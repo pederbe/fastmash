@@ -39,42 +39,54 @@ fn exact(output: &Output, stdout: &[u8], stderr: &[u8], label: &str) -> io::Resu
     Ok(())
 }
 
+/// The Sort route a check expects its Command to report.
+#[derive(Clone, Copy, PartialEq)]
+enum Route {
+    /// None: the check does not ask for a route.
+    Untraced,
+    /// A calculation: native in current pairs, the system sort in older ones.
+    Calculation,
+    /// Sorted rmdup: the system sort through the installed supervisor. Older
+    /// pairs report no route for it; their calculation check proves the
+    /// supervisor instead.
+    SystemSort,
+}
+
 fn check(
     target: &Target<'_>,
     bin: &Path,
     args: &[&str],
     input: &[u8],
     expected: &[u8],
-    trace: bool,
+    route: Route,
     receipts: &mut Receipts,
-) -> io::Result<()> {
+) -> io::Result<bool> {
     let mut command = target.command("env");
     command.args(["-i", "PATH=/usr/bin:/bin", "LC_ALL=C"]);
-    if trace {
+    if route != Route::Untraced {
         command.args(["FASTMASH_GROUPING=sort", "FASTMASH_SORT_TRACE=1"]);
     }
     command.arg(bin.join("fastmash")).args(args);
     let output = receipts.run(args[0].trim_start_matches('-'), &mut command, input)?;
+    let native = matches!(
+        output.stderr.as_slice(),
+        b"sort route: native sort of the selected fields\n"
+            | b"sort route: native sort of whole records\n"
+    );
     exact(
         &output,
         expected,
-        if trace
-            && matches!(
-                output.stderr.as_slice(),
-                b"sort route: native sort of the selected fields\n"
-                    | b"sort route: native sort of whole records\n"
-            )
-        {
+        match route {
+            Route::Untraced => b"",
             // Older published pairs use the external route. Admit either
             // generation while still checking the complete diagnostic.
-            &output.stderr
-        } else if trace {
-            b"sort route: system sort\n"
-        } else {
-            b""
+            Route::Calculation if native => &output.stderr,
+            Route::SystemSort if output.stderr.is_empty() => b"",
+            Route::Calculation | Route::SystemSort => b"sort route: system sort\n",
         },
         args[0],
-    )
+    )?;
+    Ok(output.stderr == b"sort route: system sort\n")
 }
 
 pub(crate) fn verify_with_receipts(
@@ -130,7 +142,7 @@ pub(crate) fn verify_with_receipts(
         &["--version"],
         b"",
         expected_version.as_encoded_bytes(),
-        false,
+        Route::Untraced,
         receipts,
     )?;
     check(
@@ -139,7 +151,7 @@ pub(crate) fn verify_with_receipts(
         &["sum", "1", "mean", "2"],
         b"1\t2\n3\t4\n",
         b"4\t3\n",
-        false,
+        Route::Untraced,
         receipts,
     )?;
     check(
@@ -148,9 +160,10 @@ pub(crate) fn verify_with_receipts(
         &["median", "1"],
         b"1\n2\n3\n",
         b"2\n",
-        false,
+        Route::Untraced,
         receipts,
     )?;
+    let mut supervised = false;
     if programs.len() == 1 {
         let output = receipts.run(
             "no-supervisor",
@@ -164,26 +177,36 @@ pub(crate) fn verify_with_receipts(
         successful(&output, "native archive must not contain a supervisor")?;
     } else {
         // Calculations no longer exercise the Linux supervisor. Sorted rmdup
-        // still does, so keep checking that the installed pair works together.
-        check(
+        // still does, so check that the installed pair runs the system sort.
+        supervised = check(
             &target,
             bin,
             &["-s", "rmdup", "1"],
             b"b\t2\na\t1\nb\t3\n",
             b"a\t1\nb\t2\n",
-            false,
+            Route::SystemSort,
             receipts,
         )?;
     }
-    check(
+    supervised |= check(
         &target,
         bin,
         &["-sg1", "pcov", "2:3"],
         b"b\t2\t3\na\t1\t2\na\t3\t6\n",
         b"a\t2\nb\t0\n",
-        programs.len() == 2,
+        if programs.len() == 2 {
+            Route::Calculation
+        } else {
+            Route::Untraced
+        },
         receipts,
-    )
+    )?;
+    if programs.len() == 2 && !supervised {
+        return Err(io::Error::other(
+            "no Command used the system sort through the installed supervisor",
+        ));
+    }
+    Ok(())
 }
 
 pub fn verify(target: Target<'_>, version: &OsStr, bin: &Path, checksums: &Path) -> io::Result<()> {

@@ -77,7 +77,7 @@ anonymous: the operating system removes them automatically, even if Fastmash
 is interrupted.
 
 A chunk holds each record's grouping keys and the fields its operations use
-(the whole record for calculations that need it, with `--full`, in language locales, or when the field
+(the whole record with `--full`, in language locales, or when the field
 separator is a letter, a digit or the decimal point, which a number could run
 on into) and 32 bytes per record for sorting. A sort starts with a 16 MiB
 chunk. When it fills, Fastmash holds the whole input in memory instead, if
@@ -87,32 +87,32 @@ a share of what is free under that limit or on the host (one per running
 Fastmash), and with less than half the swap in use. For piped input it asks
 for 64 MiB, then twice its memory each time it fills, within the same bounds.
 Otherwise the first chunk takes 64 MiB unless a cgroup memory limit lacks
-room for it, and then the sort spills. In language locales the records are
-prepared for sorting on several threads, whose batches take a sixteenth of
-the 64 MiB.
+room for it, and then the sort spills. In language locales, and for other
+means, higher moments, normality tests and paired statistics grouped by one
+key, records are prepared for sorting on several threads, whose batches take
+a sixteenth of the 64 MiB.
 
 `FASTMASH_SORT_MEMORY_BYTES` fixes the chunk's memory target instead, and
 `FASTMASH_SORT_TRACE` (set to anything) reports each decision on standard
 error. Neither is a limit on Fastmash's total memory use.
 
-In language locales, records are prepared for sorting on up to 8 threads.
-On Linux, numerical calculations can merge spilled records and calculate in
-parallel on two threads. Both use the processors available to
-Fastmash, or `OMP_NUM_THREADS` if it is set, capped by `OMP_THREAD_LIMIT`.
-Set `OMP_NUM_THREADS=1` to sort on one thread.
+In language locales, and for those calculations in the `C` locales, records
+are prepared for sorting on up to 8 threads. On Linux, numerical calculations
+can merge spilled records and calculate in parallel on two threads. Both use
+the processors available to Fastmash, or `OMP_NUM_THREADS` if it is set,
+capped by `OMP_THREAD_LIMIT`. Set `OMP_NUM_THREADS=1` to sort on one thread.
 
 Every sorted calculation uses Fastmash's own sorter in `C`, `POSIX`,
-`C.UTF-8` and their supported aliases, as well as language locales. This includes
-`rand`, `geomean`, `harmmean`, `ms`, `rms`, skewness, kurtosis, normality tests,
-paired statistics and mixed calculations. These calculations keep whole records
-where selected fields cannot serve them, preserving contribution order and seeded
-randomness. They need neither the system `sort` nor the sort supervisor.
+`C.UTF-8` and their supported aliases, as well as language locales. This
+includes `rand`, `geomean`, `harmmean`, `ms`, `rms`, skewness, kurtosis,
+normality tests, paired statistics and mixed calculations. They preserve
+contribution order and seeded randomness, and need neither the system `sort`
+nor the sort supervisor.
 
 On Linux in the C locales, `rmdup` with `-s` still uses the system `sort`
-through Fastmash's sort supervisor. This route writes its
-temporary files in a private directory in `TMPDIR`; see
-[System requirements](../requirements.md) for what it needs. In language locales
-`rmdup` also uses Fastmash's own sorter.
+through Fastmash's sort supervisor. This route writes its temporary files in a
+private directory in `TMPDIR`; see [System requirements](../requirements.md)
+for what it needs. In language locales `rmdup` also uses Fastmash's own sorter.
 
 ## Ignoring case: `-i`
 

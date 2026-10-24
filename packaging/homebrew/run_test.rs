@@ -103,11 +103,23 @@ fn run() -> io::Result<()> {
         ));
     }
     if !cfg!(target_os = "macos") {
-        expect(
-            &pipe(&binary, &["-s", "rmdup", "1"], b"b\t2\na\t1\nb\t3\n")?,
-            b"a\t1\nb\t2\n",
-            "sorted rmdup",
-        )?;
+        fs::write("rmdup-input", b"b\t2\na\t1\nb\t3\n")?;
+        let rmdup = command(&binary, &["-s", "rmdup", "1"])
+            .env("FASTMASH_SORT_TRACE", "1")
+            .stdin(Stdio::from(File::open("rmdup-input")?))
+            .output()?;
+        expect(&rmdup, b"a\t1\nb\t2\n", "sorted rmdup")?;
+        // Current packages run sorted rmdup through the supervisor. Older ones
+        // report no route for it, and the paired operation used it instead.
+        let system = b"sort route: system sort\n".as_slice();
+        if !matches!(rmdup.stderr.as_slice(), b"sort route: system sort\n" | b"")
+            || (rmdup.stderr != system && output.stderr != system)
+        {
+            return Err(io::Error::other(format!(
+                "no Command used the system sort through the installed supervisor: {:?}",
+                String::from_utf8_lossy(&rmdup.stderr)
+            )));
+        }
     }
     Ok(())
 }

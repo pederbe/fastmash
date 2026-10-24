@@ -109,14 +109,28 @@ fn run() -> io::Result<()> {
             String::from_utf8_lossy(&output.stderr)
         )));
     }
-    expect(
-        &pipe(
-            command(&binary, &["-s", "rmdup", "1"]),
-            b"b\t2\na\t1\nb\t3\n",
-        )?,
-        b"a\t1\nb\t2\n",
-        "sorted rmdup",
-    )?;
+    let mut rmdup = Command::new(&binary);
+    rmdup
+        .args(["-s", "rmdup", "1"])
+        .env_clear()
+        .env("LC_ALL", "C")
+        .env("FASTMASH_SORT_TRACE", "1");
+    if fedora {
+        rmdup.env("PATH", "/usr/bin:/bin");
+    }
+    let rmdup = pipe(rmdup, b"b\t2\na\t1\nb\t3\n")?;
+    expect(&rmdup, b"a\t1\nb\t2\n", "sorted rmdup")?;
+    // Current packages run sorted rmdup through the supervisor. Older ones
+    // report no route for it, and the paired operation used it instead.
+    let system = b"sort route: system sort\n".as_slice();
+    if !matches!(rmdup.stderr.as_slice(), b"sort route: system sort\n" | b"")
+        || (rmdup.stderr != system && output.stderr != system)
+    {
+        return Err(io::Error::other(format!(
+            "no Command used the system sort through the installed supervisor: {:?}",
+            String::from_utf8_lossy(&rmdup.stderr)
+        )));
+    }
     Ok(())
 }
 

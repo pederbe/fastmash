@@ -62,11 +62,11 @@ with `--color=always`. Styling defaults to automatic terminal detection;
 
 ## Why are there two executables?
 
-On Linux, `fastmash-sort-supervisor` runs the system `sort` safely for some sorted jobs
-in the C locales, where the system `sort` is faster on large input. Keep it in
-the same directory as `fastmash`: without it, those jobs sort inside Fastmash,
-with the same output. The macOS archive contains only `fastmash` and always
-uses built-in sorting.
+On Linux, `fastmash-sort-supervisor` runs the system `sort` safely for
+`rmdup` with `-s` in the C locales. Every other job sorts inside Fastmash. Keep
+it in the same directory as `fastmash`: without it, sorted `rmdup` also sorts
+inside Fastmash, with the same output. The macOS archive contains only
+`fastmash` and always uses built-in sorting.
 
 ## Why exit status 77?
 

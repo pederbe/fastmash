@@ -455,18 +455,18 @@ fn without_close_range_cloexec_jobs_sort_in_process() {
             }
             command.output().unwrap()
         };
-        // Grouped calculations report their route. Selection commands do
-        // not, so their original byte and status assertions remain below.
-        let reports_route = job.contains(&"-g");
+        // Grouped calculations sort natively. Sorted rmdup takes the system
+        // sort where the supervisor can run, and its own sort otherwise.
+        let calculation = job.contains(&"-g");
         let ordinary = run(None, true);
         assert!(ordinary.status.success(), "{job:?}: {ordinary:?}");
         assert_eq!(ordinary.stdout, expected.as_bytes());
         assert_eq!(
             ordinary.stderr,
-            if reports_route {
+            if calculation {
                 b"sort route: native sort of the selected fields\n".as_slice()
             } else {
-                b""
+                b"sort route: system sort\n"
             },
             "{job:?}"
         );
@@ -484,8 +484,9 @@ fn without_close_range_cloexec_jobs_sort_in_process() {
                     b"sort route: native sort of whole records\n".as_slice(),
                 ]
                 .contains(&traced.stderr.as_slice())
-                    && reports_route
-                    || !reports_route && traced.stderr.is_empty(),
+                    && calculation
+                    || !calculation
+                        && traced.stderr == b"sort route: native sort of whole records\n",
                 "{errno} {job:?}: {traced:?}"
             );
         }

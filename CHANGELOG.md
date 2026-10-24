@@ -32,9 +32,12 @@ numerical profile version that introduced it.
 - Use built-in sorting for every sorted calculation in the C locales, including
   mixed calculations, other means, higher moments, normality tests, paired
   statistics and `rand`, without requiring the system `sort` or Sort supervisor.
-  Stable contribution order and the Numerical profile are preserved. On Linux,
-  large numerical sorts can merge spilled records and calculate in parallel
-  within the configured thread limits.
+  Stable contribution order and the Numerical profile are preserved. Other
+  means, higher moments, normality tests and paired statistics grouped by one
+  key prepare records on several threads. On Linux, large numerical sorts can
+  merge spilled records and calculate in parallel within the configured thread
+  limits, and under a cgroup memory limit write their runs back to storage as
+  they go. Sorted `rmdup` now reports its route under `FASTMASH_SORT_TRACE`.
 - Under a cgroup memory limit, let each built-in sort and hash grouping grow
   to half of what is free there, with growth shared among running Fastmash
   processes instead of one share per processor. Sorts and hash grouping now

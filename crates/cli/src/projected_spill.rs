@@ -318,10 +318,7 @@ impl Write for RunFile {
         #[cfg(target_os = "linux")]
         // Once a run needs writeback, finish its entire dirty tail. Leaving
         // sub-window tails on several completed runs accumulates dirty pages.
-        if self.writeback
-            && self.written >= WRITEBACK_WINDOW.min(8 << 20)
-            && self.written != self.synced
-        {
+        if self.writeback && self.written >= WRITEBACK_WINDOW && self.written != self.synced {
             self.write_back()?;
         }
         self.file.flush()
@@ -1409,6 +1406,12 @@ impl<S: Codec> Sorter<S> {
             }
         }
         self.sort();
+        // Writeback helps only where dirty run pages count against a cgroup
+        // memory limit. Elsewhere runs keep ordinary I/O.
+        #[cfg(target_os = "linux")]
+        if self.writeback && !super::memory::cgroup_limited() {
+            self.writeback = false;
+        }
         let mut output = Encoder::run(self.buffer, self.writeback)?;
         let (arena, entries) = (&self.arena, &self.entries);
         for (at, entry) in entries.iter().enumerate() {
@@ -1693,12 +1696,14 @@ mod tests {
     use std::io::{BufReader, BufWriter};
     #[cfg(target_os = "linux")]
     #[test]
-    fn run_writeback_is_opt_in() {
+    fn run_writeback_is_opt_in_under_a_cgroup_memory_limit() {
         let payload = vec![b'x'; 9 << 20];
-        for enabled in [false, true] {
+        for (requested, limited) in [(false, true), (true, false), (true, true)] {
+            let enabled = requested && limited;
             RUN_WRITEBACKS.with(|calls| calls.set(0));
+            super::super::memory::CGROUP_LIMITED.with(|answer| answer.set(Some(limited)));
             let mut sorter = Sorter::<Packed>::new(64 << 20, 0);
-            if enabled {
+            if requested {
                 sorter.enable_writeback();
             }
             sorter

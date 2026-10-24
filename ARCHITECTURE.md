@@ -234,10 +234,10 @@ flowchart TD
   them, and hash grouping gives up where two keys differ only in the blanks,
   or where a `-z` record holds a newline. `--vnlog` and `rand` (one generator
   across all groups) always sort.
-- The **native route** sorts in process. It covers counting and text
-  operations, basic statistics, quantiles, modes, MAD and variance, and every
-  operation in the language locales, whose text ordering comes from
-  pinned Unicode ICU data built into the program rather than the host's locale files.
+- The **native route** sorts in process. It covers every sorted calculation
+  in every locale and sorted `rmdup` in the language locales, whose text
+  ordering comes from pinned Unicode ICU data built into the program rather
+  than the host's locale files.
   A language sort key (`locale.rs`) is the ICU collation key, at three
   levels, of the text with the characters glibc ignores (punctuation, most
   symbols and spaces, from glibc's iso14651_t1_common in `collation_glibc.rs`)
@@ -258,7 +258,9 @@ flowchart TD
   next eight key bytes, round by round; complete keys are compared only in
   small groups and after 64 bytes of a key. Ties keep input order. In the
   language locales, collation keys are computed in batches on several
-  threads. The chunk, with the batches' share, stays within its memory target,
+  threads, as are the parsed numbers of other means, higher moments,
+  normality tests and paired statistics grouped by one key in the C locales.
+  The chunk, with the batches' share, stays within its memory target,
   sized for 64 MiB. It takes 16 MiB first. When a chunk fills, it may grow
   instead of spilling: to hold the whole input of a regular file (an estimate
   from the bytes read so far, at most the buffer GNU `sort` would use for the
@@ -278,6 +280,15 @@ flowchart TD
 - **Spill** writes sorted runs to anonymous temporary files (`O_TMPFILE`, or
   where the filesystem lacks it a private file unlinked as soon as it is open),
   which the kernel removes automatically when Fastmash exits, however it exits.
+  On Linux, a numerical calculation's runs under a cgroup memory limit are
+  written back to storage every 8 MiB (`fdatasync`), so that dirty pages do
+  not throttle the writer against the limit. Elsewhere runs use ordinary I/O.
+- On Linux, a numerical calculation whose final merge reads one level of runs
+  can overlap that merge with calculation (`projected_calculation_pipe.rs`):
+  a merge thread writes each record's selected fields and up to two parsed
+  numbers through an anonymous pipe, within the final merge's buffer
+  allowance, and the calculation reads them in order. Records whose numbers
+  read on across a separator, and other platforms, use the serial path.
 - **Quoted CSV sorting** uses its own complete decoded-record route, without
   hash replay or a text-format fallback. Record bytes, field ends, original
   locations and required language comparison segments are packed into shared

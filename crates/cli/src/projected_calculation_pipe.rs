@@ -1,6 +1,7 @@
 //! Overlap a native Spill merge with calculation through an anonymous pipe.
-//! Only selected fields need text again. Empty unselected fields preserve
-//! selector positions and field-count diagnostics. Numeric crossings use the
+//! Only selected fields need text again. A `_` in each unselected field
+//! preserves selector positions, field-count diagnostics and where a blank
+//! field's number would stop. Numeric crossings use the
 //! serial collector instead, since their original neighbours must be retained.
 #![forbid(unsafe_code)]
 use super::command_output::CommandOutput;
@@ -261,9 +262,10 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
                                         record.segment(layout.segment(field, record.key_count())),
                                     )
                                     .map_err(pipe_error)?;
-                            } else if record.fields == 1 {
-                                // An empty byte string has zero fields. Keep
-                                // one unselected field present for diagnostics.
+                            } else {
+                                // A non-blank stand-in keeps the field present
+                                // and stops a blank selected field before it
+                                // from reading on into a later number.
                                 writer.write_all(b"_").map_err(pipe_error)?;
                             }
                         }

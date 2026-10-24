@@ -361,7 +361,7 @@ Runtime and numerical limits:
   HUP/INT/TERM neither ignored (as by nohup) nor blocked, waitable children,
   pidfds and close_range(CLOEXEC) (Linux 5.11+), both executable, sort not
   BusyBox or Toybox, a -t byte below 0x80 and a writable, searchable TMPDIR.
-  Otherwise they sort in process. Linux spill uses O_TMPFILE, or unlinked
+  Otherwise it sorts in process. Linux spill uses O_TMPFILE, or unlinked
   private files where TMPDIR lacks it (NFS, older overlayfs). macOS uses
   private unlinked files; external sorting on Linux
   creates a private directory in TMPDIR when it starts.
