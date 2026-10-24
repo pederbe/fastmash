@@ -1,6 +1,6 @@
 # Fedora source package
 
-`fastmash.spec` compiles the published 0.1.0 source for Linux x86-64, using
+`fastmash.spec` compiles the published 0.2.0 source for Linux x86-64, using
 Fedora's Rust RPM macros and an offline copy of the locked Cargo dependencies.
 This is a source package proposal for Fedora, separate from the prebuilt RPM
 on the releases page. Fedora's compiler and build flags produce different
@@ -16,7 +16,8 @@ Sort route. Rust, Python and the packaging macros are build dependencies only.
 ## Build and check
 
 Run this Bash block from the repository root on Fedora with `rpm-build`,
-`cargo-rpm-macros`, Rust 1.88 or newer, GCC, Python 3, coreutils and diffutils
+`cargo-rpm-macros`, Rust 1.88 or newer, GCC, Python 3, coreutils, diffutils,
+curl and `perl-Digest-SHA` (which provides `shasum` for the installer tests)
 installed. Source preparation needs Cargo, curl, GNU tar and gzip and can use
 the normal Cargo download cache. It verifies the public release archive before
 vendoring dependencies; all compilation and package tests then run offline.
@@ -25,7 +26,7 @@ compiler builds this checker for `%check`; it is not installed in the RPM.
 
 ```bash
 bash -eu <<'EOF'
-top=$(mktemp -d)
+top=$(mktemp -d /var/tmp/fastmash-fedora-build.XXXXXX)
 mkdir -p "$top/SOURCES" "$top/SPECS"
 bash packaging/fedora/prepare-sources.sh "$top/SOURCES"
 (cd "$top/SOURCES" && sha256sum -c sources.sha256)
@@ -42,7 +43,7 @@ and permitted pidfds and `close_range`; successful built-in sorting cannot
 conceal a broken supervisor.
 
 In a disposable Fedora environment, install the resulting RPM with
-`dnf install ./fastmash-0.1.0-1.fcVERSION.x86_64.rpm`, substituting its actual
+`dnf install ./fastmash-0.2.0-1.fcVERSION.x86_64.rpm`, substituting its actual
 filename. Inspect `rpm -ql fastmash`, `rpm -q --licensefiles fastmash` and
 `rpm -q --provides fastmash` for the bundled-crate entries,
 and repeat the version, arithmetic and system-sort trace checks against
