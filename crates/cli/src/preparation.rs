@@ -1,7 +1,7 @@
 //! Ordered Command preparation with private payloads for existing runners.
 //! Cases certify completed preparation; startup and Input checks can still fail.
 use super::{
-    Failure, Kind, binding, failure, grammar, operation_set,
+    Failure, Kind, binding, failure, grammar,
     options::{Options, Setting},
     projected_sort,
     records::Separator,
@@ -394,7 +394,9 @@ pub(super) fn prepare<'o, 'p>(
                 hash_eligible: projected_sort::hash_eligible(options, &binding.operations),
                 grouping: projected_sort::grouping(environment.grouping.as_deref())?,
                 language: policy.language(),
-                covered: native != operation_set::NativeSort::Unsupported,
+                // Every calculation is supported. Storage selection separately
+                // retains whole records where selected fields cannot serve it.
+                covered: true,
                 packed: projected_sort::packed(options, native),
                 hold: sort_route::Hold::setting(environment.pipe_grouping.as_deref())?,
             };

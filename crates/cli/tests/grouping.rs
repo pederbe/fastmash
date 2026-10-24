@@ -670,8 +670,7 @@ fn hash_grouping_writes_what_the_sort_writes() {
         (&["-s", "-g", "2,1", "sum", "3"], &words),
         (&["-s", "-i", "--full", "-g", "2", "last", "3"], &words),
         (&["-s", "crosstab", "1,2", "sum", "3"], &words),
-        // Operations that the system sort serves in the C locales: a restart
-        // leaves standard input where it began, for the sort to read.
+        // Migrated calculations restart from the original input position.
         (&["-s", "-g", "1", "rms", "2", "geomean", "2"], &numbered),
         (&["-s", "-H", "-g", "1", "rms", "2"], &numbered),
         (

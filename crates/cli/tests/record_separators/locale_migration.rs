@@ -63,7 +63,7 @@ fn locale_migration_inventory() {
             "ä\nÄ\nz\nZ\nß\nSS\n",
         ),
         (
-            "external-sort-means",
+            "sorted-means",
             vec!["-sg1", "harmmean", "2"],
             "z\t2\nä\t2\na\t2\nÄ\t2\n",
         ),

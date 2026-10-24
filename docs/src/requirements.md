@@ -28,8 +28,9 @@ Under an address-space limit (`ulimit -v`, as some batch schedulers set),
 Fastmash reduces the address space that its memory allocator reserves; see
 [Address-space limits](guide/errors.md#address-space-limits).
 
-A few sorted (`-s`) jobs in the `C` locales, listed in
-[Grouping and sorting](guide/grouping.md#large-inputs), use the system `sort`
+Every sorted calculation uses built-in sorting, without the system `sort` or
+Sort supervisor. Sorted `rmdup` in the `C` locales, described in
+[Grouping and sorting](guide/grouping.md#large-inputs), uses the system `sort`
 when all of these hold: `/proc` is mounted and `fastmash-sort-supervisor` is
 beside `fastmash`; `/usr/bin/sort` is an executable from GNU coreutils or
 uutils coreutils (not BusyBox or Toybox); the field separator is ASCII; `TMPDIR` is writable; Linux

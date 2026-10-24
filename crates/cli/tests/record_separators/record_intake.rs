@@ -86,10 +86,9 @@ fn sorted_vnlog_rmdup_reads_its_second_header_from_the_sorted_records() {
 }
 
 #[test]
-fn missing_headers_keep_native_and_external_full_warning_order() {
+fn missing_headers_precede_full_warnings() {
     // Native sorting diagnoses the missing Input header before entering the
-    // data phase, so it emits no full warning. Linux's external route still
-    // reads the header from the sort pipe and warns after sort's error.
+    // data phase, so it emits no full warning for any calculation.
     for operation in ["count", "rms"] {
         for input in [b"".as_slice(), b"#c\n"] {
             let output = run(
@@ -97,22 +96,6 @@ fn missing_headers_keep_native_and_external_full_warning_order() {
                 &["-C", "--full", "-s", "-H", "-g", "x", operation, "1"],
                 input,
             );
-            #[cfg(target_os = "linux")]
-            if operation == "rms" {
-                // Older GNU sort includes its absolute program name, as in the corpus.
-                let mut stderr = if output.stderr.starts_with(b"/usr/bin/sort: ") {
-                    b"/usr/bin/".to_vec()
-                } else {
-                    Vec::new()
-                };
-                stderr.extend_from_slice(
-                    b"sort: field number is zero: invalid field specification '0,0'\n",
-                );
-                stderr.extend_from_slice(WARNING);
-                stderr.extend_from_slice(b"fastmash: read error (on close)\n");
-                assert_result(&output, 1, b"", &stderr);
-                continue;
-            }
             assert_result(
                 &output,
                 1,
@@ -224,8 +207,7 @@ fn a_read_error_fails_the_sort_like_the_system_sort() {
         "C",
     );
     assert_result(&output, 1, b"a\tb\tcount(a)\n", &[WARNING, EIO].concat());
-    // The system sort reads the failing input itself after the header read
-    // failed; GNU's "read error (on close)" then carries the header's errno.
+    // Migrated means report the failed header read through native intake too.
     let output = failing_input_with(
         &candidate(),
         &["-s", "-H", "-g1", "rms", "2"],
@@ -235,13 +217,5 @@ fn a_read_error_fails_the_sort_like_the_system_sort() {
     );
     assert_eq!(output.status.code(), Some(1), "{output:?}");
     assert!(output.stdout.is_empty(), "{output:?}");
-    #[cfg(target_os = "linux")]
-    assert!(
-        output
-            .stderr
-            .ends_with(b"fastmash: read error (on close): Input/output error\n"),
-        "{output:?}"
-    );
-    #[cfg(target_os = "macos")]
     assert_eq!(output.stderr, EIO);
 }

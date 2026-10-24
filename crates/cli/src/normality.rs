@@ -53,6 +53,7 @@ pub(super) fn jarque_bera(
     if n <= 1 {
         return Ok(quiet_nan());
     }
+    super::moments::prepare_normality(values, arithmetic, cache)?;
     let kurtosis = excess_kurtosis(values, false, arithmetic, cache)?;
     let skew = skewness(values, false, arithmetic, cache)?;
     let squared_kurtosis = decimal::multiply(kurtosis, kurtosis)?;

@@ -90,10 +90,24 @@ fn run() -> io::Result<()> {
         if !output.stderr.starts_with(b"sort route: native sort") {
             return Err(io::Error::other("paired operation did not use native sort"));
         }
-    } else if !supervisor.exists() || output.stderr != b"sort route: system sort\n" {
+    } else if !supervisor.exists()
+        || !matches!(
+            output.stderr.as_slice(),
+            b"sort route: system sort\n"
+                | b"sort route: native sort of the selected fields\n"
+                | b"sort route: native sort of whole records\n"
+        )
+    {
         return Err(io::Error::other(
-            "paired operation did not use the Sort supervisor",
+            "Linux package is missing its supervisor or a supported sort route",
         ));
+    }
+    if !cfg!(target_os = "macos") {
+        expect(
+            &pipe(&binary, &["-s", "rmdup", "1"], b"b\t2\na\t1\nb\t3\n")?,
+            b"a\t1\nb\t2\n",
+            "sorted rmdup",
+        )?;
     }
     Ok(())
 }
