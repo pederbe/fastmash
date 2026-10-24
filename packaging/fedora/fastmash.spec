@@ -1,5 +1,5 @@
 Name:           fastmash
-Version:        0.1.0
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        Fast command-line statistics and table transformations
 # Select MIT for dual-licensed crates; retain the LLVM exception and Unicode terms.
@@ -19,6 +19,9 @@ BuildRequires:  gcc
 BuildRequires:  python3
 BuildRequires:  coreutils
 BuildRequires:  diffutils
+BuildRequires:  curl
+# Installer tests cover the shasum interface used by macOS.
+BuildRequires:  perl-Digest-SHA
 Requires:       coreutils
 
 %description
@@ -59,5 +62,9 @@ bin=%{buildroot}%{_bindir}
 %{_bindir}/fastmash-sort-supervisor
 
 %changelog
+* Sat Oct 24 2026 Peder Bergan - 0.2.0-1
+- Update to the 0.2.0 release
+- Add the installer test dependencies
+
 * Tue Oct 06 2026 Peder Bergan - 0.1.0-1
 - Initial source package
