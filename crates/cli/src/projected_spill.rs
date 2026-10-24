@@ -916,9 +916,9 @@ pub(super) fn spilled_memory() -> usize {
 pub(super) struct Sorter<S: Codec> {
     /// The memory the chunk may take.
     limit: usize,
-    /// Until it declines: given the memory of a full chunk and the records
-    /// before the next one, the memory the chunk may take instead of
-    /// spilling (`memory::grow`).
+    /// Until it declines: given the sort's granted memory, its set-aside
+    /// part and the records before the next one, the memory the sort may
+    /// take instead of spilling (`memory::grow`).
     grow: Option<super::memory::Growth>,
     /// The buffer of each run file (`run_buffer`).
     buffer: usize,

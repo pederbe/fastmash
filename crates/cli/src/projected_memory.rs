@@ -76,9 +76,9 @@ pub(super) fn target(setting: Option<&std::ffi::OsStr>) -> Result<Target, Failur
 /// from the chunk, and its records so far, the memory it may take next.
 pub(super) type Growth = fn(usize, usize, u64) -> Option<usize>;
 
-/// The memory a full chunk of `memory` bytes, holding the sort's first
-/// `records` records, may take next: from facts read now (`next`), or `None`
-/// to spill. `FASTMASH_SORT_TRACE` reports each decision on standard error.
+/// The memory a sort of `memory` bytes, `set_aside` of them outside its full
+/// chunk of the first `records` records, may take next: from facts read now
+/// (`next`), or `None` to spill. `FASTMASH_SORT_TRACE` reports each decision.
 pub(super) fn grow(memory: usize, set_aside: usize, records: u64) -> Option<usize> {
     let facts = Facts {
         input: regular_input().map(|(size, consumed)| Input {
@@ -183,8 +183,8 @@ fn gnu_buffer(input: Input) -> Option<u128> {
     Some(u128::from(input.size) + lines * bytes_per_line(input.threads))
 }
 
-/// The memory a full chunk of `memory` bytes takes next under `facts`, or
-/// why it stays: see the module's rule.
+/// The memory a sort of `memory` bytes with a full chunk takes next under
+/// `facts`, or why it stays: see the module's rule.
 pub(super) fn next(facts: &Facts, memory: u64) -> Result<u64, &'static str> {
     let start = START as u64;
     let below = memory < start;
