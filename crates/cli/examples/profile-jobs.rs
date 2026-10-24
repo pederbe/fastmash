@@ -15,7 +15,7 @@ struct Job {
     name: &'static str,
     args: &'static [&'static str],
     input: Vec<u8>,
-    stdout: &'static [u8],
+    stdout: Vec<u8>,
     stderr: &'static [u8],
     status: i32,
 }
@@ -27,7 +27,7 @@ fn jobs() -> Vec<Job> {
             name: "small",
             args: &["sum", "1"],
             input: b"1\n2\n3\n".to_vec(),
-            stdout: b"6\n",
+            stdout: b"6\n".to_vec(),
             stderr: b"",
             status: 0,
         },
@@ -35,7 +35,7 @@ fn jobs() -> Vec<Job> {
             name: "decimal",
             args: &["sum", "1"],
             input: b"0.125\n".repeat(10_000_000),
-            stdout: b"1250000\n",
+            stdout: b"1250000\n".to_vec(),
             stderr: b"",
             status: 0,
         },
@@ -43,7 +43,7 @@ fn jobs() -> Vec<Job> {
             name: "grouping",
             args: &["-s", "-g1", "sum", "2"],
             input: grouped.clone(),
-            stdout: b"a\t32\nb\t32\n",
+            stdout: b"a\t32\nb\t32\n".to_vec(),
             stderr: b"",
             status: 0,
         },
@@ -51,7 +51,7 @@ fn jobs() -> Vec<Job> {
             name: "spill",
             args: &["-s", "-g1", "sum", "2"],
             input: grouped,
-            stdout: b"a\t32\nb\t32\n",
+            stdout: b"a\t32\nb\t32\n".to_vec(),
             stderr: b"",
             status: 0,
         },
@@ -59,7 +59,7 @@ fn jobs() -> Vec<Job> {
             name: "error",
             args: &["sum", "0"],
             input: Vec::new(),
-            stdout: b"",
+            stdout: Vec::new(),
             stderr: b"fastmash: invalid field '0' for operation 'sum'\n",
             status: 1,
         },
@@ -67,7 +67,7 @@ fn jobs() -> Vec<Job> {
             name: "refusal",
             args: &["-s", "-g1", "sum", "1"],
             input: Vec::new(),
-            stdout: b"",
+            stdout: Vec::new(),
             stderr: b"fastmash: FASTMASH_GROUPING must be sort or hash\n",
             status: 77,
         },
@@ -90,11 +90,62 @@ fn jobs() -> Vec<Job> {
             name,
             args: &["--csv-in", "count", "2"],
             input: record.repeat(4096),
-            stdout: b"4096\n",
+            stdout: b"4096\n".to_vec(),
             stderr: b"",
             status: 0,
         });
     }
+    // The same complete Records distinguish decoding from chunk retention and
+    // selection. A tied rank retains only the first winner in both top jobs.
+    let payload = vec![b'x'; 1024];
+    let record = [b"a,1,\"".as_slice(), &payload, b"\"\n"].concat();
+    let winner = [b"a\t1\t".as_slice(), &payload, b"\n"].concat();
+    for (name, args, stdout) in [
+        (
+            "csv-copy",
+            &["--csv-in", "count", "2"][..],
+            b"4096\n".to_vec(),
+        ),
+        (
+            "csv-copy-sort",
+            &["--csv-in", "-s", "-g1", "count", "2"][..],
+            b"a\t4096\n".to_vec(),
+        ),
+        (
+            "csv-copy-spill",
+            &["--csv-in", "-s", "-g1", "count", "2"][..],
+            b"a\t4096\n".to_vec(),
+        ),
+        (
+            "csv-copy-top",
+            &["--csv-in", "top:1", "2"][..],
+            winner.clone(),
+        ),
+        (
+            "csv-copy-sort-top",
+            &["--csv-in", "-s", "-g1", "top:1", "2"][..],
+            winner,
+        ),
+    ] {
+        jobs.push(Job {
+            name,
+            args,
+            input: record.repeat(4096),
+            stdout,
+            stderr: b"",
+            status: 0,
+        });
+    }
+    jobs.push(Job {
+        name: "csv-copy-wide",
+        args: &["--csv-in", "count", "2"],
+        input: [b"\"x\",".repeat(128), b"1\n".to_vec()]
+            .concat()
+            .repeat(4096),
+        stdout: b"4096\n".to_vec(),
+        stderr: b"",
+        status: 0,
+    });
     jobs
 }
 
@@ -102,7 +153,7 @@ fn capture(root: &Path, binary: &Path, job: Job) -> Result<(), Box<dyn Error>> {
     let input = root.join(format!("{}.input", job.name));
     fs::write(&input, &job.input)?;
     let report = root.join(format!("{}.json", job.name));
-    let spill = job.name == "spill";
+    let spill = matches!(job.name, "spill" | "csv-copy-spill");
     let mut command = Command::new(binary);
     command
         .arg0("fastmash")
@@ -119,7 +170,11 @@ fn capture(root: &Path, binary: &Path, job: Job) -> Result<(), Box<dyn Error>> {
         )
         .env(
             "FASTMASH_SORT_MEMORY_BYTES",
-            if spill { "1" } else { "67108864" },
+            match job.name {
+                "spill" => "1",
+                "csv-copy-spill" => "65536",
+                _ => "67108864",
+            },
         )
         .args(job.args)
         .stdin(File::open(&input)?);
@@ -169,7 +224,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .filter(|job| selected.as_ref().is_none_or(|name| name == job.name))
         .collect();
     if jobs.is_empty() {
-        return Err("unknown job, use small, decimal, grouping, spill, error, refusal, csv-short, csv-long, csv-quoted or csv-escaped".into());
+        return Err("unknown job, use small, decimal, grouping, spill, error, refusal, csv-short, csv-long, csv-quoted, csv-escaped, csv-copy, csv-copy-sort, csv-copy-spill, csv-copy-top, csv-copy-sort-top or csv-copy-wide".into());
     }
     fs::create_dir(&destination)?;
     let root = fs::canonicalize(destination)?;
