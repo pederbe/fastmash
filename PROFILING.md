@@ -48,6 +48,36 @@ short fields, 1,024-byte fields, quoted fields with embedded CRLF, and escaped
 quotes with empty fields. Use their retained `.input` files with the Callgrind
 command below, replacing `sum 1` with `--csv-in count 2`.
 
+The CSV copying jobs isolate decoding, retention and selection over 4,096
+Records. The first five use the same input: `a,1,"PAYLOAD"`, with 1,024 `x`
+bytes in the quoted payload. Output uses the ordinary tab separator.
+
+| Job | Command | Expected output |
+| --- | --- | --- |
+| `csv-copy` | `--csv-in count 2` | `4096` |
+| `csv-copy-sort` | `--csv-in -s -g1 count 2` | `a` and `4096` |
+| `csv-copy-spill` | `--csv-in -s -g1 count 2` | `a` and `4096` |
+| `csv-copy-top` | `--csv-in top:1 2` | The first complete decoded Record |
+| `csv-copy-sort-top` | `--csv-in -s -g1 top:1 2` | The first complete decoded Record |
+| `csv-copy-wide` | `--csv-in count 2` | `4096` |
+
+`csv-copy-spill` sets `FASTMASH_SORT_MEMORY_BYTES=65536` and checks that a
+private run was opened. The other jobs use the runner's 64 MiB target. This
+forced Spill isolates run encoding and merge-head allocation costs. It does
+not represent ordinary sort-memory selection. `csv-copy-wide` has 128 quoted
+one-byte fields followed by `1`, exposing repeated small appends and field-end
+writes. The top jobs have tied ranks, so only the first Record wins. They
+isolate rejecting candidates from copying accepted candidates, rather than
+measuring a workload in which every Record replaces the winner.
+
+Build with `hotpath-alloc` and run a job twice in fresh destinations, once with
+the default allocation-byte metric and once with `HOTPATH_ALLOC_METRIC=count`.
+Allocation bytes include successive buffer growth. They are not a count of
+bytes copied, live memory or peak resident memory. Use the raw Callgrind call
+graph to distinguish copying inside decoding from copying into sort chunks.
+Keep per-Record helpers uninstrumented to avoid adding a measurement to every
+append.
+
 The example configures `HOTPATH_OUTPUT_PATH`, `HOTPATH_OUTPUT_FORMAT=json`, and
 `HOTPATH_METRICS_SERVER_OFF=1` on each child. No static capture starts a network
 listener. Without `HOTPATH_OUTPUT_PATH`, an instrumented binary runs without a
