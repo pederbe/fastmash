@@ -17,13 +17,14 @@
 //!   eighth of the total, with less than half the swap in use;
 //! - half of what is left of the address-space and data rlimits.
 //!
-//! Below `START`, a chunk asks for at least `START`. If that growth is
-//! refused, it still takes `START` unless the cgroup rule refuses that too,
-//! so a sort started beside others whose chunks have grown spills rather than
-//! overrunning their limit. A fact that cannot be read, or that contradicts
-//! another, keeps `START`. Once the chunk has spilled the sort keeps its
-//! memory. On macOS the Linux memory sources are absent, so the chunk spills
-//! at `START` rather than growing. This is a chunk target, not an input cap.
+//! A sort below `START`, counting its run buffers, asks for at least `START`.
+//! If that growth is refused, it still takes `START` unless the cgroup rule
+//! refuses that too, so a sort started beside others whose chunks have grown
+//! spills rather than overrunning their limit. A fact that cannot be read, or
+//! that contradicts another, keeps `START`. Once the chunk has spilled the
+//! sort keeps its memory. On macOS the Linux memory sources are absent, so the
+//! chunk spills at `START` rather than growing. This is a chunk target, not an
+//! input cap.
 use super::{Failure, unsupported};
 use std::{
     fs,
@@ -186,12 +187,9 @@ pub(super) fn next(facts: &Facts, memory: u64) -> Result<u64, &'static str> {
         within(facts, host, memory, target)
     });
     match grown {
-        // Below `START`, only a cgroup limit refuses the chunk `START` itself,
-        // when that is a real step: no other limit applied to a sort's first
-        // 64 MiB before.
-        Err(_) if below && start - memory >= start / 8 => {
-            within_cgroups(facts, memory, start).map(|()| start)
-        }
+        // Below `START`, only a cgroup limit refuses the chunk `START` itself:
+        // no other limit applied to a sort's first 64 MiB before.
+        Err(_) if below => within_cgroups(facts, memory, start).map(|()| start),
         grown => grown,
     }
 }
@@ -555,8 +553,9 @@ mod tests {
 
     #[test]
     fn a_file_grows_to_hold_the_rest_within_every_limit() {
-        let memory = 60 * MIB;
-        // 60 MiB for the first sixth: the whole file, with a tenth to spare.
+        // A sort that has taken `START` for the first sixth: the whole file,
+        // with a tenth to spare.
+        let memory = START as u64;
         let whole = u64::try_from(u128::from(memory) * 94_666_612 / 15_777_768).unwrap();
         let fits = whole + whole / 10;
         let file = Facts {
@@ -680,9 +679,9 @@ mod tests {
         for (name, facts, expected) in cases {
             assert_eq!(next(&facts, memory), expected, "{name}");
         }
-        // The benchmark method's 512 MiB limit: a 61 MiB chunk holding
+        // The benchmark method's 512 MiB limit: a sort at `START` holding
         // 900,000 of a file's two million records grows to hold the rest,
-        // about 148 MiB, as GNU `sort` (308 MB here) holds it.
+        // about 155 MiB, as GNU `sort` (308 MB here) holds it.
         let benchmark = |sorts, used| Facts {
             input: Some(Input {
                 size: 55_000_000,
@@ -697,7 +696,7 @@ mod tests {
             sorts,
             ..roomy()
         };
-        let chunk = 61 * MIB;
+        let chunk = START as u64;
         let whole = chunk * 55 / 25;
         assert_eq!(next(&benchmark(1, 70 * MIB), chunk), Ok(whole + whole / 10));
         // Four such sorts running together share the limit and spill instead.
@@ -782,7 +781,8 @@ mod tests {
             assert_eq!(next(&nested(input), memory), Err("cgroup memory limit"));
         }
         // Below `START`, only a cgroup limit refuses it: unreadable facts,
-        // host memory, swap and a file beyond GNU `sort`'s buffer do not.
+        // host memory, swap, rlimits and a file beyond GNU `sort`'s buffer
+        // do not.
         let refused_above_start = [
             Facts {
                 host: None,
@@ -815,7 +815,7 @@ mod tests {
             Facts {
                 address_space: Some(Headroom {
                     limit: 200 * MIB,
-                    used: 60 * MIB,
+                    used: 100 * MIB,
                 }),
                 ..roomy()
             },
@@ -825,8 +825,8 @@ mod tests {
             // Held input replayed beside the chunk can fill it past `FIRST`
             // first: it still takes `START`.
             assert_eq!(next(facts, 30 * MIB), Ok(start), "{facts:?}");
-            // A chunk that has taken `START` takes no small step beyond it.
-            assert!(next(facts, 62 * MIB).is_err(), "{facts:?}");
+            // A sort that has taken `START` takes no more when refused.
+            assert!(next(facts, start).is_err(), "{facts:?}");
         }
         // Piped input takes `START` rather than doubling its first chunk.
         assert_eq!(next(&roomy(), memory), Ok(start));

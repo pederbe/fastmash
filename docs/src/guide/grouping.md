@@ -84,8 +84,8 @@ chunk. When it fills, Fastmash holds the whole input in memory instead, if
 that fits: within the buffer GNU `sort` would use for an input file, a quarter
 of the available memory, half of what is free under any cgroup memory limit,
 a share of what is free under that limit or on the host (one per running
-Fastmash), and with less than half the swap in use. For piped input the
-chunk takes 64 MiB, then doubles each time it fills, within the same bounds.
+Fastmash), and with less than half the swap in use. For piped input it asks
+for 64 MiB, then twice its memory each time it fills, within the same bounds.
 Otherwise the first chunk takes 64 MiB unless a cgroup memory limit lacks
 room for it, and then the sort spills. In language locales the records are
 prepared for sorting on several threads, whose batches take a sixteenth of

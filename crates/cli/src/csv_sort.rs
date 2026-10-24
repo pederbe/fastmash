@@ -494,7 +494,7 @@ impl Sorting {
     pub(crate) fn new(options: &options::Options) -> Result<Self, Failure> {
         let target = memory::target(options.sort_memory.as_deref())?;
         let collator = options.locale.collator()?;
-        // The chunk grows from its first memory, and its run buffers with it.
+        // The chunk starts within its first memory and grows from there.
         let first = memory::Target {
             bytes: target.first,
             ..target

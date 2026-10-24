@@ -1051,9 +1051,10 @@ impl<S: Codec> Sorter<S> {
         if self.used() > self.memory() {
             return false;
         }
-        // A grown target, like the first, leaves the run buffers and the
-        // producer's share outside the chunk.
-        match grow(self.memory(), records).map(|memory| memory.saturating_sub(self.set_aside)) {
+        // The sort's memory and its grown target, like the first, include
+        // the run buffers and the producer's share set aside from the chunk.
+        let memory = self.memory().saturating_add(self.set_aside);
+        match grow(memory, records).map(|memory| memory.saturating_sub(self.set_aside)) {
             Some(limit) if limit > self.limit => {
                 self.limit = limit;
                 true
@@ -2771,10 +2772,8 @@ mod tests {
         assert_eq!(limits, [chunk_memory(start, 0), (16 << 20) - set_aside]);
         assert_eq!(spilled, 0);
         assert_eq!(calls.len(), 1);
-        assert!(
-            calls[0].0 <= chunk_memory(start, 0) && calls[0].1 > 1000,
-            "{calls:?}"
-        );
+        // The growth is asked with the sort's whole memory.
+        assert!(calls[0].0 <= start && calls[0].1 > 1000, "{calls:?}");
         // A growth is asked at every fill until the chunk holds the input.
         let (limits, spilled, calls) = sorted(Some(double), 0);
         assert!(
