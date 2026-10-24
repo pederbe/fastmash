@@ -1019,15 +1019,19 @@ impl<S: Codec> Sorter<S> {
         });
         self.memory().saturating_add(held)
     }
-    /// A sort of memory target `target`, whose chunk may grow when it fills
-    /// if the target allows (`memory::grow`), and whose records' producer
-    /// holds `share` bytes of it.
+    /// A sort of memory target `target`, whose chunk takes the target's first
+    /// memory and may grow when it fills if the target allows
+    /// (`memory::grow`), and whose records' producer holds `share` bytes of it.
     pub(super) fn with_target(target: super::memory::Target, share: usize) -> Self {
+        let sorter = Self::new(target.bytes, share);
         Self {
+            limit: sorter
+                .limit
+                .saturating_sub(target.bytes.saturating_sub(target.first)),
             grow: target
                 .grows
                 .then_some(super::memory::grow as fn(usize, u64) -> Option<usize>),
-            ..Self::new(target.bytes, share)
+            ..sorter
         }
     }
     /// Gives a full chunk the memory its growth allows, before the record

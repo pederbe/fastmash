@@ -494,15 +494,20 @@ impl Sorting {
     pub(crate) fn new(options: &options::Options) -> Result<Self, Failure> {
         let target = memory::target(options.sort_memory.as_deref())?;
         let collator = options.locale.collator()?;
+        // The chunk grows from its first memory; run buffers keep the target's.
+        let first = memory::Target {
+            bytes: target.first,
+            ..target
+        };
         Ok(Self {
             rows: if let Some(collator) = collator {
                 Rows::Language {
-                    packed: Packed::new(target),
+                    packed: Packed::new(first),
                     builder: KeyBuilder::default(),
                     collator,
                 }
             } else {
-                Rows::C(Packed::new(target))
+                Rows::C(Packed::new(first))
             },
             runs: runs::Runs::new(spill::run_buffer(target.bytes)),
         })

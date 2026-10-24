@@ -547,7 +547,7 @@ fn classify<O: CommandOutput>(
     let class_bytes = groups.group_bytes()
         + std::mem::size_of::<Representative>()
         + 4 * std::mem::size_of::<u64>();
-    let mut budget = target.bytes;
+    let mut budget = target.first;
     // The dense owner adds one Binding reference to the previous vector.
     let mut used = std::mem::size_of::<&OperationSet>();
     let mut table = Table::new();

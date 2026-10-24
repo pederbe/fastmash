@@ -79,13 +79,15 @@ is interrupted.
 A chunk holds each record's grouping keys and the fields its operations use
 (the whole record with `--full`, in language locales, or when the field
 separator is a letter, a digit or the decimal point, which a number could run
-on into) and 32 bytes per record for sorting. A sort starts with a 64 MiB
+on into) and 32 bytes per record for sorting. A sort starts with a 16 MiB
 chunk. When it fills, Fastmash holds the whole input in memory instead, if
 that fits: within the buffer GNU `sort` would use for an input file, a quarter
 of the available memory, half of what is free under any cgroup memory limit,
 a share of what is free under that limit or on the host (one per running
-Fastmash), and with less than half the swap in use. For piped input it doubles the chunk each time it
-fills, within the same bounds. Otherwise it spills. In language locales the
+Fastmash), and with less than half the swap in use. For piped input it doubles
+the chunk each time it fills, within the same bounds. Otherwise the first
+chunk grows to 64 MiB, unless a cgroup memory limit lacks room for it, and
+then the sort spills. In language locales the
 records are prepared for sorting on several threads, whose batches take a
 sixteenth of the first 64 MiB.
 
