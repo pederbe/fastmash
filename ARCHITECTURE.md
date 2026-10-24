@@ -268,10 +268,11 @@ flowchart TD
   running Fastmash of what is free under that limit after a reserve and of the
   host's available memory (so that sorts running together share them), and
   half of any address-space limit, and only while less than half the swap is
-  in use. A first chunk that cannot grow further takes 64 MiB unless the
-  cgroup rule refuses it, so a sort started beside others that have grown
-  spills rather than overrunning their limit. A fact that cannot be read keeps
-  the chunk at 64 MiB. `FASTMASH_SORT_MEMORY_BYTES` fixes the target instead.
+  in use. Below 64 MiB a chunk asks for at least 64 MiB, and if that growth
+  is refused it still takes 64 MiB unless a cgroup limit refuses that too, so
+  a sort started beside others that have grown spills rather than overrunning
+  their limit. A fact that cannot be read keeps the chunk at 64 MiB.
+  `FASTMASH_SORT_MEMORY_BYTES` fixes the target instead.
   The last chunk is read in place, without copying records; earlier chunks
   are spilled and merged with it.
 - **Spill** writes sorted runs to anonymous temporary files (`O_TMPFILE`, or

@@ -922,6 +922,9 @@ pub(super) struct Sorter<S: Codec> {
     grow: Option<fn(usize, u64) -> Option<usize>>,
     /// The buffer of each run file (`run_buffer`).
     buffer: usize,
+    /// The memory of the sort's target left to the run buffers and the
+    /// producer's share, outside the chunk.
+    set_aside: usize,
     arena: Vec<u8>,
     entries: Vec<Entry>,
     scratch: Vec<Entry>,
@@ -986,10 +989,12 @@ impl<S: Codec> Sorter<S> {
     /// A sort of memory target `target`, whose records' producer holds
     /// `share` bytes of it.
     pub(super) fn new(target: usize, share: usize) -> Self {
+        let limit = chunk_memory(target, share);
         Self {
-            limit: chunk_memory(target, share),
+            limit,
             grow: None,
             buffer: run_buffer(target),
+            set_aside: target.saturating_sub(limit),
             arena: Vec::new(),
             entries: Vec::new(),
             scratch: Vec::new(),
@@ -1019,15 +1024,14 @@ impl<S: Codec> Sorter<S> {
         });
         self.memory().saturating_add(held)
     }
-    /// A sort of memory target `target`, whose chunk takes the target's first
-    /// memory and may grow when it fills if the target allows
-    /// (`memory::grow`), and whose records' producer holds `share` bytes of it.
+    /// A sort of memory target `target`, whose chunk starts within the
+    /// target's first memory and may grow when it fills if the target allows
+    /// (`memory::grow`), and whose records' producer holds `share` bytes of
+    /// it. The run buffers and the share stay sized for the whole target.
     pub(super) fn with_target(target: super::memory::Target, share: usize) -> Self {
         let sorter = Self::new(target.bytes, share);
         Self {
-            limit: sorter
-                .limit
-                .saturating_sub(target.bytes.saturating_sub(target.first)),
+            limit: target.first.saturating_sub(sorter.set_aside),
             grow: target
                 .grows
                 .then_some(super::memory::grow as fn(usize, u64) -> Option<usize>),
@@ -1047,9 +1051,11 @@ impl<S: Codec> Sorter<S> {
         if self.used() > self.memory() {
             return false;
         }
-        match grow(self.memory(), records) {
-            Some(memory) if memory > self.limit => {
-                self.limit = memory;
+        // A grown target, like the first, leaves the run buffers and the
+        // producer's share outside the chunk.
+        match grow(self.memory(), records).map(|memory| memory.saturating_sub(self.set_aside)) {
+            Some(limit) if limit > self.limit => {
+                self.limit = limit;
                 true
             }
             _ => {
@@ -2758,9 +2764,11 @@ mod tests {
         assert_eq!(limits, [chunk_memory(start, 0)]);
         assert!(fixed > 10, "{fixed}");
         assert!(calls.is_empty());
-        // A full chunk takes the memory its growth gives, and holds the rest.
+        // A full chunk takes the memory its growth gives, less the run
+        // buffers set aside, and holds the rest.
         let (limits, spilled, calls) = sorted(Some(to_16_mib), 0);
-        assert_eq!(limits, [chunk_memory(start, 0), 16 << 20]);
+        let set_aside = start - chunk_memory(start, 0);
+        assert_eq!(limits, [chunk_memory(start, 0), (16 << 20) - set_aside]);
         assert_eq!(spilled, 0);
         assert_eq!(calls.len(), 1);
         assert!(
