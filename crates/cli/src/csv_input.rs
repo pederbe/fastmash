@@ -68,6 +68,7 @@ impl Record {
         self.view().fields()
     }
 
+    #[inline]
     fn append(&mut self, bytes: &[u8]) -> Result<(), Failure> {
         self.bytes
             .len()
