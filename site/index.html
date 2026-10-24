@@ -25,7 +25,7 @@
 <link rel="preload" href="fonts/source-code-pro-v11-all-charsets-500.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="landing.css">
 <noscript><link rel="stylesheet" href="landing-noscript.css"></noscript>
-<script src="landing.js" defer></script>
+<script src="landing.js"></script>
 <script type="application/ld+json">
 {
  "@context": "https://schema.org",
@@ -84,7 +84,8 @@
 
 <main id="main-content" tabindex="-1">
   <section class="hero">
-    <div class="hero-copy">
+    <div class="hero-art" aria-hidden="true"><div class="hero-glow" data-motion="breathe"></div></div>
+    <div class="hero-copy" data-reveal>
       <p class="eyebrow">Rust-powered statistics for text and CSV</p>
       <h1>Fast statistics.<br><span class="hero-accent">Smarter tables.</span></h1>
       <p class="lede">The datamash commands you already know, with quoted CSV, weighted means and complete-record selection. Inspect table health. Compare datasets. Get the same numbers on every supported machine.</p>
@@ -141,6 +142,7 @@
       </div>
     </div>
 
+    <div class="terminal-aura" data-reveal data-aura>
     <figure class="terminal" aria-label="Example: colored help and a quoted CSV summary with Fastmash">
       <div class="terminal-bar"><span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span><small>fastmash · terminal</small></div>
 <pre tabindex="0"><code><span class="prompt">$</span> fastmash --help
@@ -158,16 +160,17 @@ east,4
 <span class="prompt">$</span> <span class="cursor" aria-hidden="true"></span></code></pre>
       <figcaption>Readable help in color. Clean data for the next step in your pipeline.</figcaption>
     </figure>
+    </div>
   </section>
 
   <section class="workflows" aria-labelledby="workflows-title">
-    <div class="section-head">
+    <div class="section-head" data-reveal>
       <p class="eyebrow">From raw exports to useful answers</p>
       <h2 id="workflows-title">More of your workflow, in one command</h2>
       <p>Keep familiar field selectors and grouping. Add the tools that make daily table work easier.</p>
     </div>
     <div class="workflow-grid">
-      <article class="workflow-card">
+      <article class="workflow-card" data-reveal>
         <p class="workflow-index" aria-hidden="true">01 / REPORT</p>
         <h3>CSV in. Named results out.</h3>
         <p>Read quoted fields with commas and line breaks. Write CSV reports with stable column names, grouping and weighted means.</p>
@@ -176,7 +179,7 @@ east,4
   wmean price:units &lt; sales.csv</code></pre>
         <a href="guide/csv-and-result-names.html">CSV and result names</a>
       </article>
-      <article class="workflow-card">
+      <article class="workflow-card" data-reveal>
         <p class="workflow-index" aria-hidden="true">02 / INSPECT</p>
         <h3>Understand your table.</h3>
         <p>See widths, missing values and mixed types. Validate the rules you supply, or keep the highest and lowest complete records with stable ties.</p>
@@ -186,7 +189,7 @@ east,4
         <a href="guide/table-health.html">Table health</a>
         <a href="guide/top-n-records.html">Highest and lowest records</a>
       </article>
-      <article class="workflow-card">
+      <article class="workflow-card" data-reveal>
         <p class="workflow-index" aria-hidden="true">03 / COMPARE</p>
         <h3>See what changed.</h3>
         <p>Align summaries from two datasets, even when headers move. Rank absolute or percentage changes, with added and removed keys still visible.</p>
@@ -199,22 +202,22 @@ east,4
   </section>
 
   <section class="speed" aria-labelledby="speed-title">
-    <div class="section-head">
+    <div class="section-head" data-reveal>
       <h2 id="speed-title">4.2× on RefGene quartiles</h2>
       <p>Speed relative to GNU datamash 1.9 on selected core jobs. Two native Linux machines, the same data and output, exact release binaries.</p>
     </div>
-    <div class="chart" tabindex="0" role="region" aria-label="Benchmark chart">
+    <div class="chart" data-reveal tabindex="0" role="region" aria-label="Benchmark chart">
 <!-- chart -->
     </div>
-    <p class="fine-print" id="fine-print">* Six named host/job comparisons are slower: disk-spilling sorts, Intel many keys and Intel distinct-value geometric mean. Three further comparisons are inconclusive. <a href="benchmarks/index.html">All results and the method</a></p>
+    <p class="fine-print" id="fine-print" data-reveal>* Six named host/job comparisons are slower: disk-spilling sorts, Intel many keys and Intel distinct-value geometric mean. Three further comparisons are inconclusive. <a href="benchmarks/index.html">All results and the method</a></p>
   </section>
 
   <section class="better" aria-labelledby="better-title">
-    <div class="section-head">
+    <div class="section-head" data-reveal>
       <h2 id="better-title">And better in other ways</h2>
       <p>Portable arithmetic, built-in locale data and clear handling of inputs that GNU datamash 1.9 cannot safely process.</p>
     </div>
-    <div class="compare" role="table" aria-label="GNU datamash 1.9 compared with Fastmash">
+    <div class="compare" data-reveal role="table" aria-label="GNU datamash 1.9 compared with Fastmash">
       <div class="compare-row compare-head" role="row">
         <span role="columnheader"></span><span role="columnheader">GNU datamash 1.9</span><span role="columnheader">Fastmash</span>
       </div>
@@ -249,16 +252,16 @@ east,4
         <span class="fm" role="cell">Kept in full</span>
       </div>
     </div>
-    <p class="more"><a href="guide/differences.html">All differences from GNU datamash</a></p>
+    <p class="more" data-reveal><a href="guide/differences.html">All differences from GNU datamash</a></p>
   </section>
 
   <section class="switch" aria-labelledby="switch-title">
-    <div class="switch-copy">
+    <div class="switch-copy" data-reveal>
       <h2 id="switch-title">Keep the commands you know</h2>
       <p>GNU datamash's operations, options, field selectors, grouping and headers. Most scripts can switch by changing the program name; the migration guide covers the documented differences.</p>
       <a class="button accent-edge" href="guide/migrating.html">Migrating from datamash</a>
     </div>
-<pre tabindex="0" class="diff" aria-label="Replacing datamash with fastmash in a script"><code><span class="del">- datamash -t, -s -g 1 mean 3 sstdev 3 &lt; sales.csv</span>
+<pre tabindex="0" class="diff" data-reveal aria-label="Replacing datamash with fastmash in a script"><code><span class="del">- datamash -t, -s -g 1 mean 3 sstdev 3 &lt; sales.csv</span>
 <span class="add">+ fastmash -t, -s -g 1 mean 3 sstdev 3 &lt; sales.csv</span></code></pre>
   </section>
 </main>
@@ -270,5 +273,6 @@ east,4
     <span class="profiles"><a href="https://github.com/pederbe" rel="me">GitHub</a> · <a href="https://www.linkedin.com/in/pederbergan/" rel="me">LinkedIn</a> · <a href="https://bsky.app/profile/pederbe.dev" rel="me">Bluesky</a></span></p>
   <p class="sibling">Also by Peder: <a href="https://udpstp.com/">udpstp</a>, network capacity testing</p>
 </footer>
+<button id="motion-toggle" class="motion-toggle" type="button" hidden>Pause motion</button>
 </body>
 </html>

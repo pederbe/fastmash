@@ -29,6 +29,9 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Animate the website's landing page with scroll entrances, a breathing hero
+  glow and a pulsing terminal halo. Decorative motion runs only in view, a
+  button pauses it, and reduced-motion settings keep the page static.
 - Under a cgroup memory limit, let each built-in sort and hash grouping grow
   to half of what is free there, with growth shared among running Fastmash
   processes instead of one share per processor. Sorts and hash grouping now
