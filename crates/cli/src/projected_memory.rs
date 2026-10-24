@@ -1,26 +1,30 @@
 //! How much memory the in-process sort's chunk takes before it spills.
 //!
-//! `FASTMASH_SORT_MEMORY_BYTES` fixes it. Otherwise a sort starts at `START`,
-//! and each time its chunk fills it may take more (`grow`): for input from a
+//! `FASTMASH_SORT_MEMORY_BYTES` fixes it. Otherwise a sort's chunk takes
+//! `FIRST`, and each time it fills it may take more (`grow`): for input from a
 //! regular file, enough to hold the rest of the input (an estimate from the
 //! bytes read and the chunk's memory so far, with a tenth to spare) and at
 //! most the buffer GNU `sort` would fill for that file; for piped input,
 //! twice its memory. Either only when the memory it would take stays within
 //! every limit read at that moment:
 //!
-//! - at each cgroup level with a limit, a quarter of what is left under it,
-//!   and a growth of at most this job's share of it (per usable CPU) after a
-//!   reserve, so that as many jobs as CPUs, started together or one after
-//!   another, stay within the limit;
+//! - at each cgroup level with a limit, half of what is left under it, and a
+//!   growth of at most this job's share of it (per running fastmash) after a
+//!   reserve, so that sorts running together share the limit and later ones
+//!   still find room;
 //! - on the host, a quarter of the available memory, and a growth of at
 //!   most the share (per running fastmash) of what is available above an
 //!   eighth of the total, with less than half the swap in use;
 //! - half of what is left of the address-space and data rlimits.
 //!
+//! A sort below `START`, counting its run buffers and its producer's share,
+//! asks for at least `START`. If that growth is refused, it still takes
+//! `START` unless the cgroup rule refuses that too, so a sort started beside
+//! others whose chunks have grown spills rather than overrunning their limit.
 //! A fact that cannot be read, or that contradicts another, keeps `START`.
-//! Once the chunk has spilled the sort keeps its memory.
-//! On macOS the Linux memory sources are absent, so the chunk spills at the
-//! initial target rather than growing. This is a chunk target, not an input cap.
+//! Once the chunk has spilled the sort keeps its memory. On macOS the Linux
+//! memory sources are absent, so the chunk spills at `START` rather than
+//! growing. This is a chunk target, not an input cap.
 use super::{Failure, unsupported};
 use std::{
     fs,
@@ -29,23 +33,29 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-/// The memory a sort starts with.
+/// The memory a sort is sized for, which it takes once a cgroup memory limit
+/// leaves room for it.
 pub(super) const START: usize = 64 << 20;
 
-/// A sort's memory target: its bytes, and whether its chunk may grow
-/// (`grow`) when it fills.
+/// The memory a sort takes before its first decision (`grow`).
+pub(super) const FIRST: usize = 16 << 20;
+
+/// A sort's memory target: the bytes its buffers are sized for, the bytes its
+/// chunk takes before it first fills, and whether it may grow (`grow`) then.
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Target {
     pub(super) bytes: usize,
+    pub(super) first: usize,
     pub(super) grows: bool,
 }
 
 /// The memory target of a sort: `FASTMASH_SORT_MEMORY_BYTES` (`setting`), fixed, or
-/// `START`, grown as the chunk fills.
+/// `START`, taken from `FIRST` and grown as the chunk fills.
 pub(super) fn target(setting: Option<&std::ffi::OsStr>) -> Result<Target, Failure> {
     match setting {
         None => Ok(Target {
             bytes: START,
+            first: FIRST,
             grows: true,
         }),
         Some(value) => value
@@ -55,16 +65,21 @@ pub(super) fn target(setting: Option<&std::ffi::OsStr>) -> Result<Target, Failur
             .filter(|&n| n > 0)
             .map(|bytes| Target {
                 bytes,
+                first: bytes,
                 grows: false,
             })
             .ok_or_else(|| unsupported("FASTMASH_SORT_MEMORY_BYTES must be a positive byte count")),
     }
 }
 
-/// The memory a full chunk of `memory` bytes, holding the sort's first
-/// `records` records, may take next: from facts read now (`next`), or `None`
-/// to spill. `FASTMASH_SORT_TRACE` reports each decision on standard error.
-pub(super) fn grow(memory: usize, records: u64) -> Option<usize> {
+/// A sort's growth (`grow`): given its memory, the part of it set aside
+/// from the chunk, and its records so far, the memory it may take next.
+pub(super) type Growth = fn(usize, usize, u64) -> Option<usize>;
+
+/// The memory a sort of `memory` bytes, `set_aside` of them outside its full
+/// chunk of the first `records` records, may take next: from facts read now
+/// (`next`), or `None` to spill. `FASTMASH_SORT_TRACE` reports each decision.
+pub(super) fn grow(memory: usize, set_aside: usize, records: u64) -> Option<usize> {
     let facts = Facts {
         input: regular_input().map(|(size, consumed)| Input {
             size,
@@ -72,13 +87,13 @@ pub(super) fn grow(memory: usize, records: u64) -> Option<usize> {
             records,
             threads: fastmash_sort_process::sort_threads(),
         }),
-        cpus: std::thread::available_parallelism().map_or(1, |n| n.get() as u64),
         sorts: running_sorts(Path::new("/")),
+        set_aside: set_aside as u64,
         ..host(Path::new("/"))
     };
     let next = next(&facts, memory as u64);
     if std::env::var_os("FASTMASH_SORT_TRACE").is_some() {
-        let mib = |bytes: u64| bytes >> 20;
+        let mib = |bytes: u64| bytes.saturating_sub(set_aside as u64) >> 20;
         let message = match next {
             Ok(bytes) => format!(
                 "sort memory: chunk of {} MiB full after {records} records: grows to {} MiB\n",
@@ -138,10 +153,11 @@ pub(super) struct Facts {
     pub(super) data: Option<Headroom>,
     /// Whether the rlimits and their use could be read.
     pub(super) limits_read: bool,
-    /// The CPUs this process may use, and the fastmash processes running
-    /// (this one among them).
-    pub(super) cpus: u64,
+    /// The fastmash processes running (this one among them).
     pub(super) sorts: u64,
+    /// The part of a sort's memory set aside from its chunk, for run buffers
+    /// and its producer, which does not grow with the input.
+    pub(super) set_aside: u64,
 }
 
 /// GNU `sort`'s bytes per line besides the line's text on `threads`
@@ -167,52 +183,93 @@ fn gnu_buffer(input: Input) -> Option<u128> {
     Some(u128::from(input.size) + lines * bytes_per_line(input.threads))
 }
 
-/// The memory a full chunk of `memory` bytes takes next under `facts`, or
-/// why it stays: see the module's rule.
+/// The memory a sort of `memory` bytes with a full chunk takes next under
+/// `facts`, or why it stays: see the module's rule.
 pub(super) fn next(facts: &Facts, memory: u64) -> Result<u64, &'static str> {
+    let start = START as u64;
+    let below = memory < start;
+    let grown = readable(facts).and_then(|host| {
+        let target = wanted(facts, memory)?;
+        // Below `START`, a chunk asks for at least `START`.
+        let target = if below { target.max(start) } else { target };
+        within(facts, host, memory, target)
+    });
+    match grown {
+        // Below `START`, only a cgroup limit refuses the chunk `START` itself:
+        // no other limit applied to a sort's first 64 MiB before.
+        Err(_) if below => within_cgroups(facts, memory, start).map(|()| start),
+        grown => grown,
+    }
+}
+
+/// The host's memory, if every fact a growth depends on could be read.
+fn readable(facts: &Facts) -> Result<Host, &'static str> {
     let host = facts.host.ok_or("host memory unreadable")?;
-    let cgroups = facts.cgroups.as_ref().ok_or("cgroup memory unreadable")?;
+    facts.cgroups.as_ref().ok_or("cgroup memory unreadable")?;
     if !facts.limits_read {
         return Err("resource limits unreadable");
     }
-    let memory = u128::from(memory);
-    let target = match facts.input {
+    Ok(host)
+}
+
+/// The memory a sort of `memory` bytes would take when its chunk is full:
+/// for a file, enough for the rest of it within GNU `sort`'s buffer;
+/// otherwise twice the chunk. The set-aside part does not grow.
+fn wanted(facts: &Facts, memory: u64) -> Result<u64, &'static str> {
+    let set_aside = u128::from(facts.set_aside.min(memory));
+    let (memory, chunk) = (u128::from(memory), u128::from(memory) - set_aside);
+    let chunk_target = match facts.input {
         // The rest of the file, at the chunk's memory per byte so far.
         Some(input) if input.consumed > 0 && input.size > input.consumed => {
-            let whole = memory * u128::from(input.size) / u128::from(input.consumed);
+            let whole = chunk * u128::from(input.size) / u128::from(input.consumed);
             let target = whole + whole / 10;
             if gnu_buffer(input).is_none_or(|buffer| target > buffer) {
                 return Err("beyond GNU sort's buffer for the file");
             }
             target
         }
-        _ => memory * 2,
+        _ => chunk * 2,
     };
+    let target = chunk_target + set_aside;
     if target <= memory {
         return Err("no growth");
     }
-    let growth = target - memory;
+    u64::try_from(target).map_err(|_| "no growth")
+}
+
+/// `target` if a chunk of `memory` bytes may take it under the rlimits, the
+/// cgroup limits and the `host`'s memory.
+fn within(facts: &Facts, host: Host, memory: u64, target: u64) -> Result<u64, &'static str> {
     for limit in [facts.address_space, facts.data].into_iter().flatten() {
-        if target > u128::from(limit.limit.saturating_sub(limit.used)) / 2 {
+        if target > limit.limit.saturating_sub(limit.used) / 2 {
             return Err("resource limit");
         }
     }
-    let cpus = u128::from(facts.cpus.max(1));
-    for level in cgroups {
-        let left = u128::from(level.limit.saturating_sub(level.used));
-        let reserve = u128::from((level.limit / 8).max(128 << 20));
-        if growth > left.saturating_sub(reserve) / cpus || target > left / 4 {
-            return Err("cgroup memory limit");
-        }
-    }
-    let spare = u128::from(host.available.saturating_sub(host.total / 8));
-    if growth > spare / u128::from(facts.sorts.max(1)) || target > u128::from(host.available) / 4 {
+    within_cgroups(facts, memory, target)?;
+    let growth = target.saturating_sub(memory);
+    let spare = host.available.saturating_sub(host.total / 8);
+    if growth > spare / facts.sorts.max(1) || target > host.available / 4 {
         return Err("available memory");
     }
     if host.swap_total > 0 && host.swap_free < host.swap_total / 2 {
         return Err("swap in use");
     }
-    u64::try_from(target).map_err(|_| "no growth")
+    Ok(target)
+}
+
+/// Whether a chunk of `memory` bytes may take `target` under each cgroup
+/// limit: half of what is left, and a growth of at most this job's share of
+/// what is left after a reserve. Unreadable cgroups allow it.
+fn within_cgroups(facts: &Facts, memory: u64, target: u64) -> Result<(), &'static str> {
+    let growth = target.saturating_sub(memory);
+    for level in facts.cgroups.iter().flatten() {
+        let left = level.limit.saturating_sub(level.used);
+        let reserve = (level.limit / 8).max(128 << 20);
+        if growth > left.saturating_sub(reserve) / facts.sorts.max(1) || target > left / 2 {
+            return Err("cgroup memory limit");
+        }
+    }
+    Ok(())
 }
 
 /// The size of standard input when it is a regular file of positive size,
@@ -475,7 +532,7 @@ mod tests {
         }
     }
 
-    /// A 16 GiB host with 10 GiB available and no swap, no limits, 8 CPUs.
+    /// A 16 GiB host with 10 GiB available and no swap, no limits.
     fn roomy() -> Facts {
         Facts {
             input: None,
@@ -489,9 +546,27 @@ mod tests {
             address_space: None,
             data: None,
             limits_read: true,
-            cpus: 8,
             sorts: 1,
+            set_aside: 0,
         }
+    }
+
+    #[test]
+    fn a_set_aside_part_does_not_grow_with_the_input() {
+        let (start, set_aside) = (START as u64, 6 * MIB + MIB / 4);
+        let chunk = start - set_aside;
+        let file = Facts {
+            input: Some(six_million(8)),
+            set_aside,
+            ..roomy()
+        };
+        let whole = chunk * 94_666_612 / 15_777_768;
+        assert_eq!(next(&file, start), Ok(whole + whole / 10 + set_aside));
+        let piped = Facts {
+            set_aside,
+            ..roomy()
+        };
+        assert_eq!(next(&piped, start), Ok(2 * chunk + set_aside));
     }
 
     #[test]
@@ -508,8 +583,9 @@ mod tests {
 
     #[test]
     fn a_file_grows_to_hold_the_rest_within_every_limit() {
-        let memory = 60 * MIB;
-        // 60 MiB for the first sixth: the whole file, with a tenth to spare.
+        // A sort that has taken `START` for the first sixth: the whole file,
+        // with a tenth to spare.
+        let memory = START as u64;
         let whole = u64::try_from(u128::from(memory) * 94_666_612 / 15_777_768).unwrap();
         let fits = whole + whole / 10;
         let file = Facts {
@@ -517,7 +593,7 @@ mod tests {
             ..roomy()
         };
         assert_eq!(next(&file, memory), Ok(fits));
-        let cases: [(&str, Facts, Result<u64, &str>); 12] = [
+        let cases: [(&str, Facts, Result<u64, &str>); 11] = [
             (
                 "GNU sort holds less on one thread (383 MB)",
                 Facts {
@@ -538,29 +614,18 @@ mod tests {
                 Err("beyond GNU sort's buffer for the file"),
             ),
             (
-                "a quarter of the cgroup's headroom",
+                "half the cgroup's headroom",
                 Facts {
                     cgroups: Some(vec![Headroom {
                         limit: 2 * GIB,
-                        used: 600 * MIB,
+                        used: 1300 * MIB,
                     }]),
                     ..file.clone()
                 },
                 Err("cgroup memory limit"),
             ),
             (
-                "a cgroup with room for a CPU's share",
-                Facts {
-                    cgroups: Some(vec![Headroom {
-                        limit: 64 * GIB,
-                        used: GIB,
-                    }]),
-                    ..file.clone()
-                },
-                Ok(fits),
-            ),
-            (
-                "a share per CPU of a cgroup's headroom",
+                "a cgroup with room for the growth",
                 Facts {
                     cgroups: Some(vec![Headroom {
                         limit: 3 * GIB,
@@ -568,19 +633,19 @@ mod tests {
                     }]),
                     ..file.clone()
                 },
-                Err("cgroup memory limit"),
+                Ok(fits),
             ),
             (
-                "one CPU takes the whole share",
+                "a share per running fastmash of a cgroup's headroom",
                 Facts {
                     cgroups: Some(vec![Headroom {
                         limit: 3 * GIB,
                         used: 100 * MIB,
                     }]),
-                    cpus: 1,
+                    sorts: 8,
                     ..file.clone()
                 },
-                Ok(fits),
+                Err("cgroup memory limit"),
             ),
             (
                 "a quarter of available memory",
@@ -644,6 +709,31 @@ mod tests {
         for (name, facts, expected) in cases {
             assert_eq!(next(&facts, memory), expected, "{name}");
         }
+        // The benchmark method's 512 MiB limit: a sort at `START` holding
+        // 900,000 of a file's two million records grows to hold the rest,
+        // about 155 MiB, as GNU `sort` (308 MB here) holds it.
+        let benchmark = |sorts, used| Facts {
+            input: Some(Input {
+                size: 55_000_000,
+                consumed: 25_000_000,
+                records: 900_000,
+                threads: 8,
+            }),
+            cgroups: Some(vec![Headroom {
+                limit: 512 * MIB,
+                used,
+            }]),
+            sorts,
+            ..roomy()
+        };
+        let chunk = START as u64;
+        let whole = chunk * 55 / 25;
+        assert_eq!(next(&benchmark(1, 70 * MIB), chunk), Ok(whole + whole / 10));
+        // Four such sorts running together share the limit and spill instead.
+        assert_eq!(
+            next(&benchmark(4, 280 * MIB), chunk),
+            Err("cgroup memory limit")
+        );
         // Piped input doubles, within the same limits.
         assert_eq!(next(&roomy(), memory), Ok(2 * memory));
         let small = Facts {
@@ -664,6 +754,112 @@ mod tests {
             ),
             Err("host memory unreadable")
         );
+    }
+
+    #[test]
+    fn a_first_chunk_takes_start_where_cgroups_leave_room() {
+        let start = START as u64;
+        let memory = 15 * MIB;
+        // A file's two million records under the benchmark method's 512 MiB
+        // limit, with 220,000 of them in the first chunk.
+        let first = |sorts, used| Facts {
+            input: Some(Input {
+                size: 55_000_000,
+                consumed: 6_000_000,
+                records: 220_000,
+                threads: 8,
+            }),
+            cgroups: Some(vec![Headroom {
+                limit: 512 * MIB,
+                used,
+            }]),
+            sorts,
+            ..roomy()
+        };
+        let whole = memory * 55 / 6;
+        // Alone, the sort takes the whole file at once.
+        assert_eq!(next(&first(1, 20 * MIB), memory), Ok(whole + whole / 10));
+        // Beside one that holds its whole file, a second takes `START`, and a
+        // third spills from its first chunk: the limit keeps their room.
+        assert_eq!(next(&first(2, 185 * MIB), memory), Ok(start));
+        assert_eq!(
+            next(&first(3, 255 * MIB), memory),
+            Err("cgroup memory limit")
+        );
+        // Eight started together all spill from their first chunks.
+        assert_eq!(
+            next(&first(8, 160 * MIB), memory),
+            Err("cgroup memory limit")
+        );
+        // Every limited level counts: a roomy service inside a full parent,
+        // with piped input as well as a file.
+        let nested = |input| Facts {
+            input,
+            cgroups: Some(vec![
+                Headroom {
+                    limit: 512 * MIB,
+                    used: 400 * MIB,
+                },
+                Headroom {
+                    limit: 4 * GIB,
+                    used: 20 * MIB,
+                },
+            ]),
+            ..roomy()
+        };
+        for input in [None, first(1, 0).input] {
+            assert_eq!(next(&nested(input), memory), Err("cgroup memory limit"));
+        }
+        // Below `START`, only a cgroup limit refuses it: unreadable facts,
+        // host memory, swap, rlimits and a file beyond GNU `sort`'s buffer
+        // do not.
+        let refused_above_start = [
+            Facts {
+                host: None,
+                cgroups: None,
+                limits_read: false,
+                ..roomy()
+            },
+            Facts {
+                host: Some(Host {
+                    available: 200 * MIB,
+                    ..roomy().host.unwrap()
+                }),
+                ..roomy()
+            },
+            Facts {
+                host: Some(Host {
+                    swap_total: 8 * GIB,
+                    swap_free: GIB,
+                    ..roomy().host.unwrap()
+                }),
+                ..roomy()
+            },
+            Facts {
+                input: Some(Input {
+                    records: 10_000,
+                    ..first(1, 20 * MIB).input.unwrap()
+                }),
+                ..roomy()
+            },
+            Facts {
+                address_space: Some(Headroom {
+                    limit: 200 * MIB,
+                    used: 100 * MIB,
+                }),
+                ..roomy()
+            },
+        ];
+        for facts in &refused_above_start {
+            assert_eq!(next(facts, memory), Ok(start), "{facts:?}");
+            // Held input replayed beside the chunk can fill it past `FIRST`
+            // first: it still takes `START`.
+            assert_eq!(next(facts, 30 * MIB), Ok(start), "{facts:?}");
+            // A sort that has taken `START` takes no more when refused.
+            assert!(next(facts, start).is_err(), "{facts:?}");
+        }
+        // Piped input takes `START` rather than doubling its first chunk.
+        assert_eq!(next(&roomy(), memory), Ok(start));
     }
 
     impl Root {

@@ -224,7 +224,7 @@ impl<K: ChunkKeys> Packed<K> {
             let next = self
                 .target
                 .grows
-                .then(|| memory::grow(self.target.bytes, self.entries.len() as u64))
+                .then(|| memory::grow(self.target.bytes, 0, self.entries.len() as u64))
                 .flatten()
                 .filter(|&bytes| bytes > self.target.bytes);
             let Some(bytes) = next else {
@@ -494,15 +494,20 @@ impl Sorting {
     pub(crate) fn new(options: &options::Options) -> Result<Self, Failure> {
         let target = memory::target(options.sort_memory.as_deref())?;
         let collator = options.locale.collator()?;
+        // The chunk starts within its first memory and grows from there.
+        let first = memory::Target {
+            bytes: target.first,
+            ..target
+        };
         Ok(Self {
             rows: if let Some(collator) = collator {
                 Rows::Language {
-                    packed: Packed::new(target),
+                    packed: Packed::new(first),
                     builder: KeyBuilder::default(),
                     collator,
                 }
             } else {
-                Rows::C(Packed::new(target))
+                Rows::C(Packed::new(first))
             },
             runs: runs::Runs::new(spill::run_buffer(target.bytes)),
         })
