@@ -821,7 +821,7 @@ fn within(budget: &mut usize, used: usize, target: memory::Target, records: u64)
     while used > *budget {
         match target
             .grows
-            .then(|| memory::grow(*budget, records))
+            .then(|| memory::grow(*budget, 0, records))
             .flatten()
         {
             Some(grown) if grown > *budget => *budget = grown,

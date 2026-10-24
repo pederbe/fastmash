@@ -919,7 +919,7 @@ pub(super) struct Sorter<S: Codec> {
     /// Until it declines: given the memory of a full chunk and the records
     /// before the next one, the memory the chunk may take instead of
     /// spilling (`memory::grow`).
-    grow: Option<fn(usize, u64) -> Option<usize>>,
+    grow: Option<super::memory::Growth>,
     /// The buffer of each run file (`run_buffer`).
     buffer: usize,
     /// The memory of the sort's target left to the run buffers and the
@@ -1034,7 +1034,7 @@ impl<S: Codec> Sorter<S> {
             limit: target.first.saturating_sub(sorter.set_aside),
             grow: target
                 .grows
-                .then_some(super::memory::grow as fn(usize, u64) -> Option<usize>),
+                .then_some(super::memory::grow as super::memory::Growth),
             ..sorter
         }
     }
@@ -1051,10 +1051,13 @@ impl<S: Codec> Sorter<S> {
         if self.used() > self.memory() {
             return false;
         }
-        // The sort's memory and its grown target, like the first, include
-        // the run buffers and the producer's share set aside from the chunk.
-        let memory = self.memory().saturating_add(self.set_aside);
-        match grow(memory, records).map(|memory| memory.saturating_sub(self.set_aside)) {
+        // The sort's granted memory and its grown target, like the first,
+        // include the run buffers and the producer's share set aside from the
+        // chunk.
+        let memory = self.limit.saturating_add(self.set_aside);
+        match grow(memory, self.set_aside, records)
+            .map(|memory| memory.saturating_sub(self.set_aside))
+        {
             Some(limit) if limit > self.limit => {
                 self.limit = limit;
                 true
@@ -2705,15 +2708,15 @@ mod tests {
         static GROWTH_CALLS: std::cell::RefCell<Vec<(usize, u64)>> =
             const { std::cell::RefCell::new(Vec::new()) };
     }
-    fn to_16_mib(memory: usize, records: u64) -> Option<usize> {
+    fn to_16_mib(memory: usize, _set_aside: usize, records: u64) -> Option<usize> {
         GROWTH_CALLS.with(|calls| calls.borrow_mut().push((memory, records)));
         Some(16 << 20)
     }
-    fn double(memory: usize, records: u64) -> Option<usize> {
+    fn double(memory: usize, _set_aside: usize, records: u64) -> Option<usize> {
         GROWTH_CALLS.with(|calls| calls.borrow_mut().push((memory, records)));
         Some(memory * 2)
     }
-    fn decline(memory: usize, records: u64) -> Option<usize> {
+    fn decline(memory: usize, _set_aside: usize, records: u64) -> Option<usize> {
         GROWTH_CALLS.with(|calls| calls.borrow_mut().push((memory, records)));
         None
     }
@@ -2729,7 +2732,7 @@ mod tests {
         let rows = short_rows(60000);
         let expected = job.reference::<Packed>(&rows);
         let start = 1 << 16;
-        let sorted = |grow: Option<fn(usize, u64) -> Option<usize>>, failures: usize| {
+        let sorted = |grow: Option<super::super::memory::Growth>, failures: usize| {
             SPILLED_CHUNKS.with(|count| count.set(0));
             GROWTH_CALLS.with(|calls| calls.borrow_mut().clear());
             let mut sorter = Sorter::<Packed>::new(start, 0);
@@ -2772,8 +2775,8 @@ mod tests {
         assert_eq!(limits, [chunk_memory(start, 0), (16 << 20) - set_aside]);
         assert_eq!(spilled, 0);
         assert_eq!(calls.len(), 1);
-        // The growth is asked with the sort's whole memory.
-        assert!(calls[0].0 <= start && calls[0].1 > 1000, "{calls:?}");
+        // The growth is asked with the sort's whole granted memory.
+        assert!(calls[0].0 == start && calls[0].1 > 1000, "{calls:?}");
         // A growth is asked at every fill until the chunk holds the input.
         let (limits, spilled, calls) = sorted(Some(double), 0);
         assert!(

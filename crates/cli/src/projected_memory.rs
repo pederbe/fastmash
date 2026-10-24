@@ -17,14 +17,14 @@
 //!   eighth of the total, with less than half the swap in use;
 //! - half of what is left of the address-space and data rlimits.
 //!
-//! A sort below `START`, counting its run buffers, asks for at least `START`.
-//! If that growth is refused, it still takes `START` unless the cgroup rule
-//! refuses that too, so a sort started beside others whose chunks have grown
-//! spills rather than overrunning their limit. A fact that cannot be read, or
-//! that contradicts another, keeps `START`. Once the chunk has spilled the
-//! sort keeps its memory. On macOS the Linux memory sources are absent, so the
-//! chunk spills at `START` rather than growing. This is a chunk target, not an
-//! input cap.
+//! A sort below `START`, counting its run buffers and its producer's share,
+//! asks for at least `START`. If that growth is refused, it still takes
+//! `START` unless the cgroup rule refuses that too, so a sort started beside
+//! others whose chunks have grown spills rather than overrunning their limit.
+//! A fact that cannot be read, or that contradicts another, keeps `START`.
+//! Once the chunk has spilled the sort keeps its memory. On macOS the Linux
+//! memory sources are absent, so the chunk spills at `START` rather than
+//! growing. This is a chunk target, not an input cap.
 use super::{Failure, unsupported};
 use std::{
     fs,
@@ -72,10 +72,14 @@ pub(super) fn target(setting: Option<&std::ffi::OsStr>) -> Result<Target, Failur
     }
 }
 
+/// A sort's growth (`grow`): given its memory, the part of it set aside
+/// from the chunk, and its records so far, the memory it may take next.
+pub(super) type Growth = fn(usize, usize, u64) -> Option<usize>;
+
 /// The memory a full chunk of `memory` bytes, holding the sort's first
 /// `records` records, may take next: from facts read now (`next`), or `None`
 /// to spill. `FASTMASH_SORT_TRACE` reports each decision on standard error.
-pub(super) fn grow(memory: usize, records: u64) -> Option<usize> {
+pub(super) fn grow(memory: usize, set_aside: usize, records: u64) -> Option<usize> {
     let facts = Facts {
         input: regular_input().map(|(size, consumed)| Input {
             size,
@@ -84,11 +88,12 @@ pub(super) fn grow(memory: usize, records: u64) -> Option<usize> {
             threads: fastmash_sort_process::sort_threads(),
         }),
         sorts: running_sorts(Path::new("/")),
+        set_aside: set_aside as u64,
         ..host(Path::new("/"))
     };
     let next = next(&facts, memory as u64);
     if std::env::var_os("FASTMASH_SORT_TRACE").is_some() {
-        let mib = |bytes: u64| bytes >> 20;
+        let mib = |bytes: u64| bytes.saturating_sub(set_aside as u64) >> 20;
         let message = match next {
             Ok(bytes) => format!(
                 "sort memory: chunk of {} MiB full after {records} records: grows to {} MiB\n",
@@ -150,6 +155,9 @@ pub(super) struct Facts {
     pub(super) limits_read: bool,
     /// The fastmash processes running (this one among them).
     pub(super) sorts: u64,
+    /// The part of a sort's memory set aside from its chunk, for run buffers
+    /// and its producer, which does not grow with the input.
+    pub(super) set_aside: u64,
 }
 
 /// GNU `sort`'s bytes per line besides the line's text on `threads`
@@ -204,22 +212,25 @@ fn readable(facts: &Facts) -> Result<Host, &'static str> {
     Ok(host)
 }
 
-/// The memory a full chunk of `memory` bytes would take: for a file, enough
-/// for the rest of it within GNU `sort`'s buffer; otherwise twice as much.
+/// The memory a sort of `memory` bytes would take when its chunk is full:
+/// for a file, enough for the rest of it within GNU `sort`'s buffer;
+/// otherwise twice the chunk. The set-aside part does not grow.
 fn wanted(facts: &Facts, memory: u64) -> Result<u64, &'static str> {
-    let memory = u128::from(memory);
-    let target = match facts.input {
+    let set_aside = u128::from(facts.set_aside.min(memory));
+    let (memory, chunk) = (u128::from(memory), u128::from(memory) - set_aside);
+    let chunk_target = match facts.input {
         // The rest of the file, at the chunk's memory per byte so far.
         Some(input) if input.consumed > 0 && input.size > input.consumed => {
-            let whole = memory * u128::from(input.size) / u128::from(input.consumed);
+            let whole = chunk * u128::from(input.size) / u128::from(input.consumed);
             let target = whole + whole / 10;
             if gnu_buffer(input).is_none_or(|buffer| target > buffer) {
                 return Err("beyond GNU sort's buffer for the file");
             }
             target
         }
-        _ => memory * 2,
+        _ => chunk * 2,
     };
+    let target = chunk_target + set_aside;
     if target <= memory {
         return Err("no growth");
     }
@@ -536,7 +547,26 @@ mod tests {
             data: None,
             limits_read: true,
             sorts: 1,
+            set_aside: 0,
         }
+    }
+
+    #[test]
+    fn a_set_aside_part_does_not_grow_with_the_input() {
+        let (start, set_aside) = (START as u64, 6 * MIB + MIB / 4);
+        let chunk = start - set_aside;
+        let file = Facts {
+            input: Some(six_million(8)),
+            set_aside,
+            ..roomy()
+        };
+        let whole = chunk * 94_666_612 / 15_777_768;
+        assert_eq!(next(&file, start), Ok(whole + whole / 10 + set_aside));
+        let piped = Facts {
+            set_aside,
+            ..roomy()
+        };
+        assert_eq!(next(&piped, start), Ok(2 * chunk + set_aside));
     }
 
     #[test]

@@ -224,7 +224,7 @@ impl<K: ChunkKeys> Packed<K> {
             let next = self
                 .target
                 .grows
-                .then(|| memory::grow(self.target.bytes, self.entries.len() as u64))
+                .then(|| memory::grow(self.target.bytes, 0, self.entries.len() as u64))
                 .flatten()
                 .filter(|&bytes| bytes > self.target.bytes);
             let Some(bytes) = next else {
