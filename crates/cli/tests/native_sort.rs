@@ -263,6 +263,55 @@ fn native_merge_pipe_preserves_numerics_seeded_draws_headers_and_full_records() 
 
 #[test]
 #[cfg(target_os = "linux")]
+fn native_merge_pipe_keeps_blank_fields_from_reading_on_to_later_numbers() {
+    let fixture = Fixture::new("native-merge-pipe-blanks");
+    // Read with its record, a blank selected field reaches the unselected text
+    // after it. The pipe's rebuilt record must give the same diagnostic.
+    let mut input = b"id\tkey\tx\tnote\ty\n".to_vec();
+    input.extend_from_slice(b"ignored\tz\t");
+    input.extend(std::iter::repeat_n(b' ', 600));
+    input.extend_from_slice(b"\tnote\t5\n");
+    for _ in 0..800_000 {
+        input.extend_from_slice(b"ignored\tz\t3\tnote\t4\n");
+    }
+    let args = ["-H", "-s", "-g2", "sum", "3", "sum", "5"];
+    for file in [false, true] {
+        let invoke = |limit| {
+            let mut command = fixture.command(&args, "33554432");
+            command
+                .env("FASTMASH_SORT_TRACE", "1")
+                .env("OMP_NUM_THREADS", "2")
+                .env("OMP_THREAD_LIMIT", limit);
+            fixture.invoke(&mut command, &input, file)
+        };
+        let serial = invoke("1");
+        let piped = invoke("2");
+        assert_eq!(serial.status.code(), Some(1), "{serial:?}");
+        assert_eq!(piped.status.code(), Some(1), "{piped:?}");
+        assert_eq!(piped.stdout, serial.stdout);
+        let diagnostics = |output: &Output| {
+            output
+                .stderr
+                .split(|&byte| byte == b'\n')
+                .filter(|line| !line.starts_with(b"sort "))
+                .map(<[u8]>::to_vec)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(diagnostics(&piped), diagnostics(&serial));
+        assert!(
+            String::from_utf8_lossy(&serial.stderr).contains("invalid numeric value"),
+            "{serial:?}"
+        );
+        assert!(
+            String::from_utf8_lossy(&piped.stderr)
+                .contains("sort calculation: native merge pipe\n")
+        );
+        fixture.clean();
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn native_merge_pipe_keeps_diagnostics_and_joins_after_calculation_failure() {
     let fixture = Fixture::new("native-merge-pipe-errors");
     for (bad, first) in [
