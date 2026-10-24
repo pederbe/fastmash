@@ -136,10 +136,13 @@ document.querySelectorAll('button[data-copy]').forEach(function (button) {
   }, { rootMargin: '0px 0px -64px 0px', threshold: 0.05 });
   effects.forEach(function (_, element) { observer.observe(element); });
   revealTargets.forEach(function (element) { entranceObserver.observe(element); });
-  // Keyboard focus never waits for an entrance.
+  // Keyboard focus never waits for an entrance. A running entrance finishes only
+  // for keyboard focus, so a mouse press does not move its target mid-click.
   document.addEventListener('focusin', function (event) {
     revealTargets.forEach(function (element) {
-      if (!element.hasAttribute('data-revealed') && element.contains(event.target)) finishEntrance(element);
+      if (!element.contains(event.target)) return;
+      if (!element.hasAttribute('data-revealed') ||
+          (entrances.has(element) && event.target.matches(':focus-visible'))) finishEntrance(element);
     });
   });
   button.addEventListener('click', function () { requested = !requested; update(); });

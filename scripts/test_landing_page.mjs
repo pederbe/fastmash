@@ -262,3 +262,16 @@ test('keyboard focus shows content without waiting for its entrance', async () =
       getComputedStyle(element).opacity, element.getAnimations().length]), [true, '1', 0]);
   } finally { await page.close(); }
 });
+
+test('keyboard focus finishes an entrance that is already under way', async () => {
+  const page = await browser.newPage();
+  try {
+    await page.setViewport(desktop);
+    await page.goto(origin, { waitUntil: 'load' });
+    await page.$eval('.better', element => element.scrollIntoView({ block: 'center' }));
+    await page.waitForFunction(() => document.querySelector('.better .more').getAnimations().length > 0);
+    await page.focus('.better .more a');
+    assert.deepEqual(await page.$eval('.better .more', element =>
+      [getComputedStyle(element).opacity, element.getAnimations().length]), ['1', 0]);
+  } finally { await page.close(); }
+});
