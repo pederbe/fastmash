@@ -29,6 +29,9 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Animate the website's landing page with scroll entrances, a breathing hero
+  glow and a pulsing terminal halo. Decorative motion runs only in view, a
+  button pauses it, and reduced-motion settings keep the page static.
 - Reduce decoding work for long quoted CSV fields while preserving strict
   validation and original error locations.
 - Speed up plain-number conversion in CSV calculations and reduce sorting work
