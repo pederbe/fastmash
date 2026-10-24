@@ -8,10 +8,10 @@
 //! twice its memory. Either only when the memory it would take stays within
 //! every limit read at that moment:
 //!
-//! - at each cgroup level with a limit, a quarter of what is left under it,
-//!   and a growth of at most this job's share of it (per usable CPU) after a
-//!   reserve, so that as many jobs as CPUs, started together or one after
-//!   another, stay within the limit;
+//! - at each cgroup level with a limit, half of what is left under it, and a
+//!   growth of at most this job's share of it (per running fastmash) after a
+//!   reserve, so that sorts running together share the limit and later ones
+//!   still find room;
 //! - on the host, a quarter of the available memory, and a growth of at
 //!   most the share (per running fastmash) of what is available above an
 //!   eighth of the total, with less than half the swap in use;
@@ -72,7 +72,6 @@ pub(super) fn grow(memory: usize, records: u64) -> Option<usize> {
             records,
             threads: fastmash_sort_process::sort_threads(),
         }),
-        cpus: std::thread::available_parallelism().map_or(1, |n| n.get() as u64),
         sorts: running_sorts(Path::new("/")),
         ..host(Path::new("/"))
     };
@@ -138,9 +137,7 @@ pub(super) struct Facts {
     pub(super) data: Option<Headroom>,
     /// Whether the rlimits and their use could be read.
     pub(super) limits_read: bool,
-    /// The CPUs this process may use, and the fastmash processes running
-    /// (this one among them).
-    pub(super) cpus: u64,
+    /// The fastmash processes running (this one among them).
     pub(super) sorts: u64,
 }
 
@@ -197,16 +194,16 @@ pub(super) fn next(facts: &Facts, memory: u64) -> Result<u64, &'static str> {
             return Err("resource limit");
         }
     }
-    let cpus = u128::from(facts.cpus.max(1));
+    let sorts = u128::from(facts.sorts.max(1));
     for level in cgroups {
         let left = u128::from(level.limit.saturating_sub(level.used));
         let reserve = u128::from((level.limit / 8).max(128 << 20));
-        if growth > left.saturating_sub(reserve) / cpus || target > left / 4 {
+        if growth > left.saturating_sub(reserve) / sorts || target > left / 2 {
             return Err("cgroup memory limit");
         }
     }
     let spare = u128::from(host.available.saturating_sub(host.total / 8));
-    if growth > spare / u128::from(facts.sorts.max(1)) || target > u128::from(host.available) / 4 {
+    if growth > spare / sorts || target > u128::from(host.available) / 4 {
         return Err("available memory");
     }
     if host.swap_total > 0 && host.swap_free < host.swap_total / 2 {
@@ -489,7 +486,6 @@ mod tests {
             address_space: None,
             data: None,
             limits_read: true,
-            cpus: 8,
             sorts: 1,
         }
     }
@@ -517,7 +513,7 @@ mod tests {
             ..roomy()
         };
         assert_eq!(next(&file, memory), Ok(fits));
-        let cases: [(&str, Facts, Result<u64, &str>); 12] = [
+        let cases: [(&str, Facts, Result<u64, &str>); 11] = [
             (
                 "GNU sort holds less on one thread (383 MB)",
                 Facts {
@@ -538,29 +534,18 @@ mod tests {
                 Err("beyond GNU sort's buffer for the file"),
             ),
             (
-                "a quarter of the cgroup's headroom",
+                "half the cgroup's headroom",
                 Facts {
                     cgroups: Some(vec![Headroom {
                         limit: 2 * GIB,
-                        used: 600 * MIB,
+                        used: 1300 * MIB,
                     }]),
                     ..file.clone()
                 },
                 Err("cgroup memory limit"),
             ),
             (
-                "a cgroup with room for a CPU's share",
-                Facts {
-                    cgroups: Some(vec![Headroom {
-                        limit: 64 * GIB,
-                        used: GIB,
-                    }]),
-                    ..file.clone()
-                },
-                Ok(fits),
-            ),
-            (
-                "a share per CPU of a cgroup's headroom",
+                "a cgroup with room for the growth",
                 Facts {
                     cgroups: Some(vec![Headroom {
                         limit: 3 * GIB,
@@ -568,19 +553,19 @@ mod tests {
                     }]),
                     ..file.clone()
                 },
-                Err("cgroup memory limit"),
+                Ok(fits),
             ),
             (
-                "one CPU takes the whole share",
+                "a share per running sort of a cgroup's headroom",
                 Facts {
                     cgroups: Some(vec![Headroom {
                         limit: 3 * GIB,
                         used: 100 * MIB,
                     }]),
-                    cpus: 1,
+                    sorts: 8,
                     ..file.clone()
                 },
-                Ok(fits),
+                Err("cgroup memory limit"),
             ),
             (
                 "a quarter of available memory",
@@ -644,6 +629,28 @@ mod tests {
         for (name, facts, expected) in cases {
             assert_eq!(next(&facts, memory), expected, "{name}");
         }
+        // The benchmark method's 512 MiB limit on a 16-CPU host: a 61 MiB
+        // chunk holding 900,000 of a file's two million records grows to hold
+        // the rest, about 148 MiB, as GNU `sort` (308 MB here) holds it.
+        let benchmark = |sorts| Facts {
+            input: Some(Input {
+                size: 55_000_000,
+                consumed: 25_000_000,
+                records: 900_000,
+                threads: 8,
+            }),
+            cgroups: Some(vec![Headroom {
+                limit: 512 * MIB,
+                used: 70 * MIB,
+            }]),
+            sorts,
+            ..roomy()
+        };
+        let chunk = 61 * MIB;
+        let whole = chunk * 55 / 25;
+        assert_eq!(next(&benchmark(1), chunk), Ok(whole + whole / 10));
+        // Four sorts running together share the limit and spill instead.
+        assert_eq!(next(&benchmark(4), chunk), Err("cgroup memory limit"));
         // Piped input doubles, within the same limits.
         assert_eq!(next(&roomy(), memory), Ok(2 * memory));
         let small = Facts {

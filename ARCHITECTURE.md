@@ -263,11 +263,11 @@ flowchart TD
   spilling: to hold the whole input of a regular file (an estimate from the
   bytes read so far, at most the buffer GNU `sort` would use for the file), or
   to twice its size for piped input, when the memory read at that moment
-  allows it. The chunk may take at most a quarter of the available memory, a
-  share per processor of what is free under each cgroup memory limit (so that
-  as many jobs as processors fit together), a share per running Fastmash of
-  the host's available memory, and half of any address-space limit, and only
-  while less than half the swap is in use. A fact that cannot be read keeps
+  allows it. The chunk may take at most a quarter of the available memory,
+  half of what is free under each cgroup memory limit, a share per running
+  Fastmash of what is free under that limit after a reserve and of the host's
+  available memory (so that sorts running together share them), and half of
+  any address-space limit, and only while less than half the swap is in use. A fact that cannot be read keeps
   the chunk as it is. `FASTMASH_SORT_MEMORY_BYTES` fixes the target instead.
   The last chunk is read in place, without copying records; earlier chunks
   are spilled and merged with it.

@@ -29,6 +29,10 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Let built-in sorting under a cgroup memory limit hold up to half of what is
+  free there, shared among running Fastmash sorts, instead of a share per
+  processor. Sorts in containers and services with memory limits spill less
+  often. Output is unchanged.
 - Reduce decoding work for long quoted CSV fields while preserving strict
   validation and original error locations.
 - Speed up plain-number conversion in CSV calculations and reduce sorting work
