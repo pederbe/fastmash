@@ -547,7 +547,7 @@ fn classify<O: CommandOutput>(
     let class_bytes = groups.group_bytes()
         + std::mem::size_of::<Representative>()
         + 4 * std::mem::size_of::<u64>();
-    let mut budget = target.bytes;
+    let mut budget = target.first;
     // The dense owner adds one Binding reference to the previous vector.
     let mut used = std::mem::size_of::<&OperationSet>();
     let mut table = Table::new();
@@ -821,7 +821,7 @@ fn within(budget: &mut usize, used: usize, target: memory::Target, records: u64)
     while used > *budget {
         match target
             .grows
-            .then(|| memory::grow(*budget, records))
+            .then(|| memory::grow(*budget, 0, records))
             .flatten()
         {
             Some(grown) if grown > *budget => *budget = grown,

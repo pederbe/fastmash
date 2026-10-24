@@ -346,9 +346,10 @@ Runtime and numerical limits:
   Native sorting keeps only the fields jobs use (whole records with --full, in
   language locales, or for numbers when the separator is a letter, digit or the
   decimal point). It holds the whole input in memory when memory
-  allows; otherwise it sorts 64 MiB chunks and spills them to anonymous
-  files in TMPDIR (default /tmp). FASTMASH_SORT_MEMORY_BYTES fixes the chunk
-  target; FASTMASH_SORT_TRACE reports the choice on standard error.
+  allows; otherwise it sorts 64 MiB chunks, or 16 MiB ones under a tight
+  cgroup memory limit, and spills them to anonymous files in TMPDIR (default
+  /tmp). FASTMASH_SORT_MEMORY_BYTES fixes the chunk target;
+  FASTMASH_SORT_TRACE reports the choice on standard error.
   With standard input from a file whose keys repeat, or from a pipe in a
   language locale, -s groups instead of sorting: each group's records are
   collected as they arrive, and only the groups are sorted (hash grouping).
