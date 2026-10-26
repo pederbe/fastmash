@@ -1,5 +1,10 @@
 # Releasing Fastmash
 
+The website keeps its existing automatic builds from `main`. After publication
+advances the `release` branch, the release workflow calls the fixed-`main`
+Cloudflare deploy hook stored in `CLOUDFLARE_DEPLOY_HOOK`. The build resolves the
+download version from that release branch while rendering current documentation.
+
 How and when Fastmash is released. The release itself is automated; this is
 the checklist around it.
 

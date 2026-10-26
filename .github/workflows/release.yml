@@ -291,3 +291,12 @@ jobs:
           test "$latest" = "$GITHUB_REF_NAME" || exit 0
           old=$(git ls-remote --heads origin refs/heads/release | cut -f1)
           git push --force-with-lease="refs/heads/release:$old" origin "$GITHUB_SHA:refs/heads/release"
+      - name: Refresh the published website
+        env:
+          CLOUDFLARE_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_DEPLOY_HOOK"
+          curl --proto '=https' --silent --show-error --fail --retry 2 \
+            --request POST "$CLOUDFLARE_DEPLOY_HOOK" \
+            | jq -e '.success == true and (.result.build_uuid | type == "string")'
