@@ -109,16 +109,13 @@ fn prepare_at(
         fs::write(output, "changed=false\n")?;
         return Ok(());
     }
-    let log = git(
-        root,
-        &["log", "--no-merges", "--format=%s%x00%b%x00%h%x00", &range],
-    )?;
+    let log = git(root, &["log", "--format=%s%x00%b%x00%h%x00%P%x00", &range])?;
     let records: Vec<_> = log.split('\0').collect();
     let mut groups = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
     let mut breaking = false;
     let mut feature = false;
-    for record in records.chunks(3) {
-        let [subject, body, hash] = record else {
+    for record in records.chunks(4) {
+        let [subject, body, hash, parents] = record else {
             continue;
         };
         let subject = subject.trim();
@@ -132,6 +129,11 @@ fn prepare_at(
             || body.contains("BREAKING-CHANGE:");
         breaking |= is_breaking;
         feature |= subject.starts_with("feat");
+        // A compatibility marker may exist only in the merge message.
+        // Ordinary merge summaries add no information beyond their commits.
+        if parents.split_whitespace().count() > 1 && !is_breaking {
+            continue;
+        }
         let group = if is_breaking {
             0
         } else if subject.starts_with("feat") {
@@ -141,8 +143,15 @@ fn prepare_at(
         } else {
             3
         };
+        let warning = body
+            .lines()
+            .filter(|line| {
+                line.starts_with("BREAKING CHANGE:") || line.starts_with("BREAKING-CHANGE:")
+            })
+            .map(|line| format!("  {line}\n"))
+            .collect::<String>();
         groups[group].push(format!(
-            "- {subject} ([{}](https://github.com/pederbe/fastmash/commit/{}))\n",
+            "- {subject} ([{}](https://github.com/pederbe/fastmash/commit/{}))\n{warning}",
             hash.trim(),
             hash.trim()
         ));
@@ -386,6 +395,64 @@ mod tests {
     impl Drop for Directory {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    #[test]
+    fn merge_messages_preserve_compatibility_markers_without_bookkeeping() {
+        for (subject, body, breaking) in [
+            ("fix!: Change installer interface", "", true),
+            (
+                "fix: Change installer interface",
+                "BREAKING CHANGE: New arguments",
+                true,
+            ),
+            ("Merge installer branch", "", false),
+        ] {
+            let dir = Directory::new();
+            let root = &dir.0;
+            git(root, &["init", "-b", "main"]).unwrap();
+            git(root, &["config", "user.email", "test@example.com"]).unwrap();
+            git(root, &["config", "user.name", "Test"]).unwrap();
+            fs::create_dir_all(root.join("crates/cli")).unwrap();
+            fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
+            fs::write(
+                root.join("crates/cli/Cargo.toml"),
+                "[package]\nname = \"fastmash\"\nversion = \"0.2.0\"\n",
+            )
+            .unwrap();
+            fs::write(
+                root.join("Cargo.lock"),
+                "[[package]]\nname = \"fastmash\"\nversion = \"0.2.0\"\n",
+            )
+            .unwrap();
+            fs::write(
+                root.join("CHANGELOG.md"),
+                "# Changelog\n\n## [Unreleased]\n\n## [0.2.0] - 2026-10-12\n\nOld\n",
+            )
+            .unwrap();
+            git(root, &["add", "."]).unwrap();
+            git(root, &["commit", "-m", "Initial"]).unwrap();
+            git(root, &["tag", "v0.2.0"]).unwrap();
+            git(root, &["checkout", "-b", "installer"]).unwrap();
+            fs::write(root.join("install.sh"), "true\n").unwrap();
+            git(root, &["add", "."]).unwrap();
+            git(root, &["commit", "-m", "fix: Adjust installer"]).unwrap();
+            git(root, &["checkout", "main"]).unwrap();
+            git(
+                root,
+                &["merge", "--no-ff", "installer", "-m", subject, "-m", body],
+            )
+            .unwrap();
+            let output = root.join("plan");
+            prepare_at(root, "v0.2.0", "2026-10-26", "auto", &output, None).unwrap();
+            let expected_tag = if breaking { "tag=v0.3.0" } else { "tag=v0.2.1" };
+            assert!(fs::read_to_string(output).unwrap().contains(expected_tag));
+            let changelog = fs::read_to_string(root.join("CHANGELOG.md")).unwrap();
+            assert_eq!(changelog.contains("### Breaking changes"), breaking);
+            assert_eq!(changelog.contains(subject), breaking);
+            if !body.is_empty() {
+                assert!(changelog.contains("BREAKING CHANGE: New arguments"));
+            }
         }
     }
     #[test]
