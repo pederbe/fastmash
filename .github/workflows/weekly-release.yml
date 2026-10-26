@@ -75,8 +75,8 @@ jobs:
               echo 'No unreleased product or packaging changes.' >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
-            # Release-version changes do not invalidate runtime measurements.
-            # Runtime, dependency, compiler or flag changes require new evidence.
+            # Package versions affect Cargo metadata and executable layout.
+            # Require accepted evidence for this exact planned release version.
             "$release" check-qualification WORKTREE
             tag=$(sed -n 's/^tag=//p' "$RUNNER_TEMP/plan")
             [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]

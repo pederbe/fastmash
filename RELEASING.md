@@ -24,7 +24,7 @@ Breaking commit markers (`type!:` or `BREAKING CHANGE:`) select a minor version
 before 1.0 and a major version afterward. New authored **Added**, **Changed** or
 **Removed** entries also select a minor version before 1.0.
 
-Publication waits for runtime qualification, reproducible Linux builds, package
+Publication waits for exact-version qualification, reproducible Linux builds, package
 checks and installation checks against uploaded Linux and macOS assets. A failed
 run retains its frozen tag and draft. The next weekly run retries only failed
 jobs. If a source fix is needed, merge it into `main`, then dispatch Weekly release
@@ -90,23 +90,29 @@ release is being tagged.
    - the demo GIF and video exports (`scripts/demo/record.mjs`; see
      `scripts/demo/README.md`) if the demo job's times moved
      noticeably, and any claims on the landing page and link-preview image.
-7. **Record reusable qualification.** After both measurement hosts accept
-   the runtime inputs, prepare the release helper and record their evidence:
+7. **Record exact-version qualification.** Set the planned release version
+   before building and measuring. After both measurement hosts accept that
+   executable pair, prepare the release helper and record their evidence:
 
    ```sh
    cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bin fastmash-release
    target/debug/fastmash-release record-qualification SOURCE_SHA AMD_EVIDENCE_URL INTEL_EVIDENCE_URL
    ```
 
-   Commit `release/qualification.tsv` through the normal review and CI route.
-   The record binds the accepted source and distinct host evidence to a digest
-   of runtime crates, dependencies, compiler configuration and build recipe.
-   Only first-party package versions and internal version pins are normalized.
-   A runtime-input change requires fresh qualification. A metadata-only version
-   bump reuses its runtime evidence, then rebuilds twice and freezes the exact
-   new executable hashes in the tag's `release/qualified.sha256`.
+   Commit the versioned source, `release/qualification.tsv` and both accepted
+   hashes in `release/qualified.sha256` together through the normal review and
+   CI route. The record binds the accepted source and distinct host evidence
+   to the exact runtime crates, package versions, lockfile, compiler configuration
+   and build recipe. Package-version changes can alter Cargo crate identities,
+   generated code and executable layout, so they require new qualification.
+   Weekly release rebuilds twice and verifies the existing accepted hashes.
+   It never replaces them with hashes from an unqualified build.
+
+   Qualification on the two measurement hosts is still a separate prerequisite.
+   The weekly workflow publishes an already qualified planned version. It stops
+   before tagging when that exact version or its accepted evidence is missing.
 8. **Automatic publication.** Weekly release creates the dated changelog and
-   immutable tag, then explicitly dispatches Release. Release checks the runtime
+   immutable tag, then explicitly dispatches Release. Release checks the exact-source
    binding and frozen Linux hashes, builds both platforms, creates attestations
    and a draft, downloads its uploaded assets and checks installation. Only then
    does it publish the GitHub release. It dry-runs the five published source

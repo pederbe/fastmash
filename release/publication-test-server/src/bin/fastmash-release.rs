@@ -1,4 +1,4 @@
-//! Weekly release metadata and version-independent qualification bindings.
+//! Weekly release metadata and exact-version qualification bindings.
 #![forbid(unsafe_code)]
 #[path = "../qualification.rs"]
 mod qualification;

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Freeze reproducible Linux executable hashes for a versioned, qualified source.
+# Reproduce the exact executable pair already accepted for this release version.
 set -euo pipefail
 : "${RUNNER_TEMP:?}"
 work="$RUNNER_TEMP/weekly-linux"
@@ -17,4 +17,5 @@ done
 for binary in fastmash fastmash-sort-supervisor; do
     cmp "$work/out/first/release/$binary" "$work/out/second/release/$binary"
 done
-(cd "$work/out/first/release" && sha256sum fastmash fastmash-sort-supervisor) > release/qualified.sha256
+qualified=$(realpath release/qualified.sha256)
+(cd "$work/out/first/release" && sha256sum -c "$qualified")
