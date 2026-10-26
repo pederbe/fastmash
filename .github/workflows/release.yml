@@ -5,8 +5,13 @@ on:
 
 permissions:
   contents: write
+  actions: write
   id-token: write
   attestations: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   macos:
@@ -23,6 +28,14 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: "1.99.1"
+      - name: Validate runtime qualification
+        run: |
+          cargo run --locked --quiet --manifest-path release/publication-test-server/Cargo.toml --bin fastmash-release -- check-qualification HEAD
       # The tag's CHANGELOG section, dated, becomes the release notes.
       - name: Release notes
         run: |
@@ -50,7 +63,7 @@ jobs:
           docker run --rm -v "$PWD:/source:ro" -v "$PWD/out:/out" \
             -e CARGO_TARGET_DIR=/out/target fastmash-release-builder bash -c \
             'bash /source/release/build.sh && CARGO_HOME=/tmp/cargo cargo run --locked --release -p fastmash-license-notices --manifest-path /source/Cargo.toml > /out/THIRD-PARTY-LICENSES.md'
-      # Refuse to publish bytes that were not the ones measured.
+      # Refuse bytes differing from the frozen candidate with qualified runtime inputs.
       - name: Check the qualified checksums
         run: |
           cd out/target/release
@@ -145,9 +158,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" assets/fastmash-*.tar.gz assets/fastmash_*.deb assets/fastmash-*.rpm \
-            assets/fastmash-*.sha256 assets/fastmash_*.sha256 \
-            --verify-tag --title "Fastmash ${GITHUB_REF_NAME#v}" --notes-file assets/notes.md --draft
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft > "$RUNNER_TEMP/release-state.json"; then
+            jq -e .isDraft "$RUNNER_TEMP/release-state.json" > /dev/null
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Fastmash ${GITHUB_REF_NAME#v}" --notes-file assets/notes.md --draft
+          fi
+          existing=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          mkdir "$RUNNER_TEMP/existing-assets"
+          for asset in assets/fastmash-*.tar.gz assets/fastmash_*.deb assets/fastmash-*.rpm assets/fastmash-*.sha256 assets/fastmash_*.sha256; do
+            name=$(basename "$asset")
+            if grep -qxF "$name" <<< "$existing"; then
+              gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir "$RUNNER_TEMP/existing-assets"
+              cmp "$asset" "$RUNNER_TEMP/existing-assets/$name"
+            else
+              gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" "$asset"
+            fi
+          done
 
   delivered-macos:
     needs: [draft, macos]
@@ -160,3 +188,106 @@ jobs:
       tag: ${{ github.ref_name }}
       release-archive: true
       archive-sha256: ${{ needs.macos.outputs.archive-sha256 }}
+
+  publish:
+    needs: [draft, delivered-macos, crates-check]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: "1.99.1"
+      - name: Install package inspection tools
+        run: sudo apt-get install -y --no-install-recommends rpm
+      - name: Verify delivered Linux assets before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/delivered"
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/delivered"
+          cd "$RUNNER_TEMP/delivered"
+          sha256sum -c ./*.sha256
+          for asset in *.tar.gz *.deb *.rpm; do
+            gh attestation verify "$asset" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
+          done
+          version=${GITHUB_REF_NAME#v}
+          name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
+          tar -xzf "$name.tar.gz"
+          cd "$GITHUB_WORKSPACE"
+          cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
+          bash release/check-installed.sh "$version" "$RUNNER_TEMP/delivered/$name" release/qualified.sha256
+          target/debug/fastmash-test-package-installation packages "$RUNNER_TEMP/delivered" "$version" release/qualified.sha256 \
+            --expected-docs "$RUNNER_TEMP/delivered/$name"
+      - name: Publish verified release and start package repository update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          test "$(printf '%s\n' "$latest" "$GITHUB_REF_NAME" | sort -V | tail -1)" = "$GITHUB_REF_NAME" ||
+            { echo 'A newer version is already published.' >&2; exit 1; }
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          previous_run=$(gh run list --workflow package-repository.yml --branch "$GITHUB_REF_NAME" --json databaseId --limit 1 --jq '.[0].databaseId // 0')
+          gh workflow run package-repository.yml --ref "$GITHUB_REF_NAME" -f tag="$GITHUB_REF_NAME"
+          run=
+          for _ in {1..15}; do
+            run=$(gh run list --workflow package-repository.yml --branch "$GITHUB_REF_NAME" --commit "$GITHUB_SHA" --json databaseId --limit 1 --jq ".[0].databaseId | select(. > $previous_run)")
+            [ -z "$run" ] || break
+            sleep 2
+          done
+          test -n "$run" || { echo 'Package repository dispatch did not produce a run.' >&2; exit 1; }
+          gh run watch "$run" --exit-status
+
+  crates-check:
+    needs: draft
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: "1.99.1"
+      - name: Check packaged sources before registry authentication
+        run: bash release/check-crate-packages.sh "${GITHUB_REF_NAME#v}"
+
+  crates-publish:
+    needs: publish
+    runs-on: ubuntu-26.04
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: "1.99.1"
+      - name: Obtain a temporary crates.io token
+        id: auth
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+      - name: Publish remaining workspace crates in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: bash release/publish-crates.sh "${GITHUB_REF_NAME#v}" publish
+
+  finish:
+    needs: [publish, crates-publish]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Advance the published website source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          test "$latest" = "$GITHUB_REF_NAME" || exit 0
+          old=$(git ls-remote --heads origin refs/heads/release | cut -f1)
+          git push --force-with-lease="refs/heads/release:$old" origin "$GITHUB_SHA:refs/heads/release"

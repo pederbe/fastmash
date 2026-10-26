@@ -91,7 +91,9 @@ def version():
 
 def published_version():
     """Release used by public download links, independent of candidate source."""
-    value = (ROOT / 'site' / 'release-version.txt').read_text(encoding='utf-8').strip()
+    value = os.environ.get('FASTMASH_SITE_RELEASE_VERSION')
+    if value is None:
+        value = (ROOT / 'site' / 'release-version.txt').read_text(encoding='utf-8').strip()
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', value):
         sys.exit('site/release-version.txt must name a published release')
     return value

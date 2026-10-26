@@ -5,11 +5,26 @@ the checklist around it.
 
 ## Rhythm
 
-Small, frequent releases: whenever a user-visible improvement has landed and
-been measured, and at least every two months while there are unreleased
-changes. Each release should have one headline a user cares about, such as
-"0.2: faster disk-spill sorts", which is also its announcement.
+Every Monday at 06:17 UTC, the Weekly release workflow checks for product,
+dependency and packaging changes since the last published release. Documentation
+and website changes alone do not create a release. Run it manually for an urgent
+fix, selecting a minor or major increment when needed. Disable its schedule to
+stop recurring publication.
 
+The workflow prepares a versioned metadata commit and tag without changing
+`main`. Every published crate, internal version pin, lockfile and executable
+version stays aligned. Release notes combine new authored changelog entries with
+commits grouped into breaking changes, additions, fixes and other changes.
+Breaking commit markers (`type!:` or `BREAKING CHANGE:`) select a minor version
+before 1.0 and a major version afterward. New authored **Added**, **Changed** or
+**Removed** entries also select a minor version before 1.0.
+
+Publication waits for runtime qualification, reproducible Linux builds, package
+checks and installation checks against uploaded Linux and macOS assets. A failed
+run retains its frozen tag and draft. The next weekly run retries only failed
+jobs. If a source fix is needed, merge it into `main`, then dispatch Weekly release
+with `supersede_failed=true`. That creates a higher version while preserving the
+failed tag and its evidence.
 Patch releases (0.x.**y**) fix bugs and change no documented behavior or
 numerical output. Before 1.0, a minor release (0.**x**) may change behavior;
 every such change is listed under **Changed**.
@@ -70,33 +85,38 @@ release is being tagged.
    - the demo GIF and video exports (`scripts/demo/record.mjs`; see
      `scripts/demo/README.md`) if the demo job's times moved
      noticeably, and any claims on the landing page and link-preview image.
-7. **Tag.** Move the `[Unreleased]` entries under
-   `## [X.Y.Z] - YYYY-MM-DD` using the actual release date; the workflow
-   refuses a tag without a dated entry. Tag the qualified commit `vX.Y.Z`
-   and push the tag, then start the release explicitly:
-   `gh workflow run Release --ref vX.Y.Z`. The tagged commit must contain
-   the manual workflow; changing `main` does not update an existing tag.
-   A dispatch on a branch skips the release job.
-   The workflow builds, checks the checksums, runs the corpus, packages
-   `.tar.gz`, `.deb` and `.rpm`, tests the packages on Debian 12 and
-   AlmaLinux 8, attests provenance and creates a **draft** release with the
-   changelog section as its notes.
-8. **Publish.** Review the draft (assets, notes) and publish it. Then publish
-   the crates to crates.io in dependency order:
-   `fastmash-numeric-contract`, `fastmash-conversion`,
-   `fastmash-portable-numerics`, `fastmash-sort-process`, `fastmash`.
-   The website deploys from `main`; check that the install page and landing
-   page show the new version. Update `site/release-version.txt` only after the
-   release is available, then update published platform text and metadata.
-   The homepage test in `scripts/test_build_site.py` records the published version;
-   update its expected release when publishing.
-9. **Packages.** Approve the Package repository workflow, which adds the
-   published `.deb` and `.rpm` to the signed apt and dnf repository at
-   `packages.fastmash.io` ([packaging/repository](packaging/repository/README.md)).
-   Update any existing distribution packages when the release is available. Additional distribution channels, including conda-forge,
-   follow the first release; they are not required to launch it.
-10. **Announce** the headline: a Discussions announcement, and the social
-    accounts. A release with a measured improvement links its benchmark.
+7. **Record reusable qualification.** After both measurement hosts accept
+   the runtime inputs, prepare the release helper and record their evidence:
+
+   ```sh
+   cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bin fastmash-release
+   target/debug/fastmash-release record-qualification SOURCE_SHA AMD_EVIDENCE_URL INTEL_EVIDENCE_URL
+   ```
+
+   Commit `release/qualification.tsv` through the normal review and CI route.
+   The record binds the accepted source and distinct host evidence to a digest
+   of runtime crates, dependencies, compiler configuration and build recipe.
+   Only first-party package versions and internal version pins are normalized.
+   A runtime-input change requires fresh qualification. A metadata-only version
+   bump reuses its runtime evidence, then rebuilds twice and freezes the exact
+   new executable hashes in the tag's `release/qualified.sha256`.
+8. **Automatic publication.** Weekly release creates the dated changelog and
+   immutable tag, then explicitly dispatches Release. Release checks the runtime
+   binding and frozen Linux hashes, builds both platforms, creates attestations
+   and a draft, downloads its uploaded assets and checks installation. Only then
+   does it publish the GitHub release. It dry-runs the five published source
+   packages before obtaining a temporary crates.io token and publishing them in
+   dependency order. Registry failures remain visible and are retried without
+   selecting another source revision.
+9. **Packages.** Release explicitly dispatches Package repository at the same
+   tag, adding its signed packages to `packages.fastmash.io`. The registry and
+   signing environments retain their tag restrictions. Additional distribution
+   submissions remain separate work. After delivery succeeds, Release advances the `release` branch to the
+   published tag. The website builds `main` with `bash scripts/build_site.sh
+   --cloudflare`, reading the published version from that branch. A failed
+   finalizer is retried before preparing another version.
+10. **Announcements.** Social posts and Discussions announcements remain separate
+    from scheduled releases. Link measurements when making performance claims.
 
 ## Patch releases
 
@@ -197,9 +217,8 @@ leaves published timing claims unchanged need not regenerate their charts.
 
 After qualification, update `release/qualified.sha256` to the **two candidate
 hashes**, keeping the previous release's manifest at its tag. Move the selected
-changelog entries into the dated patch section when tagging. These metadata-only
-changes must reproduce the qualified executable hashes at the final tagged
-revision; any mismatch stops the release. Verify that the tag's version, crate
+changelog entries into the dated patch section when tagging. The generated release metadata must reproduce its frozen executable hashes
+at the final tagged revision. Any mismatch stops the release. Verify that the tag's version, crate
 versions, notes and executable version agree.
 
 Use checklist step 7 to prepare the tag and explicitly dispatch the maintained
@@ -223,9 +242,9 @@ Review the draft's notes and complete asset list. Download its delivered assets,
 verify their checksum sidecars and provenance, and repeat extraction/installation
 checks against the qualified manifest. Build-side checks alone do not verify an
 uploaded asset. Retain asset hashes and installation logs with qualification.
-Publish the release and crates only with the maintainer's explicit approval,
-then follow checklist steps 8–10 as authorized. Creating a draft does not authorize
-publication, additional package submissions or announcements.
+The authorized weekly workflow publishes the release and crates after these
+checks pass, then follows checklist steps 8–9. Additional distribution submissions
+and announcements remain separate work.
 
 ## Native macOS release delivery
 
@@ -278,8 +297,8 @@ and repeats documented installation, installed executable checks, applicable
 command tests and both corpus input modes. Those checks use the delivered
 bytes; rebuilding a source executable cannot substitute for them. Evidence
 from candidate and delivered installations has separate artifact names.
-A failure leaves the draft unpublished. Review the complete successful run
-and all assets before authorizing publication.
+A failure leaves the draft unpublished. Successful delivered-asset checks
+allow the workflow to publish automatically.
 
 The macOS checksum is frozen per workflow run rather than stored in the Linux
 manifest. Two clean builds establish within-run executable reproducibility;

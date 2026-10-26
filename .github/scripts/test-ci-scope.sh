@@ -8,11 +8,11 @@ cd "$fixture"
 git init -q
 git config user.email fixture@example.invalid
 git config user.name fixture
-mkdir -p crates/app/src crates/helper/src .github/workflows
+mkdir -p crates/app/src crates/helper/src .github/workflows release/publication-test-server/src scripts
 printf '[workspace]\nmembers = ["crates/app", "crates/helper"]\n' > Cargo.toml
 printf '[package]\nname = "fastmash"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\n' > crates/app/Cargo.toml
 printf '[package]\nname = "helper"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\ndevlib = "1"\n' > crates/helper/Cargo.toml
-touch crates/app/src/lib.rs crates/helper/src/lib.rs .github/workflows/ci.yml
+touch crates/app/src/lib.rs crates/helper/src/lib.rs .github/workflows/ci.yml release/publication-test-server/src/weekly.rs scripts/build_site.py
 cat > Cargo.lock <<'LOCK'
 version = 4
 [[package]]
@@ -58,6 +58,10 @@ printf '// application change\n' > crates/app/src/lib.rs
 expect application=true
 printf '# workflow change\n' > .github/workflows/ci.yml
 expect application=false configuration=true packages=
+printf '// release tooling change\n' > release/publication-test-server/src/weekly.rs
+expect application=false configuration=true packages=
+printf '# website change\n' > scripts/build_site.py
+expect application=false configuration=false packages=
 printf '# documentation\n' > README.md
 expect application=false packages=
 rm README.md

@@ -109,10 +109,18 @@ if base:
     for path in filter(None, paths):
         if path.endswith(".md") or path.startswith("docs/") or path == "Cargo.lock":
             continue
-        if path.startswith((".github/workflows/", ".github/scripts/")):
+        if path.startswith((".github/workflows/", ".github/scripts/")) or path in {
+            "release/prepare-linux.sh", "release/check-crate-packages.sh", "release/publish-crates.sh",
+            "release/publication-test-server/src/weekly.rs",
+            "release/publication-test-server/src/qualification.rs",
+            "release/publication-test-server/src/crates_publish_tests.rs",
+            "release/publication-test-server/src/bin/fastmash-release.rs",
+        }:
             configuration = True
         elif any(path.startswith(str(pathlib.PurePosixPath(m).parent) + "/") for m in after):
             continue
+        elif path in {"scripts/build_site.sh", "scripts/build_site.py", "scripts/test_build_site.py"}:
+            continue  # Website checks cover these files without rebuilding the application.
         elif path.startswith("tools/icu-exemplars/"):
             continue  # Its separate reference workflow covers this standalone tool.
         else:
