@@ -60,12 +60,19 @@ jobs:
           bash -n .github/scripts/*.sh
           bash .github/scripts/test-ci-scope.sh
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        if: needs.changes.outputs.application != 'false' || needs.changes.outputs.packages != ''
+        if: needs.changes.outputs.configuration == 'true' || needs.changes.outputs.application != 'false' || needs.changes.outputs.packages != ''
         with:
           # Pinned like the release builder, so a new Rust release's lints do
           # not fail unrelated pull requests; raise it deliberately.
           toolchain: "1.99.1"
           components: rustfmt, clippy
+      - name: Check weekly release tooling
+        if: needs.changes.outputs.configuration == 'true' || needs.changes.outputs.application != 'false'
+        run: |
+          bash -n release/prepare-linux.sh release/check-crate-packages.sh release/publish-crates.sh
+          cargo fmt --manifest-path release/publication-test-server/Cargo.toml --check
+          cargo clippy --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bin fastmash-release -- -D warnings
+          cargo test --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bin fastmash-release
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         if: needs.changes.outputs.application != 'false' || needs.changes.outputs.packages != ''
       - run: cargo fmt --all --check

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 import build_site
 
@@ -20,6 +21,21 @@ class SiteBuildTests(unittest.TestCase):
             self.assertIn('/download/v0.2.0/fastmash_0.2.0_amd64.deb', page)
             self.assertIn('"softwareVersion": "0.2.0"', page)
             self.assertNotIn('/download/v0.1.0/', page)
+
+    def test_homepage_follows_the_published_release_pointer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            book = Path(directory)
+            (book / 'fonts').mkdir()
+            (book / 'favicon.svg').write_text('fixture')
+            (book / 'fonts/source-code-pro-v11-all-charsets-500.woff2').write_text('fixture')
+            with mock.patch.dict(build_site.os.environ, {'FASTMASH_SITE_RELEASE_VERSION': '0.3.2'}):
+                build_site.landing(book)
+            page = (book / 'index.html').read_text()
+            self.assertIn('/download/v0.3.2/fastmash_0.3.2_amd64.deb', page)
+            self.assertIn('"softwareVersion": "0.3.2"', page)
+            with mock.patch.dict(build_site.os.environ, {'FASTMASH_SITE_RELEASE_VERSION': 'main'}):
+                with self.assertRaises(SystemExit):
+                    build_site.published_version()
 
     def test_html_routes_keep_queries_fragments_and_relative_paths(self):
         cases = {
