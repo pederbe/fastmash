@@ -39,6 +39,7 @@
   "guide/dataset-comparison.md": "Compare numerical summaries from two datasets, align complete keys and independently named headers, and rank absolute or percentage changes.",
   "guide/table-health.md": "Inspect Fastmash table health, review inferred findings, validate supplied type, presence and width rules, and read versioned TSV reports.",
   "guide/terminal-color.md": "Control Fastmash terminal styling for help, failure prefixes and readable health reports, with automatic detection and color suppression.",
+  "adr/0013-reuse-tested-release-artifacts.md": "Why releases reuse reproducible binaries, test installation once and deploy the website separately.",
   "adr/0012-release-delivery-and-performance.md": "Why weekly releases verify reproducibility and delivered bytes while performance acceptance stays with runtime changes and dated claims.",
   "adr/0011-native-release-delivery.md": "Why native release delivery reuses the same reproducible archive through qualification, draft upload and installation."
 }

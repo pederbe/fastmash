@@ -28,6 +28,7 @@ jobs:
       application: ${{ steps.scope.outputs.application }}
       packages: ${{ steps.scope.outputs.packages }}
       configuration: ${{ steps.scope.outputs.configuration }}
+      tag: ${{ steps.scope.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,6 +42,8 @@ jobs:
             git cat-file -e "$BASE_SHA^{commit}" || git fetch --no-tags --depth=1 origin "$BASE_SHA"
           fi
           bash .github/scripts/ci-scope.sh "$BASE_SHA" | tee "$GITHUB_OUTPUT"
+          version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -1)
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
   # Keep the required job names. Missing filter output runs the checks.
   check:
@@ -273,8 +276,19 @@ jobs:
     needs: changes
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (!github.event.repository.private && needs.changes.outputs.application != 'false')
+      (!github.event.repository.private &&
+       (needs.changes.outputs.application != 'false' || needs.changes.outputs.configuration == 'true'))
     uses: ./.github/workflows/macos.yml
     permissions:
       contents: read
       attestations: read
+
+  release-linux:
+    name: Linux release artifacts
+    needs: changes
+    if: >-
+      !github.event.repository.private &&
+      needs.changes.outputs.configuration == 'true'
+    uses: ./.github/workflows/linux-release.yml
+    with:
+      tag: ${{ needs.changes.outputs.tag }}
