@@ -1,5 +1,5 @@
 #!/bin/bash
-# Reproduce the exact executable pair already accepted for this release version.
+# Freeze delivery hashes after two identical clean builds of the planned version.
 set -euo pipefail
 : "${RUNNER_TEMP:?}"
 work="$RUNNER_TEMP/weekly-linux"
@@ -17,5 +17,4 @@ done
 for binary in fastmash fastmash-sort-supervisor; do
     cmp "$work/out/first/release/$binary" "$work/out/second/release/$binary"
 done
-qualified=$(realpath release/qualified.sha256)
-(cd "$work/out/first/release" && sha256sum -c "$qualified")
+(cd "$work/out/first/release" && sha256sum fastmash fastmash-sort-supervisor) > release/delivery.sha256

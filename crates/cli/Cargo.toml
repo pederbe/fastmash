@@ -12,7 +12,7 @@ categories = ["command-line-utilities", "science", "text-processing"]
 readme = "../../README.md"
 
 # `cargo binstall fastmash` downloads the prebuilt release archive (the
-# benchmarked binaries) instead of compiling.
+# tested delivery binaries) instead of compiling.
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/fastmash-v{ version }-{ target }.tar.gz"
 bin-dir = "fastmash-v{ version }-{ target }/{ bin }{ binary-ext }"

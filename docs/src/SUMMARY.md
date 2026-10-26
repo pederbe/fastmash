@@ -53,3 +53,4 @@
     - [0010: Native Apple Silicon macOS](adr/0010-native-apple-silicon.md)
 - [About](about.md)
     - [0011: Native release delivery](adr/0011-native-release-delivery.md)
+- [0012: Release delivery and performance](adr/0012-release-delivery-and-performance.md)

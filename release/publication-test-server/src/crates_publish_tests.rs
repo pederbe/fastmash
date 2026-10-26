@@ -1,4 +1,4 @@
-//! Exercise registry recovery and accepted release hashes without network publication.
+//! Exercise registry recovery and frozen delivery hashes without network publication.
 use std::{fs, os::unix::fs::PermissionsExt, path::Path, process::Command};
 fn executable(path: &Path, text: &str) {
     fs::write(path, text).unwrap();
@@ -91,9 +91,9 @@ fi
 }
 
 #[test]
-fn reproducible_unqualified_build_cannot_replace_accepted_hashes() {
+fn reproducible_build_freezes_delivery_hashes_and_rejects_mismatch() {
     let root = std::path::PathBuf::from("/var/tmp").join(format!(
-        "fastmash-qualified-build-{}-{}",
+        "fastmash-delivery-build-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -103,20 +103,8 @@ fn reproducible_unqualified_build_cannot_replace_accepted_hashes() {
     fs::create_dir_all(root.join("bin")).unwrap();
     fs::create_dir(root.join("release")).unwrap();
     fs::write(root.join("release/Containerfile"), "fixture\n").unwrap();
-    fs::write(root.join("qualified-binary"), "accepted").unwrap();
-    let output = Command::new("sha256sum")
-        .arg(root.join("qualified-binary"))
-        .output()
-        .unwrap();
-    assert!(output.status.success());
-    let hash = String::from_utf8(output.stdout)
-        .unwrap()
-        .split_whitespace()
-        .next()
-        .unwrap()
-        .to_owned();
-    let accepted = format!("{hash}  fastmash\n{hash}  fastmash-sort-supervisor\n");
-    fs::write(root.join("release/qualified.sha256"), &accepted).unwrap();
+    let historical = "historical qualification is not a delivery manifest\n";
+    fs::write(root.join("release/qualified.sha256"), historical).unwrap();
     executable(&root.join("bin/curl"), "#!/bin/sh\nexit 0\n");
     executable(
         &root.join("bin/docker"),
@@ -131,12 +119,16 @@ test -n "$build"
 out="$RUNNER_TEMP/weekly-linux/out/$build/release"
 mkdir -p "$out"
 for binary in fastmash fastmash-sort-supervisor; do
-  printf '%s' "$FIXTURE_BINARY" > "$out/$binary"
+  if [ "$FIXTURE_MODE" = mismatch ] && [ "$build" = second ]; then
+    printf different > "$out/$binary"
+  else
+    printf candidate > "$out/$binary"
+  fi
 done
 "#,
     );
     let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../prepare-linux.sh");
-    let run = |name: &str, binary: &str| {
+    let run = |name: &str, mode: &str| {
         Command::new("bash")
             .arg(&script)
             .current_dir(&root)
@@ -149,26 +141,43 @@ done
                 ),
             )
             .env("RUNNER_TEMP", root.join(name))
-            .env("FIXTURE_BINARY", binary)
+            .env("FIXTURE_MODE", mode)
             .output()
             .unwrap()
     };
-    let accepted_run = run("accepted-run", "accepted");
+    let reproducible = run("reproducible", "same");
     assert!(
-        accepted_run.status.success(),
+        reproducible.status.success(),
         "{}",
-        String::from_utf8_lossy(&accepted_run.stderr)
+        String::from_utf8_lossy(&reproducible.stderr)
+    );
+    let manifest = root.join("release/delivery.sha256");
+    let text = fs::read_to_string(&manifest).unwrap();
+    assert_eq!(text.lines().count(), 2);
+    assert!(text.contains("  fastmash\n"));
+    assert!(text.contains("  fastmash-sort-supervisor\n"));
+    let verified = Command::new("sha256sum")
+        .arg("-c")
+        .arg(&manifest)
+        .current_dir(root.join("reproducible/weekly-linux/out/first/release"))
+        .output()
+        .unwrap();
+    assert!(
+        verified.status.success(),
+        "{}",
+        String::from_utf8_lossy(&verified.stderr)
     );
     assert_eq!(
         fs::read_to_string(root.join("release/qualified.sha256")).unwrap(),
-        accepted
+        historical
     );
-    // Both fresh builds agree with each other, but neither is the accepted pair.
-    let different = run("unqualified-run", "reproducible-but-unqualified");
+    fs::remove_file(&manifest).unwrap();
+    let different = run("nonreproducible", "mismatch");
     assert!(!different.status.success());
+    assert!(!manifest.exists());
     assert_eq!(
         fs::read_to_string(root.join("release/qualified.sha256")).unwrap(),
-        accepted
+        historical
     );
     fs::remove_dir_all(root).unwrap();
 }

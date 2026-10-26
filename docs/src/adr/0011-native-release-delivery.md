@@ -5,6 +5,10 @@ archive boundary in [ADR 0010: Native Apple Silicon macOS](0010-native-apple-sil
 With the publication of 0.2.0, this also supersedes the Linux-only scope of
 [ADR 0007: Linux x86-64 first](0007-linux-first.md).
 
+The Linux performance-manifest prerequisite and manual publication step are
+superseded by [ADR 0012](0012-release-delivery-and-performance.md). The native
+archive reproducibility and installed-delivery guarantees remain in force.
+
 ## Decision
 
 Build the Apple Silicon executable twice in separate clean target trees on
