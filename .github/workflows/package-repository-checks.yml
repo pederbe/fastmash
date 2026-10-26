@@ -60,3 +60,11 @@ jobs:
           trap 'rm -rf "$work"' EXIT
           bash release/package-publication-fixtures.sh "$work"
           bash release/test-package-publication.sh "$work/old" "$work/new"
+          # The host RPM 6 verifier also accepts V6-only signatures. Require the
+          # oldest supported RPM client to recognize the fixture signatures.
+          docker run --rm -v "$work/new:/repo:ro" almalinux:8 /bin/bash -ec '
+            rpmkeys --import /repo/fastmash.asc
+            for package in /repo/rpm/*.rpm; do
+              rpmkeys --checksig "$package" | grep -q ": digests signatures OK$"
+            done
+          '
