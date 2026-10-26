@@ -80,12 +80,13 @@ for package in "$@"; do
     fastmash-*.x86_64.rpm)
         cp "$package" "$work/$name"
         before=$(rpm_identity "$work/$name")
+        # RPM 6 otherwise defaults to signatures that RPM 4.x clients cannot read.
         if [ -n "${GPG_PASSPHRASE:-}" ]; then
-            rpmsign --addsign --define "_gpg_name $fingerprint" \
+            rpmsign --addsign --rpmv4 --define "_gpg_name $fingerprint" \
                 --define "_gpg_sign_cmd_extra_args --batch --pinentry-mode loopback --passphrase-fd 3" \
                 "$work/$name" 3<<<"$GPG_PASSPHRASE" >/dev/null
         else
-            rpmsign --addsign --define "_gpg_name $fingerprint" \
+            rpmsign --addsign --rpmv4 --define "_gpg_name $fingerprint" \
                 --define "_gpg_sign_cmd_extra_args --batch" "$work/$name" >/dev/null
         fi
         test "$(rpm_identity "$work/$name")" = "$before" ||

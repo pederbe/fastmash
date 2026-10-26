@@ -30,6 +30,7 @@ version = "1.0.0"
 name = "devlib"
 version = "1.0.0"
 LOCK
+printf '# repository fixture\n' > release/package-repository.sh
 git add .
 git commit -qm fixture
 base=$(git rev-parse HEAD)
@@ -59,6 +60,8 @@ expect application=true
 printf '# workflow change\n' > .github/workflows/ci.yml
 expect application=false configuration=true packages=
 printf '// release tooling change\n' > release/publication-test-server/src/weekly.rs
+expect application=false configuration=true packages=
+printf '# package signing change\n' > release/package-repository.sh
 expect application=false configuration=true packages=
 printf '# website change\n' > scripts/build_site.py
 expect application=false configuration=false packages=

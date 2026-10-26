@@ -111,6 +111,7 @@ if base:
             continue
         if path.startswith((".github/workflows/", ".github/scripts/")) or path in {
             "release/prepare-linux.sh", "release/check-crate-packages.sh", "release/publish-crates.sh",
+            "release/package-repository.sh",  # Dedicated package workflow verifies signing/installation.
             "release/publication-test-server/src/weekly.rs",
             "release/publication-test-server/src/crates_publish_tests.rs",
             "release/publication-test-server/src/bin/fastmash-release.rs",
