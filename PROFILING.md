@@ -2,7 +2,7 @@
 
 Use hotpath-rs for local diagnosis of startup, decimal calculations, Grouping
 and Spill. Ordinary builds have no profiling dependency or instrumentation.
-The optional dependency uses MIT-licensed hotpath 0.29.1. Its transitive
+The optional dependency uses MIT-licensed hotpath 0.29.2. Its transitive
 dependencies are checked by the repository's `cargo deny check licenses` policy.
 CPU report decoding also brings in the permissive Zlib-licensed `zlib-rs`.
 
@@ -95,13 +95,13 @@ records or arithmetic primitives.
 
 ## CPU sampling
 
-Reuse `samply` 0.13.x, `hotpath-samply` 0.29.1 and the hotpath CLI/TUI when
+Reuse `samply` 0.13.x, `hotpath-samply` 0.29.2 and the hotpath CLI/TUI when
 installed. If missing, upstream installation commands are
 
 ```sh
 cargo install samply --locked
-cargo install hotpath --version 0.29.1 --bin hotpath-samply
-cargo install hotpath --version 0.29.1 --features tui --bin hotpath
+cargo install hotpath --version 0.29.2 --bin hotpath-samply
+cargo install hotpath --version 0.29.2 --features tui --bin hotpath
 ```
 
 Build with symbols and CPU support, then capture only the decimal job. On Linux
