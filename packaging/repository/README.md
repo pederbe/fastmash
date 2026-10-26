@@ -99,7 +99,8 @@ as part of publication.
    Access Key ID and Secret Access Key for the environment secrets. Leave
    public `r2.dev` access disabled.
 3. **Environment.** In the repository settings, create the `packages`
-   environment with the maintainer as required reviewer, limited to the `main`
+   environment without required reviewers, so verified releases publish
+   automatically. Limit it to the `main`
    branch and `v*` tags, with these secrets:
 
    | Secret | Value |
