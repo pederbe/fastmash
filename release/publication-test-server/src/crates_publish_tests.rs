@@ -181,3 +181,74 @@ done
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn website_refresh_skips_stale_releases_and_reports_its_own_failure() {
+    let root = std::path::PathBuf::from("/var/tmp").join(format!(
+        "fastmash-website-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(root.join("bin")).unwrap();
+    executable(&root.join("bin/gh"), "#!/bin/sh\nprintf delivered\n");
+    executable(
+        &root.join("bin/curl"),
+        r#"#!/bin/bash
+set -euo pipefail
+printf 'requested\n' >> "$FIXTURE_TRACE"
+if [ "$FIXTURE_MODE" = failure ]; then exit 22; fi
+printf '{"success":true,"result":{"build_uuid":"fixture-build"}}' > "${!#}"
+"#,
+    );
+    let workflow = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows/website-deploy.yml"),
+    )
+    .unwrap();
+    let script = workflow
+        .split_once("        run: |\n")
+        .unwrap()
+        .1
+        .lines()
+        .map(|line| line.strip_prefix("          ").unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let trace = root.join("trace");
+    for (sha, mode, success, requested) in [
+        ("stale", "success", true, false),
+        ("delivered", "success", true, true),
+        ("", "success", true, true),
+        ("delivered", "failure", false, true),
+    ] {
+        fs::write(&trace, "").unwrap();
+        let output = Command::new("bash")
+            .args(["-c", &script])
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    root.join("bin").display(),
+                    std::env::var("PATH").unwrap()
+                ),
+            )
+            .env("RUNNER_TEMP", &root)
+            .env("GITHUB_STEP_SUMMARY", root.join("summary"))
+            .env("GITHUB_REPOSITORY", "fixture/website")
+            .env("RELEASE_SHA", sha)
+            .env("CLOUDFLARE_DEPLOY_HOOK", "https://example.invalid/hook")
+            .env("FIXTURE_TRACE", &trace)
+            .env("FIXTURE_MODE", mode)
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.success(),
+            success,
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(!fs::read_to_string(&trace).unwrap().is_empty(), requested);
+    }
+    fs::remove_dir_all(root).unwrap();
+}
