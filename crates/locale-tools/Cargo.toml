@@ -60,7 +60,7 @@ nix = { version = "0.31.3", default-features = false, features = ["fs", "signal"
 
 [dev-dependencies]
 # Compile emitted tables against the real safe Profile constructor and getters.
-fastmash-conversion = { path = "../conversion", version = "=0.2.0" }
+fastmash-conversion = { path = "../conversion", version = "=0.3.0" }
 
 [lints]
 workspace = true

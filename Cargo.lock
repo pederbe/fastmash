@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "fastmash"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "astro-float-num",
  "base64",
@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "fastmash-conversion"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "fastmash-numeric-contract",
  "num-bigint",
@@ -233,7 +233,7 @@ dependencies = [
 
 [[package]]
 name = "fastmash-corpus-driver"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "flate2",
  "nix",
@@ -271,18 +271,18 @@ dependencies = [
 
 [[package]]
 name = "fastmash-numeric-contract"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "fastmash-portable-numerics"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "fastmash-numeric-contract",
 ]
 
 [[package]]
 name = "fastmash-sort-process"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "getrandom 0.4.3",
  "rustix",
