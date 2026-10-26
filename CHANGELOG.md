@@ -29,6 +29,9 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Homebrew installs prebuilt bottles that follow each release within a day, and
+  the installation guide now leads with apt, dnf and Homebrew.
+
 - Animate the website's landing page with scroll entrances, a breathing hero
   glow and a pulsing terminal halo. Decorative motion runs only in view, a
   button pauses it, and reduced-motion settings keep the page static.

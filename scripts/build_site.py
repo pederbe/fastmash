@@ -11,6 +11,7 @@ static page in site/. This:
   inlines the generated benchmark chart (docs/src/benchmarks/core-jobs.svg)
   where the page says `<!-- chart -->`, fills `@VERSION@` with the fastmash
   published release version (site/release-version.txt), and copies its CSS and script;
+- fills `@VERSION@` in the docs pages with the same published release version;
 - copies install.sh, served at https://fastmash.io/install.sh;
 - writes a Markdown copy of every docs page next to its HTML (guide/output.md
   beside guide/output.html), with mdBook includes resolved, and links it from
@@ -173,6 +174,16 @@ def docs_markdown(book):
         if 'type="text/markdown"' not in page:
             page = page.replace('</head>', alternate + '</head>', 1)
         page_path.write_text(page, encoding='utf-8')
+
+
+def release_versions(book):
+    """Fill @VERSION@ in docs pages, Markdown copies and the search index."""
+    version = published_version()
+    for path in book.rglob('*'):
+        if path.suffix in ('.html', '.md', '.js') and path.is_file():
+            text = path.read_text(encoding='utf-8')
+            if '@VERSION@' in text:
+                path.write_text(text.replace('@VERSION@', version), encoding='utf-8')
 
 
 def navigation(book):
@@ -346,6 +357,7 @@ def main(book):
     landing(book)
     diagrams(book)
     docs_markdown(book)
+    release_versions(book)
     navigation(book)
     routes(book)
     llms_txt(book)
