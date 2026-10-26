@@ -1,4 +1,4 @@
-//! Exercise registry failures and partial-upload recovery without network publication.
+//! Exercise registry recovery and accepted release hashes without network publication.
 use std::{fs, os::unix::fs::PermissionsExt, path::Path, process::Command};
 fn executable(path: &Path, text: &str) {
     fs::write(path, text).unwrap();
@@ -87,5 +87,88 @@ fi
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("HTTP 403"));
     assert_eq!(fs::read_to_string(&trace).unwrap(), "");
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn reproducible_unqualified_build_cannot_replace_accepted_hashes() {
+    let root = std::path::PathBuf::from("/var/tmp").join(format!(
+        "fastmash-qualified-build-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(root.join("bin")).unwrap();
+    fs::create_dir(root.join("release")).unwrap();
+    fs::write(root.join("release/Containerfile"), "fixture\n").unwrap();
+    fs::write(root.join("qualified-binary"), "accepted").unwrap();
+    let output = Command::new("sha256sum")
+        .arg(root.join("qualified-binary"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let hash = String::from_utf8(output.stdout)
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_owned();
+    let accepted = format!("{hash}  fastmash\n{hash}  fastmash-sort-supervisor\n");
+    fs::write(root.join("release/qualified.sha256"), &accepted).unwrap();
+    executable(&root.join("bin/curl"), "#!/bin/sh\nexit 0\n");
+    executable(
+        &root.join("bin/docker"),
+        r#"#!/bin/bash
+set -euo pipefail
+if [ "$1" != run ]; then exit 0; fi
+build=
+for arg in "$@"; do
+  case "$arg" in CARGO_TARGET_DIR=/out/*) build=${arg##*/};; esac
+done
+test -n "$build"
+out="$RUNNER_TEMP/weekly-linux/out/$build/release"
+mkdir -p "$out"
+for binary in fastmash fastmash-sort-supervisor; do
+  printf '%s' "$FIXTURE_BINARY" > "$out/$binary"
+done
+"#,
+    );
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../prepare-linux.sh");
+    let run = |name: &str, binary: &str| {
+        Command::new("bash")
+            .arg(&script)
+            .current_dir(&root)
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    root.join("bin").display(),
+                    std::env::var("PATH").unwrap()
+                ),
+            )
+            .env("RUNNER_TEMP", root.join(name))
+            .env("FIXTURE_BINARY", binary)
+            .output()
+            .unwrap()
+    };
+    let accepted_run = run("accepted-run", "accepted");
+    assert!(
+        accepted_run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&accepted_run.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("release/qualified.sha256")).unwrap(),
+        accepted
+    );
+    // Both fresh builds agree with each other, but neither is the accepted pair.
+    let different = run("unqualified-run", "reproducible-but-unqualified");
+    assert!(!different.status.success());
+    assert_eq!(
+        fs::read_to_string(root.join("release/qualified.sha256")).unwrap(),
+        accepted
+    );
     fs::remove_dir_all(root).unwrap();
 }
