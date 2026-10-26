@@ -51,22 +51,29 @@ west	8	4
 Fastmash runs on **Linux x86-64** (glibc), **Windows through WSL2** and
 **Apple Silicon macOS 15 and later**.
 
-Download a prebuilt binary from the
-[releases page](https://github.com/pederbe/fastmash/releases), or install with
-Cargo on Linux or WSL2.
+Install prebuilt programs with your package manager. On Debian or Ubuntu,
+add the [signed apt repository](https://fastmash.io/install.html#debian-and-ubuntu).
+On Fedora, RHEL and similar systems:
 
 ```sh
-cargo install --locked fastmash
+sudo curl -fsSLo /etc/yum.repos.d/fastmash.repo https://packages.fastmash.io/fastmash.repo
+sudo dnf install fastmash
 ```
 
-On Apple Silicon macOS
+With Homebrew on Apple Silicon macOS or Linux:
 
 ```sh
-cargo install --locked --bin fastmash fastmash
+brew install pederbe/tap/fastmash
 ```
 
-The [installation guide](https://fastmash.io/install.html) also covers Homebrew,
-Linux packages and the quick installer.
+On any supported system, the quick installer downloads the latest release:
+
+```sh
+curl -fsSL https://fastmash.io/install.sh | sh
+```
+
+The [installation guide](https://fastmash.io/install.html) also covers single
+packages, release archives, cargo-binstall and compiling with Cargo.
 
 ## Quick start
 

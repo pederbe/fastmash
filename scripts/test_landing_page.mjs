@@ -39,7 +39,7 @@ after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
 });
 
-const panels = ['panel-script', 'panel-cargo', 'panel-binstall', 'panel-deb', 'panel-rpm'];
+const panels = ['panel-script', 'panel-brew', 'panel-deb', 'panel-rpm', 'panel-binstall', 'panel-cargo'];
 async function visiblePanels(page) {
   return page.$$eval('.install-panel', elements => elements
     .filter(element => element.getBoundingClientRect().height > 0).map(element => element.id));
@@ -105,7 +105,7 @@ test('every installation command remains visible without JavaScript', async () =
       command: element.textContent, width: element.getBoundingClientRect().width,
       focusable: element.tabIndex === 0,
     })));
-    assert.equal(commands.length, 5);
+    assert.equal(commands.length, panels.length);
     assert.ok(commands.every(code => code.command.trim() && code.width > 0 && code.focusable));
     assert.equal(await page.$eval('.install-tabs', element => element.getBoundingClientRect().height), 0);
     assert.ok(await page.$$eval('.copy', elements => elements.every(element =>
@@ -128,10 +128,10 @@ test('installation tabs retain click and keyboard selection', async () => {
         .map(tab => tab.getAttribute('aria-controls')));
       assert.deepEqual(selected, [panel]);
     }
-    await page.focus('#tab-rpm');
+    await page.focus('#tab-cargo');
     for (const [key, panel] of [
-      ['ArrowRight', 'panel-script'], ['ArrowLeft', 'panel-rpm'],
-      ['Home', 'panel-script'], ['End', 'panel-rpm'],
+      ['ArrowRight', 'panel-script'], ['ArrowLeft', 'panel-cargo'],
+      ['Home', 'panel-script'], ['End', 'panel-cargo'],
     ]) {
       await page.keyboard.press(key);
       assert.deepEqual(await visiblePanels(page), [panel]);

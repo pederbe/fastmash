@@ -93,10 +93,11 @@
       <div class="installer" id="install">
         <div class="install-tabs" role="tablist" aria-label="Ways to install">
           <button type="button" role="tab" id="tab-script" aria-controls="panel-script" aria-selected="true">Script</button>
-          <button type="button" role="tab" id="tab-cargo" aria-controls="panel-cargo" aria-selected="false" tabindex="-1">Cargo</button>
-          <button type="button" role="tab" id="tab-binstall" aria-controls="panel-binstall" aria-selected="false" tabindex="-1">cargo-binstall</button>
+          <button type="button" role="tab" id="tab-brew" aria-controls="panel-brew" aria-selected="false" tabindex="-1">Homebrew</button>
           <button type="button" role="tab" id="tab-deb" aria-controls="panel-deb" aria-selected="false" tabindex="-1">Debian/Ubuntu</button>
           <button type="button" role="tab" id="tab-rpm" aria-controls="panel-rpm" aria-selected="false" tabindex="-1">Fedora/RHEL</button>
+          <button type="button" role="tab" id="tab-binstall" aria-controls="panel-binstall" aria-selected="false" tabindex="-1">cargo-binstall</button>
+          <button type="button" role="tab" id="tab-cargo" aria-controls="panel-cargo" aria-selected="false" tabindex="-1">Cargo</button>
         </div>
         <div class="install-panel" role="tabpanel" id="panel-script" aria-labelledby="tab-script">
           <div class="install">
@@ -105,12 +106,26 @@
           </div>
           <p class="install-note">Installs the latest release into ~/.local/bin after checking its checksum.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-cargo" aria-labelledby="tab-cargo" hidden>
+        <div class="install-panel" role="tabpanel" id="panel-brew" aria-labelledby="tab-brew" hidden>
           <div class="install">
-            <code id="cmd-cargo" tabindex="0">cargo install --locked fastmash</code>
-            <button type="button" class="copy" data-copy="cmd-cargo" aria-label="Copy the Cargo install command">Copy</button>
+            <code id="cmd-brew" tabindex="0">brew install pederbe/tap/fastmash</code>
+            <button type="button" class="copy" data-copy="cmd-brew" aria-label="Copy the Homebrew install command">Copy</button>
           </div>
-          <p class="install-note">Builds from source with your Rust toolchain. On macOS, add --bin fastmash.</p>
+          <p class="install-note">Installs a prebuilt bottle on Apple Silicon macOS and Linux, with updates through brew upgrade.</p>
+        </div>
+        <div class="install-panel" role="tabpanel" id="panel-deb" aria-labelledby="tab-deb" hidden>
+          <div class="install">
+            <code id="cmd-deb" tabindex="0">curl -LO https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash_@VERSION@_amd64.deb &amp;&amp; sudo apt install ./fastmash_@VERSION@_amd64.deb</code>
+            <button type="button" class="copy" data-copy="cmd-deb" aria-label="Copy the Debian/Ubuntu install command">Copy</button>
+          </div>
+          <p class="install-note">A single .deb package for Debian 10, Ubuntu 20.04 and newer. For updates through apt, <a href="install.html#debian-and-ubuntu">add the repository</a>.</p>
+        </div>
+        <div class="install-panel" role="tabpanel" id="panel-rpm" aria-labelledby="tab-rpm" hidden>
+          <div class="install">
+            <code id="cmd-rpm" tabindex="0">sudo curl -fsSLo /etc/yum.repos.d/fastmash.repo https://packages.fastmash.io/fastmash.repo &amp;&amp; sudo dnf install fastmash</code>
+            <button type="button" class="copy" data-copy="cmd-rpm" aria-label="Copy the Fedora/RHEL install command">Copy</button>
+          </div>
+          <p class="install-note">Adds the signed dnf repository for Fedora, RHEL 8 and newer, with updates through dnf.</p>
         </div>
         <div class="install-panel" role="tabpanel" id="panel-binstall" aria-labelledby="tab-binstall" hidden>
           <div class="install">
@@ -119,19 +134,12 @@
           </div>
           <p class="install-note">Downloads the prebuilt release binaries. On macOS, add --bin fastmash.</p>
         </div>
-        <div class="install-panel" role="tabpanel" id="panel-deb" aria-labelledby="tab-deb" hidden>
+        <div class="install-panel" role="tabpanel" id="panel-cargo" aria-labelledby="tab-cargo" hidden>
           <div class="install">
-            <code id="cmd-deb" tabindex="0">curl -LO https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash_@VERSION@_amd64.deb &amp;&amp; sudo apt install ./fastmash_@VERSION@_amd64.deb</code>
-            <button type="button" class="copy" data-copy="cmd-deb" aria-label="Copy the Debian/Ubuntu install command">Copy</button>
+            <code id="cmd-cargo" tabindex="0">cargo install --locked fastmash</code>
+            <button type="button" class="copy" data-copy="cmd-cargo" aria-label="Copy the Cargo install command">Copy</button>
           </div>
-          <p class="install-note">The .deb package for Debian 10, Ubuntu 20.04 and newer.</p>
-        </div>
-        <div class="install-panel" role="tabpanel" id="panel-rpm" aria-labelledby="tab-rpm" hidden>
-          <div class="install">
-            <code id="cmd-rpm" tabindex="0">sudo dnf install https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash-@VERSION@-1.x86_64.rpm</code>
-            <button type="button" class="copy" data-copy="cmd-rpm" aria-label="Copy the Fedora/RHEL install command">Copy</button>
-          </div>
-          <p class="install-note">The .rpm package for Fedora, RHEL 8 and newer.</p>
+          <p class="install-note">Builds from source with your Rust toolchain. On macOS, add --bin fastmash.</p>
         </div>
         <p class="install-alt">Linux x86-64 and WSL2 · Apple Silicon macOS 15+ · <a href="install.html">installation details</a></p>
       </div>

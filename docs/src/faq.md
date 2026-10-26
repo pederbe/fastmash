@@ -84,9 +84,10 @@ every machine; GNU datamash's depend on the hardware and C library. See
 
 ## Does it work on macOS or Windows?
 
-On Windows, use WSL2. Fastmash 0.2.0 also supports Apple Silicon macOS 15
+On Windows, use WSL2. Fastmash also supports Apple Silicon macOS 15
 and later, with the published archive checked natively on macOS 15 and 26.
-See the [native archive instructions](install.md#native-macos-archive).
+Install it with [Homebrew](install.md#homebrew) or the
+[native archive](install.md#macos-archive).
 Intel macOS and native Windows are outside the current product scope.
 
 ## How does Fastmash relate to GNU datamash?

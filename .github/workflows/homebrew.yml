@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/homebrew.yml'
       - 'packaging/homebrew/**'
+      - 'crates/license-notices/**'
 
 permissions:
   contents: read
@@ -17,13 +18,14 @@ concurrency:
 
 jobs:
   recipe:
-    name: Source package on ${{ matrix.os }}
+    name: Recipe on ${{ matrix.os }}
     if: github.event_name == 'workflow_dispatch' || !github.event.repository.private
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26]
+        os: [macos-15, macos-26, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_ANALYTICS: '1'
@@ -31,15 +33,35 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install and check the retained formula
+      - name: Install and check the retained formula with this checkout's source
         run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          fi
           brew --version
           brew config
           brew tap-new --no-git fastmash-qualification/local
           tap=$(brew --repository)/Library/Taps/fastmash-qualification/homebrew-local
+          formula=fastmash-qualification/local/fastmash
           cp packaging/homebrew/fastmash.rb "$tap/Formula/fastmash.rb"
-          brew install --build-from-source fastmash-qualification/local/fastmash
-          brew test fastmash-qualification/local/fastmash
-          brew audit --strict fastmash-qualification/local/fastmash
-          brew style fastmash-qualification/local/fastmash
-          brew uninstall fastmash-qualification/local/fastmash
+          brew audit --strict "$formula"
+          brew style "$formula"
+          # Build the recipe from this checkout, so recipe and source changes
+          # are checked together before they reach a release.
+          version=$(awk -F'"' '/^version = /{print $2; exit}' crates/cli/Cargo.toml)
+          archive=$RUNNER_TEMP/fastmash-$version.tar.gz
+          git archive --format=tar.gz --prefix="fastmash-$version/" -o "$archive" HEAD
+          digest=$(shasum -a 256 "$archive" | cut -d' ' -f1)
+          sed -i.orig -e "s|^  url \".*\"$|  url \"file://$archive\"|" \
+            -e "s|^  sha256 \".*\"$|  sha256 \"$digest\"|" "$tap/Formula/fastmash.rb"
+          grep -qxF "  url \"file://$archive\"" "$tap/Formula/fastmash.rb"
+          grep -qxF "  sha256 \"$digest\"" "$tap/Formula/fastmash.rb"
+          rm "$tap/Formula/fastmash.rb.orig"
+          brew install --build-from-source "$formula"
+          brew test "$formula"
+          prefix=$(brew --prefix)
+          cellar=$(brew --cellar fastmash)
+          brew uninstall "$formula"
+          test ! -e "$prefix/bin/fastmash"
+          test ! -e "$prefix/bin/fastmash-sort-supervisor"
+          test ! -e "$cellar"

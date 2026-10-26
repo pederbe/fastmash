@@ -13,10 +13,11 @@ Most Linux systems from 2018 onward need nothing beyond the
 | `/proc` mounted | Needed for the system `sort` route below; without it, those jobs sort in process, and output is written in 8 KiB blocks, even to a terminal |
 | A writable `TMPDIR` (default `/tmp`) | Temporary data for large sorted jobs |
 
-Fastmash 0.2.0 supports Linux x86-64, Windows through WSL2 and
+Fastmash supports Linux x86-64, Windows through WSL2 and
 **Apple Silicon macOS 15 or later** (`aarch64-apple-darwin`), with native checks
 on macOS 15 and 26. Intel macOS, older macOS versions and native Windows are
-outside the scope. See the [native archive instructions](install.md#native-macos-archive).
+outside the scope. See [Homebrew](install.md#homebrew) or the
+[native archive instructions](install.md#macos-archive).
 
 macOS uses its system libraries and Fastmash's built-in sorting with Spill.
 It needs no `/proc`, GNU coreutils or Sort supervisor. A writable temporary

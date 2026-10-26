@@ -37,6 +37,21 @@ class SiteBuildTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     build_site.published_version()
 
+    def test_docs_pages_name_the_published_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            book = Path(directory)
+            (book / 'guide').mkdir()
+            (book / 'install.html').write_text('<code>version=@VERSION@</code>')
+            (book / 'install.md').write_text('fastmash_@VERSION@_amd64.deb')
+            (book / 'searchindex-1.js').write_text('"v@VERSION@"')
+            (book / 'guide' / 'operations.html').write_text('unchanged')
+            with mock.patch.dict(build_site.os.environ, {'FASTMASH_SITE_RELEASE_VERSION': '0.3.2'}):
+                build_site.release_versions(book)
+            self.assertEqual((book / 'install.html').read_text(), '<code>version=0.3.2</code>')
+            self.assertEqual((book / 'install.md').read_text(), 'fastmash_0.3.2_amd64.deb')
+            self.assertEqual((book / 'searchindex-1.js').read_text(), '"v0.3.2"')
+            self.assertEqual((book / 'guide' / 'operations.html').read_text(), 'unchanged')
+
     def test_html_routes_keep_queries_fragments_and_relative_paths(self):
         cases = {
             'introduction.html': 'introduction',
