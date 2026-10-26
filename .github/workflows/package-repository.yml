@@ -3,8 +3,8 @@ name: Package repository
 # Adds a published release's .deb and .rpm to the signed apt and dnf
 # repository at packages.fastmash.io. It uses the release assets as
 # published, after checking their checksums and their attestations from
-# release.yml, and never rebuilds the programs. Dispatch it on main with a tag
-# for releases whose tagged commit predates this workflow.
+# release.yml, and never rebuilds the programs. Dispatch on a version tag to
+# retry its repository publication.
 on:
   release:
     types: [published]
@@ -28,7 +28,7 @@ jobs:
   publish:
     runs-on: ubuntu-26.04
     # The signing key and storage credentials live only in this environment,
-    # which requires the maintainer's approval.
+    # restricted to version-tag delivery.
     environment: packages
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
@@ -51,7 +51,9 @@ jobs:
           state=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '"\(.draft) \(.prerelease)"')
           test "$state" = "false false" || { echo "$TAG is not a published full release" >&2; exit 1; }
           git fetch --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG"
-          git show "$TAG:release/qualified.sha256" > "$RUNNER_TEMP/qualified.sha256"
+          manifest=release/delivery.sha256
+          git cat-file -e "$TAG:$manifest" 2>/dev/null || manifest=release/qualified.sha256
+          git show "$TAG:$manifest" > "$RUNNER_TEMP/delivery.sha256"
       - name: Download and verify release assets
         run: |
           version=${TAG#v}
@@ -136,7 +138,7 @@ jobs:
             previous=$(grep -vxF "$version" <<<"$versions" | tail -n 1 || true)
           fi
           bash release/test-package-repository.sh "$RUNNER_TEMP/repository" "$version" \
-            "$RUNNER_TEMP/qualified.sha256" ${previous:+"$previous"} --expected-docs "$documents"
+            "$RUNNER_TEMP/delivery.sha256" ${previous:+"$previous"} --expected-docs "$documents"
       # Publish all immutable references before advancing InRelease and the
       # dnf mirrorlist. Clients already reading the old generation keep working.
       - name: Upload

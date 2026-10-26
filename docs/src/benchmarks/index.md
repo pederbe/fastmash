@@ -1,8 +1,8 @@
 # Benchmarks
 
-Speed is Fastmash's reason to exist, so every release is measured against GNU
-datamash 1.9 on the same machines, with the same data, and the results are
-published in full: wins and losses.
+Performance-affecting changes are compared with the previous accepted build
+before merging. Published benchmarks identify the measured version and include
+both wins and losses. Routine version bumps do not create new benchmark claims.
 
 ## Fastmash 0.1.0
 
@@ -11,7 +11,7 @@ published in full: wins and losses.
 Mean of the two sessions' median elapsed times, in milliseconds; lower is
 better. Measured with the
 0.1.0 release binaries themselves (`fastmash` sha256 `1f1fec94…`), the
-same bytes you download. The chart is generated from
+same bytes retained in that release. The chart is generated from
 [core-jobs.tsv](core-jobs.tsv) by `scripts/benchmark_chart.py`.
 
 The animated demo replays the Intel laptop's RefGene quartile job below.

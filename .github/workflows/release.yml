@@ -33,9 +33,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: "1.99.1"
-      - name: Validate exact-version qualification
-        run: |
-          cargo run --locked --quiet --manifest-path release/publication-test-server/Cargo.toml --bin fastmash-release -- check-qualification HEAD
       # The tag's CHANGELOG section, dated, becomes the release notes.
       - name: Release notes
         run: |
@@ -56,18 +53,18 @@ jobs:
               "https://static.rust-lang.org/dist/$component-1.99.1-x86_64-unknown-linux-gnu.tar.xz"
           done
           docker build -f builder/Containerfile -t fastmash-release-builder builder
-      # The same recipe that built the benchmarked binaries.
+      # Rebuild the planned version with the same pinned recipe as preparation.
       - name: Build
         run: |
           mkdir out
           docker run --rm -v "$PWD:/source:ro" -v "$PWD/out:/out" \
             -e CARGO_TARGET_DIR=/out/target fastmash-release-builder bash -c \
             'bash /source/release/build.sh && CARGO_HOME=/tmp/cargo cargo run --locked --release -p fastmash-license-notices --manifest-path /source/Cargo.toml > /out/THIRD-PARTY-LICENSES.md'
-      # Refuse bytes differing from the frozen candidate with qualified runtime inputs.
-      - name: Check the qualified checksums
+      # Delivery hashes bind the tested and uploaded bytes, not performance claims.
+      - name: Check the frozen delivery checksums
         run: |
           cd out/target/release
-          sha256sum -c "$GITHUB_WORKSPACE/release/qualified.sha256"
+          sha256sum -c "$GITHUB_WORKSPACE/release/delivery.sha256"
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: "1.99.1"
@@ -77,7 +74,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           target/release/fastmash-corpus --binary out/target/release/fastmash --expected-version "$version"
           target/release/fastmash-corpus --binary out/target/release/fastmash --expected-version "$version" --stdin-file
-          (cd out/target/release && sha256sum -c "$GITHUB_WORKSPACE/release/qualified.sha256")
+          (cd out/target/release && sha256sum -c "$GITHUB_WORKSPACE/release/delivery.sha256")
       - name: Workspace and exact release command checks
         run: |
           cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
@@ -97,7 +94,7 @@ jobs:
           installed="$RUNNER_TEMP/archive-installed"
           mkdir "$installed"
           tar -xzf "$name.tar.gz" -C "$installed"
-          bash release/check-installed.sh "$version" "$installed/$name" release/qualified.sha256
+          bash release/check-installed.sh "$version" "$installed/$name" release/delivery.sha256
       # .deb and .rpm of the same bytes; release/package.sh checks that.
       - name: Linux packages
         run: |
@@ -114,9 +111,9 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           name="fastmash-${GITHUB_REF_NAME}-x86_64-unknown-linux-gnu"
-          target/debug/fastmash-test-package-installation packages packages "$version" release/qualified.sha256 \
+          target/debug/fastmash-test-package-installation packages packages "$version" release/delivery.sha256 \
             --expected-docs "$name"
-      - name: Retain qualified Linux assets and notes
+      - name: Retain tested Linux assets and notes
         run: |
           mkdir release-assets
           cp fastmash-*.tar.gz fastmash_*.deb fastmash-*.rpm fastmash-*.sha256 fastmash_*.sha256 release-assets/
@@ -217,8 +214,8 @@ jobs:
           tar -xzf "$name.tar.gz"
           cd "$GITHUB_WORKSPACE"
           cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
-          bash release/check-installed.sh "$version" "$RUNNER_TEMP/delivered/$name" release/qualified.sha256
-          target/debug/fastmash-test-package-installation packages "$RUNNER_TEMP/delivered" "$version" release/qualified.sha256 \
+          bash release/check-installed.sh "$version" "$RUNNER_TEMP/delivered/$name" release/delivery.sha256
+          target/debug/fastmash-test-package-installation packages "$RUNNER_TEMP/delivered" "$version" release/delivery.sha256 \
             --expected-docs "$RUNNER_TEMP/delivered/$name"
       - name: Publish verified release and start package repository update
         env:

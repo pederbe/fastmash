@@ -1,7 +1,5 @@
-//! Weekly release metadata and exact-version qualification bindings.
+//! Weekly release versioning and changelog metadata.
 #![forbid(unsafe_code)]
-#[path = "../qualification.rs"]
-mod qualification;
 #[path = "../weekly.rs"]
 mod weekly;
 mod common {
@@ -37,9 +35,6 @@ fn main() {
         Some((command, args)) => match command.as_str() {
             "prepare-weekly" => weekly::prepare(args),
             "release-notes" => weekly::notes(args),
-            "qualification-inputs" => qualification::inputs(args),
-            "check-qualification" => qualification::check(args),
-            "record-qualification" => qualification::record(args),
             _ => Err("unknown release command".into()),
         },
         None => Err("expected a release command".into()),

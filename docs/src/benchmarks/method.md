@@ -2,8 +2,8 @@
 
 ## Principles
 
-- **One build.** Every number on the results page comes from the same release
-  artifact. Results from different versions are never combined.
+- **Identified build.** Each published comparison identifies the exact measured
+  executable. Results from different versions are never combined.
 - **Exact output first.** A timing counts only if Fastmash's output matches
   the expected output for that job.
 - **Same conditions.** GNU datamash and Fastmash run on the same host, with the
@@ -37,7 +37,7 @@ and regenerates the synthetic inputs from the same fixed seed.
 
 ## Acceptance rules
 
-The rules are fixed before a release candidate is measured:
+The rules are fixed before a performance comparison is measured:
 
 | Rule | Threshold |
 | --- | --- |
@@ -49,9 +49,16 @@ The rules are fixed before a release candidate is measured:
 | Memory review | Peak memory more than twice GNU datamash's **and** 64 MiB more |
 
 A job that fails, times out or gives a wrong answer counts as a failure, not
-a result. Each candidate is also compared with the previous accepted Fastmash
-build on every existing job (the *predecessor guards*); a slowdown beyond these limits needs
-an explicit, published justification.
+a result. Performance-affecting changes are compared with the previous accepted
+Fastmash build through predecessor guards covering affected workloads and
+representative regressions. A material slowdown needs a fix or an explicit
+disposition. New whole-catalog and overall-speed claims use the full matrix.
+
+Release delivery separately checks reproducibility, correctness, installation
+and provenance. A routine version bump is not another benchmark campaign or
+a claim that new executable bytes were measured. Results below remain scoped
+to the dated Linux 0.1.0 measurement. See
+[ADR 0012](../adr/0012-release-delivery-and-performance.md).
 
 ## Hosts
 
