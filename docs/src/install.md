@@ -77,8 +77,9 @@ brew install pederbe/tap/fastmash
 ```
 
 Homebrew downloads a prebuilt bottle for macOS 15, macOS 26 and Linux x86-64,
-so you do not need Rust. On other setups it builds from source automatically,
-which takes a few minutes and needs no action from you. Bottles are built by
+so you do not need Rust. If no bottle matches your setup, such as a Homebrew
+installed outside its default location, it builds from source automatically.
+This takes a few minutes and needs no action from you. Bottles are built by
 Homebrew from the published source, separately from the release archives.
 
 Update with `brew upgrade fastmash` and remove it with

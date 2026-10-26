@@ -34,9 +34,10 @@ for retries.
 Change the recipe here, in the same pull request as any source change it
 depends on. The `Homebrew recipe checks` workflow builds the changed recipe
 from the pull request's own source on macOS 15, macOS 26 and Linux x86-64, and
-runs its test, audit, style check and removal check. The `url` and `sha256`
-lines name the latest release that the tap published. The tap's workflow
-replaces them for each new release.
+runs its test, audit, style check and removal check. It also runs for changes
+to the dependency notice tool, which the recipe uses. The `url` and `sha256`
+lines name a published release, so the recipe stays valid on its own. The
+tap's workflow replaces them for each new release.
 
 Homebrew's
 [acceptance policy](https://docs.brew.sh/Package-Acceptance-Policy) includes

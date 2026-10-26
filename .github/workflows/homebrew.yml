@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/homebrew.yml'
       - 'packaging/homebrew/**'
+      - 'crates/license-notices/**'
 
 permissions:
   contents: read
@@ -24,6 +25,7 @@ jobs:
       matrix:
         os: [macos-15, macos-26, ubuntu-24.04]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     env:
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_ANALYTICS: '1'

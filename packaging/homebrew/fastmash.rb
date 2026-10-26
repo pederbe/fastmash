@@ -18,8 +18,9 @@ class Fastmash < Formula
 
   def install
     if OS.mac?
-      # The Sort supervisor is Linux-only; macOS sorts with the built-in sorter.
+      # Match the release archives' deployment target.
       ENV["MACOSX_DEPLOYMENT_TARGET"] = "15.0"
+      # The Sort supervisor is Linux-only; macOS sorts with the built-in sorter.
       system "cargo", "install", "--bin", "fastmash", *std_cargo_args(path: "crates/cli")
       target = "aarch64-apple-darwin"
     else
