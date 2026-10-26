@@ -40,38 +40,38 @@ become performance claims for later releases or macOS.
 
 [ADR 0012](docs/src/adr/0012-release-delivery-and-performance.md) records this
 separation between performance acceptance and release delivery.
+[ADR 0013](docs/src/adr/0013-reuse-tested-release-artifacts.md) removes repeated
+builds and installation checks and separates website deployment.
 
 ## Build, test and publish
 
 The GitHub-hosted workflows perform these steps for the frozen version:
 
-1. Build the Linux pair twice with `release/Containerfile` and
+1. Build the tagged Linux pair twice with `release/Containerfile` and
    `release/build.sh`, using empty target directories. Both executable pairs
-   must be byte-identical. Freeze their actual hashes in the tag's
-   `release/delivery.sha256`. This is a delivery manifest, not benchmark evidence.
-   The historical `release/qualified.sha256` remains unchanged.
-2. Rebuild the tagged Linux source and verify its delivery manifest. Run the
-   workspace tests and both regression-corpus input modes against that exact
-   executable, with its Sort supervisor beside it. Package the same bytes into
-   the archive, `.deb` and `.rpm`, then test extraction, installation, Commands
-   and removal. Packaging must not rewrite either executable.
-3. Build the Apple Silicon executable twice on macOS 15 with the pinned
-   compiler, remapped paths and deployment target 15.0. Freeze one archive and
-   its SHA-256. Install those exact bytes on macOS 15 and 26 and run the
-   applicable Command, Numerical profile, Spill, cleanup, signal and both corpus
-   input-mode checks. See [ADR 0011](docs/src/adr/0011-native-release-delivery.md).
-4. Attest the platform archives and Linux packages, create a draft release and
-   upload its frozen assets. Download them again, verify checksums and
-   attestations, and repeat Linux package and native macOS installation checks.
+   must be byte-identical. Record their hashes in the run's
+   `release/delivery.sha256` and package one of those pairs directly. Include
+   the manifest as `binary.sha256` inside the archive. Historical manifests
+   remain unchanged.
+2. Run workspace tests and both regression-corpus input modes against that
+   executable and its Sort supervisor. Package the same bytes into the archive,
+   `.deb` and `.rpm`, then test extraction, installation, Commands and removal.
+3. Build the Apple Silicon executable twice on macOS 15 with the pinned compiler,
+   remapped paths and deployment target 15.0. Freeze one archive and its SHA-256.
+4. Attest the platform archives and Linux packages and upload a draft release.
+   Verify downloaded Linux assets against the build's retained checksums and
+   release provenance. Install the downloaded macOS archive once on macOS 15
+   and 26 and run the applicable command tests and both corpus input modes.
    Dry-run the five published source packages before publishing anything.
-5. Publish the GitHub release only after those checks pass. Explicitly dispatch
+5. Publish the GitHub release after those checks pass. Explicitly dispatch
    Package repository at the same tag and wait for its signed apt/dnf update and
    installed-client checks. Publish the remaining crates in dependency order
    using the existing crates.io trusted publisher.
-6. Advance the `release` branch after delivery succeeds. The website keeps
-   building current documentation from `main`, reads the published version from
-   `site/release-version.txt` on that branch, and receives a refresh through its
-   fixed-`main` Cloudflare deploy hook.
+6. Advance the `release` branch after package delivery succeeds. A separate
+   Website deployment workflow requests the fixed-`main` Cloudflare build.
+   Website failures do not fail package delivery. Retry that workflow manually
+   without rebuilding or republishing a release. Cloudflare reports the actual
+   website build result after accepting the request.
 
 The workflow binds correctness and installation evidence to the delivered
 bytes. It does not relabel a fresh rebuild as a benchmarked executable. Additional
@@ -186,10 +186,11 @@ campaign, and unchanged dated claims do not need regenerated charts.
 
 ### Verify delivery and prepare the draft
 
-After two identical clean builds, the preparation workflow writes the actual
-candidate hashes to `release/delivery.sha256`. Preserve historical qualified
-manifests unchanged. Move selected changelog entries into the dated patch section
-when tagging. The final tagged source must reproduce its frozen delivery hashes.
+After two identical clean builds, the Linux release job writes the actual
+candidate hashes to its local `release/delivery.sha256` and includes that manifest
+in the archive. Weekly preparation only versions metadata and creates the tag.
+Preserve historical qualified manifests unchanged. Move selected changelog entries
+into the dated patch section when tagging.
 Verify that the tag, crate versions, notes and executable version agree.
 
 The Release workflow checks those hashes, runs the workspace and candidate
@@ -209,9 +210,10 @@ executables are removed. Package construction also checks that packaging did not
 rewrite either executable. Keep these checks passing before accepting the draft.
 
 Review the draft's notes and complete asset list. Download its delivered assets,
-verify their checksum sidecars and provenance, and repeat extraction/installation
-checks against the delivery manifest. Build-side checks alone do not verify an
-uploaded asset. Retain asset hashes and installation logs with the delivery evidence.
+verify their checksum sidecars and provenance against the build records. Identical
+Linux downloads reuse the completed installation evidence. macOS installation
+checks run once against the downloaded draft archive. Retain asset hashes and
+installation logs with the delivery evidence.
 The authorized weekly workflow publishes the release and crates after these
 checks pass, then updates the signed repositories and published website version. Additional distribution submissions
 and announcements remain separate work.
@@ -249,26 +251,20 @@ Spill, signals and temporary-file cleanup stay covered. Representative hosted
 GNU comparisons remain scoped to those runners and workloads.
 
 A successful branch run is candidate evidence, not a release or permission to
-publish. Weekly preparation freezes the Linux delivery manifest for the
-planned version before creating its tag.
+publish. The release job freezes the Linux delivery manifest for the
+planned version during the release build, after creating its tag.
 Keep the Numerical profile unchanged unless the numerical-change rules apply.
 
 ### Deliver through the Release workflow
 
-On the frozen version tag, the Release workflow calls the same native build
-and installation workflows. Linux's delivery checksum gate and
-archive/package checks remain required. Only after both platforms pass does
-it stage the same macOS archive, attest both platform archives and Linux
-packages, and create a draft release.
-
-The workflow then downloads the draft's uploaded macOS archive on macOS 15
-and 26, verifies the release-workflow attestation and the frozen archive hash,
-and repeats documented installation, installed executable checks, applicable
-command tests and both corpus input modes. Those checks use the delivered
-bytes; rebuilding a source executable cannot substitute for them. Evidence
-from candidate and delivered installations has separate artifact names.
-A failure leaves the draft unpublished. Successful delivered-asset checks
-allow the workflow to publish automatically.
+On the frozen version tag, the Release workflow calls the native source checks
+and archive build, then stages and attests that archive in a draft release.
+It skips the earlier candidate-installation round. The workflow downloads the
+draft archive on macOS 15 and 26, verifies its release-workflow attestation and
+frozen hash, and runs documented installation, installed executable checks,
+applicable command tests and both corpus modes once on each baseline. A failure
+leaves the draft unpublished. Branch CI retains the candidate-installation round
+because it has no draft release to download.
 
 The macOS checksum is frozen per workflow run rather than stored in the Linux
 manifest. Two clean builds establish within-run executable reproducibility;

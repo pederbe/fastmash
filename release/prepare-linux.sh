@@ -1,5 +1,5 @@
 #!/bin/bash
-# Freeze delivery hashes after two identical clean builds of the planned version.
+# Build the tagged version twice and retain one pair with its delivery hashes.
 set -euo pipefail
 : "${RUNNER_TEMP:?}"
 work="$RUNNER_TEMP/weekly-linux"

@@ -51,9 +51,6 @@ jobs:
           state=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '"\(.draft) \(.prerelease)"')
           test "$state" = "false false" || { echo "$TAG is not a published full release" >&2; exit 1; }
           git fetch --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG"
-          manifest=release/delivery.sha256
-          git cat-file -e "$TAG:$manifest" 2>/dev/null || manifest=release/qualified.sha256
-          git show "$TAG:$manifest" > "$RUNNER_TEMP/delivery.sha256"
       - name: Download and verify release assets
         run: |
           version=${TAG#v}
@@ -68,6 +65,16 @@ jobs:
             gh attestation verify "$name" --repo "$GITHUB_REPOSITORY" --source-ref "refs/tags/$TAG" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
           done
+          # The attested archive carries the tested executable manifest.
+          # Older releases retain their manifests in the immutable tag.
+          archive="fastmash-${TAG}-x86_64-unknown-linux-gnu"
+          if tar -tzf "$archive.tar.gz" "$archive/binary.sha256" >/dev/null 2>&1; then
+            tar -xOf "$archive.tar.gz" "$archive/binary.sha256" > "$RUNNER_TEMP/delivery.sha256"
+          else
+            manifest=release/delivery.sha256
+            git cat-file -e "$TAG:$manifest" 2>/dev/null || manifest=release/qualified.sha256
+            git show "$TAG:$manifest" > "$RUNNER_TEMP/delivery.sha256"
+          fi
       - name: Prepare independent package documents
         run: |
           name="fastmash-${TAG}-x86_64-unknown-linux-gnu"
