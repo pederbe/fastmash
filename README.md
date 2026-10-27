@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pederbe/fastmash/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/pederbe/fastmash/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/pederbe/fastmash/actions/workflows/ci.yml?query=event%3Apull_request"><img alt="Pull request CI" src="https://github.com/pederbe/fastmash/actions/workflows/ci.yml/badge.svg?event=pull_request"></a>
   <a href="https://github.com/pederbe/fastmash/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/pederbe/fastmash"></a>
   <a href="https://github.com/pederbe/fastmash/blob/main/LICENSE-MIT"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue"></a>
   or
