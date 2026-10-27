@@ -12,10 +12,6 @@ on:
       version:
         type: string
         required: true
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/cargo-binstall.yml'
 
 permissions:
   contents: read

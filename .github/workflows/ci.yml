@@ -32,6 +32,7 @@ jobs:
       homebrew: ${{ steps.paths.outputs.homebrew }}
       locale: ${{ steps.paths.outputs.locale }}
       packages_repository: ${{ steps.paths.outputs.packages_repository }}
+      binstall: ${{ steps.paths.outputs.binstall }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,6 +56,8 @@ jobs:
               - '.github/workflows/homebrew.yml'
               - 'packaging/homebrew/**'
               - 'crates/license-notices/**'
+            binstall:
+              - '.github/workflows/cargo-binstall.yml'
             locale:
               - '.github/workflows/locale-reference.yml'
               - 'tools/icu-exemplars/**'
@@ -350,9 +353,21 @@ jobs:
       needs.changes.outputs.packages_repository != 'false')
     uses: ./.github/workflows/package-repository-checks.yml
 
+  binstall:
+    needs: changes
+    if: >-
+      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.binstall != 'false')
+    uses: ./.github/workflows/cargo-binstall.yml
+    with:
+      version: ''
+    permissions:
+      contents: read
+      attestations: read
+
   ci:
     name: CI
-    needs: [changes, check, test, profiling, msrv, licenses, native, release-linux, documentation, homebrew, locale, packages-repository]
+    needs: [changes, check, test, profiling, msrv, licenses, native, release-linux, documentation, homebrew, locale, packages-repository, binstall]
     if: always()
     runs-on: ubuntu-26.04
     steps:
