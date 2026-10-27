@@ -2,13 +2,7 @@ name: ICU locale reference
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/locale-reference.yml'
-      - 'tools/icu-exemplars/**'
-      - 'data/locales/collation-candidates.json'
-      - 'deny.toml'
+  workflow_call:
 
 permissions:
   contents: read
