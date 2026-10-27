@@ -29,6 +29,10 @@ jobs:
       packages: ${{ steps.scope.outputs.packages }}
       configuration: ${{ steps.scope.outputs.configuration }}
       tag: ${{ steps.scope.outputs.tag }}
+      homebrew: ${{ steps.paths.outputs.homebrew }}
+      locale: ${{ steps.paths.outputs.locale }}
+      packages_repository: ${{ steps.paths.outputs.packages_repository }}
+      binstall: ${{ steps.paths.outputs.binstall }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,8 +48,39 @@ jobs:
           bash .github/scripts/ci-scope.sh "$BASE_SHA" | tee "$GITHUB_OUTPUT"
           version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -1)
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+        id: paths
+        with:
+          filters: |
+            homebrew:
+              - '.github/workflows/homebrew.yml'
+              - 'packaging/homebrew/**'
+              - 'crates/license-notices/**'
+            binstall:
+              - '.github/workflows/cargo-binstall.yml'
+            locale:
+              - '.github/workflows/locale-reference.yml'
+              - 'tools/icu-exemplars/**'
+              - 'data/locales/collation-candidates.json'
+              - 'deny.toml'
+            packages_repository:
+              - '.github/workflows/package-repository*.yml'
+              - 'release/package-repository.sh'
+              - 'release/macos-archive.sh'
+              - 'packaging/linux-source-test.rs'
+              - 'packaging/fedora/**'
+              - 'packaging/nix/**'
+              - 'release/publish-package-repository.sh'
+              - 'release/package-publication-fixtures.sh'
+              - 'release/test-package-publication.sh'
+              - 'release/test-package-repository.sh'
+              - 'release/check-installed.sh'
+              - 'crates/cli/tests/release_installation.rs'
+              - 'release/publication-test-server/**'
+              - 'packaging/conda-forge/**'
+              - 'packaging/homebrew/**'
 
-  # Keep the required job names. Missing filter output runs the checks.
+  # Missing filter output runs the checks.
   check:
     name: Format and lint
     needs: changes
@@ -76,6 +111,7 @@ jobs:
           cargo fmt --manifest-path release/publication-test-server/Cargo.toml --check
           cargo clippy --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bin fastmash-release -- -D warnings
           cargo test --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bin fastmash-release
+          cargo test --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --test ci_workflow
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         if: needs.changes.outputs.application != 'false' || needs.changes.outputs.packages != ''
       - run: cargo fmt --all --check
@@ -292,3 +328,57 @@ jobs:
     uses: ./.github/workflows/linux-release.yml
     with:
       tag: ${{ needs.changes.outputs.tag }}
+
+  documentation:
+    uses: ./.github/workflows/docs.yml
+
+  homebrew:
+    needs: changes
+    if: >-
+      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.homebrew != 'false')
+    uses: ./.github/workflows/homebrew.yml
+
+  locale:
+    needs: changes
+    if: >-
+      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.locale != 'false')
+    uses: ./.github/workflows/locale-reference.yml
+
+  packages-repository:
+    needs: changes
+    if: >-
+      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.packages_repository != 'false')
+    uses: ./.github/workflows/package-repository-checks.yml
+
+  binstall:
+    needs: changes
+    if: >-
+      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.binstall != 'false')
+    uses: ./.github/workflows/cargo-binstall.yml
+    with:
+      version: ''
+    permissions:
+      contents: read
+      attestations: read
+
+  ci:
+    name: CI
+    needs: [changes, check, test, profiling, msrv, licenses, native, release-linux, documentation, homebrew, locale, packages-repository, binstall]
+    if: always()
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Require passing checks
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          test -n "$RESULTS"
+          for result in $RESULTS; do
+            case "$result" in
+              success|skipped) ;;
+              *) echo "A check finished with: $result"; exit 1 ;;
+            esac
+          done

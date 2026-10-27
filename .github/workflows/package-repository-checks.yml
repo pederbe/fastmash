@@ -2,24 +2,7 @@ name: Package repository checks
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/package-repository*.yml'
-      - 'release/package-repository.sh'
-      - 'release/macos-archive.sh'
-      - 'packaging/linux-source-test.rs'
-      - 'packaging/fedora/**'
-      - 'packaging/nix/**'
-      - 'release/publish-package-repository.sh'
-      - 'release/package-publication-fixtures.sh'
-      - 'release/test-package-publication.sh'
-      - 'release/test-package-repository.sh'
-      - 'release/check-installed.sh'
-      - 'crates/cli/tests/release_installation.rs'
-      - 'release/publication-test-server/**'
-      - 'packaging/conda-forge/**'
-      - 'packaging/homebrew/**'
+  workflow_call:
 
 permissions:
   contents: read

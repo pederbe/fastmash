@@ -65,8 +65,8 @@ Before closing an implementation ticket, update its acceptance checklist and
 check whether its parent issue is complete.
 
 Renovate prepares one combined daily dependency update, including stable major
-releases. Merge follows required checks and an independent Spec and Standards
-review.
+releases. GitHub automatically merges the batch after the required CI result
+passes, covering every applicable platform, documentation and package check.
 The daily self-hosted run updates Cargo, npm, Actions, container digests and the
 custom tools in `.github/dependency-pins.json`. The synchronization helper keeps
 release archive hashes and compiler versions together before pushing the PR.

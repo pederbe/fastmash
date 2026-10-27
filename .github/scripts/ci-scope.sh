@@ -109,7 +109,7 @@ if base:
     for path in filter(None, paths):
         if path.endswith(".md") or path.startswith("docs/") or path == "Cargo.lock":
             continue
-        if path.startswith((".github/workflows/", ".github/scripts/")) or path in {
+        if path.startswith((".github/workflows/", ".github/scripts/", "release/publication-test-server/tests/")) or path in {
             "release/prepare-linux.sh", "release/check-crate-packages.sh", "release/publish-crates.sh",
             "release/package-repository.sh",  # Dedicated package workflow verifies signing/installation.
             "release/publication-test-server/src/weekly.rs",
