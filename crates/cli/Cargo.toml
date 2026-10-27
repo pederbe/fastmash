@@ -55,11 +55,11 @@ sha2 = { version = "0.11.1", default-features = false }
 mem_prefetch = { version = "0.1.1", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rustix = { version = "1.1.5", default-features = false, features = ["std", "rand", "stdio", "fs"] }
+rustix = { version = "1.1.6", default-features = false, features = ["std", "rand", "stdio", "fs"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Borrow standard descriptors without initializing an additional I/O buffer.
-rustix = { version = "1.1.5", default-features = false, features = ["std", "stdio", "fs", "termios"] }
+rustix = { version = "1.1.6", default-features = false, features = ["std", "stdio", "fs", "termios"] }
 getrandom = { version = "0.4.3", default-features = false, features = ["std"] }
 
 [features]
