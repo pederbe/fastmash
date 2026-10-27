@@ -114,9 +114,10 @@ jobs:
         run: |
           set -euo pipefail
           # Only the crate's own release metadata: no QuickInstall builds and
-          # no fallback to compiling with cargo install.
-          cargo binstall --no-confirm --disable-telemetry --strategies crate-meta-data \
-            --root "$RUNNER_TEMP/root" $BIN_ARGS "fastmash@$VERSION"
+          # no fallback to compiling with cargo install. --bin takes several
+          # values, so the crate name comes first as in the documented command.
+          cargo binstall "fastmash@$VERSION" --no-confirm --disable-telemetry \
+            --strategies crate-meta-data --root "$RUNNER_TEMP/root" $BIN_ARGS
           ls -l "$RUNNER_TEMP/root/bin"
       - name: Check installed bytes, version, commands and sort route
         run: |

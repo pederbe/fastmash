@@ -184,7 +184,7 @@ cargo binstall fastmash
 On Apple Silicon macOS 15 or later, select its single executable:
 
 ```sh
-cargo binstall --bin fastmash fastmash
+cargo binstall fastmash --bin fastmash
 ```
 
 Other platforms have no prebuilt Fastmash executable. If the download is not
