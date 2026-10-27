@@ -188,8 +188,8 @@ cargo binstall --bin fastmash fastmash
 ```
 
 Other platforms have no prebuilt Fastmash executable. If the download is not
-available, cargo-binstall falls back to other sources or offers to compile.
-Add `--strategies crate-meta-data` to stop with an error instead.
+available, cargo-binstall offers to compile instead. Add
+`--strategies crate-meta-data` to stop with an error instead.
 
 `cargo install` compiles Fastmash from source with your
 [Rust toolchain](https://rustup.rs). On Linux or WSL2:

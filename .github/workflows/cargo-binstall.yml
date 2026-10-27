@@ -23,7 +23,7 @@ permissions:
 
 concurrency:
   group: cargo-binstall-${{ github.ref }}-${{ github.event_name }}-${{ inputs.version }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
@@ -38,7 +38,7 @@ jobs:
       matrix:
         include:
           # Pinned cargo-binstall release archives and their SHA-256.
-          - os: ubuntu-24.04
+          - os: ubuntu-26.04
             target: x86_64-unknown-linux-gnu
             programs: fastmash fastmash-sort-supervisor
             installer: cargo-binstall-x86_64-unknown-linux-musl.tgz
@@ -85,7 +85,8 @@ jobs:
           cd "$archive"
           shasum -a 256 -c "$name.tar.gz.sha256"
           tar -xzf "$name.tar.gz"
-          # The installed executables must be these archive bytes.
+          # The installed executables must be these archive bytes. Archives
+          # before 0.4.0 carry no binary.sha256, so hash the extracted files.
           (cd "$name" && shasum -a 256 $PROGRAMS) > "$RUNNER_TEMP/archive-executables.sha256"
           cat "$RUNNER_TEMP/archive-executables.sha256"
       - name: Install the pinned cargo-binstall release
