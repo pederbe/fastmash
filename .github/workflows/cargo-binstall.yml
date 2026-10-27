@@ -1,0 +1,134 @@
+name: cargo-binstall installation
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published stable version to install, such as 0.3.0. Empty selects the latest release.
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/cargo-binstall.yml'
+
+permissions:
+  contents: read
+  attestations: read
+
+concurrency:
+  group: cargo-binstall-${{ github.ref }}-${{ github.event_name }}-${{ inputs.version }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  install:
+    name: cargo-binstall on ${{ matrix.os }}
+    if: github.event_name != 'pull_request' || !github.event.repository.private
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Pinned cargo-binstall release archives and their SHA-256.
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            programs: fastmash fastmash-sort-supervisor
+            installer: cargo-binstall-x86_64-unknown-linux-musl.tgz
+            installer-sha256: 1f72931713e9091478538c6c78c3f11f205b4f6f394f35e61835036b23929d2a
+            # The documented commands from docs/src/install.md.
+            bin-args: ''
+          - os: macos-15
+            target: aarch64-apple-darwin
+            programs: fastmash
+            installer: cargo-binstall-aarch64-apple-darwin.zip
+            installer-sha256: b027e09e54431e56a75ce63858a798e1bfd9cd5fa62894186d46808d50b31335
+            bin-args: --bin fastmash
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      BINSTALL_VERSION: v1.25.3
+      REQUESTED_VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: '1.99.1'
+      - name: Select the published stable version
+        run: |
+          set -euo pipefail
+          version=${REQUESTED_VERSION:-$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)}
+          version=${version#v}
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a stable version: $version" >&2; exit 1; }
+          printf 'VERSION=%s\n' "$version" >> "$GITHUB_ENV"
+      - name: Download and verify the selected release archive
+        env:
+          TARGET: ${{ matrix.target }}
+          PROGRAMS: ${{ matrix.programs }}
+        run: |
+          set -euo pipefail
+          name="fastmash-v$VERSION-$TARGET"
+          archive="$RUNNER_TEMP/archive"
+          mkdir "$archive"
+          gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --dir "$archive" --pattern "$name.tar.gz" --pattern "$name.tar.gz.sha256"
+          gh attestation verify "$archive/$name.tar.gz" --repo "$GITHUB_REPOSITORY" --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"
+          cd "$archive"
+          shasum -a 256 -c "$name.tar.gz.sha256"
+          tar -xzf "$name.tar.gz"
+          # The installed executables must be these archive bytes.
+          (cd "$name" && shasum -a 256 $PROGRAMS) > "$RUNNER_TEMP/archive-executables.sha256"
+          cat "$RUNNER_TEMP/archive-executables.sha256"
+      - name: Install the pinned cargo-binstall release
+        env:
+          INSTALLER: ${{ matrix.installer }}
+          INSTALLER_SHA256: ${{ matrix.installer-sha256 }}
+        run: |
+          set -euo pipefail
+          tool="$RUNNER_TEMP/cargo-binstall"
+          mkdir "$tool"
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$tool/$INSTALLER" \
+            "https://github.com/cargo-bins/cargo-binstall/releases/download/$BINSTALL_VERSION/$INSTALLER"
+          printf '%s  %s\n' "$INSTALLER_SHA256" "$tool/$INSTALLER" | shasum -a 256 -c
+          case "$INSTALLER" in
+            *.zip) unzip -q "$tool/$INSTALLER" -d "$tool" ;;
+            *) tar -xzf "$tool/$INSTALLER" -C "$tool" ;;
+          esac
+          "$tool/cargo-binstall" -V
+          printf '%s\n' "$tool" >> "$GITHUB_PATH"
+      - name: Install from the upstream release only
+        env:
+          BIN_ARGS: ${{ matrix.bin-args }}
+          # Read by cargo-binstall for GitHub release lookups.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Only the crate's own release metadata: no QuickInstall builds and
+          # no fallback to compiling with cargo install.
+          cargo binstall --no-confirm --disable-telemetry --strategies crate-meta-data \
+            --root "$RUNNER_TEMP/root" $BIN_ARGS "fastmash@$VERSION"
+          ls -l "$RUNNER_TEMP/root/bin"
+      - name: Check installed bytes, version, commands and sort route
+        run: |
+          set -euo pipefail
+          cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
+          bash release/check-installed.sh "$VERSION" "$RUNNER_TEMP/root/bin" "$RUNNER_TEMP/archive-executables.sha256"
+      - name: Remove the installation
+        env:
+          PROGRAMS: ${{ matrix.programs }}
+        run: |
+          set -euo pipefail
+          cargo uninstall --root "$RUNNER_TEMP/root" fastmash
+          for program in $PROGRAMS; do
+            test ! -e "$RUNNER_TEMP/root/bin/$program"
+          done
+          test -z "$(ls -A "$RUNNER_TEMP/root/bin")"

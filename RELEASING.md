@@ -66,7 +66,9 @@ The GitHub-hosted workflows perform these steps for the frozen version:
 5. Publish the GitHub release after those checks pass. Explicitly dispatch
    Package repository at the same tag and wait for its signed apt/dnf update and
    installed-client checks. Publish the remaining crates in dependency order
-   using the existing crates.io trusted publisher.
+   using the existing crates.io trusted publisher. Then install the release
+   with cargo-binstall on Linux x86-64 and Apple Silicon macOS and check the
+   installed bytes against the release archives.
 6. Advance the `release` branch after package delivery succeeds. A separate
    Website deployment workflow requests the fixed-`main` Cloudflare build.
    Website failures do not fail package delivery. Retry that workflow manually

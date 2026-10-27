@@ -174,17 +174,22 @@ The final command prints `3`.
 If you already use Rust, Cargo offers two routes.
 
 [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads the
-prebuilt release binaries, without compiling. On Linux or WSL2:
+same prebuilt executables as the release archives, without compiling. On Linux
+x86-64 or WSL2, it installs `fastmash` and its Sort supervisor:
 
 ```sh
 cargo binstall fastmash
 ```
 
-On Apple Silicon macOS 15 or later:
+On Apple Silicon macOS 15 or later, select its single executable:
 
 ```sh
 cargo binstall --bin fastmash fastmash
 ```
+
+Other platforms have no prebuilt Fastmash executable. If the download is not
+available, cargo-binstall falls back to other sources or offers to compile.
+Add `--strategies crate-meta-data` to stop with an error instead.
 
 `cargo install` compiles Fastmash from source with your
 [Rust toolchain](https://rustup.rs). On Linux or WSL2:

@@ -29,6 +29,10 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- cargo-binstall no longer falls back to third-party QuickInstall builds, and
+  each release checks that it installs the published executables on Linux
+  x86-64 and Apple Silicon macOS.
+
 - Homebrew installs prebuilt bottles that follow each release within a day, and
   the installation guide now leads with apt, dnf and Homebrew.
 
