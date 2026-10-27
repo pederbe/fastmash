@@ -22,12 +22,18 @@ numerical profile version that introduced it.
 
 ### Fixed
 
+- The installation guide's cargo-binstall command for macOS names the crate
+  before `--bin fastmash`, which cargo-binstall otherwise rejects.
 - Refuse safely when the operating system denies the runtime signal-mask query.
 - Prepare apt and dnf repository updates without replacing metadata that
   clients are still reading, using retained apt By-Hash indexes and signed
   dnf snapshots.
 
 ### Changed
+
+- cargo-binstall no longer falls back to third-party QuickInstall builds, and
+  each release checks that it installs the published executables on Linux
+  x86-64 and Apple Silicon macOS.
 
 - Homebrew installs prebuilt bottles that follow each release within a day, and
   the installation guide now leads with apt, dnf and Homebrew.

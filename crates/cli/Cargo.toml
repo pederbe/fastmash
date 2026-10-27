@@ -12,11 +12,14 @@ categories = ["command-line-utilities", "science", "text-processing"]
 readme = "../../README.md"
 
 # `cargo binstall fastmash` downloads the prebuilt release archive (the
-# tested delivery binaries) instead of compiling.
+# tested delivery binaries) instead of compiling. The cargo-binstall workflow
+# checks this route for each release. QuickInstall is disabled so a failed
+# download never installs a third-party build.
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/fastmash-v{ version }-{ target }.tar.gz"
 bin-dir = "fastmash-v{ version }-{ target }/{ bin }{ binary-ext }"
 pkg-fmt = "tgz"
+disabled-strategies = ["quick-install"]
 
 [[bin]]
 name = "fastmash"

@@ -175,6 +175,15 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: bash release/publish-crates.sh "${GITHUB_REF_NAME#v}" publish
 
+  binstall:
+    needs: crates-publish
+    uses: ./.github/workflows/cargo-binstall.yml
+    permissions:
+      contents: read
+      attestations: read
+    with:
+      version: ${{ github.ref_name }}
+
   finish:
     needs: [publish, crates-publish]
     runs-on: ubuntu-26.04

@@ -26,8 +26,10 @@ release is newer than the tap's formula, it takes this recipe from the release
 tag and sets the tag's source URL and checksum. It then builds and tests
 bottles on GitHub-hosted runners, publishes them, and checks installation,
 upgrade from the previous version and removal from the published tap.
-It does nothing when the versions match. A failure leaves the tap unchanged,
-and does not affect the Fastmash release or its other packages. See the
+It does nothing when the versions match. Failed bottle builds leave the tap
+unchanged. A final installation-check failure can occur after the bottles are
+published, and can be checked again without rebuilding them. Neither failure
+affects the Fastmash release or its other packages. See the
 [tap's maintenance guide](https://github.com/pederbe/homebrew-tap/blob/main/CONTRIBUTING.md)
 for retries.
 
