@@ -363,9 +363,9 @@ dependencies = [
 
 [[package]]
 name = "hotpath"
-version = "0.29.2"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b4af2b5ecf2650278fe33b0e49b68c8c484d2306475c127628316dea740cf5c"
+checksum = "618bdbbe0aa401002251afd661e4b46cae48b22a132c656373c1738d250c1946"
 dependencies = [
  "arc-swap",
  "cfg-if",
@@ -389,15 +389,15 @@ dependencies = [
 
 [[package]]
 name = "hotpath-drain"
-version = "0.29.2"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5cceb6c15fbaaeb00b51acc7be7fad533d0b56cb422b1cfc16cf9ca1624d33a"
+checksum = "1732059b5a68195c48a0b279f6efda01472e6a7ecaa4d9f12ec2ea72be77e9f6"
 
 [[package]]
 name = "hotpath-macros"
-version = "0.29.2"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08c0a42eb299ebb7ec6b9161489e5bf132603a34ca12cecadb8490937aa0492a"
+checksum = "2e465e7b1e71edfb58f3bf40dbf1441dbef2b2907f302835574a634f85402176"
 dependencies = [
  "proc-macro2",
  "quote",
