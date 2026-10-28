@@ -66,8 +66,39 @@ fn actual_ci_step_rejects_failed_cancelled_or_missing_results() {
         let output = std::process::Command::new("bash")
             .args(["-ec", &script])
             .env("RESULTS", results)
+            .env("CHANGES_RESULT", "success")
+            .env("DOCUMENTATION_RESULT", "success")
             .output()
             .unwrap();
         assert_eq!(output.status.success(), expected, "results: {results:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn required_website_check_cannot_be_skipped() {
+    let workflow = workflow();
+    let gate = workflow.split_once("\n  ci:\n").unwrap().1;
+    let script = gate.split_once("        run: |\n").unwrap().1;
+    let script = script
+        .lines()
+        .map(|line| line.strip_prefix("          ").unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n");
+    for (changes, documentation, expected) in [
+        ("success", "success", true),
+        ("success", "skipped", false),
+        ("success", "failure", false),
+        ("success", "cancelled", false),
+        ("skipped", "success", false),
+    ] {
+        let result = std::process::Command::new("bash")
+            .args(["-ec", &script])
+            .env("RESULTS", "success skipped")
+            .env("CHANGES_RESULT", changes)
+            .env("DOCUMENTATION_RESULT", documentation)
+            .status()
+            .unwrap();
+        assert_eq!(result.success(), expected, "{changes}/{documentation}");
     }
 }

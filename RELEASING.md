@@ -86,6 +86,26 @@ bytes. It does not relabel a fresh rebuild as a benchmarked executable. Addition
 distribution submissions, public announcements and new performance claims remain
 separate work.
 
+## Website updates
+
+Cloudflare Workers Builds publishes website-input changes from `main` using
+`scripts/build_site.sh --cloudflare`. The build checks the documentation,
+static diagrams and generated routes before uploading its output. Pull requests
+run the same website build through the required CI result. A selected website
+check must succeed, and cannot pass as a skipped job.
+
+The homepage and documentation share the committed 1200 by 630 `site/og.png`.
+Its editable source is `scripts/demo/og.html`. Use the rendering command in
+`scripts/demo/README.md` after editing, and review the image and its alternative
+text together. The homepage and chapter heads provide Open Graph and Twitter
+metadata. Chapter canonical URLs use the same clean routes as the sitemap.
+
+Website build-tool changes alone do not start a binary release. Release
+publication refreshes the displayed version through the separate deployment
+workflow, whose queued requests do not replace pending requests. Cloudflare
+reports the build and deployment result. Retry a failed website update there
+without rebuilding published binaries.
+
 ## Failures and urgent fixes
 
 A failed run retains its immutable tag and any draft assets. The next weekly run

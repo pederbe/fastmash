@@ -374,7 +374,11 @@ jobs:
       - name: Require passing checks
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          DOCUMENTATION_RESULT: ${{ needs.documentation.result }}
         run: |
+          test "$CHANGES_RESULT" = success
+          test "$DOCUMENTATION_RESULT" = success
           test -n "$RESULTS"
           for result in $RESULTS; do
             case "$result" in
