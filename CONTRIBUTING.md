@@ -100,7 +100,7 @@ aligned.
 ## Before you open a pull request
 
 1. Read [ARCHITECTURE.md](ARCHITECTURE.md) for how the code fits together, and
-   [CONTEXT.md](CONTEXT.md) for the project's vocabulary. Use its terms in code,
+   [GLOSSARY.md](GLOSSARY.md) for the project's vocabulary. Use its terms in code,
    comments, issues and commit messages.
 2. Keep each pull request to one change. Separate refactoring from behavior changes.
 3. Add tests. Bug fixes need a test that fails without the fix. Behavior

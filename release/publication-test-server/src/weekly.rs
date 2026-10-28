@@ -30,6 +30,11 @@ fn meaningful(path: &str) -> bool {
                 | ".github/FUNDING.yml"
                 | ".github/workflows/docs.yml"
                 | ".github/workflows/website-deploy.yml"
+                | "scripts/build_site.sh"
+                | "scripts/build_site.py"
+                | "scripts/test_build_site.py"
+                | "package.json"
+                | "package-lock.json"
         )
 }
 
@@ -376,6 +381,22 @@ pub fn notes(args: &[String]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn website_tooling_does_not_start_a_binary_release() {
+        for path in [
+            "scripts/build_site.sh",
+            "scripts/build_site.py",
+            "scripts/test_build_site.py",
+            "package.json",
+            "package-lock.json",
+        ] {
+            assert!(!meaningful(path), "{path}");
+        }
+        for path in ["install.sh", "Cargo.lock", "release/prepare-linux.sh"] {
+            assert!(meaningful(path), "{path}");
+        }
+    }
     struct Directory(std::path::PathBuf);
     impl Directory {
         fn new() -> Self {

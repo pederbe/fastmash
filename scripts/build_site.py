@@ -171,6 +171,7 @@ def docs_markdown(book):
                      f'href="{Path(path).name}">\n'
                      f'<link rel="canonical" href="{url}">\n'
                      f'<meta property="og:url" content="{url}">\n')
+        alternate += f'<meta name="twitter:description" content="{summary}">\n'
         if 'type="text/markdown"' not in page:
             page = page.replace('</head>', alternate + '</head>', 1)
         page_path.write_text(page, encoding='utf-8')
@@ -339,6 +340,12 @@ def llms_txt(book):
 
 
 def sitemap(book):
+    for name in ('print.html', 'toc.html', '404.html'):
+        path = book / name
+        if path.is_file():
+            page = path.read_text(encoding='utf-8')
+            path.write_text(page.replace('</head>', '<meta name="robots" content="noindex">\n</head>', 1),
+                            encoding='utf-8')
     pages = [''] + [site_url(Path(path).with_suffix('.html').as_posix())
                     for _, _, path in chapters()]
     entries = ''.join(f'  <url><loc>{escape(SITE + "/" + page)}</loc></url>\n' for page in pages)
