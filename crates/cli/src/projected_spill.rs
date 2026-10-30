@@ -1535,8 +1535,8 @@ fn merge_into<'a, S: Codec>(
         consume(streams[at].1.take().unwrap())?;
         match streams[at].0.next()? {
             Some(next) => streams[at].1 = Some(next),
-            // `remove` keeps the remaining streams in order.
-            None => drop(streams.remove(at)),
+            // Record sequence numbers break key ties, so stream order is irrelevant.
+            None => drop(streams.swap_remove(at)),
         }
     }
     Ok(())
@@ -1733,6 +1733,30 @@ mod tests {
     fn final_merge_preserves_keys_ties_and_payloads_across_levels() {
         levels::<Packed>();
         levels::<Original>();
+    }
+    #[test]
+    fn merge_preserves_sequence_ties_when_an_earlier_stream_is_exhausted() {
+        fn check<S: Codec + Build>() {
+            // Every key is equal. Exhausting the first stream moves the last
+            // stream ahead of the second, whose next sequence must still win.
+            let files = [vec![0], vec![3, 9], vec![6, 12]]
+                .into_iter()
+                .map(|sequences| {
+                    let records: Vec<_> = sequences.into_iter().map(record::<S>).collect();
+                    run_file(&encode_all(&records))
+                })
+                .collect();
+            let mut sequences = Vec::new();
+            merge_into::<S>(run_sources(files), |record| {
+                sequences.push(record.sequence);
+                Ok(())
+            })
+            .ok()
+            .unwrap();
+            assert_eq!(sequences, [0, 3, 6, 9, 12]);
+        }
+        check::<Packed>();
+        check::<Original>();
     }
     #[test]
     fn final_folding_does_not_rewrite_a_larger_run_with_the_smaller_level() {
