@@ -84,6 +84,11 @@ fn main() -> ExitCode {
         if mode == "failed-route" {
             return ExitCode::from(17);
         }
+    } else if args == ["-s", "rmdup", "1"] {
+        if input != b"b\t2\na\t1\nb\t3\n" {
+            return ExitCode::from(20);
+        }
+        print!("a\t1\nb\t2\n");
     } else {
         return ExitCode::from(19);
     }

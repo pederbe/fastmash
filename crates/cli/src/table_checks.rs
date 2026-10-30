@@ -109,8 +109,10 @@ pub(super) fn dedup<W: Write>(
     if super::sort_route::native(options.locale.language(), false, || {
         sorted_input::available(options.input)
     }) {
+        super::sort_route::trace("native sort of whole records");
         return native_dedup(reader, output, options, key);
     }
+    super::sort_route::trace("system sort");
     let sorting = sorted_input::Sorting::prepare(sorted_input::admit(&options.locale)?, options)?;
     if let Some(record) = sorting.header() {
         resolve(&mut key, record, options)?;

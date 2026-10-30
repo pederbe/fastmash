@@ -38,6 +38,8 @@ pub(super) fn share(threads: usize, target: usize) -> usize {
 /// Per-thread scratch space for projection.
 #[derive(Default)]
 pub(super) struct Scratch {
+    /// Accepted record sequence, for projections with deferred field outcomes.
+    pub sequence: u64,
     pub spans: Vec<Range<usize>>,
     pub sort_keys: storage::SortKeys,
     pub language: storage::LanguageScratch,
@@ -84,6 +86,7 @@ pub(super) struct Batch {
     threads: usize,
     /// The raw bytes at which a batch is projected.
     limit: usize,
+    per_record: usize,
     next_sequence: u64,
     scratch: Scratch,
     single: Vec<u8>,
@@ -99,10 +102,18 @@ impl Batch {
             ends: Vec::new(),
             threads,
             limit: (share(threads, target) / RAW_SHARE).max(1),
+            per_record: PER_RECORD,
             next_sequence: 0,
             scratch: Scratch::default(),
             single: Vec::new(),
         }
+    }
+
+    /// Charge projection metadata that can grow with selected fields even
+    /// when the corresponding input fields are absent.
+    pub(super) fn with_projected_overhead(mut self, bytes: usize) -> Self {
+        self.per_record = self.per_record.saturating_add(bytes.div_ceil(RAW_SHARE));
+        self
     }
 
     /// Takes the next raw record; projected records reach `accept` in input
@@ -117,6 +128,7 @@ impl Batch {
     ) -> Result<(), Failure> {
         if self.threads == 1 {
             self.single.clear();
+            self.scratch.sequence = self.next_sequence;
             let (prefix, key_len) = project(record, &mut self.scratch, &mut self.single)?;
             let sequence = self.next_sequence;
             self.next_sequence = sequence.checked_add(1).ok_or_else(allocation)?;
@@ -138,7 +150,10 @@ impl Batch {
         self.bytes.extend_from_slice(record);
         self.ends.try_reserve(1).map_err(|_| allocation())?;
         self.ends.push(self.bytes.len());
-        let held = self.bytes.len() + self.ends.len() * PER_RECORD;
+        let held = self
+            .bytes
+            .len()
+            .saturating_add(self.ends.len().saturating_mul(self.per_record));
         if self.ends.len() >= RECORDS || held >= self.limit {
             self.finish(project, accept)?;
         }
@@ -154,6 +169,7 @@ impl Batch {
     ) -> Result<(), Failure> {
         let count = self.ends.len();
         let first = self.next_sequence;
+        let next = first.checked_add(count as u64).ok_or_else(allocation)?;
         let (bytes, ends) = (&self.bytes, &self.ends);
         let record = |at: usize| -> &[u8] {
             let start = if at == 0 { 0 } else { ends[at - 1] };
@@ -168,6 +184,7 @@ impl Batch {
                 return out;
             }
             for at in from..to {
+                scratch.sequence = first + at as u64;
                 match project(record(at), &mut scratch, &mut out.bytes) {
                     Ok((prefix, key_len)) => out.records.push((prefix, key_len, out.bytes.len())),
                     Err(failure) => {
@@ -222,7 +239,7 @@ impl Batch {
                 return Err(failure);
             }
         }
-        self.next_sequence = first.checked_add(count as u64).ok_or_else(allocation)?;
+        self.next_sequence = next;
         self.bytes.clear();
         self.ends.clear();
         // A batch that a large record grew gives its memory back.
@@ -276,6 +293,33 @@ mod tests {
                 .unwrap();
             assert_eq!(seen, expected, "{threads}");
         }
+    }
+
+    #[test]
+    fn projected_metadata_cannot_accumulate_a_batch_of_oversized_records() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let waiting = AtomicUsize::new(0);
+        let most = AtomicUsize::new(0);
+        let project = |_: &[u8], _: &mut Scratch, out: &mut Vec<u8>| {
+            out.try_reserve(8192).map_err(|_| allocation())?;
+            out.resize(out.len() + 8192, 0);
+            let now = waiting.fetch_add(1, Ordering::Relaxed) + 1;
+            most.fetch_max(now, Ordering::Relaxed);
+            Ok((0, 0))
+        };
+        // A single projected Record exceeds this 4 KiB producer share.
+        // One is permitted, but short input must not collect many of them.
+        let mut batch = Batch::new(4, 64 << 10).with_projected_overhead(8192);
+        let accept = |_: Projected<'_>| {
+            waiting.fetch_sub(1, Ordering::Relaxed);
+            Ok(())
+        };
+        for _ in 0..100 {
+            batch.push(b"a", &project, accept).ok().unwrap();
+        }
+        batch.finish(&project, accept).ok().unwrap();
+        assert_eq!(waiting.load(Ordering::Relaxed), 0);
+        assert_eq!(most.load(Ordering::Relaxed), 1);
     }
 
     #[test]

@@ -215,7 +215,7 @@ fn long_raw_records_survive_native_spill_and_output_failure() {
 }
 
 #[test]
-fn native_original_spill_and_external_header_handoff() {
+fn native_original_spill_and_paired_header_handoff() {
     for (a, input, expected, spill) in [
         (
             args(&["-zsg1", "sum", "2", "first", "3", "last", "3"]),

@@ -194,6 +194,440 @@ fn exact(output: &Output, stdout: &[u8]) {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn native_merge_pipe_preserves_numerics_seeded_draws_headers_and_full_records() {
+    let fixture = Fixture::new("native-merge-pipe-results");
+    for (flags, header, end) in [
+        (&[][..], true, b'\n'),
+        (&["-z", "-i", "--full"][..], true, 0),
+        (&["--header-out"][..], false, b'\n'),
+    ] {
+        let mut input = Vec::new();
+        if header {
+            input.extend_from_slice(b"key\tx\ty\tunused\tsequence");
+            input.push(end);
+        }
+        for row in 0..800_000 {
+            let key = ["B", "a", "b", "A"][row % 4];
+            write!(&mut input, "{key}\t3\t4\tretained by full\t{row}").unwrap();
+            input.push(end);
+        }
+        let mut args = flags.to_vec();
+        if header {
+            args.push("-H");
+        }
+        args.extend([
+            "--seed", "17", "-s", "-g1", "rms", "2", "pcov", "2:3", "last", "5", "rand", "5",
+            "rms", "5",
+        ]);
+        for file in [false, true] {
+            let invoke = |limit| {
+                let mut command = fixture.command(&args, "33554432");
+                command
+                    .env("FASTMASH_SORT_TRACE", "1")
+                    .env("OMP_NUM_THREADS", "2")
+                    .env("OMP_THREAD_LIMIT", limit);
+                fixture.invoke(&mut command, &input, file)
+            };
+            let serial = invoke("1");
+            assert!(serial.status.success(), "{serial:?}");
+            let result_at = if flags.contains(&"--full") { 5 } else { 1 };
+            for row in serial
+                .stdout
+                .split(|&byte| byte == end)
+                .skip(1)
+                .filter(|row| !row.is_empty())
+            {
+                // Constant x=3 and y=4 give RMS 3 and covariance 0 exactly.
+                assert_eq!(
+                    row.split(|&byte| byte == b'\t').nth(result_at),
+                    Some(b"3".as_slice())
+                );
+                assert_eq!(
+                    row.split(|&byte| byte == b'\t').nth(result_at + 1),
+                    Some(b"0".as_slice())
+                );
+            }
+            let piped = invoke("2");
+            exact(&piped, &serial.stdout);
+            assert!(piped.stderr.windows(SPILL.len()).any(|part| part == SPILL));
+            assert!(
+                String::from_utf8_lossy(&piped.stderr)
+                    .contains("sort calculation: native merge pipe\n")
+            );
+            assert!(!String::from_utf8_lossy(&serial.stderr).contains("native merge pipe"));
+            fixture.clean();
+        }
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn native_merge_pipe_keeps_blank_fields_from_reading_on_to_later_numbers() {
+    let fixture = Fixture::new("native-merge-pipe-blanks");
+    // Read with its record, a blank selected field reaches the unselected text
+    // after it. The pipe's rebuilt record must give the same diagnostic.
+    let mut input = b"id\tkey\tx\tnote\ty\n".to_vec();
+    input.extend_from_slice(b"ignored\tz\t");
+    input.extend(std::iter::repeat_n(b' ', 600));
+    input.extend_from_slice(b"\tnote\t5\n");
+    for _ in 0..800_000 {
+        input.extend_from_slice(b"ignored\tz\t3\tnote\t4\n");
+    }
+    let args = ["-H", "-s", "-g2", "sum", "3", "sum", "5"];
+    for file in [false, true] {
+        let invoke = |limit| {
+            let mut command = fixture.command(&args, "33554432");
+            command
+                .env("FASTMASH_SORT_TRACE", "1")
+                .env("OMP_NUM_THREADS", "2")
+                .env("OMP_THREAD_LIMIT", limit);
+            fixture.invoke(&mut command, &input, file)
+        };
+        let serial = invoke("1");
+        let piped = invoke("2");
+        assert_eq!(serial.status.code(), Some(1), "{serial:?}");
+        assert_eq!(piped.status.code(), Some(1), "{piped:?}");
+        assert_eq!(piped.stdout, serial.stdout);
+        let diagnostics = |output: &Output| {
+            output
+                .stderr
+                .split(|&byte| byte == b'\n')
+                .filter(|line| !line.starts_with(b"sort "))
+                .map(<[u8]>::to_vec)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(diagnostics(&piped), diagnostics(&serial));
+        assert!(
+            String::from_utf8_lossy(&serial.stderr).contains("invalid numeric value"),
+            "{serial:?}"
+        );
+        assert!(
+            String::from_utf8_lossy(&piped.stderr)
+                .contains("sort calculation: native merge pipe\n")
+        );
+        fixture.clean();
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn native_merge_pipe_keeps_diagnostics_and_joins_after_calculation_failure() {
+    let fixture = Fixture::new("native-merge-pipe-errors");
+    for (bad, first) in [
+        (b"ignored\t!\tbad\t4\t0\n".as_slice(), "3"),
+        (b"!\n".as_slice(), "3"),
+        (b"ignored\t!\tbad\tbad\t0\n".as_slice(), "4"),
+    ] {
+        let mut input = b"id\tkey\tx\ty\tsequence\n".to_vec();
+        input.extend_from_slice(bad);
+        for _ in 0..800_000 {
+            input.extend_from_slice(b"ignored\tz\t3\t4\t0\n");
+        }
+        for args in [
+            vec!["-H", "-s", "-g2", "rms", first, "pcov", "3:4"],
+            vec!["-H", "-s", "-g2", "pcov", "3:4"],
+            vec!["-H", "-s", "-g2", "pcov", "4:3"],
+        ] {
+            for file in [false, true] {
+                let invoke = |limit| {
+                    let mut command = fixture.command(&args, "33554432");
+                    command
+                        .env("FASTMASH_SORT_TRACE", "1")
+                        .env("OMP_NUM_THREADS", "2")
+                        .env("OMP_THREAD_LIMIT", limit);
+                    fixture.invoke(&mut command, &input, file)
+                };
+                let serial = invoke("1");
+                let piped = invoke("2");
+                assert_eq!(serial.status.code(), Some(1), "{serial:?}");
+                assert_eq!(piped.status.code(), Some(1), "{piped:?}");
+                assert_eq!(piped.stdout, serial.stdout);
+                let diagnostics = |output: &Output| {
+                    output
+                        .stderr
+                        .split(|&byte| byte == b'\n')
+                        .filter(|line| !line.starts_with(b"sort "))
+                        .map(<[u8]>::to_vec)
+                        .collect::<Vec<_>>()
+                };
+                assert_eq!(diagnostics(&piped), diagnostics(&serial));
+                assert!(
+                    String::from_utf8_lossy(&piped.stderr)
+                        .contains("sort calculation: native merge pipe\n")
+                );
+                fixture.clean();
+            }
+        }
+    }
+}
+
+#[test]
+fn shared_key_segments_keep_requested_fields_and_original_bytes() {
+    let fixture = Fixture::new("native-shared-key-segments");
+    for (args, input, expected) in [
+        (
+            vec![
+                "--seed", "17", "-s", "-g2,1,2", "ms", "1", "pcov", "1:2", "rand", "2", "first",
+                "3", "last", "3",
+            ],
+            b"3\t4\t10\n1\t2\t20\n3\t4\t30\n".as_slice(),
+            b"2\t1\t2\t1\t0\t2\t20\t20\n4\t3\t4\t9\t0\t4\t10\t30\n".as_slice(),
+        ),
+        (
+            vec!["-i", "-s", "-g1", "first", "1", "ms", "2"],
+            b"a\t3\nA\t4\nb\t1\nB\t2\n",
+            b"a\ta\t12.5\nb\tb\t2.5\n",
+        ),
+    ] {
+        for memory in ["1", "67108864"] {
+            for file in [false, true] {
+                let mut command = fixture.command(&args, memory);
+                command.env("FASTMASH_SORT_TRACE", "1");
+                let output = fixture.invoke(&mut command, input, file);
+                exact(&output, expected);
+                fixture.clean();
+            }
+        }
+    }
+}
+
+#[test]
+fn parallel_preparation_keeps_numeric_crossing_errors_at_their_original_sequence() {
+    let fixture = Fixture::new("native-parallel-crossings");
+    let mut input = b"1-1\n".repeat(20_000);
+    // This later input Record sorts first. Parsing through the separator
+    // diagnoses its 514-byte field as too long, rather than merely invalid.
+    input.extend(std::iter::repeat_n(b' ', 512));
+    input.extend_from_slice(b"1e-1\n");
+    for threads in ["1", "2", "4"] {
+        for file in [false, true] {
+            let mut command = fixture.command(&["-s", "-t-", "-g1", "ms", "1"], "67108864");
+            command
+                .env("FASTMASH_SORT_TRACE", "1")
+                .env("OMP_NUM_THREADS", threads)
+                .env("OMP_THREAD_LIMIT", threads);
+            let output = fixture.invoke(&mut command, &input, file);
+            assert_eq!(output.status.code(), Some(1), "{output:?}");
+            assert!(output.stdout.is_empty(), "{output:?}");
+            assert!(
+                output
+                    .stderr
+                    .ends_with(b"fastmash: internal error: input field too long (514)\n"),
+                "{output:?}"
+            );
+            fixture.clean();
+        }
+    }
+}
+
+#[test]
+fn every_c_locale_calculation_sorts_natively_with_or_without_a_supervisor() {
+    let mut fixture = Fixture::new("native-all-calculations");
+    let standalone = fixture.binary.clone();
+    let operations = [
+        ("geomean", "2"),
+        ("harmmean", "2"),
+        ("ms", "2"),
+        ("rms", "2"),
+        ("pskew", "2"),
+        ("sskew", "2"),
+        ("pkurt", "2"),
+        ("skurt", "2"),
+        ("jarque", "2"),
+        ("dpo", "2"),
+        ("pcov", "2:3"),
+        ("scov", "2:3"),
+        ("ppearson", "2:3"),
+        ("spearson", "2:3"),
+        ("dotprod", "2:3"),
+        ("rand", "2"),
+    ];
+    let a = b"a\t1\t4\na\t2\t3\na\t4\t2\na\t8\t1\n".repeat(3);
+    let b = b"b\t3\t1\nb\t6\t2\nb\t9\t3\nb\t12\t4\n".repeat(3);
+    let sorted = [a.as_slice(), b.as_slice()].concat();
+    let input = [b.as_slice(), a.as_slice()].concat();
+    for available in [true, false] {
+        fixture.binary = if available {
+            executable::fastmash().into()
+        } else {
+            standalone.clone()
+        };
+        for locale in ["C", "POSIX", "C.UTF-8", "C.utf8", "POSIX.UTF8"] {
+            for file in [false, true] {
+                for memory in ["67108864", "1"] {
+                    for (operation, field) in operations {
+                        // Mixed text and numerical results exercise stable ties as well
+                        // as each formerly external calculation. The reference reads
+                        // already grouped input in exactly the contribution order.
+                        let args = [
+                            "-g1",
+                            "--seed=42",
+                            operation,
+                            field,
+                            "sum",
+                            "2",
+                            "first",
+                            "3",
+                            "last",
+                            "3",
+                        ];
+                        let mut reference = fixture.command(&args, memory);
+                        reference.env("LC_ALL", locale);
+                        let reference = fixture.invoke(&mut reference, &sorted, file);
+                        assert!(reference.status.success(), "{operation}: {reference:?}");
+                        let mut args = args.to_vec();
+                        args.insert(0, "-s");
+                        let mut command = fixture.command(&args, memory);
+                        command
+                            .env("LC_ALL", locale)
+                            .env("FASTMASH_SORT_TRACE", "1");
+                        let output = fixture.invoke(&mut command, &input, file);
+                        exact(&output, &reference.stdout);
+                        assert_eq!(
+                            output.stderr.windows(SPILL.len()).any(|line| line == SPILL),
+                            memory == "1",
+                            "{operation}: {output:?}"
+                        );
+                        fixture.clean();
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn migrated_calculations_keep_record_formats_and_numeric_crossings() {
+    let fixture = Fixture::new("native-calculation-formats");
+    let cases: &[(&[&str], &[u8], &[u8])] = &[
+        (
+            &["-sCH", "-gkey", "ms", "value"],
+            b"#skip\nkey\tvalue\nb\t2\na\t3\n",
+            b"GroupBy(key)\tms(value)\na\t9\nb\t4\n",
+        ),
+        (
+            &["-sWi", "-g1", "ms", "2", "first", "3", "last", "3"],
+            b"B 2 first\na 3 one\nb 4 last\nA 5 two\n",
+            b"A\t17\tone\ttwo\nb\t10\tfirst\tlast\n",
+        ),
+        (&["-sz", "-g1", "ms", "2"], b"b\t2\0a\t3\0", b"a\t9\0b\t4\0"),
+        (
+            &["-s", "-t.", "-g1", "ms", "2"],
+            b"b.2.5\na.3.5\n",
+            b"a.9\nb.4\n",
+        ),
+        (
+            &["-s", "-te", "-g1", "ms", "2"],
+            b"b e2e2\na e3e2\n",
+            b"a e9\nb e4\n",
+        ),
+        (
+            &["-s", "-t1", "-g1", "ms", "2"],
+            b"b1215\na1315\n",
+            b"a19\nb14\n",
+        ),
+    ];
+    for file in [false, true] {
+        for memory in ["67108864", "1"] {
+            for &(args, input, expected) in cases {
+                let mut command = fixture.command(args, memory);
+                command.env("FASTMASH_SORT_TRACE", "1");
+                let output = fixture.invoke(&mut command, input, file);
+                exact(&output, expected);
+                fixture.clean();
+            }
+        }
+    }
+}
+
+#[test]
+fn remaining_calculations_project_fields_without_changing_results() {
+    let fixture = Fixture::new("native-advanced-fields");
+    let input = include_bytes!("fixtures/native-sort-advanced.tsv");
+    // Numeric rows: GNU 1.9, Linux x86-64, LC_ALL=C. Dot product is the
+    // exact sum of x * (2*x), for x=1..8 and x=2..9. Seeded random choices
+    // preserve the preceding implementation's results and contribution order.
+    let cases: &[(&str, &str, &[u8])] = &[
+        ("geomean", "2", b"a\t3.7643505995031\nb\t4.9541639996482\n"),
+        ("harmmean", "2", b"a\t2.9434954007884\nb\t4.3740507702322\n"),
+        ("ms", "2", b"a\t25.5\nb\t35.5\n"),
+        ("rms", "2", b"a\t5.049752469181\nb\t5.9581876439065\n"),
+        ("pskew", "2", b"a\t0\nb\t0\n"),
+        ("sskew", "2", b"a\t0\nb\t0\n"),
+        ("pkurt", "2", b"a\t-1.2380952380952\nb\t-1.2380952380952\n"),
+        ("skurt", "2", b"a\t-1.2\nb\t-1.2\n"),
+        ("jarque", "2", b"a\t0.77454465071599\nb\t0.77454465071599\n"),
+        ("dpo", "2", b"a\t0.72013518580735\nb\t0.72013518580735\n"),
+        ("pcov", "2:3", b"a\t10.5\nb\t10.5\n"),
+        ("scov", "2:3", b"a\t12\nb\t12\n"),
+        ("ppearson", "2:3", b"a\t1\nb\t1\n"),
+        ("spearson", "2:3", b"a\t1\nb\t1\n"),
+        ("dotprod", "2:3", b"a\t408\nb\t568\n"),
+        ("rand", "2", b"a\t8\nb\t4\n"),
+    ];
+    for file in [false, true] {
+        for memory in ["1048576", "1"] {
+            for &(operation, selector, expected) in cases {
+                let mut command =
+                    fixture.command(&["--seed", "17", "-s", "-g1", operation, selector], memory);
+                command.env("FASTMASH_SORT_TRACE", "1");
+                let output = fixture.invoke(&mut command, input, file);
+                exact(&output, expected);
+                assert!(
+                    output
+                        .stderr
+                        .starts_with(b"sort route: native sort of the selected fields\n"),
+                    "{operation}: {output:?}"
+                );
+                assert_eq!(
+                    output.stderr.windows(SPILL.len()).any(|line| line == SPILL),
+                    memory == "1",
+                    "{operation}: {output:?}"
+                );
+                fixture.clean();
+            }
+        }
+    }
+}
+
+#[test]
+fn projected_random_operations_share_draws_in_request_order() {
+    let fixture = Fixture::new("native-projected-random");
+    let input = include_bytes!("fixtures/native-sort-advanced.tsv");
+    // The preceding implementation's fixed-seed result, with two random
+    // Operations sharing draws and a numeric Operation reading the same field.
+    for file in [false, true] {
+        for memory in ["1048576", "1"] {
+            let mut command = fixture.command(
+                &[
+                    "--seed", "17", "-s", "-g1", "rand", "2", "rand", "3", "rms", "2",
+                ],
+                memory,
+            );
+            command.env("FASTMASH_SORT_TRACE", "1");
+            let output = fixture.invoke(&mut command, input, file);
+            exact(
+                &output,
+                b"a\t8\t16\t5.049752469181\nb\t8\t12\t5.9581876439065\n",
+            );
+            assert!(
+                output
+                    .stderr
+                    .starts_with(b"sort route: native sort of the selected fields\n"),
+                "{output:?}"
+            );
+            assert_eq!(
+                output.stderr.windows(SPILL.len()).any(|line| line == SPILL),
+                memory == "1",
+                "{output:?}"
+            );
+            fixture.clean();
+        }
+    }
+}
+
+#[test]
 fn native_sort_keeps_stable_contributions_through_multiple_spill_levels() {
     let fixture = Fixture::new("native-stable-spill");
     let mut input = Vec::new();
@@ -205,7 +639,7 @@ fn native_sort_keeps_stable_contributions_through_multiple_spill_levels() {
         for memory in ["67108864", "1"] {
             let mut command = fixture.command(
                 &[
-                    "-s", "-g1", "count", "2", "sum", "2", "first", "3", "last", "3",
+                    "-s", "-g1", "count", "2", "sum", "2", "rms", "2", "first", "3", "last", "3",
                 ],
                 memory,
             );
@@ -213,7 +647,7 @@ fn native_sort_keeps_stable_contributions_through_multiple_spill_levels() {
             let output = fixture.invoke(&mut command, &input, file);
             exact(
                 &output,
-                b"a\t32\t32\trecord01\trecord63\nb\t32\t32\trecord00\trecord62\n",
+                b"a\t32\t32\t1\trecord01\trecord63\nb\t32\t32\t1\trecord00\trecord62\n",
             );
             assert_eq!(
                 output.stderr.windows(SPILL.len()).any(|line| line == SPILL),
@@ -326,20 +760,31 @@ fn hash_and_replayed_input_keep_exact_results_before_forced_spill() {
             ("hash", "67108864", false),
             ("hash:restart=1", "65536", true),
         ] {
-            let mut command = fixture.command(&["-s", "-g1", "sum", "2"], memory);
-            command
-                .env("FASTMASH_GROUPING", grouping)
-                .env("FASTMASH_PIPE_GROUPING", "hash")
-                .env("FASTMASH_SORT_TRACE", "1");
-            let output = fixture.invoke(&mut command, &input, file);
-            assert!(output.status.success(), "{output:?}");
-            assert_eq!(output.stdout, b"a\t32000\nb\t48000\n");
-            let trace = String::from_utf8_lossy(&output.stderr);
-            assert!(trace.contains("hash first"), "{output:?}");
-            assert_eq!(trace.contains("holding the input"), !file, "{output:?}");
-            assert_eq!(trace.contains("sorting instead"), restart, "{output:?}");
-            assert_eq!(trace.contains("private run opened"), restart, "{output:?}");
-            fixture.clean();
+            for (requests, expected) in [
+                (vec!["sum", "2"], b"a\t32000\nb\t48000\n".as_slice()),
+                (vec!["sum", "2", "ms", "2"], b"a\t32000\t5\nb\t48000\t13\n"),
+                (
+                    vec!["sum", "2", "dotprod", "2:2"],
+                    b"a\t32000\t80000\nb\t48000\t208000\n",
+                ),
+            ] {
+                let mut args = vec!["-s", "-g1"];
+                args.extend(requests);
+                let mut command = fixture.command(&args, memory);
+                command
+                    .env("FASTMASH_GROUPING", grouping)
+                    .env("FASTMASH_PIPE_GROUPING", "hash")
+                    .env("FASTMASH_SORT_TRACE", "1");
+                let output = fixture.invoke(&mut command, &input, file);
+                assert!(output.status.success(), "{output:?}");
+                assert_eq!(output.stdout, expected);
+                let trace = String::from_utf8_lossy(&output.stderr);
+                assert!(trace.contains("hash first"), "{output:?}");
+                assert_eq!(trace.contains("holding the input"), !file, "{output:?}");
+                assert_eq!(trace.contains("sorting instead"), restart, "{output:?}");
+                assert_eq!(trace.contains("private run opened"), restart, "{output:?}");
+                fixture.clean();
+            }
         }
     }
 }
@@ -353,7 +798,7 @@ fn spill_storage_errors_are_reported_only_when_storage_is_needed() {
     for temporary in [&absent, &not_directory] {
         for csv in [false, true] {
             for memory in ["67108864", "1"] {
-                let mut args = vec!["-s", "-g1", "sum", "2"];
+                let mut args = vec!["-s", "-g1", "ms", "2"];
                 if csv {
                     args.insert(0, "--csv");
                 }
@@ -378,9 +823,9 @@ fn spill_storage_errors_are_reported_only_when_storage_is_needed() {
                     assert_eq!(
                         output.stdout,
                         if csv {
-                            b"a,3\nb,5\n".as_slice()
+                            b"a,9\nb,25\n".as_slice()
                         } else {
-                            b"a\t3\nb\t5\n"
+                            b"a\t9\nb\t25\n"
                         }
                     );
                     assert!(output.stderr.is_empty());
@@ -469,7 +914,7 @@ fn interrupted_spill(fixture: &Fixture, csv: bool, signal: i32) {
     let args = if csv {
         ["--csv", "-s", "-g1", "sum", "2"].as_slice()
     } else {
-        ["-s", "-g1", "sum", "2"].as_slice()
+        ["-s", "-g1", "rms", "2"].as_slice()
     };
     let mut command = fixture.command(args, "1");
     command.env("FASTMASH_SORT_TRACE", "1");

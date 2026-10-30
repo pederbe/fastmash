@@ -55,12 +55,7 @@ pub(super) fn skewness(
             let cube = decimal::multiply(delta, square)?;
             moment3 = decimal::add(moment3, cube)?;
         }
-        moment2 = decimal::divide(moment2, integer(n))?;
-        moment3 = decimal::divide(moment3, integer(n))?;
-        let squared_moment2 = decimal::multiply(moment2, moment2)?;
-        let cubed_moment2 = decimal::multiply(moment2, squared_moment2)?;
-        let denominator = arithmetic.sqrt(cubed_moment2).map_err(numeric_failure)?;
-        let result = decimal::divide(moment3, denominator)?;
+        let result = finished_skew(moment2, moment3, n, arithmetic)?;
         cache.skew = Some(result);
         result
     };
@@ -103,11 +98,7 @@ pub(super) fn excess_kurtosis(
             let fourth = decimal::multiply(delta, cube)?;
             moment4 = decimal::add(moment4, fourth)?;
         }
-        moment2 = decimal::divide(moment2, integer(n))?;
-        moment4 = decimal::divide(moment4, integer(n))?;
-        let denominator = decimal::multiply(moment2, moment2)?;
-        let result = decimal::divide(moment4, denominator)?;
-        let result = decimal::subtract(result, integer(3))?;
+        let result = finished_kurtosis(moment2, moment4, n)?;
         cache.kurtosis = Some(result);
         result
     };
@@ -128,10 +119,147 @@ pub(super) fn excess_kurtosis(
     }
 }
 
+fn finished_skew(
+    moment2: numerics::Value,
+    moment3: numerics::Value,
+    n: u64,
+    arithmetic: &mut numerics::Numerics,
+) -> Result<numerics::Value, Failure> {
+    let moment2 = decimal::divide(moment2, integer(n))?;
+    let moment3 = decimal::divide(moment3, integer(n))?;
+    let squared_moment2 = decimal::multiply(moment2, moment2)?;
+    let cubed_moment2 = decimal::multiply(moment2, squared_moment2)?;
+    let denominator = arithmetic.sqrt(cubed_moment2).map_err(numeric_failure)?;
+    decimal::divide(moment3, denominator)
+}
+
+fn finished_kurtosis(
+    moment2: numerics::Value,
+    moment4: numerics::Value,
+    n: u64,
+) -> Result<numerics::Value, Failure> {
+    let moment2 = decimal::divide(moment2, integer(n))?;
+    let moment4 = decimal::divide(moment4, integer(n))?;
+    let denominator = decimal::multiply(moment2, moment2)?;
+    let result = decimal::divide(moment4, denominator)?;
+    decimal::subtract(result, integer(3))
+}
+
+/// Jarque-Bera needs both central moments. Share only identical scalar
+/// subexpressions, retaining each input-order accumulation and its round points.
+/// Keep both cube operand orders exactly as in the separate kernels.
+pub(super) fn prepare_normality(
+    values: &[numerics::Value],
+    arithmetic: &mut numerics::Numerics,
+    cache: &mut Cache,
+) -> Result<(), Failure> {
+    let n = values.len() as u64;
+    if n <= 1 || cache.skew.is_some() || cache.kurtosis.is_some() {
+        return Ok(());
+    }
+    let mean = sample_mean(values, cache)?;
+    let mut moment2 = integer(0);
+    let mut moment3 = integer(0);
+    let mut moment4 = integer(0);
+    for &value in values {
+        let delta = decimal::subtract(value, mean)?;
+        let square = decimal::multiply(delta, delta)?;
+        moment2 = decimal::add(moment2, square)?;
+        let cube = decimal::multiply(square, delta)?;
+        let fourth = decimal::multiply(delta, cube)?;
+        moment4 = decimal::add(moment4, fourth)?;
+        let cube = decimal::multiply(delta, square)?;
+        moment3 = decimal::add(moment3, cube)?;
+    }
+    // Jarque-Bera finishes kurtosis before skewness, including on failure.
+    cache.kurtosis = Some(finished_kurtosis(moment2, moment4, n)?);
+    cache.skew = Some(finished_skew(moment2, moment3, n, arithmetic)?);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::{Kind, operation_set::moment_value};
     use super::*;
+
+    #[test]
+    fn combined_normality_matches_separate_kernels_bit_for_bit() {
+        let special = |bits| {
+            numerics::canonical(fastmash_numeric_contract::Raw80::try_from_bits(bits).unwrap())
+        };
+        let edges = [
+            0,
+            1 << 79,
+            1,
+            (1 << 63) - 1,
+            0x0001_8000_0000_0000_0000,
+            0x3fff_8000_0000_0000_0000,
+            0xbfff_8000_0000_0000_0000,
+            0x7ffe_ffff_ffff_ffff_ffff,
+            0xfffe_ffff_ffff_ffff_ffff,
+            0x7fff_8000_0000_0000_0000,
+            0xffff_8000_0000_0000_0000,
+            0x7fff_c000_0000_0000_0001,
+            0xffff_c000_0000_0000_0002,
+        ];
+        let mut math = numerics::Numerics::with_requirements(false, true)
+            .unwrap()
+            .with_mean_math(true)
+            .unwrap();
+        let mut random = 17u64;
+        for case in 0..384 {
+            let count = case % 129;
+            let values: Vec<_> = (0..count)
+                .map(|at| {
+                    random = random.wrapping_mul(6364136223846793005).wrapping_add(1);
+                    if case < edges.len() * 2 || (case % 3 == 0 && at % 17 == 0) {
+                        special(edges[(case + at) % edges.len()])
+                    } else {
+                        let exponent = 0x3fffu16 - 40 + (random % 81) as u16;
+                        numerics::canonical(fastmash_numeric_contract::Raw80::new(
+                            exponent | ((random >> 48) as u16 & 0x8000),
+                            random | (1 << 63),
+                        ))
+                    }
+                })
+                .collect();
+            let mut separate = Cache::default();
+            excess_kurtosis(&values, false, &mut math, &mut separate)
+                .ok()
+                .unwrap();
+            let expected = super::super::normality::jarque_bera(&values, &mut math, &mut separate)
+                .ok()
+                .unwrap();
+            let mut combined = Cache::default();
+            let actual = super::super::normality::jarque_bera(&values, &mut math, &mut combined)
+                .ok()
+                .unwrap();
+            assert!(
+                numerics::Numerics::value80(actual)
+                    .same_bits(numerics::Numerics::value80(expected)),
+                "case {case}"
+            );
+            for kind in [
+                Kind::Pskew,
+                Kind::Sskew,
+                Kind::Pkurt,
+                Kind::Skurt,
+                Kind::Dpo,
+            ] {
+                let expected = moment_value(kind, &values, &mut math, &mut Cache::default())
+                    .ok()
+                    .unwrap();
+                let actual = moment_value(kind, &values, &mut math, &mut combined)
+                    .ok()
+                    .unwrap();
+                assert!(
+                    numerics::Numerics::value80(actual)
+                        .same_bits(numerics::Numerics::value80(expected)),
+                    "case {case}, {kind:?}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn reuse_matches_fresh_bits_in_every_order() {

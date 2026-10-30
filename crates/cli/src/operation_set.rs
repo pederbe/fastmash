@@ -64,8 +64,6 @@ pub(super) struct Needs {
 /// How the native Sort route can sort records for these Operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum NativeSort {
-    /// An Operation needs more than the native Sort route keeps.
-    Unsupported,
     /// An Operation reads numbers, which GNU reads on from the field into the
     /// rest of the record: packed fields serve only where the separator
     /// cannot continue a number, otherwise sort the original records.
@@ -226,21 +224,9 @@ impl OperationSet {
 
     /// Whether and how the native Sort route can sort for these Operations.
     pub(super) fn native_sort(&self) -> NativeSort {
-        let supported = self.plans.iter().all(|op| {
-            op.kind.uses_borrowed_number()
-                || matches!(
-                    op.kind,
-                    Kind::Count
-                        | Kind::First
-                        | Kind::Last
-                        | Kind::Unique
-                        | Kind::Countunique
-                        | Kind::Collapse
-                )
-        });
-        if !supported {
-            NativeSort::Unsupported
-        } else if self.plans.iter().any(|op| op.kind.uses_borrowed_number()) {
+        if self.plans.iter().any(|op| {
+            op.kind.converts_numeric_field() || matches!(op.selector, Selector::Pair { .. })
+        }) {
             NativeSort::Original
         } else {
             NativeSort::Packed
@@ -337,7 +323,7 @@ impl OperationSet {
     /// [`OperationSet::collect`] for a record whose fields `record` supplies,
     /// as the Packed native Sort route keeps only the selected fields. With
     /// `texts`, every Operation reads one field's text (`NativeSort::Packed`),
-    /// which goes straight to the text collector.
+    /// which goes straight to the text collector, preserving random draws.
     #[inline]
     pub(super) fn collect_fields<'r>(
         &mut self,
@@ -346,6 +332,7 @@ impl OperationSet {
         line: u64,
         options: &options::Options,
         arithmetic: &mut numerics::Numerics,
+        mut random: Option<&mut random::RandomState>,
     ) -> Result<bool, Failure> {
         if texts {
             let mut keep = false;
@@ -354,11 +341,11 @@ impl OperationSet {
                     unreachable!("text Operations select single fields")
                 };
                 let bytes = record.text(field, line, options)?;
-                keep |= collect_text(plan, state, bytes, options.narm, None)?;
+                keep |= collect_text(plan, state, bytes, options.narm, random.as_deref_mut())?;
             }
             return Ok(keep);
         }
-        self.collect_selected(record, line, options, arithmetic)
+        self.collect_selected(record, line, options, arithmetic, random)
     }
 
     /// [`OperationSet::collect_fields`] for Operations that read numbers: the
@@ -370,6 +357,7 @@ impl OperationSet {
         line: u64,
         options: &options::Options,
         arithmetic: &mut numerics::Numerics,
+        random: Option<&mut random::RandomState>,
     ) -> Result<bool, Failure> {
         collect(
             record,
@@ -378,7 +366,7 @@ impl OperationSet {
             line,
             options,
             arithmetic,
-            None,
+            random,
         )
     }
 

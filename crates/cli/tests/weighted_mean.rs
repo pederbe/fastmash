@@ -19,9 +19,6 @@ mod temp_dir;
 
 const FULL_WARNING: &[u8] = b"fastmash: Using -f/--full with non-linewise operations is deprecated and will be disabled in a future release.\n";
 
-#[cfg(target_os = "linux")]
-const PAIRED_SORT_ROUTE: &str = "system sort";
-#[cfg(target_os = "macos")]
 const PAIRED_SORT_ROUTE: &str = "native sort";
 
 fn candidate() -> Command {
@@ -240,8 +237,7 @@ fn sorting_spill_and_hash_replay_preserve_the_ordered_binary80_trace() {
                 }
             }
         }
-        // Existing paired composition selects the system sort on Linux in the
-        // C locale; macOS uses the native sort.
+        // Paired composition uses native sorting on every supported platform.
         // Zero products and these integer products are exact for dotprod too.
         let output = invoke_in(
             &[
@@ -628,7 +624,7 @@ fn weighted_sorted_headers_and_key_errors_keep_established_output_timing() {
 }
 
 #[test]
-fn sorted_named_weighted_empty_domains_complete_native_and_external_reports() {
+fn sorted_named_weighted_empty_domains_complete_text_and_csv_reports() {
     for regular_file in [false, true] {
         for grouping in ["sort", "hash:restart=1"] {
             for csv in [false, true] {

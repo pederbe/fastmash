@@ -98,10 +98,37 @@ fn run() -> io::Result<()> {
     }
     let output = pipe(route, b"b\t2\t3\na\t1\t2\na\t3\t6\n")?;
     expect(&output, b"a\t2\nb\t0\n", "paired operation")?;
-    if output.stderr != b"sort route: system sort\n" {
+    if !matches!(
+        output.stderr.as_slice(),
+        b"sort route: system sort\n"
+            | b"sort route: native sort of the selected fields\n"
+            | b"sort route: native sort of whole records\n"
+    ) {
         return Err(io::Error::other(format!(
-            "paired operation did not use the Sort supervisor: {:?}",
+            "paired operation did not report a supported sort route: {:?}",
             String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    let mut rmdup = Command::new(&binary);
+    rmdup
+        .args(["-s", "rmdup", "1"])
+        .env_clear()
+        .env("LC_ALL", "C")
+        .env("FASTMASH_SORT_TRACE", "1");
+    if fedora {
+        rmdup.env("PATH", "/usr/bin:/bin");
+    }
+    let rmdup = pipe(rmdup, b"b\t2\na\t1\nb\t3\n")?;
+    expect(&rmdup, b"a\t1\nb\t2\n", "sorted rmdup")?;
+    // Current packages run sorted rmdup through the supervisor. Older ones
+    // report no route for it, and the paired operation used it instead.
+    let system = b"sort route: system sort\n".as_slice();
+    if !matches!(rmdup.stderr.as_slice(), b"sort route: system sort\n" | b"")
+        || (rmdup.stderr != system && output.stderr != system)
+    {
+        return Err(io::Error::other(format!(
+            "no Command used the system sort through the installed supervisor: {:?}",
+            String::from_utf8_lossy(&rmdup.stderr)
         )));
     }
     Ok(())

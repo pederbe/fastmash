@@ -47,7 +47,8 @@ const MODES: &[(&str, &[&str])] = &[
     ),
     ("group", &["-g", "1", "count", "1"]),
     ("native", &["-s", "-g", "1", "count", "1"]),
-    ("external", &["-s", "-g", "1", "geomean", "2"]),
+    ("sorted-mean", &["-s", "-g", "1", "geomean", "2"]),
+    ("external", &["-s", "rmdup", "1"]),
     ("named", &["-H", "-s", "-g", "key", "geomean", "value"]),
     ("full", &["--full", "count", "1"]),
     ("help", &["--help"]),
@@ -281,9 +282,6 @@ fn check(mode: &str, fault: &str, name: &str, output: &Output) {
     if mode == "named" && fault == "closed-output-empty" {
         assert_eq!(output.status.code(), Some(1), "{name}");
         assert!(output.stdout.is_empty(), "{name}");
-        #[cfg(target_os = "linux")]
-        assert_eq!(output.stderr, b"sort: field number is zero: invalid field specification '0,0'\nfastmash: read error (on close)\n", "{name}");
-        #[cfg(target_os = "macos")]
         assert_eq!(
             output.stderr, b"fastmash: missing input header for named grouping key\n",
             "{name}"
@@ -319,7 +317,7 @@ fn check(mode: &str, fault: &str, name: &str, output: &Output) {
             "result-name" => b"records\n2\n",
             "csv" => b"\"records,\"\"daily\"\"\"\n2\n",
             "group" | "native" => b"a\t1\nb\t1\n",
-            "external" => b"a\t1\nb\t2\n",
+            "external" | "sorted-mean" => b"a\t1\nb\t2\n",
             "named" => b"GroupBy(key)\tgeomean(value)\na\t1\nb\t2\n",
             "full" => b"a\t1\t2\n",
             "help" => include_bytes!("../src/help.txt"),
@@ -348,19 +346,26 @@ fn check(mode: &str, fault: &str, name: &str, output: &Output) {
         }
         if !unused_input && !unused_output && !ordinary_output {
             let message: &[u8] = match fault {
-                "closed-input" | "write-only-input" => b"fastmash: read error: Bad file descriptor\n",
-                #[cfg(target_os = "linux")]
-                "directory-input" if mode == "named" => b"sort: field number is zero: invalid field specification '0,0'\nfastmash: read error (on close): Is a directory\n",
+                "closed-input" | "write-only-input" => {
+                    b"fastmash: read error: Bad file descriptor\n"
+                }
                 #[cfg(target_os = "linux")]
                 "directory-input" if mode == "external" => {
                     // The child owns its diagnostic; these are the two named test profiles.
-                    let gnu = b"sort: read failed: -: Is a directory\nfastmash: read error (on close)\n";
-                    let uutils = b"sort: Is a directory (os error 21)\nfastmash: read error (on close)\n";
-                    assert!(output.stderr == gnu || output.stderr == uutils, "{name}: {output:?}");
+                    let gnu =
+                        b"sort: read failed: -: Is a directory\nfastmash: read error (on close)\n";
+                    let uutils =
+                        b"sort: Is a directory (os error 21)\nfastmash: read error (on close)\n";
+                    assert!(
+                        output.stderr == gnu || output.stderr == uutils,
+                        "{name}: {output:?}"
+                    );
                     return;
                 }
                 "directory-input" => b"fastmash: read error: Is a directory\n",
-                "closed-output" | "read-only-output" | "closed-output-empty" => b"fastmash: write error: Bad file descriptor\n",
+                "closed-output" | "read-only-output" | "closed-output-empty" => {
+                    b"fastmash: write error: Bad file descriptor\n"
+                }
                 "full-output" => b"fastmash: write error: No space left on device\n",
                 "broken-output" if mode == "help" => b"fastmash: unsupported output I/O error\n",
                 "broken-output" => b"",

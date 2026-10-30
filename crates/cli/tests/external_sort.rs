@@ -139,9 +139,9 @@ fn the_exec_role_exits_77_whatever_its_standard_error() {
 /// `cwd`, keeping its input open so the sort is still running.
 fn start_external(tmpdir: Option<&std::ffi::OsStr>, cwd: &std::path::Path) -> Child {
     let mut command = Command::new(executable::fastmash());
-    // `geomean` in the C locale takes the external sort route.
+    // Sorted rmdup still takes the external route in the C locale.
     command
-        .args(["-s", "-g", "1", "geomean", "2"])
+        .args(["-s", "rmdup", "1"])
         .env_clear()
         .env("LC_ALL", "C")
         .env("FASTMASH_GROUPING", "sort")
@@ -284,7 +284,7 @@ fn external_sort_threads_follow_gnu_sort_defaults() {
     ] {
         let mut command = Command::new(executable::fastmash());
         command
-            .args(["-s", "-g", "1", "geomean", "2"])
+            .args(["-s", "rmdup", "1"])
             .env_clear()
             .env("LC_ALL", "C")
             .env("FASTMASH_GROUPING", "sort")
@@ -455,18 +455,18 @@ fn without_close_range_cloexec_jobs_sort_in_process() {
             }
             command.output().unwrap()
         };
-        // Grouped calculations report their route. Selection commands do
-        // not, so their original byte and status assertions remain below.
-        let reports_route = job.contains(&"-g");
+        // Grouped calculations sort natively. Sorted rmdup takes the system
+        // sort where the supervisor can run, and its own sort otherwise.
+        let calculation = job.contains(&"-g");
         let ordinary = run(None, true);
         assert!(ordinary.status.success(), "{job:?}: {ordinary:?}");
         assert_eq!(ordinary.stdout, expected.as_bytes());
         assert_eq!(
             ordinary.stderr,
-            if reports_route {
-                b"sort route: system sort\n".as_slice()
+            if calculation {
+                b"sort route: native sort of the selected fields\n".as_slice()
             } else {
-                b""
+                b"sort route: system sort\n"
             },
             "{job:?}"
         );
@@ -484,8 +484,9 @@ fn without_close_range_cloexec_jobs_sort_in_process() {
                     b"sort route: native sort of whole records\n".as_slice(),
                 ]
                 .contains(&traced.stderr.as_slice())
-                    && reports_route
-                    || !reports_route && traced.stderr.is_empty(),
+                    && calculation
+                    || !calculation
+                        && traced.stderr == b"sort route: native sort of whole records\n",
                 "{errno} {job:?}: {traced:?}"
             );
         }
@@ -533,8 +534,8 @@ fn sort_root(fastmash: u32) -> Option<PathBuf> {
 #[test]
 fn interrupted_external_sort_leaves_no_temporary_directory() {
     let mut fastmash = Command::new(executable::fastmash())
-        // `geomean` in the C locale takes the external sort route.
-        .args(["-s", "-g", "1", "geomean", "2"])
+        // Sorted rmdup still takes the external route in the C locale.
+        .args(["-s", "rmdup", "1"])
         .env_clear()
         .env("LC_ALL", "C")
         .env("FASTMASH_GROUPING", "sort")
@@ -664,8 +665,8 @@ fn a_long_header_in_a_file_is_read_in_chunks() {
     }
     fs::write(&path, &input).unwrap();
     let mut fastmash = Command::new(executable::fastmash())
-        // `geomean` in the C locale takes the external sort route.
-        .args(["-s", "--header-in", "-g", "1", "geomean", "2"])
+        // Sorted rmdup still takes the external route in the C locale.
+        .args(["-s", "--header-in", "rmdup", "1"])
         .env_clear()
         .env("LC_ALL", "C")
         .env("FASTMASH_GROUPING", "sort")
@@ -697,7 +698,8 @@ fn a_long_header_in_a_file_is_read_in_chunks() {
     let mut output = fastmash.stdout.take().unwrap();
     output.read_to_end(&mut stdout).unwrap();
     assert!(wait(&mut fastmash, Duration::from_secs(20)).success());
-    let expected: String = (0..rows).map(|n| format!("k{n:05}\t1\n")).collect();
+    // Sorted rmdup consumes a second Input header from its sorted stream.
+    let expected: String = (1..rows).map(|n| format!("k{n:05}\t1\n")).collect();
     assert!(stdout == expected.as_bytes());
     assert!(reads < length / 100, "{reads} read calls");
 }
@@ -806,7 +808,7 @@ fn with_companion(name: &str, script: &str) -> (PathBuf, std::process::Output) {
     let output = run_in(
         &fastmash,
         &dir.0,
-        ["-s", "-g", "1", "geomean", "2"],
+        ["-s", "rmdup", "1"],
         &[],
         b"b\t2\na\t1\n",
     );

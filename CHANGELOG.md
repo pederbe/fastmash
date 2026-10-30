@@ -31,6 +31,15 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Use built-in sorting for every sorted calculation in the C locales, including
+  mixed calculations, other means, higher moments, normality tests, paired
+  statistics and `rand`, without requiring the system `sort` or Sort supervisor.
+  Stable contribution order and the Numerical profile are preserved. Other
+  means, higher moments, normality tests and paired statistics grouped by one
+  key prepare records on several threads. On Linux, large numerical sorts can
+  merge spilled records and calculate in parallel within the configured thread
+  limits, and under a cgroup memory limit write their runs back to storage as
+  they go. Sorted `rmdup` now reports its route under `FASTMASH_SORT_TRACE`.
 - cargo-binstall no longer falls back to third-party QuickInstall builds, and
   each release checks that it installs the published executables on Linux
   x86-64 and Apple Silicon macOS.
