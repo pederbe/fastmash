@@ -142,9 +142,10 @@ fi
 EOF
 ```
 
-Replace `@VERSION@` with the version you want. Published Linux releases through
-0.2.0 include `fastmash-sort-supervisor`. Keep that helper beside `fastmash` from
-the same release. Later archives contain only `fastmash`.
+Replace `@VERSION@` with the version you want. Existing published Linux archives
+may also contain `fastmash-sort-supervisor`. When present, keep that helper
+beside `fastmash` from the same release. Archives built with native sorting
+everywhere contain only `fastmash`.
 
 ### macOS archive
 
@@ -191,8 +192,8 @@ x86-64 or WSL2, run:
 cargo binstall fastmash
 ```
 
-Published Linux releases through 0.2.0 also install their Sort supervisor.
-Later releases contain only `fastmash`.
+Existing published Linux releases may also install their Sort supervisor.
+Releases containing the native sorting migration install only `fastmash`.
 
 On Apple Silicon macOS 15 or later, select its single executable:
 

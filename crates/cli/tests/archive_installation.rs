@@ -449,6 +449,48 @@ fn one_executable_upgrade_removes_only_an_unchanged_owned_supervisor() {
 }
 
 #[test]
+fn failed_one_executable_upgrade_preserves_the_owned_legacy_pair() {
+    let root = TempDir::new("archive-upgrade-rename-failure");
+    let path = fixture_path(&root.0, "Linux", "x86_64", "");
+    let legacy = Mirror::new(
+        "0.1.0",
+        mirrored_files(
+            fixture_archive(&root.0, "0.1.0", "x86_64-unknown-linux-gnu", true),
+            false,
+        ),
+    );
+    let dir = root.0.join("installed");
+    let first = install(&legacy, Some("0.1.0"), &dir, Some(&path), &root.0);
+    assert!(first.status.success(), "{first:?}");
+    fs::write(dir.join("fastmash"), b"previous fastmash").unwrap();
+    let receipt = fs::read(dir.join(".fastmash-supervisor.sha256")).unwrap();
+    fs::remove_file(path.join("mv")).unwrap();
+    script(&path.join("mv"), "#!/bin/sh\nexit 73\n");
+    let native = Mirror::new(
+        "0.3.0",
+        mirrored_files(
+            fixture_archive(&root.0, "0.3.0", "x86_64-unknown-linux-gnu", false),
+            false,
+        ),
+    );
+    let upgraded = install(&native, Some("0.3.0"), &dir, Some(&path), &root.0);
+    assert_eq!(upgraded.status.code(), Some(73), "{upgraded:?}");
+    assert_eq!(
+        fs::read(dir.join("fastmash")).unwrap(),
+        b"previous fastmash"
+    );
+    assert_eq!(
+        fs::read(dir.join("fastmash-sort-supervisor")).unwrap(),
+        b"replacement supervisor"
+    );
+    assert_eq!(
+        fs::read(dir.join(".fastmash-supervisor.sha256")).unwrap(),
+        receipt
+    );
+    assert_eq!(fs::read_dir(dir).unwrap().count(), 3);
+}
+
+#[test]
 fn unsupported_native_target_or_old_macos_preserves_the_installation() {
     for (label, os, arch, version) in [
         ("intel", "Darwin", "x86_64", "26.0"),

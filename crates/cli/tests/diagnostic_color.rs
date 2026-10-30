@@ -190,9 +190,7 @@ fn help_output_failures_retain_selected_diagnostic_color() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
-fn child_sort_diagnostics_are_forwarded_without_generated_styling() {
-    // Sorted rmdup is the last Command on the external route.
+fn native_duplicate_removal_diagnostics_receive_the_selected_style() {
     let args = ["-H", "-s", "rmdup", "key"];
     let plain = PROGRAM.invoke(&args, b"", &[], false, false);
     let mut colored_args = vec!["--color=always"];
@@ -201,16 +199,13 @@ fn child_sort_diagnostics_are_forwarded_without_generated_styling() {
     assert_eq!(colored.status.code(), Some(1), "{colored:?}");
     assert_eq!(colored.status, plain.status);
     assert_eq!(colored.stdout, plain.stdout);
-    let marker = plain
-        .stderr
-        .windows(b"fastmash: ".len())
-        .position(|bytes| bytes == b"fastmash: ")
-        .unwrap();
-    assert!(marker > 0, "expected the system sort's diagnostic first");
-    assert_eq!(colored.stderr[..marker], plain.stderr[..marker]);
     assert_eq!(
-        &colored.stderr[marker..],
-        [PREFIX, &plain.stderr[marker + b"fastmash: ".len()..]].concat()
+        plain.stderr,
+        b"fastmash: missing input header for named grouping key\n"
+    );
+    assert_eq!(
+        colored.stderr,
+        [PREFIX, b"missing input header for named grouping key\n"].concat()
     );
 }
 

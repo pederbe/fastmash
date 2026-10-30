@@ -45,8 +45,8 @@ fn sorted_vnlog_rmdup_reads_its_second_header_from_the_sorted_records() {
     // pipe (datamash.c open_input, remove_dups_in_file), where it skips
     // comments in the vnlog prologue (text-lines.c line_record_fread). The
     // reference host has no en_US locale, so GNU sorted in byte order; `#`
-    // records sort before letters under en_US collation too. On Linux the C
-    // locale uses the system sort; macOS and the language locale sort natively.
+    // records sort before letters under en_US collation too. Both platforms
+    // now use native sorting in each locale.
     for locale in ["C", "en_US.UTF-8"] {
         for (arguments, input, stdout) in [
             (

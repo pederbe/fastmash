@@ -61,11 +61,6 @@ fn native_duplicate_removal_preserves_records_keys_headers_and_separators() {
             input: b"b\tB\0a\tA\0b\tlater\0",
             expected: b"a\tA\0b\tB\0",
         },
-        Case {
-            args: &["--csv-in", "-s", "rmdup", "1"],
-            input: b"b,\"first,b\"\na,\"first\na\"\nb,last\n",
-            expected: b"a\tfirst\na\nb\tfirst,b\n",
-        },
     ];
     for locale in ["C", "POSIX", "C.UTF-8", "C.utf8", "C.utf-8"] {
         for memory in ["1", "67108864"] {
@@ -166,4 +161,21 @@ fn native_duplicate_removal_accepts_non_ascii_separator_bytes() {
     assert!(output.status.success(), "{output:?}");
     assert_eq!(output.stdout, b"a\x80kept\nb\x80first\n");
     assert!(output.stderr.is_empty(), "{output:?}");
+}
+
+#[test]
+fn duplicate_removal_preserves_the_quoted_csv_refusal() {
+    let output = test_process::bounded(executable::fastmash(), 15)
+        .args(["--csv-in", "-s", "rmdup", "1"])
+        .env_clear()
+        .env("LC_ALL", "C")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(77));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        output.stderr,
+        b"fastmash: CSV is supported only for aggregate and per-row operations\n"
+    );
 }

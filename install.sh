@@ -118,22 +118,24 @@ main() {
         chmod 755 "$staging/$program"
     done
     ownership=$dir/.fastmash-supervisor.sha256
-    if [ "$programs" = fastmash ]; then
-        # Only remove a regular file whose bytes match this installer's receipt.
-        # Older installations without a receipt and user replacements stay put.
-        old=$dir/fastmash-sort-supervisor
-        if [ -f "$old" ] && [ ! -L "$old" ] && [ -f "$ownership" ] && [ ! -L "$ownership" ] &&
-            [ "$(fingerprint "$old")" = "$(cat "$ownership")" ]; then
-            rm "$old"
-            rm "$ownership"
-        fi
-    else
+    if [ "$programs" != fastmash ]; then
         fingerprint "$staging/fastmash-sort-supervisor" > "$staging/ownership"
     fi
     for program in $programs; do
         # Rename, so a running copy is never overwritten in place.
         mv -f "$staging/$program" "$dir/$program"
     done
+    if [ "$programs" = fastmash ]; then
+        # Only remove a regular file whose bytes match this installer's receipt.
+        # Retire it only after the new command is in place. Older installations
+        # without a receipt and user replacements stay put.
+        old=$dir/fastmash-sort-supervisor
+        if [ -f "$old" ] && [ ! -L "$old" ] && [ -f "$ownership" ] && [ ! -L "$ownership" ] &&
+            [ "$(fingerprint "$old")" = "$(cat "$ownership")" ]; then
+            rm "$old"
+            rm "$ownership"
+        fi
+    fi
     if [ -f "$staging/ownership" ]; then
         mv -f "$staging/ownership" "$ownership"
     fi
