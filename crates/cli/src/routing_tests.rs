@@ -217,7 +217,6 @@ fn sigpipe_policy_in_isolated_test_processes() {
         "default",
         "ignored",
         "stderr",
-        "sort-mask",
     ] {
         let output = std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "routing_tests::sigpipe_child", "--nocapture"])
@@ -225,7 +224,7 @@ fn sigpipe_policy_in_isolated_test_processes() {
             .env("LC_ALL", "C")
             .output()
             .unwrap();
-        if ["default", "ignored", "stderr", "sort-mask"].contains(&case) {
+        if ["default", "ignored", "stderr"].contains(&case) {
             assert_eq!(output.status.signal(), Some(13), "{case}: {:?}", output);
             assert!(
                 output
@@ -247,7 +246,9 @@ fn sigpipe_child() {
         return;
     };
     nix::unistd::alarm::set(10);
-    let old = fastmash_sort_process::linux::mask(None).unwrap();
+    use nix::sys::signal::{SigSet, SigmaskHow, sigprocmask};
+    let mut old = SigSet::empty();
+    sigprocmask(SigmaskHow::SIG_SETMASK, None, Some(&mut old)).unwrap();
     if [
         "blocked",
         "blocked-sorted",
@@ -259,7 +260,9 @@ fn sigpipe_child() {
     ]
     .contains(&case.as_str())
     {
-        fastmash_sort_process::linux::mask(Some(old | (1 << 12))).unwrap();
+        let mut blocked = old;
+        blocked.add(nix::sys::signal::Signal::SIGPIPE);
+        sigprocmask(SigmaskHow::SIG_SETMASK, Some(&blocked), None).unwrap();
         let spellings = match case.as_str() {
             "help" => vec!["--help"],
             "version" => vec!["--version"],
@@ -340,7 +343,9 @@ fn sigpipe_child() {
         }
         std::process::exit(0);
     }
-    fastmash_sort_process::linux::mask(Some(old & !(1 << 12))).unwrap();
+    let mut unblocked = old;
+    unblocked.remove(nix::sys::signal::Signal::SIGPIPE);
+    sigprocmask(SigmaskHow::SIG_SETMASK, Some(&unblocked), None).unwrap();
     // The Rust test runtime starts with ignored SIGPIPE. Calibrate that state
     // using a real pipe with no reader, before the production initializer.
     let (reader, writer) = nix::unistd::pipe().unwrap();
@@ -357,14 +362,6 @@ fn sigpipe_child() {
         assert!(setup_sigpipe().is_ok());
     }
     assert!(setup_sigpipe().is_ok());
-    if case == "sort-mask" {
-        // The same mask transition used by Session::start, with no candidate launch.
-        let admitted = fastmash_sort_process::linux::mask(None).unwrap();
-        fastmash_sort_process::linux::mask(Some(admitted | fastmash_sort_process::linux::CANCEL))
-            .unwrap();
-        fastmash_sort_process::linux::restore_mask(admitted);
-        assert_eq!(fastmash_sort_process::linux::mask(None).unwrap(), admitted);
-    }
     std::io::Write::write_all(&mut std::io::stdout(), SIGPIPE_READY).unwrap();
     std::io::Write::flush(&mut std::io::stdout()).unwrap();
     let (reader, writer) = nix::unistd::pipe().unwrap();
@@ -432,7 +429,7 @@ fn signal_failures_preserve_diagnostics_and_stop_before_restoration() {
 }
 
 #[test]
-fn command_setup_precedes_numerics_entropy_and_sort_admission() {
+fn command_setup_precedes_numerics_and_entropy() {
     let operations = requests(&options(&["sum", "1", "rand", "1"]));
     for cause in [
         numerics::NumericFailure::Allocation,
@@ -441,7 +438,6 @@ fn command_setup_precedes_numerics_entropy_and_sort_admission() {
     ] {
         let events = RefCell::new(Vec::new());
         let result = initialize_before_input(
-            true,
             operations.needs(false).random,
             None,
             &mut NoEntropy,
@@ -453,7 +449,6 @@ fn command_setup_precedes_numerics_entropy_and_sort_admission() {
                 events.borrow_mut().push("session");
                 Err::<(), _>(numeric_failure(cause))
             },
-            || panic!("sort after failed session"),
         );
         assert_eq!(
             result.err().unwrap().message,
@@ -462,13 +457,11 @@ fn command_setup_precedes_numerics_entropy_and_sort_admission() {
         assert_eq!(*events.borrow(), ["signals", "session"]);
     }
     let result = initialize_before_input(
-        true,
         operations.needs(false).random,
         None,
         &mut NoEntropy,
         || Err(unsupported("signal first")),
         || panic!("numerics after signals"),
-        || panic!("sort after signals"),
     );
     let _: Result<((), Option<random::RandomState>), _> = result;
 }
@@ -481,48 +474,32 @@ fn startup_keeps_one_value_for_empty_session_free_mixed_and_duplicate_requests()
         vec!["sum", "1", "sum", "1", "rand", "1"],
     ] {
         let operations = requests(&options(&args));
-        for sorted in [false, true] {
-            let events = RefCell::new(Vec::new());
-            let needs = false;
-            let (value, _) = initialize_before_input(
-                sorted,
-                operations.needs(false).random,
-                Some(7),
-                &mut NoEntropy,
-                || {
-                    events.borrow_mut().push("signals");
-                    Ok(())
-                },
-                || {
-                    events.borrow_mut().push("constructor");
-                    Ok((42, needs))
-                },
-                || {
-                    events.borrow_mut().push("sort");
-                    Ok(())
-                },
-            )
-            .ok()
-            .unwrap();
-            assert_eq!(value, (42, needs));
-            assert_eq!(
-                *events.borrow(),
-                if sorted {
-                    vec!["signals", "constructor", "sort"]
-                } else {
-                    vec!["signals", "constructor"]
-                }
-            );
-        }
+        let events = RefCell::new(Vec::new());
+        let needs = false;
+        let (value, _) = initialize_before_input(
+            operations.needs(false).random,
+            Some(7),
+            &mut NoEntropy,
+            || {
+                events.borrow_mut().push("signals");
+                Ok(())
+            },
+            || {
+                events.borrow_mut().push("constructor");
+                Ok((42, needs))
+            },
+        )
+        .ok()
+        .unwrap();
+        assert_eq!(value, (42, needs));
+        assert_eq!(*events.borrow(), vec!["signals", "constructor"]);
     }
     let (value, _) = initialize_before_input(
-        false,
         false,
         None,
         &mut NoEntropy,
         || Ok(()),
         || numerics::Numerics::new(false).map_err(numeric_failure),
-        || panic!("not sorted"),
     )
     .ok()
     .unwrap();

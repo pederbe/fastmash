@@ -44,6 +44,10 @@ fn exact(output: &Output, stdout: &[u8], stderr: &[u8], label: &str) -> io::Resu
 enum Route {
     /// None: the check does not ask for a route.
     Untraced,
+    /// The single executable performs sorting itself.
+    Native,
+    /// Older macOS archives sort duplicate removal natively without a trace.
+    NativeDuplicateRemoval,
     /// A calculation: native in current pairs, the system sort in older ones.
     Calculation,
     /// Sorted rmdup: the system sort through the installed supervisor. Older
@@ -78,6 +82,11 @@ fn check(
         expected,
         match route {
             Route::Untraced => b"",
+            Route::NativeDuplicateRemoval if output.stderr.is_empty() => b"",
+            Route::NativeDuplicateRemoval if native => &output.stderr,
+            Route::NativeDuplicateRemoval => b"sort route: native sort of whole records\n",
+            Route::Native if native => &output.stderr,
+            Route::Native => b"sort route: native sort of whole records\n",
             // Older published pairs use the external route. Admit either
             // generation while still checking the complete diagnostic.
             Route::Calculation if native => &output.stderr,
@@ -98,8 +107,21 @@ pub(crate) fn verify_with_receipts(
 ) -> io::Result<()> {
     let platform = receipts.run("platform", target.command("uname").arg("-s"), b"")?;
     successful(&platform, "release platform")?;
+    // Frozen Linux releases contain two executables. The supplied identity
+    // manifest selects that legacy layout without making it the new default.
+    let manifest = receipts.run(
+        "checksum-manifest",
+        target.command("cat").arg(checksums),
+        b"",
+    )?;
+    successful(&manifest, "release checksum manifest")?;
+    let legacy = manifest
+        .stdout
+        .split(|byte| *byte == b'\n')
+        .any(|line| line.ends_with(b" fastmash-sort-supervisor"));
     let (programs, checksum): (&[&str], &[&str]) = match platform.stdout.as_slice() {
-        b"Linux\n" => (&["fastmash", "fastmash-sort-supervisor"], &["sha256sum"]),
+        b"Linux\n" if legacy => (&["fastmash", "fastmash-sort-supervisor"], &["sha256sum"]),
+        b"Linux\n" => (&["fastmash"], &["sha256sum"]),
         b"Darwin\n" => (&["fastmash"], &["shasum", "-a", "256"]),
         _ => return Err(io::Error::other("unsupported release platform")),
     };
@@ -175,7 +197,8 @@ pub(crate) fn verify_with_receipts(
             b"",
         )?;
         successful(&output, "native archive must not contain a supervisor")?;
-    } else {
+    }
+    if programs.len() == 2 {
         // Calculations no longer exercise the Linux supervisor. Sorted rmdup
         // still does, so check that the installed pair runs the system sort.
         supervised = check(
@@ -185,6 +208,20 @@ pub(crate) fn verify_with_receipts(
             b"b\t2\na\t1\nb\t3\n",
             b"a\t1\nb\t2\n",
             Route::SystemSort,
+            receipts,
+        )?;
+    } else {
+        check(
+            &target,
+            bin,
+            &["-s", "rmdup", "1"],
+            b"b\t2\na\t1\nb\t3\n",
+            b"a\t1\nb\t2\n",
+            if platform.stdout == b"Darwin\n" {
+                Route::NativeDuplicateRemoval
+            } else {
+                Route::Native
+            },
             receipts,
         )?;
     }
@@ -197,7 +234,7 @@ pub(crate) fn verify_with_receipts(
         if programs.len() == 2 {
             Route::Calculation
         } else {
-            Route::Untraced
+            Route::Native
         },
         receipts,
     )?;

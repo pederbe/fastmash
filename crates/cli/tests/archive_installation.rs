@@ -159,7 +159,7 @@ fn fixture_path(root: &Path, os: &str, arch: &str, version: &str) -> PathBuf {
     // must use the same shasum interface as the system tool on a native Mac.
     for tool in [
         "curl", "tar", "gzip", "mktemp", "rm", "mkdir", "cp", "chmod", "mv", "sed", "tail", "tr",
-        "grep",
+        "grep", "cat",
     ] {
         symlink(real_tool(tool), bin.join(tool)).unwrap();
     }
@@ -311,7 +311,11 @@ fn linux_installs_the_matched_pair_and_latest_redirect() {
             & 0o777,
         0o755
     );
-    assert_eq!(fs::read_dir(dir).unwrap().count(), 2);
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 3);
+    assert_eq!(
+        fs::read_to_string(dir.join(".fastmash-supervisor.sha256")).unwrap(),
+        format!("{}\n", digest(b"replacement supervisor"))
+    );
 }
 
 #[test]
@@ -370,16 +374,78 @@ fn failed_download_or_checksum_preserves_the_existing_installation() {
 }
 
 #[test]
-fn incomplete_linux_archive_preserves_both_programs() {
-    let root = TempDir::new("archive-missing-supervisor");
+fn single_executable_linux_archive_preserves_an_unproven_supervisor() {
+    let root = TempDir::new("archive-single-linux");
     let path = fixture_path(&root.0, "Linux", "x86_64", "");
     let archive = fixture_archive(&root.0, "0.1.0", "x86_64-unknown-linux-gnu", false);
     let mirror = Mirror::new("0.1.0", mirrored_files(archive, false));
     let dir = root.0.join("installed");
     previous_installation(&dir);
     let output = install(&mirror, Some("0.1.0"), &dir, Some(&path), &root.0);
-    assert!(!output.status.success(), "{output:?}");
-    assert_previous(&dir);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read(dir.join("fastmash")).unwrap(),
+        b"replacement fastmash"
+    );
+    assert_eq!(
+        fs::read(dir.join("fastmash-sort-supervisor")).unwrap(),
+        b"previous supervisor"
+    );
+    assert_eq!(fs::read_dir(&dir).unwrap().count(), 2);
+}
+
+#[test]
+fn one_executable_upgrade_removes_only_an_unchanged_owned_supervisor() {
+    for state in ["owned", "modified", "symlink"] {
+        let root = TempDir::new(&format!("archive-upgrade-{state}"));
+        let path = fixture_path(&root.0, "Linux", "x86_64", "");
+        let legacy = Mirror::new(
+            "0.1.0",
+            mirrored_files(
+                fixture_archive(&root.0, "0.1.0", "x86_64-unknown-linux-gnu", true),
+                false,
+            ),
+        );
+        let dir = root.0.join("installed");
+        let first = install(&legacy, Some("0.1.0"), &dir, Some(&path), &root.0);
+        assert!(first.status.success(), "{first:?}");
+        let supervisor = dir.join("fastmash-sort-supervisor");
+        if state == "modified" {
+            fs::write(&supervisor, b"user replacement").unwrap();
+        } else if state == "symlink" {
+            fs::remove_file(&supervisor).unwrap();
+            fs::write(root.0.join("unrelated"), b"replacement supervisor").unwrap();
+            symlink(root.0.join("unrelated"), &supervisor).unwrap();
+        }
+        let native = Mirror::new(
+            "0.3.0",
+            mirrored_files(
+                fixture_archive(&root.0, "0.3.0", "x86_64-unknown-linux-gnu", false),
+                false,
+            ),
+        );
+        let upgraded = install(&native, Some("0.3.0"), &dir, Some(&path), &root.0);
+        assert!(upgraded.status.success(), "{state}: {upgraded:?}");
+        assert_eq!(
+            fs::read(dir.join("fastmash")).unwrap(),
+            b"replacement fastmash"
+        );
+        match state {
+            "owned" => {
+                assert!(!supervisor.exists());
+                assert!(!dir.join(".fastmash-supervisor.sha256").exists());
+            }
+            "modified" => assert_eq!(fs::read(supervisor).unwrap(), b"user replacement"),
+            "symlink" => {
+                assert!(supervisor.is_symlink());
+                assert_eq!(
+                    fs::read(root.0.join("unrelated")).unwrap(),
+                    b"replacement supervisor"
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[test]
@@ -437,9 +503,7 @@ fn documented_macos_method_installs_a_verified_archive_with_an_explicit_version(
     // The manual method uses an already downloaded archive, without curl or
     // GNU checksum tools. Selecting Linux instructions must fail here.
     fs::remove_file(path.join("curl")).unwrap();
-    for tool in ["bash", "cat"] {
-        symlink(real_tool(tool), path.join(tool)).unwrap();
-    }
+    symlink(real_tool("bash"), path.join("bash")).unwrap();
     let output = Command::new("/bin/bash")
         .args(["-c", documented_instructions()])
         .current_dir(&root.0)
@@ -462,9 +526,7 @@ fn documented_archive_or_binary_checksum_failure_preserves_the_installation() {
     let version = "0.2.0-macos-test";
     let (name, archive) = fixture_archive(&root.0, version, "aarch64-apple-darwin", false);
     let path = fixture_path(&root.0, "Darwin", "arm64", "15.7");
-    for tool in ["bash", "cat"] {
-        symlink(real_tool(tool), path.join(tool)).unwrap();
-    }
+    symlink(real_tool("bash"), path.join("bash")).unwrap();
     let dir = root.0.join(".local/bin");
     fs::create_dir(root.0.join(".local")).unwrap();
     previous_installation(&dir);

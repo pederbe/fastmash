@@ -1,5 +1,9 @@
 # 0012: Separate release delivery from performance acceptance
 
+The Linux executable-pair references below are superseded by
+[ADR 0014: Native sorting in one executable](0014-native-sorting-everywhere.md).
+The release and performance evidence boundaries remain unchanged.
+
 Status: accepted. Supersedes the Linux performance-manifest prerequisite and
 manual publication step in [ADR 0011](0011-native-release-delivery.md). Its
 native archive reproducibility and installed-delivery guarantees remain.

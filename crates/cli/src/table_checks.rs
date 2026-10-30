@@ -9,7 +9,7 @@ use super::{
     named_fields,
     options::Options,
     random::TableState,
-    records, sorted_input, standard_io, unsupported,
+    records, standard_io, unsupported,
 };
 use std::{
     collections::HashSet,
@@ -91,7 +91,7 @@ pub(super) fn dedup<W: Write>(
     options: &Options,
     mut keys: Vec<Field>,
 ) -> Result<(), Failure> {
-    let mut key = keys
+    let key = keys
         .pop()
         .ok_or_else(|| unsupported("internal dedup key missing"))?;
     if matches!(key, Field::Name(_)) && !options.header_in {
@@ -104,30 +104,8 @@ pub(super) fn dedup<W: Write>(
         return dedup_records(reader, output, options, key, intake);
     }
     options.locale.sorting()?;
-    // No Operation of rmdup is covered: only its locale or an unusable system
-    // sort keeps it in process.
-    if super::sort_route::native(options.locale.language(), false, || {
-        sorted_input::available(options.input)
-    }) {
-        super::sort_route::trace("native sort of whole records");
-        return native_dedup(reader, output, options, key);
-    }
-    super::sort_route::trace("system sort");
-    let sorting = sorted_input::Sorting::prepare(sorted_input::admit(&options.locale)?, options)?;
-    if let Some(record) = sorting.header() {
-        resolve(&mut key, record, options)?;
-    }
-    let number = match &key {
-        Field::Number(n) => *n,
-        Field::Name(_) => 0,
-    };
-    sorting.start(&[number], options)?.run(|reader, header| {
-        // GNU reads a second header here even after open_input consumed the
-        // first (datamash.c remove_dups_in_file).
-        let lines = u64::from(header.is_some());
-        let sorted = Intake::new(options, intake::Header::of(options)).after(lines);
-        dedup_records(reader, output, options, key, sorted)
-    })
+    super::sort_route::trace("native sort of whole records");
+    native_dedup(reader, output, options, key)
 }
 
 fn row<W: Write>(output: &mut BufferedStdout<'_, W>, record: &[u8], options: &Options) {

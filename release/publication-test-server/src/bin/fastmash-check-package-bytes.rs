@@ -13,11 +13,12 @@ fn main() -> ExitCode {
     }
     let bin = Path::new(&args[0]);
     let packaged = Path::new(&args[1]).join("usr/bin");
-    for program in ["fastmash", "fastmash-sort-supervisor"] {
-        if !matches!(same(&bin.join(program), &packaged.join(program)), Ok(true)) {
-            eprintln!("{program} changed during packaging");
-            return ExitCode::FAILURE;
-        }
+    if !matches!(
+        same(&bin.join("fastmash"), &packaged.join("fastmash")),
+        Ok(true)
+    ) {
+        eprintln!("fastmash changed during packaging");
+        return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
 }

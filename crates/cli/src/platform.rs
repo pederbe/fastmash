@@ -1,7 +1,7 @@
 //! Native process primitives used by the standard streams and signal policy.
 use std::io;
 
-pub(super) use super::standard_stream_io::{flags, read, seek, write};
+pub(super) use super::standard_stream_io::{read, seek, write};
 
 /// Closes an exclusively owned raw descriptor, without retrying an uncertain
 /// close. Callers must finish every use of the descriptor first.

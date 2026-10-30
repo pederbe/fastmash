@@ -1490,11 +1490,6 @@ mod compact_tests {
                 &["-gkey", "wmean", "value:weight", "dotprod", "value:weight"],
                 &["rmdup", "key"],
             ] {
-                // C-locale rmdup still has an external route in this slice;
-                // the standalone executable checks its native fallback.
-                if locale == "C" && requests[0] == "rmdup" {
-                    continue;
-                }
                 let weighted = requests.contains(&"wmean");
                 for bytes in [b"".as_slice(), b"#skip\n ;skip\n"] {
                     for read_error in [None, Some(5), Some(9), Some(21)] {

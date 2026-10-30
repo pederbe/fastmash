@@ -21,7 +21,7 @@ sha256sums=('RELEASE_SHA256')
 
 package() {
   cd "${_name}"
-  install -Dm755 fastmash fastmash-sort-supervisor -t "${pkgdir}/usr/bin/"
+  install -Dm755 fastmash -t "${pkgdir}/usr/bin/"
   install -Dm644 README.md CHANGELOG.md -t "${pkgdir}/usr/share/doc/fastmash/"
   install -Dm644 LICENSE-MIT LICENSE-APACHE THIRD-PARTY-LICENSES.md \
     -t "${pkgdir}/usr/share/licenses/${pkgname}/"

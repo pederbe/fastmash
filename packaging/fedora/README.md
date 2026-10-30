@@ -13,6 +13,10 @@ where Fedora's RPM generator reads it to identify bundled crates in package
 metadata. The package requires coreutils for the system
 Sort route. Rust, Python and the packaging macros are build dependencies only.
 
+The recipe retains these published source inputs. Current development source
+builds one executable and uses native sorting. The executable file list admits
+the older supervisor only when the selected source still builds it.
+
 ## Build and check
 
 Run this Bash block from the repository root on Fedora with `rpm-build`,

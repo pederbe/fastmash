@@ -52,11 +52,9 @@ fn run() -> io::Result<()> {
             "version command failed with {status}"
         )));
     }
-    let metadata = fs::metadata(bin.join("fastmash-sort-supervisor"))?;
+    let metadata = fs::metadata(&binary)?;
     if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
-        return Err(io::Error::other(
-            "sort supervisor is not installed and executable",
-        ));
+        return Err(io::Error::other("fastmash is not installed and executable"));
     }
     check(&binary, &["sum", "1", "mean", "1"], b"1\n2\n3\n", b"6\t2\n")?;
     check(

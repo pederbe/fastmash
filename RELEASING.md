@@ -55,14 +55,14 @@ builds and installation checks and separates website deployment.
 
 The GitHub-hosted workflows perform these steps for the frozen version:
 
-1. Build the tagged Linux pair twice with `release/Containerfile` and
-   `release/build.sh`, using empty target directories. Both executable pairs
+1. Build the tagged Linux executable twice with `release/Containerfile` and
+   `release/build.sh`, using empty target directories. Both executable builds
    must be byte-identical. Record their hashes in the run's
-   `release/delivery.sha256` and package one of those pairs directly. Include
+   `release/delivery.sha256` and package one of those builds directly. Include
    the manifest as `binary.sha256` inside the archive. Historical manifests
    remain unchanged.
 2. Run workspace tests and both regression-corpus input modes against that
-   executable and its Sort supervisor. Package the same bytes into the archive,
+   executable. Package the same bytes into the archive,
    `.deb` and `.rpm`, then test extraction, installation, Commands and removal.
 3. Build the Apple Silicon executable twice on macOS 15 with the pinned compiler,
    remapped paths and deployment target 15.0. Freeze one archive and its SHA-256.
@@ -175,14 +175,14 @@ lockfile, and keep only its user-visible fixes under `[Unreleased]`. Record the
 full source revision, lockfile hash, builder identity, compiler and flags.
 Use the pinned `release/Containerfile` and `release/build.sh` recipe already used
 by the release workflow. Build twice from the same clean source into separate
-empty target directories and compare **both** executables byte for byte. Normal
+empty target directories and compare the executable byte for byte. Normal
 Cargo output is suitable for development checks but is not the release artifact.
 
 Run formatting, warnings-denied Clippy, release workspace tests, minimum Rust
 version, license/advisory and documentation checks on that source. Retain the
 independent primitive, exact conversion and MPFR challenge checks. Then run the
-command tests and both corpus input modes against the candidate pair, with
-`fastmash-sort-supervisor` beside `fastmash`. The command tests include the
+command tests and both corpus input modes against the candidate executable.
+The command tests include the
 independent numerical CLI fixtures and affected-feature tests; they must execute
 the candidate rather than a separately built executable.
 
@@ -238,12 +238,13 @@ package checks use:
 bash release/check-installed.sh X.Y.Z /absolute/path/to/installed/bin release/delivery.sha256
 ```
 
-This check verifies both installed executable hashes, version, arithmetic and
-an actual system Sort route. Correct output from a built-in fallback does not
-prove that the installed Sort supervisor works. The workflow installs and removes
-the packages in clean Debian 12 and AlmaLinux 8 containers and verifies that both
-executables are removed. Package construction also checks that packaging did not
-rewrite either executable. Keep these checks passing before accepting the draft.
+This check verifies the installed executable hash, version, arithmetic, sorted
+calculations and duplicate removal. The workflow installs and removes the
+packages in clean Debian 12 and AlmaLinux 8 containers and verifies removal.
+Upgrade checks cover earlier two-executable installations, removing their stale
+supervisor without touching unrelated files. Package construction also checks
+that packaging did not rewrite the executable. Keep these checks passing before
+accepting the draft.
 
 Review the draft's notes and complete asset list. Download its delivered assets,
 verify their checksum sidecars and provenance against the build records. Identical

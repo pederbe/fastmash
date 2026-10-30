@@ -11,14 +11,18 @@ Fastmash 0.2.0 adds native Apple Silicon macOS 15 and later alongside Linux
 x86-64 and WSL2. Its published archive is checked on macOS 15 and 26,
 including command behavior, numerical results and archive installation.
 
+## In development: native sorting everywhere
+
+Every sorted calculation and sorted duplicate removal now uses built-in stable
+sorting with disk spill. Fastmash builds as one executable on Linux and macOS.
+The next release will no longer require the system `sort` or a sort supervisor.
+
 ## Other planned work
 
 - **Performance.** Close the remaining gaps where GNU datamash is faster
   (large sorts that spill to disk, the geometric mean of many distinct values,
   scientific-notation input sorted in language locales), guided by the
   published [benchmarks](benchmarks/index.md#where-gnu-datamash-is-still-faster).
-- **Native sorting everywhere**, retiring the external `sort` route that some
-  sorted jobs in the `C` locales still use where the system supports it.
 - **Broader locale support.**
 - **Packaging** in distribution repositories and conda-forge.
 

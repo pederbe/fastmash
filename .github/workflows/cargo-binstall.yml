@@ -36,7 +36,7 @@ jobs:
           # Pinned cargo-binstall release archives and their SHA-256.
           - os: ubuntu-26.04
             target: x86_64-unknown-linux-gnu
-            programs: fastmash fastmash-sort-supervisor
+            programs: fastmash
             installer: cargo-binstall-x86_64-unknown-linux-musl.tgz
             installer-sha256: 1f72931713e9091478538c6c78c3f11f205b4f6f394f35e61835036b23929d2a
             # The documented commands from docs/src/install.md.
@@ -81,6 +81,12 @@ jobs:
           cd "$archive"
           shasum -a 256 -c "$name.tar.gz.sha256"
           tar -xzf "$name.tar.gz"
+          # Published older Linux archives contain a matched companion.
+          # Derive that legacy layout from the verified archive.
+          if [ -f "$name/fastmash-sort-supervisor" ]; then
+            PROGRAMS="$PROGRAMS fastmash-sort-supervisor"
+          fi
+          printf 'PROGRAMS=%s\n' "$PROGRAMS" >> "$GITHUB_ENV"
           # The installed executables must be these archive bytes. Archives
           # before 0.4.0 carry no binary.sha256, so hash the extracted files.
           (cd "$name" && shasum -a 256 $PROGRAMS) > "$RUNNER_TEMP/archive-executables.sha256"
@@ -121,8 +127,6 @@ jobs:
           cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
           bash release/check-installed.sh "$VERSION" "$RUNNER_TEMP/root/bin" "$RUNNER_TEMP/archive-executables.sha256"
       - name: Remove the installation
-        env:
-          PROGRAMS: ${{ matrix.programs }}
         run: |
           set -euo pipefail
           cargo uninstall --root "$RUNNER_TEMP/root" fastmash

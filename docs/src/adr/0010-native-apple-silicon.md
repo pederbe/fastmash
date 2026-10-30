@@ -3,6 +3,9 @@
 Status: accepted for development. The published 0.1.0 platform scope remains
 [ADR 0007: Linux x86-64 first](0007-linux-first.md).
 
+The Linux external-supervision decision below is superseded by
+[ADR 0014: Native sorting in one executable](0014-native-sorting-everywhere.md).
+
 Add native `aarch64-apple-darwin` support with macOS 15 as the minimum, verified
 on native hosted macOS 15 and 26 runners. Cross-compilation cannot establish
 runtime support, and the maintainer has no macOS hardware. Support requires

@@ -10,7 +10,7 @@ Most Linux systems from 2018 onward need nothing beyond the
 | Linux x86-64, glibc 2.28 or later (RHEL 8, Debian 10, Ubuntu 20.04 and newer) | Supported platform for the prebuilt binaries |
 | Linux x86-64 with glibc (`x86_64-unknown-linux-gnu`) | Building Linux source; musl and other Linux targets are refused at compile time |
 | Apple Silicon macOS 15 or later (`aarch64-apple-darwin`) | Supported platform for the native archive, checked on macOS 15 and 26 |
-| `/proc` mounted | Needed for the system `sort` route below; without it, those jobs sort in process, and output is written in 8 KiB blocks, even to a terminal |
+| `/proc` mounted on Linux | Supplies memory and terminal information. Without it, Fastmash uses conservative sort memory and writes output in 8 KiB blocks, even to a terminal |
 | A writable `TMPDIR` (default `/tmp`) | Temporary data for large sorted jobs |
 
 Fastmash supports Linux x86-64, Windows through WSL2 and
@@ -19,9 +19,9 @@ on macOS 15 and 26. Intel macOS, older macOS versions and native Windows are
 outside the scope. See [Homebrew](install.md#homebrew) or the
 [native archive instructions](install.md#macos-archive).
 
-macOS uses its system libraries and Fastmash's built-in sorting with Spill.
-It needs no `/proc`, GNU coreutils or Sort supervisor. A writable temporary
-directory is still required for large sorted jobs. The same built-in locale
+Linux and macOS use Fastmash's built-in sorting with Spill. Sorting needs no
+system `sort`, helper executable, pidfds or `close_range`. A writable temporary
+directory is required when a sorted job spills. The same built-in locale
 rules and Numerical profile apply; native GNU results do not redefine Portable
 results. Missing Linux memory information does not impose a record limit.
 
@@ -29,20 +29,8 @@ Under an address-space limit (`ulimit -v`, as some batch schedulers set),
 Fastmash reduces the address space that its memory allocator reserves; see
 [Address-space limits](guide/errors.md#address-space-limits).
 
-Every sorted calculation uses built-in sorting, without the system `sort` or
-Sort supervisor. Sorted `rmdup` in the `C` locales, described in
-[Grouping and sorting](guide/grouping.md#large-inputs), uses the system `sort`
-when all of these hold: `/proc` is mounted and `fastmash-sort-supervisor` is
-beside `fastmash`; `/usr/bin/sort` is an executable from GNU coreutils or
-uutils coreutils (not BusyBox or Toybox); the field separator is ASCII; `TMPDIR` is writable; Linux
-is 5.11 or later, with pidfds and `close_range` allowed; and the `HUP`, `INT`
-and `TERM` signals are neither blocked nor ignored. Otherwise (for example
-without the supervisor or `/usr/bin/sort`, under `nohup`, for `command &` in a
-script, on an older kernel or in a restrictive container), those jobs sort
-inside Fastmash instead, with the same output but more slowly on large input.
-The system `sort` chooses its own buffer size and threads, as it does for GNU
-datamash (Fastmash's memory policy and `FASTMASH_SORT_MEMORY_BYTES` apply
-only to its own sorting).
+Every sorted calculation and sorted `rmdup` uses this same native storage and
+resource policy. See [Grouping and sorting](guide/grouping.md#large-inputs).
 
 ## Locales
 
@@ -78,7 +66,7 @@ The published [benchmarks](benchmarks/index.md) measure the qualified Linux 0.1.
 git clone https://github.com/pederbe/fastmash
 cd fastmash
 cargo build --release --locked
-# the programs are target/release/fastmash and target/release/fastmash-sort-supervisor
+# the program is target/release/fastmash
 ```
 
 To build on Apple Silicon macOS 15 or later, run this command in Bash:
@@ -89,8 +77,7 @@ MACOSX_DEPLOYMENT_TARGET=15.0 cargo build --release --locked --bin fastmash --ta
 ```
 
 The macOS build needs Rust 1.88 or later and Apple's Command Line Tools.
-Installing the archive needs neither. The Linux supervisor is not a macOS
-runtime component.
+Installing the archive needs neither.
 
 `cargo install` and source builds use your own compiler and settings. They
 omit the prebuilt binaries' branch-alignment tuning for some Intel processors,

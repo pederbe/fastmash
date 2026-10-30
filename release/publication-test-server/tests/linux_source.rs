@@ -20,13 +20,11 @@ impl Fixture {
         fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
         fs::create_dir(path.join("bin")).unwrap();
         fs::create_dir(path.join("docs")).unwrap();
-        for name in ["fastmash", "fastmash-sort-supervisor"] {
-            fs::copy(
-                env!("CARGO_BIN_EXE_fastmash-linux-source-fixture"),
-                path.join("bin").join(name),
-            )
-            .unwrap();
-        }
+        fs::copy(
+            env!("CARGO_BIN_EXE_fastmash-linux-source-fixture"),
+            path.join("bin/fastmash"),
+        )
+        .unwrap();
         for name in ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"] {
             fs::write(path.join("docs").join(name), b"nonempty\n").unwrap();
         }
@@ -104,7 +102,7 @@ fn nix_requires_each_nonempty_document_while_fedora_keeps_its_existing_scope() {
 
 #[test]
 fn missing_and_nonexecutable_programs_are_rejected() {
-    for name in ["fastmash", "fastmash-sort-supervisor"] {
+    for name in ["fastmash"] {
         let fixture = Fixture::new();
         let path = fixture.0.join("bin").join(name);
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();

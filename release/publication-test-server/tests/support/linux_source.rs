@@ -74,11 +74,11 @@ fn main() -> ExitCode {
             }
         );
         eprintln!(
-            "sort route: {} sort",
+            "sort route: {}",
             if mode == "wrong-route" {
-                "native"
+                "system sort"
             } else {
-                "system"
+                "native sort of the selected fields"
             }
         );
         if mode == "failed-route" {
@@ -89,6 +89,7 @@ fn main() -> ExitCode {
             return ExitCode::from(20);
         }
         print!("a\t1\nb\t2\n");
+        eprintln!("sort route: native sort of whole records");
     } else {
         return ExitCode::from(19);
     }

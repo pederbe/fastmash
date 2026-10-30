@@ -69,10 +69,14 @@ fn main() -> ExitCode {
                 "a\t2\nb\t0\n"
             }
         );
-        let native = cfg!(target_os = "macos") != (mode == "wrong-route");
+        let native = mode != "wrong-route";
         eprintln!(
-            "sort route: {} sort",
-            if native { "native" } else { "system" }
+            "sort route: {}",
+            if native {
+                "native sort of the selected fields"
+            } else {
+                "system sort"
+            }
         );
         if mode == "failed-route" {
             return ExitCode::from(17);
@@ -82,6 +86,7 @@ fn main() -> ExitCode {
             return ExitCode::from(20);
         }
         print!("a\t1\nb\t2\n");
+        eprintln!("sort route: native sort of whole records");
     } else {
         return ExitCode::from(19);
     }

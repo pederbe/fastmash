@@ -11,10 +11,12 @@ can be revisited; do so with a new record that supersedes the old one.
 | [0003](0003-portable-results.md) | Portable results through software arithmetic |
 | [0004](0004-refuse-rather-than-guess.md) | Refuse rather than guess |
 | [0005](0005-growable-checked-storage.md) | Growable, checked storage instead of fixed limits |
-| [0006](0006-supervised-external-sort.md) | Supervise the system `sort` for the remaining sort routes |
+| [0006](0006-supervised-external-sort.md) | Supervise the system `sort` for the remaining sort routes, superseded by 0014 |
 | [0007](0007-linux-first.md) | Linux x86-64 first |
 | [0008](0008-hash-grouping-with-restart.md) | Group sorted input by hash, and sort again when unsure |
 | [0009](0009-built-in-locale-tables.md) | Built-in locale tables, not the host's locales |
 | [0010](0010-native-apple-silicon.md) | Native Apple Silicon macOS, verified through hosted commands and installed archives |
 | [0011](0011-native-release-delivery.md) | Qualify and deliver the same native archive |
 | [0012](0012-release-delivery-and-performance.md) | Separate release delivery from performance acceptance |
+| [0013](0013-reuse-tested-release-artifacts.md) | Reuse tested release artifacts |
+| [0014](0014-native-sorting-everywhere.md) | Native sorting in one executable |

@@ -174,15 +174,11 @@ fn targets_preserve_archive_description_and_standard_library_preface() {
     let graph = one_dependency(&directory.0, "MIT");
     let linux = render(&graph, Target::Linux);
     let macos = render(&graph, Target::Macos);
-    assert!(linux.starts_with("# Third-party licenses\n\nThe fastmash and fastmash-sort-supervisor binaries include the following third-party code.\n\n"));
-    assert!(macos.starts_with("# Third-party licenses\n\nThe fastmash binaries include the following third-party code.\n\n"));
+    assert!(linux.starts_with("# Third-party licenses\n\nThe fastmash executable includes the following third-party code.\n\n"));
+    assert!(macos.starts_with("# Third-party licenses\n\nThe fastmash executable includes the following third-party code.\n\n"));
     for output in [&linux, &macos] {
         assert!(output.contains("The Rust standard library (std, core, alloc, and their dependencies) is\nlinked into the binaries under the MIT and Apache-2.0 licenses:\n<https://github.com/rust-lang/rust/blob/master/COPYRIGHT>.\n\n"));
     }
-    assert!(!linux.contains("The archive contains no sort supervisor."));
-    assert!(
-        macos.contains(
-            "Target: `aarch64-apple-darwin`. The archive contains no sort supervisor.\n\n"
-        )
-    );
+    assert!(linux.contains("Target: `x86_64-unknown-linux-gnu`.\n\n"));
+    assert!(macos.contains("Target: `aarch64-apple-darwin`.\n\n"));
 }

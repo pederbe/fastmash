@@ -81,42 +81,28 @@ fn run() -> io::Result<()> {
     fs::write("trace", &output.stderr)?;
     expect(&output, b"a\t2\nb\t0\n", "paired operation")?;
     let supervisor = Path::new(bin).join("fastmash-sort-supervisor");
-    if cfg!(target_os = "macos") {
-        match fs::symlink_metadata(supervisor) {
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
-            Ok(_) => return Err(io::Error::other("unexpected Sort supervisor on macOS")),
-        }
-        if !output.stderr.starts_with(b"sort route: native sort") {
-            return Err(io::Error::other("paired operation did not use native sort"));
-        }
-    } else if !supervisor.exists()
-        || !matches!(
-            output.stderr.as_slice(),
-            b"sort route: system sort\n"
-                | b"sort route: native sort of the selected fields\n"
-                | b"sort route: native sort of whole records\n"
-        )
-    {
-        return Err(io::Error::other(
-            "Linux package is missing its supervisor or a supported sort route",
-        ));
+    match fs::symlink_metadata(supervisor) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+        Ok(_) => return Err(io::Error::other("unexpected Sort supervisor")),
     }
-    if !cfg!(target_os = "macos") {
+    if !matches!(
+        output.stderr.as_slice(),
+        b"sort route: native sort of the selected fields\n"
+            | b"sort route: native sort of whole records\n"
+    ) {
+        return Err(io::Error::other("paired operation did not use native sort"));
+    }
+    {
         fs::write("rmdup-input", b"b\t2\na\t1\nb\t3\n")?;
         let rmdup = command(&binary, &["-s", "rmdup", "1"])
             .env("FASTMASH_SORT_TRACE", "1")
             .stdin(Stdio::from(File::open("rmdup-input")?))
             .output()?;
         expect(&rmdup, b"a\t1\nb\t2\n", "sorted rmdup")?;
-        // Current packages run sorted rmdup through the supervisor. Older ones
-        // report no route for it, and the paired operation used it instead.
-        let system = b"sort route: system sort\n".as_slice();
-        if !matches!(rmdup.stderr.as_slice(), b"sort route: system sort\n" | b"")
-            || (rmdup.stderr != system && output.stderr != system)
-        {
+        if rmdup.stderr != b"sort route: native sort of whole records\n" {
             return Err(io::Error::other(format!(
-                "no Command used the system sort through the installed supervisor: {:?}",
+                "sorted rmdup did not use native sorting: {:?}",
                 String::from_utf8_lossy(&rmdup.stderr)
             )));
         }

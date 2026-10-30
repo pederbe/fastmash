@@ -109,10 +109,10 @@ normality tests, paired statistics and mixed calculations. They preserve
 contribution order and seeded randomness, and need neither the system `sort`
 nor the sort supervisor.
 
-On Linux in the C locales, `rmdup` with `-s` still uses the system `sort`
-through Fastmash's sort supervisor. This route writes its temporary files in a
-private directory in `TMPDIR`; see [System requirements](../requirements.md)
-for what it needs. In language locales `rmdup` also uses Fastmash's own sorter.
+Sorted `rmdup` also uses the native sorter in every supported locale. It keeps
+complete records and stable key order, with the same anonymous Spill storage
+as sorted calculations. Case folding affects ordering, while duplicate keys
+are compared exactly.
 
 ## Ignoring case: `-i`
 

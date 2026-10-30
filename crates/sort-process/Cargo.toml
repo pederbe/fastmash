@@ -2,7 +2,7 @@
 name = "fastmash-sort-process"
 version = "0.2.0"
 edition = "2024"
-description = "Supervised external sort process for fastmash"
+description = "Native spill storage and thread policy for fastmash"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/pederbe/fastmash"
 homepage = "https://fastmash.io"

@@ -95,6 +95,12 @@ Downloads the latest release archive for your system, checks its checksum and
 installs it into `~/.local/bin`. Add that directory to your `PATH` if needed.
 Run the same command again to update.
 
+When upgrading from a two-executable Linux release, the installer removes the
+old Sort supervisor only if its checksum matches the ownership receipt from
+an earlier installation. An older installation without that receipt, or a
+changed helper, stays in place. After upgrading, you may remove that unused
+`fastmash-sort-supervisor` yourself if it belongs to this installation.
+
 Set `FASTMASH_INSTALL_DIR` to choose another installation directory, or
 `FASTMASH_VERSION` to choose a release.
 
@@ -129,12 +135,16 @@ curl -fLO https://github.com/pederbe/fastmash/releases/download/v$version/$name.
 sha256sum -c $name.tar.gz.sha256
 tar -xzf $name.tar.gz
 mkdir -p ~/.local/bin
-cp $name/fastmash $name/fastmash-sort-supervisor ~/.local/bin/
+cp "$name/fastmash" ~/.local/bin/
+if [ -f "$name/fastmash-sort-supervisor" ]; then
+  cp "$name/fastmash-sort-supervisor" ~/.local/bin/
+fi
 EOF
 ```
 
-Replace `@VERSION@` with the version you want. Keep `fastmash` and
-`fastmash-sort-supervisor` from the same release in the same directory.
+Replace `@VERSION@` with the version you want. Published Linux releases through
+0.2.0 include `fastmash-sort-supervisor`. Keep that helper beside `fastmash` from
+the same release. Later archives contain only `fastmash`.
 
 ### macOS archive
 
@@ -175,11 +185,14 @@ If you already use Rust, Cargo offers two routes.
 
 [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads the
 same prebuilt executables as the release archives, without compiling. On Linux
-x86-64 or WSL2, it installs `fastmash` and its Sort supervisor:
+x86-64 or WSL2, run:
 
 ```sh
 cargo binstall fastmash
 ```
+
+Published Linux releases through 0.2.0 also install their Sort supervisor.
+Later releases contain only `fastmash`.
 
 On Apple Silicon macOS 15 or later, select its single executable:
 
@@ -227,7 +240,7 @@ For the quick installer or a downloaded archive:
 
 ```sh
 rm ~/.local/bin/fastmash
-# On Linux, also remove the supervisor:
+# If installed by an earlier Linux release, also remove its helper:
 rm ~/.local/bin/fastmash-sort-supervisor
 ```
 

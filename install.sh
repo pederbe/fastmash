@@ -4,8 +4,8 @@
 #   curl -fsSL https://fastmash.io/install.sh | sh
 #
 # Downloads the selected platform archive, checks its SHA-256 checksum,
-# and installs its programs into ~/.local/bin. macOS archives contain only
-# `fastmash`; Linux archives also contain `fastmash-sort-supervisor`.
+# and installs fastmash into ~/.local/bin. Older Linux archives also contain
+# a sort supervisor, whose ownership is recorded for a later upgrade.
 # It needs curl or wget, tar, gzip, and sha256sum (Linux) or shasum (macOS).
 #
 # Settings (environment variables):
@@ -32,7 +32,7 @@ main() {
     case "$system:$machine" in
         Linux:x86_64)
             target=x86_64-unknown-linux-gnu
-            programs="fastmash fastmash-sort-supervisor"
+            programs=fastmash
             checksum_tool=sha256sum
             checksum() { sha256sum -c "$1"; }
             if has ldd && ldd --version 2>&1 | grep -qi musl; then
@@ -92,6 +92,19 @@ main() {
     tar -xzf "$tmp/$name.tar.gz" -C "$tmp" ||
         fail "could not unpack the archive; nothing was installed."
 
+    if [ "$system" = Linux ] && { [ -e "$tmp/$name/fastmash-sort-supervisor" ] || [ -L "$tmp/$name/fastmash-sort-supervisor" ]; }; then
+        programs="fastmash fastmash-sort-supervisor"
+    fi
+
+    fingerprint() {
+        if [ "$system" = Linux ]; then
+            sum=$(sha256sum "$1")
+        else
+            sum=$(shasum -a 256 "$1")
+        fi
+        printf '%s\n' "${sum%% *}"
+    }
+
     # Validate every program before changing an existing installation.
     for program in $programs; do
         [ -f "$tmp/$name/$program" ] && [ ! -L "$tmp/$name/$program" ] ||
@@ -104,10 +117,26 @@ main() {
         cp "$tmp/$name/$program" "$staging/$program"
         chmod 755 "$staging/$program"
     done
+    ownership=$dir/.fastmash-supervisor.sha256
+    if [ "$programs" = fastmash ]; then
+        # Only remove a regular file whose bytes match this installer's receipt.
+        # Older installations without a receipt and user replacements stay put.
+        old=$dir/fastmash-sort-supervisor
+        if [ -f "$old" ] && [ ! -L "$old" ] && [ -f "$ownership" ] && [ ! -L "$ownership" ] &&
+            [ "$(fingerprint "$old")" = "$(cat "$ownership")" ]; then
+            rm "$old"
+            rm "$ownership"
+        fi
+    else
+        fingerprint "$staging/fastmash-sort-supervisor" > "$staging/ownership"
+    fi
     for program in $programs; do
         # Rename, so a running copy is never overwritten in place.
         mv -f "$staging/$program" "$dir/$program"
     done
+    if [ -f "$staging/ownership" ]; then
+        mv -f "$staging/ownership" "$ownership"
+    fi
 
     say "Installed Fastmash $version in $dir."
     case ":$PATH:" in

@@ -42,8 +42,9 @@ objects for rollback; removing the active package does not delete those.
 
 Follow Nixpkgs'
 [Rust packaging guidance](https://nixos.org/manual/nixpkgs/unstable/#compiling-rust-applications-with-cargo)
-when updating the version, source hash and `cargoHash`. Keep the path replacement
-guarded with `--replace-fail`, so a changed source layout stops the build.
+when updating the version, source hash and `cargoHash`. The path replacement
+applies only to historical sources that contain the external route. Current
+source installs one executable and needs no system `sort` at runtime.
 
 ## Submission
 

@@ -8,8 +8,9 @@ brew install pederbe/tap/fastmash
 ```
 
 It builds the published source on Linux x86-64 and Apple Silicon macOS 15 or
-later with the locked Cargo dependencies. Linux installs `fastmash` and its
-Sort supervisor together. macOS installs only `fastmash`. Both include the
+later with the locked Cargo dependencies. Current source installs one
+`fastmash` executable on both platforms. Published older Linux source also
+installs its sort supervisor. Both platforms include the
 project licenses and generated dependency licenses, copyright and notice texts
 for their target. Rust is a build dependency only. The tap publishes bottles,
 which are prebuilt Homebrew packages, for macOS 15, macOS 26 and Linux x86-64.
@@ -65,12 +66,9 @@ brew uninstall OWNER/fastmash-test/fastmash
 
 On both platforms the test requires nonempty licenses and notices, the exact
 version, arithmetic and a transcendental result, and a paired operation.
-On Linux it requires the Sort supervisor and an exact `system sort` trace.
-A correct result from fallback sorting cannot pass it. Testing this optional
-route requires Linux 5.11 or later and GNU or uutils coreutils at `/usr/bin/sort`.
-Older kernels can install Fastmash and use its built-in sorting, but cannot
-pass this route check. On macOS the test requires a `native sort` trace and
-confirms that no Sort supervisor is installed.
+Current source requires exact native sorting traces for the paired operation
+and sorted duplicate removal, and confirms that no sort supervisor is installed.
+Historical release tags retain their own checks for the executables they contain.
 
-After removal, confirm that `fastmash` and, on Linux, `fastmash-sort-supervisor`
+After removal, confirm that `fastmash` and any legacy `fastmash-sort-supervisor`
 are absent from the prefix's `bin/` and that the formula's Cellar directory is gone.

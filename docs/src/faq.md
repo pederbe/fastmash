@@ -60,13 +60,13 @@ color. Calculation results, CSV, health TSV and version output remain plain even
 with `--color=always`. Styling defaults to automatic terminal detection;
 `--no-color` disables it. See [Terminal color](guide/terminal-color.md).
 
-## Why are there two executables?
+## Does sorting need another program?
 
-On Linux, `fastmash-sort-supervisor` runs the system `sort` safely for
-`rmdup` with `-s` in the C locales. Every other job sorts inside Fastmash. Keep
-it in the same directory as `fastmash`: without it, sorted `rmdup` also sorts
-inside Fastmash, with the same output. The macOS archive contains only
-`fastmash` and always uses built-in sorting.
+The development version sorts every command inside `fastmash`, on Linux and
+macOS. Published Linux releases through 0.2.0 also include
+`fastmash-sort-supervisor` for their external sorting route. Keep that helper
+beside `fastmash` when using one of those releases. See the
+[installation guide](install.md) for the selected release.
 
 ## Why exit status 77?
 
