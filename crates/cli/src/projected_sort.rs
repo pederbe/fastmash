@@ -38,6 +38,11 @@ pub(super) fn admit_memory(setting: Option<&std::ffi::OsStr>) -> Result<(), Fail
     memory::target(setting).map(|_| ())
 }
 
+/// The initial memory target of a native sort.
+pub(super) fn memory_target(setting: Option<&std::ffi::OsStr>) -> Result<usize, Failure> {
+    memory::target(setting).map(|target| target.bytes)
+}
+
 /// Marks a key layout that the eight-byte prefix cannot fully encode.
 const LONG_KEY: u8 = 9;
 
@@ -585,18 +590,26 @@ pub(super) fn sorted_rows(
     intake: Intake<'_>,
     options: &options::Options,
     keys: &[u64],
+    admit: Admit<'_>,
     mut consume: impl FnMut(&mut Vec<u8>) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
     let mut bytes = Vec::new();
-    sorted_records(reader, intake, options, keys, |record, _, phase| {
-        if phase == RecordPhase::Consume {
-            bytes.clear();
-            bytes.try_reserve(record.len()).map_err(|_| allocation())?;
-            bytes.extend_from_slice(record);
-            consume(&mut bytes)?;
-        }
-        Ok(())
-    })
+    admitted_records(
+        reader,
+        intake,
+        options,
+        keys,
+        Some(admit),
+        |record, _, phase| {
+            if phase == RecordPhase::Consume {
+                bytes.clear();
+                bytes.try_reserve(record.len()).map_err(|_| allocation())?;
+                bytes.extend_from_slice(record);
+                consume(&mut bytes)?;
+            }
+            Ok(())
+        },
+    )
 }
 
 /// Source observation happens before sorting; sorted consumption keeps each
@@ -609,9 +622,48 @@ pub(super) enum RecordPhase {
 
 pub(super) fn sorted_records(
     reader: &mut (impl BufRead + ?Sized),
+    intake: Intake<'_>,
+    options: &options::Options,
+    keys: &[u64],
+    visit: impl FnMut(&[u8], u64, RecordPhase) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    admitted_records(reader, intake, options, keys, None, visit)
+}
+
+/// The sort key of field `key` that [`project_spans`] finds in a Record
+/// without annotations: the field, after the blanks before it for blank
+/// separators, or empty for a missing field. A `-z` blank-separated key that
+/// holds a newline can differ.
+fn key_span(bytes: &[u8], key: u64, input: records::Separator) -> std::ops::Range<usize> {
+    let mut previous_end = 0;
+    let mut count = 0u64;
+    for span in records::fields(bytes, input) {
+        count += 1;
+        if count == key {
+            let start = if input == records::Separator::Whitespace {
+                previous_end
+            } else {
+                span.start
+            };
+            return start..span.start + span.length;
+        }
+        previous_end = span.start + span.length;
+    }
+    0..0
+}
+
+/// Whether to sort a Record, given its first sort key bytes.
+pub(super) type Admit<'a> = &'a mut dyn FnMut(&[u8]) -> Result<bool, Failure>;
+
+/// Sorts the Records `admit` accepts, given each one's first sort key bytes,
+/// or every Record without it. Every Record is observed; vnlog Records are
+/// all admitted.
+fn admitted_records(
+    reader: &mut (impl BufRead + ?Sized),
     mut intake: Intake<'_>,
     options: &options::Options,
     keys: &[u64],
+    mut admit: Option<Admit<'_>>,
     mut visit: impl FnMut(&[u8], u64, RecordPhase) -> Result<(), Failure>,
 ) -> Result<(), Failure> {
     let preceding = intake.line();
@@ -647,6 +699,11 @@ pub(super) fn sorted_records(
         let mut accept = |record: batch::Projected<'_>| sorter.push_body(record, shape);
         while let Some(record) = intake.next(reader, &mut bytes)? {
             visit(record.data(), intake.line(), RecordPhase::ObserveSource)?;
+            if let Some(admit) = admit.as_mut().filter(|_| !options.vnlog)
+                && !admit(&record.raw()[key_span(record.raw(), keys[0], options.input)])?
+            {
+                continue;
+            }
             batch.push(record.raw(), &project, &mut accept)?;
         }
         batch.finish(&project, &mut accept)?;
@@ -656,6 +713,12 @@ pub(super) fn sorted_records(
         while let Some(record) = intake.next(reader, &mut bytes)? {
             visit(record.data(), intake.line(), RecordPhase::ObserveSource)?;
             let raw = record.raw();
+            // Before the projection, which also counts the record's fields.
+            if let Some(admit) = admit.as_mut().filter(|_| !options.vnlog)
+                && !admit(&raw[key_span(raw, keys[0], options.input)])?
+            {
+                continue;
+            }
             let fields = project_spans::<Original>(
                 raw,
                 &[],

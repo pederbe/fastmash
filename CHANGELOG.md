@@ -35,7 +35,9 @@ numerical profile version that introduced it.
   Fastmash now builds and installs as one executable on Linux and macOS,
   without the system `sort` or a Sort supervisor. Complete retained records,
   duplicate-key equality and the Numerical profile are preserved. Input and
-  storage failures use Fastmash's own diagnostics.
+  storage failures use Fastmash's own diagnostics. Records that repeat an
+  earlier record's key are skipped as they are read, so inputs with many
+  duplicates sort less and rarely spill to disk.
 - Use built-in sorting for every sorted calculation in the C locales, including
   mixed calculations, other means, higher moments, normality tests, paired
   statistics and `rand`, without requiring the system `sort` or Sort supervisor.

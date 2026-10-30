@@ -112,7 +112,9 @@ nor the sort supervisor.
 Sorted `rmdup` also uses the native sorter in every supported locale. It keeps
 complete records and stable key order, with the same anonymous Spill storage
 as sorted calculations. Case folding affects ordering, while duplicate keys
-are compared exactly.
+are compared exactly. Records that repeat an earlier record's key are skipped
+as they are read, so inputs with many duplicates sort less and rarely spill to
+disk.
 
 ## Ignoring case: `-i`
 

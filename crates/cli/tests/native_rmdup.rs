@@ -61,6 +61,37 @@ fn native_duplicate_removal_preserves_records_keys_headers_and_separators() {
             input: b"b\tB\0a\tA\0b\tlater\0",
             expected: b"a\tA\0b\tB\0",
         },
+        // The second header takes the first `a`; the second is printed, the
+        // third is a duplicate.
+        Case {
+            args: &["--header-in", "-s", "rmdup", "1"],
+            input: b"key\tv\na\t1\na\t2\na\t3\nb\t4\nb\t5\n",
+            expected: b"a\t2\nb\t4\n",
+        },
+        // The leading blank sorts the later Record first, with the same key.
+        Case {
+            args: &["-W", "-s", "rmdup", "1"],
+            input: b"b first\n b second\nb third\n",
+            expected: b"b\tsecond\n",
+        },
+        // Keys compare up to a NUL, and sort by every byte.
+        Case {
+            args: &["-s", "rmdup", "1"],
+            input: b"a\0c\tfirst\na\0b\tsecond\na\0b\tthird\n",
+            expected: b"a\0b\tsecond\n",
+        },
+        // A key that a NUL ends early repeats a whole key sorted before it.
+        Case {
+            args: &["-s", "rmdup", "1"],
+            input: b"b\tfirst\na\0z\tlater\na\tplain\n",
+            expected: b"a\tplain\nb\tfirst\n",
+        },
+        // Sort keys end at the newline; the fields do not.
+        Case {
+            args: &["-W", "-z", "-s", "rmdup", "1"],
+            input: b"a\nb x\0a\nc y\0a\nb z\0",
+            expected: b"a\nb\tx\0a\nc\ty\0",
+        },
     ];
     for locale in ["C", "POSIX", "C.UTF-8", "C.utf8", "C.utf-8"] {
         for memory in ["1", "67108864"] {
@@ -178,4 +209,60 @@ fn duplicate_removal_preserves_the_quoted_csv_refusal() {
         output.stderr,
         b"fastmash: CSV is supported only for aggregate and per-row operations\n"
     );
+}
+
+fn run(args: &[&str], input: &[u8], memory: &str) -> std::process::Output {
+    let root = temp_dir::TempDir::new("native-rmdup-run");
+    let path = root.0.join("input");
+    fs::write(&path, input).unwrap();
+    test_process::bounded(executable::fastmash(), 30)
+        .args(args)
+        .env_clear()
+        .env("LC_ALL", "C")
+        .env("TMPDIR", &root.0)
+        .env("FASTMASH_SORT_MEMORY_BYTES", memory)
+        .stdin(fs::File::open(path).unwrap())
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn native_duplicate_removal_reports_missing_fields_after_empty_duplicates() {
+    for memory in ["1", "67108864"] {
+        let output = run(&["-s", "rmdup", "2"], b"b\t\nb\t\nc\nb\t\n", memory);
+        assert_eq!(output.status.code(), Some(1), "{output:?}");
+        assert_eq!(output.stdout, b"b\t\n");
+        assert!(
+            String::from_utf8_lossy(&output.stderr)
+                .ends_with(": invalid input: field 2 requested, line 3 has only 1 fields\n"),
+            "{output:?}"
+        );
+    }
+}
+
+/// Distinct keys beyond what the sort tracks, and later repeats of keys whose
+/// tracking stopped, still leave only each key's first Record.
+#[test]
+fn native_duplicate_removal_keeps_first_records_beyond_tracked_keys() {
+    let mut input = Vec::new();
+    let mut first = std::collections::BTreeMap::new();
+    for row in 0..70_000u32 {
+        let key = if row < 66_000 {
+            row * 7_919 % 66_000
+        } else {
+            row % 4_000
+        };
+        let key = format!("k{key:05}");
+        input.extend_from_slice(format!("{key}\t{row}\n").as_bytes());
+        first.entry(key).or_insert(row);
+    }
+    let expected: Vec<u8> = first
+        .iter()
+        .flat_map(|(key, row)| format!("{key}\t{row}\n").into_bytes())
+        .collect();
+    for memory in ["262144", "67108864"] {
+        let output = run(&["-s", "rmdup", "1"], &input, memory);
+        assert!(output.status.success(), "{memory}: {output:?}");
+        assert!(output.stdout == expected, "{memory}");
+    }
 }

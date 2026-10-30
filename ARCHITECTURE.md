@@ -300,6 +300,10 @@ flowchart TD
 - Sorted **duplicate removal** retains complete records, in stable key order,
   and compares duplicate keys exactly. Case folding changes sort order, not
   duplicate-key equality. It shares the native sorter and Spill storage.
+  A later record whose sort key bytes repeat an earlier record's can never be
+  printed, so it is dropped before sorting. The keys tracked for this take at
+  most a quarter of the sort's memory target, and an exact check after
+  sorting still decides what is printed.
 
 ## Numbers
 
