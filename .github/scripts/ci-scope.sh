@@ -109,6 +109,12 @@ if base:
     for path in filter(None, paths):
         if path.endswith(".md") or path.startswith("docs/") or path == "Cargo.lock":
             continue
+        if path.startswith("tools/release-changelog/") or path in {
+            "scripts/check-release-changelog.sh", "scripts/prepare-release.sh",
+            "scripts/record-release-changelog.sh", "scripts/configure-release-changelog.sh",
+            ".github/workflows/release-changelog.yml", ".github/workflows/release-changelog-check.yml",
+        }:
+            continue  # The standalone changelog job checks this tool without application builds.
         if path.startswith((".github/workflows/", ".github/scripts/", "release/publication-test-server/tests/")) or path in {
             "release/prepare-linux.sh", "release/check-crate-packages.sh", "release/publish-crates.sh",
             "release/package-repository.sh",  # Dedicated package workflow verifies signing/installation.
