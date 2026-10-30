@@ -361,6 +361,7 @@ fn stat(text: &str, name: &str) -> Option<u64> {
 
 /// Whether a cgroup memory limit applies to this process, so that its dirty
 /// pages count against it.
+#[cfg(target_os = "linux")]
 pub(super) fn cgroup_limited() -> bool {
     #[cfg(test)]
     if let Some(limited) = CGROUP_LIMITED.with(std::cell::Cell::get) {
@@ -369,7 +370,7 @@ pub(super) fn cgroup_limited() -> bool {
     cgroups(Path::new("/")).is_some_and(|levels| !levels.is_empty())
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 thread_local! {
     /// A test's answer for `cgroup_limited`, instead of reading the host.
     pub(super) static CGROUP_LIMITED: std::cell::Cell<Option<bool>> =

@@ -39,6 +39,7 @@ jobs:
           tap=$(brew --repository)/Library/Taps/fastmash-qualification/homebrew-local
           formula=fastmash-qualification/local/fastmash
           cp packaging/homebrew/fastmash.rb "$tap/Formula/fastmash.rb"
+          brew trust --formula "$formula"
           brew audit --strict "$formula"
           brew style "$formula"
           # Build the recipe from this checkout, so recipe and source changes
