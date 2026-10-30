@@ -21,6 +21,14 @@ independent verification. The release notes combine new authored entries with
 commits grouped into breaking changes, additions, fixes and other changes.
 Each tagged changelog keeps the preceding release history.
 
+Before preparing a release, compare the Unreleased entries with all merged
+changes since the previous published release. Check capabilities, fixes,
+installation, support boundaries, Numerical profile changes and upgrade
+instructions. Resolve omissions before freezing the notes. Generated commit
+history supplements the user-facing summary rather than replacing it. For the
+scheduled workflow, account for this coverage in each change review so it can
+reuse the maintained entries without a separate manual approval.
+
 ## Performance acceptance
 
 Performance-affecting runtime, dependency and build-recipe changes keep the

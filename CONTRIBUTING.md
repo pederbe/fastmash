@@ -110,8 +110,8 @@ aligned.
    [application checks](TESTING.md#quick-start), and build or CI tooling needs
    checks of the affected tooling and workflow filters.
 
-5. Update documentation in the same pull request when user-visible behavior
-   changes: the user guide under `docs/`, `--help` text, and `CHANGELOG.md`.
+5. Update the user guide under `docs/` and `--help` text when user-visible
+   behavior changes. Follow the [changelog guidance](#releases) in the same PR.
 
 ### Changes that need extra care
 
@@ -151,9 +151,17 @@ review it, test it and be able to explain it.
 
 ## Releases
 
-Maintainers release as described in [RELEASING.md](RELEASING.md). As a
-contributor, add a line to `CHANGELOG.md` under `[Unreleased]` for any change
-users will notice.
+Maintainers release as described in [RELEASING.md](RELEASING.md), including its
+comparison of the notes with merged changes before release preparation.
+
+Include a concise entry under `[Unreleased]` in
+[CHANGELOG.md](https://github.com/pederbe/fastmash/blob/main/CHANGELOG.md) in
+the same pull request as a user-visible change. Cover capabilities, fixes,
+installation and changes to command-line behavior or output. Explain
+compatibility consequences and any action users need to take. Numerical-output
+changes name their Numerical profile. Keep performance claims tied to their
+measured workloads. If no entry is needed, explain why in the pull request's
+Changelog section.
 
 ## Code of conduct
 
