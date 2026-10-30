@@ -2,12 +2,12 @@ name: Documentation
 
 # Checks that the website builds and its links resolve. Deployment is not done
 # here: Cloudflare Workers Builds runs the same scripts/build_site.sh on every
-# push to main and deploys docs/book (wrangler.jsonc).
+# push to main and deploys docs/book (wrangler.jsonc). Manual runs also retain
+# the checked production assets for deployment if that service is unavailable.
 # Automatic checks start once the repository is public.
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
@@ -28,8 +28,17 @@ jobs:
           python3 -B scripts/check_public_references.py
       # The deploy build: pinned mdBook, committed diagram renders (a missing
       # or unused render fails), landing page and install.sh at the root.
-      - run: bash scripts/build_site.sh
+      - run: bash scripts/build_site.sh --cloudflare
       - name: Check links
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
           args: --offline --no-progress --fallback-extensions html --index-files index.html --root-dir ${{ github.workspace }}/docs/book docs/book
+      - name: Retain checked website for manual deployment
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: built-website
+          path: docs/book
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error

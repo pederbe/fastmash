@@ -3,7 +3,7 @@
 # runs, so the same inputs give the same toolchain files anywhere.
 # Pinned manylinux_2_28_x86_64 snapshot; keep a mirrored copy of
 # this digest (validation/release-builder) in case it is withdrawn.
-FROM quay.io/pypa/manylinux_2_28_x86_64@sha256:076b19ef6e698f28649fa817c49d14443201e01da85240e8e52f93e8daa49bff
+FROM quay.io/pypa/manylinux_2_28_x86_64@sha256:e0adf18521ad35192df733a6c62d35df7801957d24e0470238aacecfab2188a3
 WORKDIR /tmp/rust
 COPY rustc-1.99.1-x86_64-unknown-linux-gnu.tar.xz cargo-1.99.1-x86_64-unknown-linux-gnu.tar.xz rust-std-1.99.1-x86_64-unknown-linux-gnu.tar.xz ./
 RUN printf '%s\n' \

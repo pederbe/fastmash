@@ -1,102 +1,130 @@
 # Releasing Fastmash
 
-How and when Fastmash is released. The release itself is automated; this is
-the checklist around it.
+## Weekly releases
 
-## Rhythm
+Every Monday at 06:17 UTC, the Weekly release workflow checks for product,
+dependency and packaging changes since the last published release. Documentation
+and website changes alone do not create a release. Run it manually for an urgent
+fix, selecting an automatic, minor or major version increment. Disable its
+schedule to stop recurring publication.
 
-Small, frequent releases: whenever a user-visible improvement has landed and
-been measured, and at least every two months while there are unreleased
-changes. Each release should have one headline a user cares about, such as
-"0.2: faster disk-spill sorts", which is also its announcement.
+The workflow creates a versioned metadata commit and tag without advancing
+`main`. Published crates, exact internal dependency pins, the lockfile and the
+executable version stay aligned. Before 1.0, a minor version may change behavior.
+Breaking commit markers (`type!:` or `BREAKING CHANGE:`), and new authored
+**Added**, **Changed** or **Removed** entries, select a minor version before 1.0.
 
-Patch releases (0.x.**y**) fix bugs and change no documented behavior or
-numerical output. Before 1.0, a minor release (0.**x**) may change behavior;
-every such change is listed under **Changed**.
+[CHANGELOG.md](CHANGELOG.md) keeps user-facing entries under `[Unreleased]`.
+Use **Added**, **Changed**, **Fixed**, **Removed** and **Security** headings.
+A numerical-output change must name its new Numerical profile and receive
+independent verification. The release notes combine new authored entries with
+commits grouped into breaking changes, additions, fixes and other changes.
+Each tagged changelog keeps the preceding release history.
 
-## Changelog practice
+Before preparing a release, compare the Unreleased entries with all merged
+changes since the previous published release. Check capabilities, fixes,
+installation, support boundaries, Numerical profile changes and upgrade
+instructions. Resolve omissions before freezing the notes. Generated commit
+history supplements the user-facing summary rather than replacing it. For the
+scheduled workflow, account for this coverage in each change review so it can
+reuse the maintained entries without a separate manual approval.
 
-[CHANGELOG.md](CHANGELOG.md) is written for users, in the pull request that
-makes the change, under `## [Unreleased]`:
+## Performance acceptance
 
-- **Added** for new operations, options and platforms.
-- **Changed** for behavior changes, including faster jobs (name the job and
-  the measured gain: "Grouped medians on sorted input are about 1.4 times
-  faster").
-- **Fixed** for bugs, naming the symptom a user would have seen.
-- **Removed** and **Security** as in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Performance-affecting runtime, dependency and build-recipe changes keep the
+existing predecessor guards during normal change review. Select the affected
+workloads and representative regression guards before measuring, follow the
+[acceptance rules](docs/src/benchmarks/method.md), and reuse valid evidence for
+unchanged inputs. A material regression needs a fix or an explicit disposition.
+New public speed claims need measurements identifying their executable, input,
+host and conditions.
 
-A change to any numerical output is always listed, with the numerical profile
-version that introduced it. Internal refactoring, tests and CI are not
-listed unless users notice them.
+Routine release versioning does not start another full benchmark campaign.
+Changing Cargo package versions can alter generated code and executable layout,
+so a new version is not claimed to be byte-equivalent to an earlier measured
+build. Published benchmark results remain attached to their named version and
+date. The existing charts describe the measured Linux 0.1.0 binaries and do not
+become performance claims for later releases or macOS.
 
-Release dates record when a version becomes available, not a target date.
-Keep upcoming changes under the undated `[Unreleased]` heading until the
-release is being tagged.
+[ADR 0012](docs/src/adr/0012-release-delivery-and-performance.md) records this
+separation between performance acceptance and release delivery.
+[ADR 0013](docs/src/adr/0013-reuse-tested-release-artifacts.md) removes repeated
+builds and installation checks and separates website deployment.
 
-## Checklist
+## Build, test and publish
 
-1. **Freeze.** Everything for the release is on `main` and the checks pass.
-   For the initial release, while the repository is private, run the CI
-   checks locally against the exported checkout: formatting, Clippy,
-   workspace tests, both regression-corpus input modes, the minimum Rust
-   version, dependency licenses and advisories, and the site and link checks.
-   Run hosted CI after the repository becomes public, before tagging. Standard
-   public hosted runners are free; extra private Actions minutes are not a
-   prerequisite. Local checks do not test GitHub's tag dispatch, permissions,
-   attestations or draft-release uploads.
-2. **Version.** Set the version in all five crates' `Cargo.toml` (including
-   the exact `=` pins between them) and update `Cargo.lock`. Keep the
-   changelog entries under `[Unreleased]` during qualification.
-3. **Build the candidate** with the release builder (`release/Containerfile`
-   and `release/build.sh`), twice from a clean checkout. The two builds must
-   be byte-identical.
-4. **Qualify the candidate.** Run the regression corpus
-   (`target/release/fastmash-corpus --binary ...`, both with and without
-   `--stdin-file`) and the benchmark catalog on
-   both measurement hosts, against GNU datamash 1.9 and the previous release,
-   with the [acceptance rules](https://fastmash.io/benchmarks/method.html)
-   fixed before measuring. A slowdown beyond the limits needs a published
-   justification or a fix.
-5. **Record the Linux bytes.** Put the qualified `fastmash` and
-   `fastmash-sort-supervisor` checksums in `release/qualified.sha256`. The
-   release workflow refuses to publish any other Linux bytes. The macOS archive
-   is frozen and qualified within the native workflow run as described below.
-6. **Update the published results** when the numbers changed:
-   - `docs/src/benchmarks/core-jobs.tsv` and the chart, with
-     `scripts/benchmark_chart.py results` and `svg`;
-   - the per-host tables on the method page and the "still faster" list on
-     the benchmarks page;
-   - the demo GIF and video exports (`scripts/demo/record.mjs`; see
-     `scripts/demo/README.md`) if the demo job's times moved
-     noticeably, and any claims on the landing page and link-preview image.
-7. **Tag.** Move the `[Unreleased]` entries under
-   `## [X.Y.Z] - YYYY-MM-DD` using the actual release date; the workflow
-   refuses a tag without a dated entry. Tag the qualified commit `vX.Y.Z`
-   and push the tag, then start the release explicitly:
-   `gh workflow run Release --ref vX.Y.Z`. The tagged commit must contain
-   the manual workflow; changing `main` does not update an existing tag.
-   A dispatch on a branch skips the release job.
-   The workflow builds, checks the checksums, runs the corpus, packages
-   `.tar.gz`, `.deb` and `.rpm`, tests the packages on Debian 12 and
-   AlmaLinux 8, attests provenance and creates a **draft** release with the
-   changelog section as its notes.
-8. **Publish.** Review the draft (assets, notes) and publish it. Then publish
-   the crates to crates.io in dependency order:
-   `fastmash-numeric-contract`, `fastmash-conversion`,
-   `fastmash-portable-numerics`, `fastmash-sort-process`, `fastmash`.
-   The website deploys from `main`; check that the install page and landing
-   page show the new version. Update `site/release-version.txt` only after the
-   release is available, then update published platform text and metadata.
-   The homepage test in `scripts/test_build_site.py` records the published version;
-   update its expected release when publishing.
-9. **Packages.** Approve the Package repository workflow, which adds the
-   published `.deb` and `.rpm` to the signed apt and dnf repository at
-   `packages.fastmash.io` ([packaging/repository](packaging/repository/README.md)).
-   Update any existing distribution packages when the release is available. Additional distribution channels, including conda-forge,
-   follow the first release; they are not required to launch it.
-10. **Announce** the headline: a Discussions announcement, and the social
-    accounts. A release with a measured improvement links its benchmark.
+The GitHub-hosted workflows perform these steps for the frozen version:
+
+1. Build the tagged Linux pair twice with `release/Containerfile` and
+   `release/build.sh`, using empty target directories. Both executable pairs
+   must be byte-identical. Record their hashes in the run's
+   `release/delivery.sha256` and package one of those pairs directly. Include
+   the manifest as `binary.sha256` inside the archive. Historical manifests
+   remain unchanged.
+2. Run workspace tests and both regression-corpus input modes against that
+   executable and its Sort supervisor. Package the same bytes into the archive,
+   `.deb` and `.rpm`, then test extraction, installation, Commands and removal.
+3. Build the Apple Silicon executable twice on macOS 15 with the pinned compiler,
+   remapped paths and deployment target 15.0. Freeze one archive and its SHA-256.
+4. Attest the platform archives and Linux packages and upload a draft release.
+   Verify downloaded Linux assets against the build's retained checksums and
+   release provenance. Install the downloaded macOS archive once on macOS 15
+   and 26 and run the applicable command tests and both corpus input modes.
+   Dry-run the five published source packages before publishing anything.
+5. Publish the GitHub release after those checks pass. Explicitly dispatch
+   Package repository at the same tag and wait for its signed apt/dnf update and
+   installed-client checks. Publish the remaining crates in dependency order
+   using the existing crates.io trusted publisher. A separate job then
+   installs the release with cargo-binstall on Linux x86-64 and Apple Silicon
+   macOS and checks the installed bytes against the release archives. Its
+   failure is reported without holding up the next step.
+6. Advance the `release` branch after package delivery succeeds. A separate
+   Website deployment workflow requests the fixed-`main` Cloudflare build.
+   Website failures do not fail package delivery. Retry that workflow manually
+   without rebuilding or republishing a release. Cloudflare reports the actual
+   website build result after accepting the request.
+7. The Homebrew tap's daily `Update` workflow notices the published release.
+   It builds, tests and publishes bottles from the release tag's
+   [recipe](packaging/homebrew/README.md), then checks an upgrade on each
+   platform. The release does not wait for it, and a tap failure is retried in
+   the tap.
+
+The workflow binds correctness and installation evidence to the delivered
+bytes. It does not relabel a fresh rebuild as a benchmarked executable. Additional
+distribution submissions, public announcements and new performance claims remain
+separate work.
+
+## Website updates
+
+Cloudflare Workers Builds publishes website-input changes from `main` using
+`scripts/build_site.sh --cloudflare`. The build checks the documentation,
+static diagrams and generated routes before uploading its output. Pull requests
+run the same website build through the required CI result. A selected website
+check must succeed, and cannot pass as a skipped job.
+
+The homepage and documentation share the committed 1200 by 630 `site/og.png`.
+Its editable source is `scripts/demo/og.html`. Use the rendering command in
+`scripts/demo/README.md` after editing, and review the image and its alternative
+text together. The homepage and chapter heads provide Open Graph and Twitter
+metadata. Chapter canonical URLs use the same clean routes as the sitemap.
+
+Website build-tool changes alone do not start a binary release. Release
+publication refreshes the displayed version through the separate deployment
+workflow, whose queued requests do not replace pending requests. Cloudflare
+reports the build and deployment result. Retry a failed website update there
+without rebuilding published binaries.
+
+## Failures and urgent fixes
+
+A failed run retains its immutable tag and any draft assets. The next weekly run
+retries only failed jobs before selecting another version. Existing draft assets
+must match the frozen assets byte for byte. Already published crate versions
+must match their source-package checksums before a partial upload resumes.
+
+If a source fix is needed, merge it through the normal pull request checks, then
+dispatch Weekly release with `supersede_failed=true`. It creates a higher version
+while preserving the failed tag and its evidence. Older runs cannot move the
+published version backward.
 
 ## Patch releases
 
@@ -136,13 +164,13 @@ Develop the fix on a `contrib/` branch and submit it through the normal pull
 request checks. Select only the accepted fixes for the release. If `main`
 already contains minor-release work, start the patch branch at the last published
 tag and cherry-pick the fixes with their tests and necessary prerequisites.
-Do not include the unreleased macOS feature in a Linux 0.1.x patch. Review the
-complete diff from the previous tag, including dependency and builder changes.
+Review the complete diff from the previous tag, including dependency and builder changes.
 
-### Build and qualify the exact candidate
+### Build and verify the patch candidate
 
-Apply checklist steps 1–5 to the selected patch source. Set all five crate
-versions and exact internal dependency pins to the patch version, update the
+Apply the hosted build and delivery checks above to the selected patch source.
+Set published crate versions and exact internal dependency pins to the patch
+version, update the
 lockfile, and keep only its user-visible fixes under `[Unreleased]`. Record the
 full source revision, lockfile hash, builder identity, compiler and flags.
 Use the pinned `release/Containerfile` and `release/build.sh` recipe already used
@@ -179,37 +207,35 @@ Run any affected feature's opt-in tests whose prerequisites are available, and
 record the remaining exclusions with their reasons. The independent numerical
 library tests still execute the test build; the CLI fixtures and corpus exercise
 the candidate. A source, dependency, toolchain, flag or executable change
-invalidates the affected qualification and needs fresh checks. Retain the
+invalidates the affected build and correctness evidence and needs fresh checks. Retain the
 previous release and its records unchanged.
 
-When a change can affect performance, compare this candidate with the delivered
-predecessor and GNU datamash 1.9 under the published
-[benchmark method](docs/src/benchmarks/method.md). Fix the jobs and acceptance
-limits before measuring. Include affected jobs and representative startup,
-streaming, retained-summary and sorting guards on both measurement hosts, using
-the same inputs, settings and build recipe. Check output before timing, alternate
-the programs, and retain both sessions, CPU time, peak memory and variation.
-Resolve any material regression before proceeding. For a change with no runtime
-effect, record why new performance measurements are unnecessary. A patch that
-leaves published timing claims unchanged need not regenerate their charts.
+When a change can affect performance, compare the changed build with the
+previous accepted Fastmash build under the existing change-review acceptance
+rules. Use GNU datamash 1.9 when evaluating GNU-relative claims. Fix the jobs and
+acceptance limits before measuring. Include affected jobs and representative
+startup, streaming, retained-summary and sorting guards, with the same inputs,
+settings and build recipe. Check output before timing, alternate the programs,
+and retain both sessions, CPU time, peak memory and variation. Resolve material
+regressions before merging. A routine release version bump does not repeat this
+campaign, and unchanged dated claims do not need regenerated charts.
 
 ### Verify delivery and prepare the draft
 
-After qualification, update `release/qualified.sha256` to the **two candidate
-hashes**, keeping the previous release's manifest at its tag. Move the selected
-changelog entries into the dated patch section when tagging. These metadata-only
-changes must reproduce the qualified executable hashes at the final tagged
-revision; any mismatch stops the release. Verify that the tag's version, crate
-versions, notes and executable version agree.
+After two identical clean builds, the Linux release job writes the actual
+candidate hashes to its local `release/delivery.sha256` and includes that manifest
+in the archive. Weekly preparation only versions metadata and creates the tag.
+Preserve historical qualified manifests unchanged. Move selected changelog entries
+into the dated patch section when tagging.
+Verify that the tag, crate versions, notes and executable version agree.
 
-Use checklist step 7 to prepare the tag and explicitly dispatch the maintained
-Release workflow. It checks the qualified hashes, runs the workspace and candidate
-command checks plus both corpus modes, and produces a draft with the archive,
+The Release workflow checks those hashes, runs the workspace and candidate
+Command checks plus both corpus modes, and produces a draft with the archive,
 Debian and RPM packages, checksums and provenance. Its archive and installed
 package checks use:
 
 ```bash
-bash release/check-installed.sh X.Y.Z /absolute/path/to/installed/bin release/qualified.sha256
+bash release/check-installed.sh X.Y.Z /absolute/path/to/installed/bin release/delivery.sha256
 ```
 
 This check verifies both installed executable hashes, version, arithmetic and
@@ -220,12 +246,13 @@ executables are removed. Package construction also checks that packaging did not
 rewrite either executable. Keep these checks passing before accepting the draft.
 
 Review the draft's notes and complete asset list. Download its delivered assets,
-verify their checksum sidecars and provenance, and repeat extraction/installation
-checks against the qualified manifest. Build-side checks alone do not verify an
-uploaded asset. Retain asset hashes and installation logs with qualification.
-Publish the release and crates only with the maintainer's explicit approval,
-then follow checklist steps 8–10 as authorized. Creating a draft does not authorize
-publication, additional package submissions or announcements.
+verify their checksum sidecars and provenance against the build records. Identical
+Linux downloads reuse the completed installation evidence. macOS installation
+checks run once against the downloaded draft archive. Retain asset hashes and
+installation logs with the delivery evidence.
+The authorized weekly workflow publishes the release and crates after these
+checks pass, then updates the signed repositories and published website version. Additional distribution submissions
+and announcements remain separate work.
 
 ## Native macOS release delivery
 
@@ -260,26 +287,20 @@ Spill, signals and temporary-file cleanup stay covered. Representative hosted
 GNU comparisons remain scoped to those runners and workloads.
 
 A successful branch run is candidate evidence, not a release or permission to
-publish. Complete Linux qualification and update `release/qualified.sha256`
-for the exact final candidate through checklist steps 1–5 before tagging.
+publish. The release job freezes the Linux delivery manifest for the
+planned version during the release build, after creating its tag.
 Keep the Numerical profile unchanged unless the numerical-change rules apply.
 
 ### Deliver through the Release workflow
 
-On the qualified tag, the manually dispatched Release workflow calls the same
-native build and installation workflows. Linux's committed checksum gate and
-archive/package checks remain required. Only after both platforms pass does
-it stage the same macOS archive, attest both platform archives and Linux
-packages, and create a draft release.
-
-The workflow then downloads the draft's uploaded macOS archive on macOS 15
-and 26, verifies the release-workflow attestation and the frozen archive hash,
-and repeats documented installation, installed executable checks, applicable
-command tests and both corpus input modes. Those checks use the delivered
-bytes; rebuilding a source executable cannot substitute for them. Evidence
-from candidate and delivered installations has separate artifact names.
-A failure leaves the draft unpublished. Review the complete successful run
-and all assets before authorizing publication.
+On the frozen version tag, the Release workflow calls the native source checks
+and archive build, then stages and attests that archive in a draft release.
+It skips the earlier candidate-installation round. The workflow downloads the
+draft archive on macOS 15 and 26, verifies its release-workflow attestation and
+frozen hash, and runs documented installation, installed executable checks,
+applicable command tests and both corpus modes once on each baseline. A failure
+leaves the draft unpublished. Branch CI retains the candidate-installation round
+because it has no draft release to download.
 
 The macOS checksum is frozen per workflow run rather than stored in the Linux
 manifest. Two clean builds establish within-run executable reproducibility;
@@ -290,8 +311,9 @@ Never substitute a development CI archive or rewrite 0.1.0 evidence.
 
 ### Publish accurate platform claims
 
-After publication, update `site/release-version.txt`, the homepage's installation
-text and `operatingSystem` metadata, README, installation, requirements,
+After publication, the workflow advances the published version pointer and
+refreshes the website. New platform support still requires updating homepage
+installation text and `operatingSystem` metadata, README, installation, requirements,
 comparison, FAQ and roadmap pages, `docs/descriptions.json` and the platform
 text emitted into `llms.txt`. Remove the candidate qualifications only when the
 release is available. Keep the existing benchmark claims scoped to their

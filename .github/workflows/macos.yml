@@ -3,12 +3,19 @@ name: Native macOS
 on:
   workflow_dispatch:
     inputs:
+      check-installation:
+        description: Check installation of the built archive
+        type: boolean
+        default: true
       release-archive:
         description: Build and qualify a release-layout candidate without publishing
         type: boolean
         default: false
   workflow_call:
     inputs:
+      check-installation:
+        type: boolean
+        default: true
       release-archive:
         type: boolean
         default: false
@@ -162,6 +169,7 @@ jobs:
           if-no-files-found: error
 
   installed-contract:
+    if: inputs.check-installation
     needs: archive
     uses: ./.github/workflows/macos-install.yml
     permissions:

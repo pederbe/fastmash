@@ -2,24 +2,7 @@ name: Package repository checks
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - '.github/workflows/package-repository*.yml'
-      - 'release/package-repository.sh'
-      - 'release/macos-archive.sh'
-      - 'packaging/linux-source-test.rs'
-      - 'packaging/fedora/**'
-      - 'packaging/nix/**'
-      - 'release/publish-package-repository.sh'
-      - 'release/package-publication-fixtures.sh'
-      - 'release/test-package-publication.sh'
-      - 'release/test-package-repository.sh'
-      - 'release/check-installed.sh'
-      - 'crates/cli/tests/release_installation.rs'
-      - 'release/publication-test-server/**'
-      - 'packaging/conda-forge/**'
-      - 'packaging/homebrew/**'
+  workflow_call:
 
 permissions:
   contents: read
@@ -60,3 +43,11 @@ jobs:
           trap 'rm -rf "$work"' EXIT
           bash release/package-publication-fixtures.sh "$work"
           bash release/test-package-publication.sh "$work/old" "$work/new"
+          # The host RPM 6 verifier also accepts V6-only signatures. Require the
+          # oldest supported RPM client to recognize the fixture signatures.
+          docker run --rm -v "$work/new:/repo:ro" almalinux:8 /bin/bash -ec '
+            rpmkeys --import /repo/fastmash.asc
+            for package in /repo/rpm/*.rpm; do
+              rpmkeys --checksig "$package" | grep -q ": digests signatures OK$"
+            done
+          '

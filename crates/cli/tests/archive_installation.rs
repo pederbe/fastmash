@@ -25,7 +25,7 @@ const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
 fn documented_instructions() -> &'static str {
     let (_, native_section) = include_str!("../../../docs/src/install.md")
-        .split_once("## Native macOS archive\n")
+        .split_once("### macOS archive\n")
         .expect("native macOS archive installation section");
     native_section
         .split("\n## ")

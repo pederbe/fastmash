@@ -1,0 +1,100 @@
+name: Weekly release
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      increment:
+        description: Version increment (auto includes breaking markers and authored behavior changes)
+        type: choice
+        options: [auto, minor, major]
+        default: auto
+      supersede_failed:
+        description: Prepare a newer tag after fixing a failed frozen release on main
+        type: boolean
+        default: false
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: weekly-release
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main' && !github.event.repository.private
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: '1.99.1'
+      - name: Prepare or resume a frozen release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INCREMENT: ${{ inputs.increment || 'auto' }}
+          SUPERSEDE_FAILED: ${{ inputs.supersede_failed || false }}
+        run: |
+          set -euo pipefail
+          previous=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
+          newest=$(git tag --list 'v*' --sort=-version:refname | head -1)
+          # Publication may have succeeded before a downstream registry update
+          # failed. Finish that same release before considering another version.
+          if [ "$newest" = "$previous" ] && [ "$SUPERSEDE_FAILED" != true ]; then
+            previous_sha=$(git rev-parse "$previous^{commit}")
+            recent=$(gh run list --workflow release.yml --commit "$previous_sha" --json databaseId,status,conclusion --limit 1)
+            if [ "$(jq 'length' <<< "$recent")" = 1 ] && [ "$(jq -r '.[0].conclusion' <<< "$recent")" != success ]; then
+              if [ "$(jq -r '.[0].status' <<< "$recent")" = completed ]; then
+                gh run rerun "$(jq -r '.[0].databaseId' <<< "$recent")" --failed
+              fi
+              echo "Finishing downstream delivery for $previous." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+          minimum=()
+          if [ "$SUPERSEDE_FAILED" = true ]; then
+            test "$(git show -s --format=%s "$newest")" = "Prepare automated release $newest"
+            old_sha=$(git rev-parse "$newest^{commit}")
+            old_run=$(gh run list --workflow release.yml --commit "$old_sha" --json status,conclusion --limit 1)
+            test "$(jq -r '.[0].status' <<< "$old_run")" = completed
+            test "$(jq -r '.[0].conclusion' <<< "$old_run")" != success
+            test "$(git rev-parse "$newest^")" != "$(git rev-parse HEAD)"
+            git merge-base --is-ancestor "$newest^" HEAD
+            minimum=("$newest")
+          fi
+          if [ "$newest" != "$previous" ] && [ "$SUPERSEDE_FAILED" != true ]; then
+            test "$(git show -s --format=%s "$newest")" = "Prepare automated release $newest"
+            tag=$newest
+          else
+            cargo build --locked --quiet --manifest-path release/publication-test-server/Cargo.toml --bin fastmash-release --target-dir target
+            release=target/debug/fastmash-release
+            "$release" prepare-weekly "$previous" "$(date -u +%F)" "$INCREMENT" "$RUNNER_TEMP/plan" "${minimum[@]}"
+            if grep -qx 'changed=false' "$RUNNER_TEMP/plan"; then
+              echo 'No unreleased product or packaging changes.' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            tag=$(sed -n 's/^tag=//p' "$RUNNER_TEMP/plan")
+            [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git add crates/*/Cargo.toml Cargo.lock CHANGELOG.md site/release-version.txt
+            git commit -m "Prepare automated release $tag"
+            git tag "$tag"
+            git push origin "refs/tags/$tag"
+          fi
+          sha=$(git rev-parse "$tag^{commit}")
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?head_sha=$sha&per_page=100")
+          id=$(jq -r '[.workflow_runs[] | select(.head_sha == "'"$sha"'" and .event == "workflow_dispatch")] | first | .id // empty' <<< "$runs")
+          if [ -n "$id" ]; then
+            status=$(jq -r '.workflow_runs[] | select(.id == '"$id"') | .status' <<< "$runs")
+            conclusion=$(jq -r '.workflow_runs[] | select(.id == '"$id"') | .conclusion' <<< "$runs")
+            if [ "$status" = completed ] && [ "$conclusion" != success ]; then
+              gh run rerun "$id" --failed
+            fi
+          else
+            # GITHUB_TOKEN tag pushes do not trigger another workflow.
+            gh workflow run release.yml --ref "$tag"
+          fi
+          echo "Release $tag uses frozen source $sha. The Release workflow reports completion or failure." >> "$GITHUB_STEP_SUMMARY"

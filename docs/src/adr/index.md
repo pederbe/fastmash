@@ -17,3 +17,4 @@ can be revisited; do so with a new record that supersedes the old one.
 | [0009](0009-built-in-locale-tables.md) | Built-in locale tables, not the host's locales |
 | [0010](0010-native-apple-silicon.md) | Native Apple Silicon macOS, verified through hosted commands and installed archives |
 | [0011](0011-native-release-delivery.md) | Qualify and deliver the same native archive |
+| [0012](0012-release-delivery-and-performance.md) | Separate release delivery from performance acceptance |

@@ -315,13 +315,17 @@ mod tests {
             for (i, &kind) in rest.iter().enumerate() {
                 prefix.push(kind);
                 let mut remaining = rest.to_vec();
-                remaining.remove(i);
+                remaining.swap_remove(i);
                 orders(prefix, &remaining, out);
                 prefix.pop();
             }
         }
         let mut permutations = Vec::new();
         orders(&mut Vec::new(), &kinds, &mut permutations);
+        assert_eq!(permutations.len(), 720);
+        for (at, order) in permutations.iter().enumerate() {
+            assert!(!permutations[..at].contains(order));
+        }
         for values in datasets {
             let expected: Vec<_> = kinds
                 .iter()

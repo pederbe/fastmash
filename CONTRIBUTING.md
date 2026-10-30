@@ -65,8 +65,8 @@ Before closing an implementation ticket, update its acceptance checklist and
 check whether its parent issue is complete.
 
 Renovate prepares one combined daily dependency update, including stable major
-releases. Merge follows required checks and an independent Spec and Standards
-review.
+releases. GitHub automatically merges the batch after the required CI result
+passes, covering every applicable platform, documentation and package check.
 The daily self-hosted run updates Cargo, npm, Actions, container digests and the
 custom tools in `.github/dependency-pins.json`. The synchronization helper keeps
 release archive hashes and compiler versions together before pushing the PR.
@@ -100,7 +100,7 @@ aligned.
 ## Before you open a pull request
 
 1. Read [ARCHITECTURE.md](ARCHITECTURE.md) for how the code fits together, and
-   [CONTEXT.md](CONTEXT.md) for the project's vocabulary. Use its terms in code,
+   [GLOSSARY.md](GLOSSARY.md) for the project's vocabulary. Use its terms in code,
    comments, issues and commit messages.
 2. Keep each pull request to one change. Separate refactoring from behavior changes.
 3. Add tests. Bug fixes need a test that fails without the fix. Behavior
@@ -110,8 +110,8 @@ aligned.
    [application checks](TESTING.md#quick-start), and build or CI tooling needs
    checks of the affected tooling and workflow filters.
 
-5. Update documentation in the same pull request when user-visible behavior
-   changes: the user guide under `docs/`, `--help` text, and `CHANGELOG.md`.
+5. Update the user guide under `docs/` and `--help` text when user-visible
+   behavior changes. Follow the [changelog guidance](#releases) in the same PR.
 
 ### Changes that need extra care
 
@@ -151,9 +151,17 @@ review it, test it and be able to explain it.
 
 ## Releases
 
-Maintainers release as described in [RELEASING.md](RELEASING.md). As a
-contributor, add a line to `CHANGELOG.md` under `[Unreleased]` for any change
-users will notice.
+Maintainers release as described in [RELEASING.md](RELEASING.md), including its
+comparison of the notes with merged changes before release preparation.
+
+Include a concise entry under `[Unreleased]` in
+[CHANGELOG.md](https://github.com/pederbe/fastmash/blob/main/CHANGELOG.md) in
+the same pull request as a user-visible change. Cover capabilities, fixes,
+installation and changes to command-line behavior or output. Explain
+compatibility consequences and any action users need to take. Numerical-output
+changes name their Numerical profile. Keep performance claims tied to their
+measured workloads. If no entry is needed, explain why in the pull request's
+Changelog section.
 
 ## Code of conduct
 

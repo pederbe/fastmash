@@ -7,7 +7,7 @@ tools they use. [CONTRIBUTING.md](CONTRIBUTING.md) is the full guide.
 
 - Fastmash is a Rust command-line program for Linux x86-64 that implements the
   GNU datamash command language with faster, portable results.
-- Read [CONTEXT.md](CONTEXT.md) before naming anything. Use its terms in code,
+- Read [GLOSSARY.md](GLOSSARY.md) before naming anything. Use its terms in code,
   tests, comments and issues, and avoid the synonyms it lists under _Avoid_.
 - Read [ARCHITECTURE.md](ARCHITECTURE.md) for the crates, the request pipeline
   and the design principles. Decisions are recorded in `docs/src/adr/`. If a

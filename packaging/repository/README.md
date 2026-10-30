@@ -2,10 +2,11 @@
 
 This directory prepares the release `.deb` and `.rpm` packages for the signed
 apt repository (Debian, Ubuntu) and a signed dnf repository (RHEL, AlmaLinux,
-Fedora) at `packages.fastmash.io`. The repository serves versions 0.1.0 and 0.2.0.
+Fedora) at `packages.fastmash.io`. Published versions remain available when a
+new release is added.
 Public-domain installation, upgrade and removal are verified on Debian 12,
 Ubuntu 24.04 and AlmaLinux 8 with signature checks enabled and installed programs
-matching each release's qualified checksums. Users who add it receive new
+matching each release's delivery checksums. Users who add it receive new
 versions through `apt upgrade` and `dnf upgrade`. See the
 [installation guide](../../docs/src/install.md) for setup.
 
@@ -24,18 +25,17 @@ packages, checks their SHA-256 files and their build attestations from
 3. runs `release/test-package-repository.sh`, which installs the version from
    the generated repository in offline Debian 12, Ubuntu 24.04 and AlmaLinux 8
    containers with signature checks on, runs `release/check-installed.sh`
-   against the tag's qualified checksums and removes it. When the version is
+   against the tag's delivery checksums and removes it. When the version is
    the newest, it installs the previous version first and upgrades;
 4. runs `release/publish-package-repository.sh` to upload packages, apt By-Hash
    indexes and complete dnf snapshots before advancing the signed apt index
    and dnf mirrorlist, then compares the published metadata with what it signed.
 
-It starts on its own when a release is published, if the tagged commit
-contains the workflow. Otherwise, run it from `main` with the tag:
-`gh workflow run "Package repository" --ref main -f tag=vX.Y.Z`. Both need the
-maintainer's approval of the `packages` environment. Runs share one
-concurrency group, and GitHub keeps only the newest pending run, so start
-each dispatch after the previous run has finished.
+Release dispatches it at the published tag. To retry that delivery, run:
+`gh workflow run package-repository.yml --ref vX.Y.Z -f tag=vX.Y.Z`.
+The workflow uses the tag-restricted `packages` environment. Runs share one
+concurrency group, and GitHub keeps only the newest pending run, so start each
+dispatch after the previous run has finished.
 
 ## Layout
 
@@ -99,7 +99,8 @@ as part of publication.
    Access Key ID and Secret Access Key for the environment secrets. Leave
    public `r2.dev` access disabled.
 3. **Environment.** In the repository settings, create the `packages`
-   environment with the maintainer as required reviewer, limited to the `main`
+   environment without required reviewers, so verified releases publish
+   automatically. Limit it to the `main`
    branch and `v*` tags, with these secrets:
 
    | Secret | Value |
@@ -143,8 +144,10 @@ tar -xzf "$assets/$name.tar.gz" --no-same-owner -C "$assets" \
 cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 GPG_PASSPHRASE=... bash release/package-repository.sh /tmp/repository test-key.asc \
   "fastmash_${version}_amd64.deb" "fastmash-${version}-1.x86_64.rpm"
-git show "$tag:release/qualified.sha256" > "$assets/qualified.sha256"
-bash release/test-package-repository.sh /tmp/repository "$version" "$assets/qualified.sha256" \
+manifest=release/delivery.sha256
+git cat-file -e "$tag:$manifest" 2>/dev/null || manifest=release/qualified.sha256
+git show "$tag:$manifest" > "$assets/delivery.sha256"
+bash release/test-package-repository.sh /tmp/repository "$version" "$assets/delivery.sha256" \
   --expected-docs "$assets/$name"
 '
 ```

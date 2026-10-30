@@ -6,6 +6,7 @@ language = "en"
 src = "src"
 
 [output.html]
+theme = "theme"
 site-url = "/"
 git-repository-url = "https://github.com/pederbe/fastmash"
 edit-url-template = "https://github.com/pederbe/fastmash/edit/main/docs/{path}"

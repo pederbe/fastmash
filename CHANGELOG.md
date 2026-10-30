@@ -22,6 +22,8 @@ numerical profile version that introduced it.
 
 ### Fixed
 
+- The installation guide's cargo-binstall command for macOS names the crate
+  before `--bin fastmash`, which cargo-binstall otherwise rejects.
 - Refuse safely when the operating system denies the runtime signal-mask query.
 - Prepare apt and dnf repository updates without replacing metadata that
   clients are still reading, using retained apt By-Hash indexes and signed
@@ -38,6 +40,16 @@ numerical profile version that introduced it.
   merge spilled records and calculate in parallel within the configured thread
   limits, and under a cgroup memory limit write their runs back to storage as
   they go. Sorted `rmdup` now reports its route under `FASTMASH_SORT_TRACE`.
+- cargo-binstall no longer falls back to third-party QuickInstall builds, and
+  each release checks that it installs the published executables on Linux
+  x86-64 and Apple Silicon macOS.
+
+- Homebrew installs prebuilt bottles that follow each release within a day, and
+  the installation guide now leads with apt, dnf and Homebrew.
+
+- Animate the website's landing page with scroll entrances, a breathing hero
+  glow and a pulsing terminal halo. Decorative motion runs only in view, a
+  button pauses it, and reduced-motion settings keep the page static.
 - Under a cgroup memory limit, let each built-in sort and hash grouping grow
   to half of what is free there, with growth shared among running Fastmash
   processes instead of one share per processor. Sorts and hash grouping now

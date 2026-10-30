@@ -11,6 +11,7 @@ static page in site/. This:
   inlines the generated benchmark chart (docs/src/benchmarks/core-jobs.svg)
   where the page says `<!-- chart -->`, fills `@VERSION@` with the fastmash
   published release version (site/release-version.txt), and copies its CSS and script;
+- fills `@VERSION@` in the docs pages with the same published release version;
 - copies install.sh, served at https://fastmash.io/install.sh;
 - writes a Markdown copy of every docs page next to its HTML (guide/output.md
   beside guide/output.html), with mdBook includes resolved, and links it from
@@ -91,7 +92,9 @@ def version():
 
 def published_version():
     """Release used by public download links, independent of candidate source."""
-    value = (ROOT / 'site' / 'release-version.txt').read_text(encoding='utf-8').strip()
+    value = os.environ.get('FASTMASH_SITE_RELEASE_VERSION')
+    if value is None:
+        value = (ROOT / 'site' / 'release-version.txt').read_text(encoding='utf-8').strip()
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', value):
         sys.exit('site/release-version.txt must name a published release')
     return value
@@ -168,9 +171,20 @@ def docs_markdown(book):
                      f'href="{Path(path).name}">\n'
                      f'<link rel="canonical" href="{url}">\n'
                      f'<meta property="og:url" content="{url}">\n')
+        alternate += f'<meta name="twitter:description" content="{summary}">\n'
         if 'type="text/markdown"' not in page:
             page = page.replace('</head>', alternate + '</head>', 1)
         page_path.write_text(page, encoding='utf-8')
+
+
+def release_versions(book):
+    """Fill @VERSION@ in docs pages, Markdown copies and the search index."""
+    version = published_version()
+    for path in book.rglob('*'):
+        if path.suffix in ('.html', '.md', '.js') and path.is_file():
+            text = path.read_text(encoding='utf-8')
+            if '@VERSION@' in text:
+                path.write_text(text.replace('@VERSION@', version), encoding='utf-8')
 
 
 def navigation(book):
@@ -326,6 +340,12 @@ def llms_txt(book):
 
 
 def sitemap(book):
+    for name in ('print.html', 'toc.html', '404.html'):
+        path = book / name
+        if path.is_file():
+            page = path.read_text(encoding='utf-8')
+            path.write_text(page.replace('</head>', '<meta name="robots" content="noindex">\n</head>', 1),
+                            encoding='utf-8')
     pages = [''] + [site_url(Path(path).with_suffix('.html').as_posix())
                     for _, _, path in chapters()]
     entries = ''.join(f'  <url><loc>{escape(SITE + "/" + page)}</loc></url>\n' for page in pages)
@@ -344,6 +364,7 @@ def main(book):
     landing(book)
     diagrams(book)
     docs_markdown(book)
+    release_versions(book)
     navigation(book)
     routes(book)
     llms_txt(book)

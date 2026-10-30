@@ -173,5 +173,5 @@
     "vulnerabilityFixStrategy": "highest"
   },
   "automergeType": "pr",
-  "platformAutomerge": false
+  "platformAutomerge": true
 }
