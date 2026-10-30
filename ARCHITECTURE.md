@@ -258,7 +258,7 @@ flowchart TD
   next eight key bytes, round by round; complete keys are compared only in
   small groups and after 64 bytes of a key. Ties keep input order. In the
   language locales, collation keys are computed in batches on several
-  threads, as are the parsed numbers of other means, higher moments,
+  threads, as are the selected-field projections for other means, higher moments,
   normality tests and paired statistics grouped by one key in the C locales.
   The chunk, with the batches' share, stays within its memory target,
   sized for 64 MiB. It takes 16 MiB first. When a chunk fills, it may grow
