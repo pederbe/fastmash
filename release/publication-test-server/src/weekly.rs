@@ -18,6 +18,51 @@ fn version(text: &str) -> Result<[u64; 3]> {
     Ok([a.parse()?, b.parse()?, c.parse()?])
 }
 
+fn release_date(text: &str) -> Result<()> {
+    if text.len() == 10
+        && text.chars().enumerate().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                c == '-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+    {
+        Ok(())
+    } else {
+        Err("expected release date YYYY-MM-DD".into())
+    }
+}
+
+// Released changelogs need no pending section. Legacy tags may still contain
+// one, so keep the optional authored entries separate from the dated history.
+fn changelog_sections(text: &str) -> Result<(&str, &str, &str)> {
+    let start = if text.starts_with("## [") {
+        0
+    } else {
+        text.find("\n## [")
+            .ok_or("missing changelog version history")?
+            + 1
+    };
+    let (intro, sections) = text.split_at(start);
+    let (authored, history) = if let Some(rest) = sections.strip_prefix("## [Unreleased]\n") {
+        let next = rest
+            .find("\n## [")
+            .ok_or("missing previous changelog section")?;
+        (&rest[..next], &rest[next + 1..])
+    } else {
+        ("", sections)
+    };
+    let heading = history.lines().next().unwrap_or("");
+    let (released, date) = heading
+        .strip_prefix("## [")
+        .and_then(|heading| heading.split_once("] - "))
+        .ok_or("missing dated changelog version heading")?;
+    version(released)?;
+    release_date(date)?;
+    Ok((intro, authored, history))
+}
+
 fn meaningful(path: &str) -> bool {
     !path.ends_with(".md")
         && !path.starts_with("docs/")
@@ -82,17 +127,7 @@ fn prepare_at(
     minimum: Option<&str>,
 ) -> Result<()> {
     let old = version(previous)?;
-    if date.len() != 10
-        || !date.chars().enumerate().all(|(i, c)| {
-            if i == 4 || i == 7 {
-                c == '-'
-            } else {
-                c.is_ascii_digit()
-            }
-        })
-    {
-        return Err("expected release date YYYY-MM-DD".into());
-    }
+    release_date(date)?;
     if !["auto", "minor", "major"].contains(&mode) {
         return Err("invalid version increment".into());
     }
@@ -163,23 +198,11 @@ fn prepare_at(
     }
     let current_changelog = fs::read_to_string(root.join("CHANGELOG.md"))?;
     let previous_source_changelog = git(root, &["show", &format!("{base}:CHANGELOG.md")])?;
-    let previous_authored = previous_source_changelog
-        .split_once("## [Unreleased]\n")
-        .ok_or("previous source lacks Unreleased heading")?
-        .1
-        .split("\n## [")
-        .next()
-        .unwrap_or("");
-    let upcoming = current_changelog
-        .split_once("## [Unreleased]\n")
-        .ok_or("missing Unreleased heading")?
-        .1
-        .split("\n## [")
-        .next()
-        .unwrap_or("");
+    let (_, previous_authored, _) = changelog_sections(&previous_source_changelog)?;
+    let (intro, authored, _) = changelog_sections(&current_changelog)?;
     // Existing authored behavior and numerical-profile changes require a minor
     // release before 1.0, even when historical commits lack conventional markers.
-    let authored_changes = authored_delta(upcoming, previous_authored);
+    let authored_changes = authored_delta(authored, previous_authored);
     let authored_behavior = authored_changes.contains("### Changed\n")
         || authored_changes.contains("### Added\n")
         || authored_changes.contains("### Removed\n");
@@ -257,22 +280,8 @@ fn prepare_at(
         }
         let _ = path;
     }
-    let changelog = fs::read_to_string(root.join("CHANGELOG.md"))?;
-    let (intro, rest) = changelog
-        .split_once("## [Unreleased]\n")
-        .ok_or("missing Unreleased changelog heading")?;
-    let (authored, _) = rest
-        .split_once("\n## [")
-        .ok_or("missing previous changelog section")?;
     let previous_changelog = git(root, &["show", &format!("{previous}:CHANGELOG.md")])?;
-    let previous_rest = previous_changelog
-        .split_once("## [Unreleased]\n")
-        .ok_or("previous release lacks Unreleased heading")?
-        .1;
-    let history = previous_rest
-        .split_once("\n## [")
-        .ok_or("previous release lacks version history")?
-        .1;
+    let (_, _, history) = changelog_sections(&previous_changelog)?;
     let mut notes = authored_delta(authored, previous_authored);
     notes.push_str("\n\n");
     for (heading, entries) in ["Breaking changes", "Added", "Fixed", "Other changes"]
@@ -287,7 +296,7 @@ fn prepare_at(
         "[Full comparison](https://github.com/pederbe/fastmash/compare/{previous}...v{next})\n"
     ));
     let changelog = format!(
-        "{intro}## [Unreleased]\n\n## [{next}] - {date}\n\n{}\n\n## [{history}",
+        "{intro}## [{next}] - {date}\n\n{}\n\n{history}",
         notes.trim()
     );
     for (path, text) in manifests {
@@ -418,6 +427,116 @@ mod tests {
             let _ = fs::remove_dir_all(&self.0);
         }
     }
+
+    fn release_fixture(changelog: &str) -> Directory {
+        let dir = Directory::new();
+        let root = &dir.0;
+        git(root, &["init", "-b", "main"]).unwrap();
+        git(root, &["config", "user.email", "test@example.com"]).unwrap();
+        git(root, &["config", "user.name", "Test"]).unwrap();
+        fs::create_dir_all(root.join("crates/cli")).unwrap();
+        fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
+        fs::write(
+            root.join("crates/cli/Cargo.toml"),
+            "[package]\nname = \"fastmash\"\nversion = \"0.2.0\"\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("Cargo.lock"),
+            "[[package]]\nname = \"fastmash\"\nversion = \"0.2.0\"\n",
+        )
+        .unwrap();
+        fs::write(root.join("CHANGELOG.md"), changelog).unwrap();
+        git(root, &["add", "."]).unwrap();
+        git(root, &["commit", "-m", "Initial"]).unwrap();
+        git(root, &["tag", "v0.2.0"]).unwrap();
+        dir
+    }
+
+    #[test]
+    fn dated_changelogs_need_no_unreleased_placeholder() {
+        for legacy_tag in [false, true] {
+            let dated = "# Changelog\n\n## [0.2.0] - 2026-10-12\n\nOld\n";
+            let prior = if legacy_tag {
+                dated.replace("## [0.2.0]", "## [Unreleased]\n\n## [0.2.0]")
+            } else {
+                dated.to_string()
+            };
+            let dir = release_fixture(&prior);
+            let root = &dir.0;
+            fs::write(root.join("CHANGELOG.md"), dated).unwrap();
+            fs::write(root.join("install.sh"), "true\n").unwrap();
+            git(root, &["add", "."]).unwrap();
+            git(root, &["commit", "-m", "fix: Preserve installation"]).unwrap();
+            let output = root.join(".git/plan");
+            prepare_at(root, "v0.2.0", "2026-10-26", "auto", &output, None).unwrap();
+            let changelog = fs::read_to_string(root.join("CHANGELOG.md")).unwrap();
+            assert!(changelog.starts_with("# Changelog\n\n## [0.2.1] - 2026-10-26\n"));
+            assert!(!changelog.contains("## [Unreleased]"));
+            assert_eq!(changelog.matches("## [0.2.0] - 2026-10-12").count(), 1);
+            assert!(changelog.contains("Old\n"));
+        }
+    }
+
+    #[test]
+    fn pending_authored_behavior_after_a_dated_release_selects_a_minor_version() {
+        let dated = "# Changelog\n\n## [0.2.0] - 2026-10-12\n\nOld\n";
+        let dir = release_fixture(dated);
+        let root = &dir.0;
+        fs::write(
+            root.join("CHANGELOG.md"),
+            dated.replace(
+                "## [0.2.0]",
+                "## [Unreleased]\n\n### Added\n\n- Install into a selected directory.\n  Preserve the requested location.\n\n## [0.2.0]",
+            ),
+        )
+        .unwrap();
+        fs::write(root.join("install.sh"), "true\n").unwrap();
+        git(root, &["add", "."]).unwrap();
+        git(root, &["commit", "-m", "Improve installation"]).unwrap();
+        let output = root.join(".git/plan");
+        prepare_at(root, "v0.2.0", "2026-10-26", "auto", &output, None).unwrap();
+        assert!(fs::read_to_string(output).unwrap().contains("tag=v0.3.0"));
+        let changelog = fs::read_to_string(root.join("CHANGELOG.md")).unwrap();
+        assert!(changelog.starts_with("# Changelog\n\n## [0.3.0] - 2026-10-26\n"));
+        assert!(!changelog.contains("## [Unreleased]"));
+        assert!(
+            changelog.contains(
+                "- Install into a selected directory.\n  Preserve the requested location."
+            )
+        );
+        assert!(changelog.contains("## [0.2.0] - 2026-10-12\n\nOld\n"));
+    }
+
+    #[test]
+    fn malformed_changelogs_fail_without_changing_metadata() {
+        for malformed in [
+            "# Changelog\n\nNo version history.\n",
+            "# Changelog\n\n## [Unreleased]\n\n- Pending fix.\n",
+            "# Changelog\n\n## [0.2.0]\n\nOld\n",
+            "# Changelog\n\n## [unknown] - 2026-10-12\n\nOld\n",
+        ] {
+            let dir = release_fixture("# Changelog\n\n## [0.2.0] - 2026-10-12\n\nOld\n");
+            let root = &dir.0;
+            fs::write(root.join("CHANGELOG.md"), malformed).unwrap();
+            fs::write(root.join("install.sh"), "true\n").unwrap();
+            git(root, &["add", "."]).unwrap();
+            git(root, &["commit", "-m", "Improve installation"]).unwrap();
+            assert!(
+                prepare_at(
+                    root,
+                    "v0.2.0",
+                    "2026-10-26",
+                    "auto",
+                    &root.join(".git/plan"),
+                    None,
+                )
+                .is_err()
+            );
+            assert!(git(root, &["status", "--porcelain"]).unwrap().is_empty());
+        }
+    }
+
     #[test]
     fn merge_messages_preserve_compatibility_markers_without_bookkeeping() {
         for (subject, body, breaking) in [

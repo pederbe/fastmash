@@ -8,11 +8,14 @@ cd "$fixture"
 git init -q
 git config user.email fixture@example.invalid
 git config user.name fixture
-mkdir -p crates/app/src crates/helper/src .github/workflows release/publication-test-server/src scripts
+mkdir -p crates/app/src crates/helper/src .github/workflows release/publication-test-server/src scripts tools/release-changelog/src
 printf '[workspace]\nmembers = ["crates/app", "crates/helper"]\n' > Cargo.toml
 printf '[package]\nname = "fastmash"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\n' > crates/app/Cargo.toml
 printf '[package]\nname = "helper"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\ndevlib = "1"\n' > crates/helper/Cargo.toml
 touch crates/app/src/lib.rs crates/helper/src/lib.rs .github/workflows/ci.yml release/publication-test-server/src/weekly.rs scripts/build_site.py
+touch tools/release-changelog/src/main.rs scripts/check-release-changelog.sh scripts/prepare-release.sh \
+  scripts/record-release-changelog.sh scripts/configure-release-changelog.sh \
+  .github/workflows/release-changelog.yml .github/workflows/release-changelog-check.yml
 cat > Cargo.lock <<'LOCK'
 version = 4
 [[package]]
@@ -65,6 +68,15 @@ printf '# package signing change\n' > release/package-repository.sh
 expect application=false configuration=true packages=
 printf '# website change\n' > scripts/build_site.py
 expect application=false configuration=false packages=
+for path in tools/release-changelog/src/main.rs scripts/check-release-changelog.sh scripts/prepare-release.sh \
+  scripts/record-release-changelog.sh scripts/configure-release-changelog.sh \
+  .github/workflows/release-changelog.yml .github/workflows/release-changelog-check.yml; do
+  printf '# changelog tooling change\n' > "$path"
+  expect application=false configuration=false packages=
+done
+printf '// changelog tooling change\n' > tools/release-changelog/src/main.rs
+printf '// application change\n' > crates/app/src/lib.rs
+expect application=true configuration=false packages=fastmash
 printf '# documentation\n' > README.md
 expect application=false packages=
 rm README.md
