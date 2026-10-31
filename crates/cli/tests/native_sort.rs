@@ -80,8 +80,7 @@ struct Fixture {
 impl Fixture {
     fn new(name: &str) -> Self {
         let root = temp_dir::TempDir::new(name);
-        // A standalone executable also exercises the built-in fallback on
-        // Linux for Operations that ordinarily use the Sort supervisor.
+        // Exercise the installed command without any sibling executable.
         let executable = standalone(&EXECUTABLE);
         let binary = executable.0.join("fastmash");
         fs::create_dir(root.0.join("spill")).unwrap();

@@ -3,7 +3,7 @@
 #
 # usage: release/package.sh VERSION BIN_DIR DOC_DIR OUT_DIR
 #
-# BIN_DIR holds fastmash and fastmash-sort-supervisor, DOC_DIR the README,
+# BIN_DIR holds fastmash, DOC_DIR the README,
 # changelog, licenses and THIRD-PARTY-LICENSES.md. Both packages install the
 # programs into /usr/bin, unchanged: the script checks that the binaries in
 # each package are byte-identical to BIN_DIR's. Prepare the Rust tools with
@@ -24,7 +24,7 @@ fi
 version=$1 bin=$(realpath "$2") docs=$(realpath "$3") out=$(realpath "$4")
 summary="Fast command-line statistics on text data, compatible with GNU datamash"
 homepage="https://fastmash.io"
-programs=(fastmash fastmash-sort-supervisor)
+programs=(fastmash)
 documents=(README.md CHANGELOG.md THIRD-PARTY-LICENSES.md LICENSE-MIT LICENSE-APACHE)
 export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(stat -c %Y "$bin/fastmash")}
 work=$(mktemp -d)
@@ -97,14 +97,12 @@ with the GNU datamash command language.
 
 %install
 install -Dm755 $bin/fastmash %{buildroot}/usr/bin/fastmash
-install -Dm755 $bin/fastmash-sort-supervisor %{buildroot}/usr/bin/fastmash-sort-supervisor
 mkdir -p %{buildroot}%{_docdir}/fastmash %{buildroot}%{_licensedir}/fastmash
 install -m644 $docs/README.md $docs/CHANGELOG.md %{buildroot}%{_docdir}/fastmash/
 install -m644 $docs/LICENSE-MIT $docs/LICENSE-APACHE $docs/THIRD-PARTY-LICENSES.md %{buildroot}%{_licensedir}/fastmash/
 
 %files
 /usr/bin/fastmash
-/usr/bin/fastmash-sort-supervisor
 %{_docdir}/fastmash
 %{_licensedir}/fastmash
 EOF

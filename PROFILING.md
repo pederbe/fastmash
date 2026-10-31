@@ -89,7 +89,7 @@ child when investigating a particular question.
 Inspect `JOB.json` with a JSON viewer or `jq . JOB.json`. Function timings
 include instrumented callees, so nested totals cannot be added. Allocation
 reports attribute Rust allocations exclusively by default. They are neither
-peak resident memory nor allocation totals for an external system sort.
+peak resident memory nor total process memory.
 Instrumentation stays at command and sort boundaries rather than individual
 records or arithmetic primitives.
 

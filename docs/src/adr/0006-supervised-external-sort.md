@@ -1,6 +1,6 @@
 # 0006: Supervise the system `sort` for the remaining sort routes
 
-Status: accepted.
+Status: superseded by [ADR 0014: Native sorting in one executable](0014-native-sorting-everywhere.md).
 
 Fastmash sorts in process, with disk spill, for the common operations and
 locales. For the remaining combinations it uses the system `sort`, as GNU

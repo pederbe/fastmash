@@ -25,9 +25,6 @@ impl Fixture {
             path.join("bin/fastmash"),
         )
         .unwrap();
-        if !cfg!(target_os = "macos") {
-            fs::write(path.join("bin/fastmash-sort-supervisor"), b"present").unwrap();
-        }
         for name in ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"] {
             fs::write(path.join("docs").join(name), b"nonempty\n").unwrap();
         }
@@ -104,11 +101,7 @@ fn missing_or_empty_documents_are_rejected() {
 fn wrong_supervisor_presence_is_rejected() {
     let fixture = Fixture::new();
     let supervisor = fixture.0.join("bin/fastmash-sort-supervisor");
-    if cfg!(target_os = "macos") {
-        fs::write(supervisor, b"unexpected").unwrap();
-    } else {
-        fs::remove_file(supervisor).unwrap();
-    }
+    fs::write(supervisor, b"unexpected").unwrap();
     assert_eq!(fixture.run("", "fixture").status.code(), Some(1));
 }
 

@@ -118,7 +118,7 @@ done
 test -n "$build"
 out="$RUNNER_TEMP/weekly-linux/out/$build/release"
 mkdir -p "$out"
-for binary in fastmash fastmash-sort-supervisor; do
+for binary in fastmash; do
   if [ "$FIXTURE_MODE" = mismatch ] && [ "$build" = second ]; then
     printf different > "$out/$binary"
   else
@@ -153,9 +153,9 @@ done
     );
     let manifest = root.join("release/delivery.sha256");
     let text = fs::read_to_string(&manifest).unwrap();
-    assert_eq!(text.lines().count(), 2);
+    assert_eq!(text.lines().count(), 1);
     assert!(text.contains("  fastmash\n"));
-    assert!(text.contains("  fastmash-sort-supervisor\n"));
+    assert!(!text.contains("fastmash-sort-supervisor"));
     let verified = Command::new("sha256sum")
         .arg("-c")
         .arg(&manifest)

@@ -1,49 +1,16 @@
-//! Private spill storage and transport for the Linux Sort supervisor.
+//! Private native Spill storage, thread policy and SIGPIPE support.
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::undocumented_unsafe_blocks)]
-#[cfg(not(any(
-    all(
-        target_os = "linux",
-        target_arch = "x86_64",
-        target_pointer_width = "64"
-    ),
-    all(
-        target_os = "macos",
-        target_arch = "aarch64",
-        target_pointer_width = "64"
-    )
-)))]
-compile_error!("fastmash-sort-process supports Linux x86-64 and Apple Silicon macOS");
-#[cfg(target_os = "linux")]
-mod external;
-/// Linux process primitives shared with the Sort supervisor; not a stable API.
 #[cfg(target_os = "linux")]
 #[doc(hidden)]
 pub mod linux;
-/// The Linux Sort supervisor executable's roles; not a stable API.
-#[cfg(target_os = "linux")]
-#[doc(hidden)]
-pub mod supervisor;
-#[cfg(target_os = "macos")]
-mod unavailable;
-#[cfg(target_os = "linux")]
-pub(crate) use external::SYSTEM_SORT;
-#[cfg(target_os = "linux")]
-pub use external::{Session, admit, available};
-#[cfg(target_os = "linux")]
-use std::os::fd::BorrowedFd;
 use std::{
-    fmt,
     fs::{File, OpenOptions},
     io,
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
 };
-#[cfg(target_os = "macos")]
-pub use unavailable::{Session, admit, available};
-
-/// The directory for temporary sort data, shared by the native spill and the
-/// external route: `TMPDIR` as given, or `/tmp` when it is unset. An empty
+/// The directory for temporary native sort data: `TMPDIR` as given, or `/tmp` when it is unset. An empty
 /// `TMPDIR` names no directory: the error opening it would give.
 pub fn temporary_dir() -> io::Result<PathBuf> {
     let dir = std::env::temp_dir();
@@ -119,7 +86,7 @@ fn random_bytes(bytes: &mut [u8]) -> io::Result<()> {
     getrandom::fill(bytes).map_err(io::Error::from)
 }
 
-/// Threads for the external sort, as GNU sort chooses its default: the
+/// Threads for native sorting, as GNU sort chooses its default: the
 /// processors available to this process (affinity and CPU quota), replaced by
 /// a positive `OMP_NUM_THREADS` (its first value) and capped by
 /// `OMP_THREAD_LIMIT`, then at most 8.
@@ -144,111 +111,6 @@ fn threads_from(num: Option<&str>, limit: Option<&str>, available: u32) -> u32 {
     }
     threads.clamp(1, 8)
 }
-
-/// The version of the command line and control messages between `fastmash`
-/// and `fastmash-sort-supervisor`, sent as the role `--supervise-PROTOCOL`.
-/// Every version keeps two things, so either side can name a mismatch: the
-/// control descriptor is the argument after the role, and a companion that
-/// does not speak the requested version replies `Kind::Mismatch` there.
-pub const PROTOCOL: u32 = 1;
-
-/// Why the external sort could not start.
-#[derive(Debug)]
-pub enum StartError {
-    /// `fastmash-sort-supervisor` is not beside the running executable.
-    MissingCompanion(io::Error),
-    /// The private directory under `base` could not be created.
-    Temporary { base: PathBuf, error: io::Error },
-    /// The companion is from another release: it replied `Kind::Mismatch`.
-    Mismatch,
-    /// Anything else: runtime requirements, protocol or process failures.
-    Other(io::Error),
-}
-impl From<io::Error> for StartError {
-    fn from(error: io::Error) -> Self {
-        Self::Other(error)
-    }
-}
-impl fmt::Display for StartError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingCompanion(error) | Self::Other(error) => error.fmt(f),
-            Self::Mismatch => f.write_str("fastmash-sort-supervisor is from another release"),
-            Self::Temporary { base, error } => {
-                write!(
-                    f,
-                    "cannot create a directory in '{}': {error}",
-                    base.display()
-                )
-            }
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Kind {
-    Ready = 1,
-    Finish = 2,
-    Abort = 3,
-    Done = 4,
-    Failed = 5,
-    /// Setup failed creating the temporary directory; status is its errno.
-    TemporaryFailed = 6,
-    /// The companion does not speak the requested protocol version.
-    Mismatch = 7,
-}
-#[derive(Clone, Copy, Debug)]
-pub struct Message {
-    pub kind: Kind,
-    pub status: i32,
-    pub cleanup: i32,
-}
-impl Message {
-    pub fn new(kind: Kind) -> Self {
-        Self {
-            kind,
-            status: 0,
-            cleanup: 0,
-        }
-    }
-    #[cfg(target_os = "linux")]
-    pub fn send(self, fd: BorrowedFd<'_>) -> io::Result<()> {
-        let mut data = [0u8; 16];
-        data[..4].copy_from_slice(b"FMS1");
-        data[4..8].copy_from_slice(&(self.kind as u32).to_le_bytes());
-        data[8..12].copy_from_slice(&self.status.to_le_bytes());
-        data[12..].copy_from_slice(&self.cleanup.to_le_bytes());
-        linux::send(fd, &data)
-    }
-    #[cfg(target_os = "linux")]
-    pub fn receive(fd: BorrowedFd<'_>) -> io::Result<Option<Self>> {
-        // One extra byte makes every oversized/truncated seqpacket invalid.
-        let mut data = [0u8; 17];
-        let n = match linux::receive(fd, &mut data) {
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(None),
-            result => result?,
-        };
-        if n != 16 || &data[..4] != b"FMS1" {
-            return Err(io::Error::other("invalid or closed sort control channel"));
-        }
-        let kind = match u32::from_le_bytes(data[4..8].try_into().unwrap()) {
-            1 => Kind::Ready,
-            2 => Kind::Finish,
-            3 => Kind::Abort,
-            4 => Kind::Done,
-            5 => Kind::Failed,
-            6 => Kind::TemporaryFailed,
-            7 => Kind::Mismatch,
-            _ => return Err(io::Error::other("unknown sort control message")),
-        };
-        Ok(Some(Self {
-            kind,
-            status: i32::from_le_bytes(data[8..12].try_into().unwrap()),
-            cleanup: i32::from_le_bytes(data[12..16].try_into().unwrap()),
-        }))
-    }
-}
-
 #[cfg(test)]
 mod storage_tests {
     use super::*;

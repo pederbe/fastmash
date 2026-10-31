@@ -29,7 +29,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
     "--bins"
   ];
   # Command tests assume an FHS host. Keep the numerical tests in the sandbox
-  # and exercise the installed command and supervisor in installCheckPhase.
+  # and exercise the installed command in installCheckPhase.
   cargoTestFlags = [
     "-p"
     "fastmash-conversion"
@@ -41,8 +41,11 @@ rustPlatform.buildRustPackage (finalAttrs: {
   ];
 
   postPatch = ''
-    substituteInPlace crates/sort-process/src/lib.rs \
-      --replace-fail '"/usr/bin/sort"' '"${lib.getExe' coreutils "sort"}"'
+    # Only historical source releases contain an external sort path.
+    if [ -f crates/sort-process/src/lib.rs ] && grep -q '"/usr/bin/sort"' crates/sort-process/src/lib.rs; then
+      substituteInPlace crates/sort-process/src/lib.rs \
+        --replace-fail '"/usr/bin/sort"' '"${lib.getExe' coreutils "sort"}"'
+    fi
   '';
 
   postBuild = ''

@@ -343,7 +343,7 @@ differs record Fastmash's documented behavior instead; the
 reasons.
 
 ```sh
-cargo build --release --workspace   # candidate, Sort supervisor and corpus driver
+cargo build --release --workspace   # candidate and corpus driver
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --keep-going
 target/release/fastmash-corpus --help
 ```
@@ -364,7 +364,7 @@ disposition and outcome. CI runs this same driver on Linux, native macOS 15 and
 26, and the executable installed from the native archive.
 For a development version, pass `--expected-version VERSION`, using the version
 in `crates/cli/Cargo.toml`.
-On macOS, the corpus driver requires no supervisor. It uses a private full
+On macOS, the corpus driver uses a private full
 filesystem for output faults and controlling-terminal job control for input
 faults. The separate Rust command tests retain the native fault helpers below. `--evidence-dir` retains the executable and fixture hashes, per-case
 dispositions, native observations and mismatches. Regular-file mode records the
@@ -424,9 +424,9 @@ margins and hardware.
 | | |
 | --- | --- |
 | OS | Linux x86-64 with glibc, or WSL2 |
-| Kernel | 5.11 or later, for the external sort route |
-| Tools | Stable Rust (see `rust-version` in `Cargo.toml`), GNU or uutils coreutils `sort`; Python 3.10 or later for website checks |
-| Temporary storage | A writable `TMPDIR`, such as ext4 or tmpfs |
+| Kernel | A supported Linux kernel with native signals and temporary-file support |
+| Tools | Stable Rust (see `rust-version` in `Cargo.toml`); Python 3.10 or later for website checks |
+| Temporary storage | A writable disk-backed `TMPDIR`, such as ext4 |
 
 Under WSL, keep the checkout and `TMPDIR` on the Linux filesystem rather than a
 Windows drive: tests are much faster there.
@@ -469,9 +469,8 @@ These named dispositions adapt observation or diagnostics only:
 | --- | --- |
 | Rust full-stream tests and all 72 `io=full` corpus cases | Shared Rust test support uses a private 8 MiB HFS+ image filled to real `ENOSPC`. Actual executable controls calibrate selected and unselected streams, with empty-sink checks before and after each case. Tests verify destination facts and owned-image cleanup. Corpus evidence retains these receipts. Linux uses `/dev/full`. |
 | `grouping-next:read-error`, `grouping-next:read-error-header`, `paired-private:grouped-read-error-after-result` | The corpus driver observes the frozen visible completed-group acknowledgement, stops the candidate, reclaims the controlling terminal foreground and resumes it. The next read produces real `EIO` without wake bytes on both platforms. Final stdout, stderr and status 1 stay frozen. |
-| `sorting/header-empty`, `sorting/header-only-comments`; native calculations in `record_separators::record_intake::missing_headers_keep_native_and_external_full_warning_order`; ordinary aggregates in `weighted_mean::sorted_named_empty_completion_keeps_header_errors_and_legacy_commands` | Native sorting on Linux and macOS reports exactly `fastmash: missing input header for named grouping key`, with empty stdout and status 1. It emits no full warning because the data phase has not begun. The fixture remains frozen; only these two named corpus diagnostics are adapted. |
-| `rms` in `record_separators::record_intake::missing_headers_keep_native_and_external_full_warning_order` | Linux's external route retains the system-sort error, then the full warning and `read error (on close)`. macOS uses the native missing-header diagnostic without a full warning. Both require empty stdout and status 1. |
-| `weighted_mean::weighted_numeric_sort_eligibility_and_system_composition_are_exercised`; mixed paired calculations in `weighted_mean::sorted_named_empty_completion_keeps_header_errors_and_legacy_commands` | Paired-operation composition uses the native Sort route on macOS and retains the system Sort route on Linux. Each platform checks its required route trace while report bytes stay identical. |
+| `sorting/header-empty`, `sorting/header-only-comments`; command cases in `record_separators::record_intake` and `weighted_mean` | Native sorting on Linux and macOS reports exactly `fastmash: missing input header for named grouping key`, with empty stdout and status 1. It emits no full warning because the data phase has not begun. The fixture remains frozen; only these two named corpus diagnostics are adapted. |
+| Paired-operation composition in `weighted_mean` | Both platforms check the native Sort route and identical report bytes. |
 | `grouping-reference-r2:held-flush-pipe`, `grouping-reference-r2:held-flush-pipe-header`, `output-header-lifecycle:held-8192`, `header-writer-reference:pipe-large` | The held prefix follows the actual destination's `fstat` block size, capped at 8,192 bytes, with a zero size using 8,192. Prefix bytes are derived from the frozen output and the known pre-EOF output, rather than candidate output. The destination facts are retained. Final stdout, status, live held process and terminal line buffering remain checked. |
 | `/usr/bin/timeout` in shared direct-command helpers | A fresh Rust launcher arms a native alarm before executing the command, without a GNU utility dependency. Linux keeps its existing timeout wrapper. |
 | Linux temporary-root and PTY metadata assumptions | Native helpers use private temporary directories and native descriptor metadata. Raw terminal flags and actual terminal behavior remain checked. |
@@ -482,34 +481,22 @@ Linux gate; generic suites are not disabled wholesale on macOS:
 
 | Test or component | Reason and native coverage |
 | --- | --- |
-| All 16 tests in `external_sort.rs`, listed below, and the external implementation's `sort-process` unit tests | They inspect or fault the Linux-only supervisor, pidfds, `close_range`, seccomp, child `/proc` entries or GNU sort scheduling. macOS never enters that route. Native sorting, bad `TMPDIR`, interrupted anonymous spill, long headers, separator bytes and inherited cancellation behavior are tested at the executed-command boundary. Sort supervisor identity and child-supervisor security have no native component. |
-| `routing_tests::sigpipe_policy_in_isolated_test_processes`, `routing_tests::sigpipe_child` | They exercise the Linux-only external sort signal mask. Their pipe and descriptor setup uses safe native APIs. `native_streams` checks the actual CLI's blocked and ignored signal inheritance, closed pipes, startup actions and sorted/comparison/health modes through native APIs. |
-| `diagnostic_color::child_sort_diagnostics_are_forwarded_without_generated_styling` | No child sort emits a diagnostic on macOS. `native_missing_header_diagnostic_receives_the_selected_style` checks the native diagnostic and selected styling instead. |
 | `grouping::native_variable_allocation_refusal_is_explicit`; `text_summaries::text_allocation_failure_is_explicit`; `record_separators::transpose::transpose_allocation_failure_is_explicit_and_has_no_output`; `record_separators::crosstab::crosstab_allocation_failure_is_explicit` | These faults depend on Linux address-space enforcement and calibrated small glibc process limits. Darwin address-space limits do not provide that fault. Checked-allocation unit fixtures, growable command tests and native spill refusal/error paths still run; these particular real allocation-failure thresholds remain Linux evidence. |
 | `grouping::eight_thread_language_sorts_use_a_fraction_of_an_address_space_limit`, including its `paused_language_sort` helper | The measurement inspects Linux `/proc/PID/status` and glibc arena reservation under `RLIMIT_AS`. macOS uses its documented conservative initial chunk target when Linux memory facts are unavailable; explicit small targets, language sorting and spill remain tested natively. |
 | `text_summaries::text_final_output_is_written_without_a_second_copy` | Its calibrated 32 MiB address-space allowance is a Linux observation. The native test still checks the full large output; it does not claim that Linux allocation threshold on Darwin. |
 | Ignored `quantiles` tests `growth_and_sort_scratch_exhaustion_are_reported`, `percentile_and_trim_allocation_failures`, `robust_allocation_failures`, `dedup_allocation_failure_and_duplicate_heavy_stream` | These opt-in Linux installed-binary tests require the calibrated address-space fault. Ordinary quantiles, robust operations, sample growth and output faults remain in the native run. |
-| Ignored `installation::installed_pair_and_missing_companion` | It requires a Cargo-installed Linux executable and Sort supervisor pair. The native archive installation test and standalone native-sort commands cover installation, startup and sorting without that component. `installed_migration_examples` runs explicitly against the native archive. |
 | Other existing ignored named-reference, retained-dataset, locale-generation and timing tests | Their explicit reference, dataset or measurement prerequisites remain unchanged on both platforms. The retained workspace inventory and result log name them and their reasons. Native GNU comparisons are recorded separately, and cannot redefine portable expectations. |
 
-The excluded external-sort tests are:
-
-- `exec_sort_accepts_only_its_own_temporary_root`
-- `the_exec_role_exits_77_whatever_its_standard_error`
-- `scratch_rejects_a_preexisting_directory`
-- `scratch_rejects_a_preexisting_symlink`
-- `external_sort_uses_tmpdir_and_cleans_it`
-- `external_sort_threads_follow_gnu_sort_defaults`
-- `unusable_tmpdir_is_a_clear_error`
-- `unusable_tmpdir_sorts_small_input_in_process`
-- `a_separator_byte_from_0x80_sorts_in_process`
-- `a_missing_supervisor_sorts_in_process`
-- `without_close_range_cloexec_jobs_sort_in_process`
-- `interrupted_external_sort_leaves_no_temporary_directory`
-- `a_killed_sort_is_named_before_read_error_on_close`
-- `a_long_header_in_a_file_is_read_in_chunks`
-- `ignored_cancellation_signals_fall_back_to_native_sorting`
-- `a_companion_from_another_release_is_named`
+Native command tests cover sorted calculations and duplicate removal, bad
+`TMPDIR`, interrupted anonymous Spill, long headers, separator bytes, closed
+pipes and inherited cancellation signals. `diagnostic_color` checks native
+failure styling. Archive and installed-command checks verify the single
+executable, including upgrades from earlier two-executable installations.
+`native_rmdup` covers C-locale aliases, file and piped input, retained record
+bytes, case-folded ordering with exact duplicate equality, named and positional
+keys, second-header handling, comments, annotated input, whitespace and NUL
+records. Its commands run with only `fastmash` installed. `native_sort` retains
+actual Spill, read-failure and cancellation coverage.
 
 After both source gates pass, one macOS 15 job builds the checksummed development
 archive with a macOS 15 deployment target. Both installation jobs download those

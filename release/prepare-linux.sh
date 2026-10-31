@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the tagged version twice and retain one pair with its delivery hashes.
+# Build the tagged version twice and retain one executable with its delivery hashes.
 set -euo pipefail
 : "${RUNNER_TEMP:?}"
 work="$RUNNER_TEMP/weekly-linux"
@@ -14,7 +14,7 @@ for build in first second; do
     docker run --rm -v "$PWD:/source:ro" -v "$work/out:/out" \
         -e CARGO_TARGET_DIR="/out/$build" fastmash-weekly-builder bash /source/release/build.sh
 done
-for binary in fastmash fastmash-sort-supervisor; do
+for binary in fastmash; do
     cmp "$work/out/first/release/$binary" "$work/out/second/release/$binary"
 done
-(cd "$work/out/first/release" && sha256sum fastmash fastmash-sort-supervisor) > release/delivery.sha256
+(cd "$work/out/first/release" && sha256sum fastmash) > release/delivery.sha256

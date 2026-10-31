@@ -1,4 +1,4 @@
-//! The Linux release check executes an installed, checksummed pair.
+//! The Linux release check executes an installed, checksummed command.
 #![forbid(unsafe_code)]
 #![cfg(target_os = "linux")]
 
@@ -23,19 +23,14 @@ fn prepared_tool(name: &str, variable: &str) -> std::path::PathBuf {
     path.canonicalize().unwrap()
 }
 
-fn installed_pair(directory: &Path) {
+fn installed_command(directory: &Path) {
     fs::copy(env!("CARGO_BIN_EXE_fastmash"), directory.join("fastmash")).unwrap();
-    fs::copy(
-        env!("CARGO_BIN_EXE_fastmash-sort-supervisor"),
-        directory.join("fastmash-sort-supervisor"),
-    )
-    .unwrap();
     record_checksums(directory);
 }
 
 fn record_checksums(directory: &Path) {
     let output = Command::new("sha256sum")
-        .args(["fastmash", "fastmash-sort-supervisor"])
+        .arg("fastmash")
         .current_dir(directory)
         .output()
         .unwrap();
@@ -64,9 +59,9 @@ fn check(directory: &Path, version: &str) -> std::process::Output {
 }
 
 #[test]
-fn release_check_accepts_the_installed_qualified_pair() {
+fn release_check_accepts_the_installed_qualified_command() {
     let directory = test_dir::TempDir::new("release-installed");
-    installed_pair(&directory.0);
+    installed_command(&directory.0);
     let output = check(&directory.0, env!("CARGO_PKG_VERSION"));
     assert!(output.status.success(), "{output:?}");
 }
@@ -74,7 +69,7 @@ fn release_check_accepts_the_installed_qualified_pair() {
 #[test]
 fn release_check_rejects_a_version_from_another_release() {
     let directory = test_dir::TempDir::new("release-version");
-    installed_pair(&directory.0);
+    installed_command(&directory.0);
     let output = check(&directory.0, "0.0.0-wrong-release");
     assert!(!output.status.success(), "{output:?}");
     assert!(
@@ -87,7 +82,7 @@ fn release_check_rejects_a_version_from_another_release() {
 fn release_check_rejects_changed_installed_bytes() {
     use std::io::Write;
     let directory = test_dir::TempDir::new("release-checksum");
-    installed_pair(&directory.0);
+    installed_command(&directory.0);
     fs::OpenOptions::new()
         .append(true)
         .open(directory.0.join("fastmash"))
@@ -100,32 +95,22 @@ fn release_check_rejects_changed_installed_bytes() {
 }
 
 #[test]
-fn release_check_rejects_a_missing_or_incompatible_supervisor() {
+fn release_check_rejects_a_missing_or_nonexecutable_command() {
     let directory = test_dir::TempDir::new("release-supervisor");
-    installed_pair(&directory.0);
-    let supervisor = directory.0.join("fastmash-sort-supervisor");
-    fs::remove_file(&supervisor).unwrap();
+    installed_command(&directory.0);
+    let binary = directory.0.join("fastmash");
+    fs::remove_file(&binary).unwrap();
     let missing = check(&directory.0, env!("CARGO_PKG_VERSION"));
     assert!(!missing.status.success(), "{missing:?}");
     assert!(String::from_utf8_lossy(&missing.stderr).contains("not installed and executable"));
 
-    fs::copy(env!("CARGO_BIN_EXE_fastmash-sort-supervisor"), &supervisor).unwrap();
-    fs::set_permissions(&supervisor, fs::Permissions::from_mode(0o644)).unwrap();
+    fs::copy(env!("CARGO_BIN_EXE_fastmash"), &binary).unwrap();
+    fs::set_permissions(&binary, fs::Permissions::from_mode(0o644)).unwrap();
     record_checksums(&directory.0);
     let nonexecutable = check(&directory.0, env!("CARGO_PKG_VERSION"));
     assert!(!nonexecutable.status.success(), "{nonexecutable:?}");
     assert!(
         String::from_utf8_lossy(&nonexecutable.stderr).contains("not installed and executable")
-    );
-
-    // Its checksum is admitted here to isolate the supervisor execution check.
-    fs::copy("/usr/bin/false", &supervisor).unwrap();
-    record_checksums(&directory.0);
-    let incompatible = check(&directory.0, env!("CARGO_PKG_VERSION"));
-    assert!(!incompatible.status.success(), "{incompatible:?}");
-    assert!(
-        String::from_utf8_lossy(&incompatible.stderr).contains("sort supervisor"),
-        "{incompatible:?}"
     );
 }
 
@@ -181,11 +166,7 @@ fn release_check_accepts_the_native_one_executable_layout() {
     let output = native_layout_check(&directory.0, env!("CARGO_PKG_VERSION"));
     assert!(output.status.success(), "{output:?}");
 
-    fs::copy(
-        env!("CARGO_BIN_EXE_fastmash-sort-supervisor"),
-        directory.0.join("fastmash-sort-supervisor"),
-    )
-    .unwrap();
+    fs::write(directory.0.join("fastmash-sort-supervisor"), b"unexpected").unwrap();
     let extra = native_layout_check(&directory.0, env!("CARGO_PKG_VERSION"));
     assert!(!extra.status.success(), "{extra:?}");
     assert!(String::from_utf8_lossy(&extra.stderr).contains("must not contain a supervisor"));

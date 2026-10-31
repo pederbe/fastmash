@@ -92,16 +92,6 @@ pub(super) fn originally_closed(fd: usize) -> bool {
     CLOSED.load(Ordering::Relaxed) & (1 << fd) != 0
 }
 
-/// Child runtimes may turn invalid input into EOF. Check access before delegation.
-pub(super) fn check_input_access() -> io::Result<()> {
-    let flags = platform::flags(0)?;
-    if flags & libc::O_ACCMODE as usize == libc::O_WRONLY as usize {
-        Err(io::Error::from_raw_os_error(9))
-    } else {
-        Ok(())
-    }
-}
-
 pub(super) fn finish_stderr() -> bool {
     let failed = STDERR_FAILED.load(Ordering::Relaxed);
     // Standard error has no Rust owner and this is its last use.

@@ -12,12 +12,6 @@ fn descriptor(fd: usize) -> io::Result<BorrowedFd<'static>> {
     }
 }
 
-pub(super) fn flags(fd: usize) -> io::Result<usize> {
-    rustix::fs::fcntl_getfl(descriptor(fd)?)
-        .map(|flags| flags.bits() as usize)
-        .map_err(io::Error::from)
-}
-
 pub(super) fn read(fd: usize, bytes: &mut [u8]) -> io::Result<usize> {
     rustix::io::read(descriptor(fd)?, bytes).map_err(io::Error::from)
 }

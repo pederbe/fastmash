@@ -192,7 +192,7 @@ jobs:
               cargo test --release -p "$package" --locked
             done
           fi
-      # The supervisor must sit beside the binary (built by the workspace build).
+      # Exercise the complete installed command from the workspace build.
       - name: Regression corpus
         if: needs.changes.outputs.application != 'false'
         run: |

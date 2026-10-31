@@ -111,21 +111,11 @@ fn linked_packages(metadata: &Value) -> Result<Vec<&Value>> {
 /// Writes stored notices and the two supported missing-file fallbacks.
 /// `metadata` must already have been filtered for `target` by Cargo.
 pub fn write_notices(metadata: &Value, target: Target, out: &mut impl Write) -> Result<()> {
-    let programs = match target {
-        Target::Linux => "fastmash and fastmash-sort-supervisor",
-        Target::Macos => "fastmash",
-    };
     write!(
         out,
-        "# Third-party licenses\n\nThe {programs} binaries include the following third-party code.\n\n{RUST_STD}\n"
+        "# Third-party licenses\n\nThe fastmash executable includes the following third-party code.\n\n{RUST_STD}\n"
     )?;
-    if target == Target::Macos {
-        write!(
-            out,
-            "Target: `{}`. The archive contains no sort supervisor.\n\n",
-            target.triple()
-        )?;
-    }
+    write!(out, "Target: `{}`.\n\n", target.triple())?;
     for package in linked_packages(metadata)? {
         let name = text(package, "name")?;
         let license = package["license"].as_str().unwrap_or("None");

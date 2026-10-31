@@ -86,8 +86,7 @@ With native sorting on Linux and macOS, a Command with a named Grouping key
 or sorted `rmdup` key and no Input header
 reports `fastmash: missing input header for named grouping key` and exits with
 status 1, including when comment-only input leaves no header. These failure
-paths need neither the system `sort` nor the Sort supervisor. The Linux external
-Sort route retains its system-sort diagnostic. A failed input read still reports
+paths run inside Fastmash on both platforms. A failed input read still reports
 the read error and exits with status 1; the missing-header diagnostic does not
 hide it. A Command containing `wmean` still succeeds without output when no
 Input header arrives at clean EOF. OS-owned diagnostic wording is checked

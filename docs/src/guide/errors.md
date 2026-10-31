@@ -68,15 +68,8 @@ datamash's own, on `--format` strings, names in a command and, in one narrow
 case, numeric fields; see [Numbers](output.md#limits).) Storage grows with the job and every
 allocation is checked; if memory runs out, Fastmash refuses with status 77
 where it can. The operating system may still stop a process that exhausts
-memory before Fastmash can report it. When it stops the system `sort` that
-some sorted jobs use (see [Large inputs](grouping.md#large-inputs)), the job
-fails with status 1, naming the signal before "read error (on close)" as GNU
-datamash does on Debian and Ubuntu:
-
-```text
-Killed
-fastmash: read error (on close)
-```
+memory before Fastmash can report it. In that case, the shell or job runner
+reports the operating system's termination status.
 
 What grows with the input:
 
@@ -119,14 +112,8 @@ Sorting large inputs with `-s` writes temporary data to `TMPDIR` (default
 Where the filesystem has no anonymous files (`O_TMPFILE`), such as NFS or a
 container's `/tmp` on Linux before 6.10, Fastmash creates private files with
 random names and removes their names at once, so they also disappear when
-Fastmash exits. Sorted jobs that use the system `sort` (see
-[Grouping and sorting](grouping.md#large-inputs)) write to a private
-directory in `TMPDIR`, which the sort supervisor creates when the job starts
-and removes when it ends, even if Fastmash is interrupted. Only killing both
-processes at once, for example with `kill -9` on the whole process group, can
-leave it behind. Where `TMPDIR` is not a writable directory, these jobs sort
-inside Fastmash instead. A sort that has to spill to disk without a usable
-`TMPDIR` stops with "sort temporary I/O error" (status 1).
+Fastmash exits, including when it is interrupted. A sort that has to spill to
+disk without a usable `TMPDIR` stops with "sort temporary I/O error" (status 1).
 
 ## Interruption
 

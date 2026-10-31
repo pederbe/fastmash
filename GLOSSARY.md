@@ -140,8 +140,7 @@ in rank order, with earlier original input records winning ties.
 
 **Sort route**:
 The way Fastmash brings equal Grouping keys together for `-s`, by sorting in
-memory with Spill as needed or, for ordinary delimited text, by another eligible
-route such as Hash grouping or the system `sort`.
+memory with Spill as needed or, for eligible ordinary delimited text, by Hash grouping.
 
 **Hash grouping**:
 A Sort route for eligible ordinary delimited-text input whose Grouping keys
@@ -154,11 +153,6 @@ _Avoid_: Hash mode, hash aggregation
 Temporarily writing sorted runs to disk so that sorting large input does not
 need to hold all of it in memory. Only sorting spills; retained samples and
 tables stay in memory.
-
-**Sort supervisor**:
-The Linux helper executable, `fastmash-sort-supervisor`, installed beside `fastmash`,
-that runs the system `sort` for the external sort route and cleans up after it.
-_Avoid_: Companion, sorter process
 
 ## Results
 
@@ -204,8 +198,7 @@ or unavailable key remains visible after them.
 The product property that one Fastmash version gives identical results
 (standard output and exit status) for the same input and explicit settings on
 every supported platform, independent of the host's CPU arithmetic, math library
-or installed locale data. Diagnostics produced by the host's own `sort` are
-outside it.
+or installed locale data.
 
 **Numerical profile**:
 A named, versioned set of rules for how Fastmash reads, computes and prints

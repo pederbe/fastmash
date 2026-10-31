@@ -13,14 +13,16 @@ It is written for contributors and for anyone evaluating the project. The
 | Platform | Linux x86-64 with glibc; Windows through WSL2; native Apple Silicon macOS 15+ |
 | Interface | GNU datamash 1.9 command language, with explicit CSV, health, selection, weighted mean and comparison extensions |
 | Numbers | 80-bit extended precision, implemented in software |
-| Sorting | In-memory sort with disk spill; the system `sort` for some routes |
-| Runtime dependencies | glibc on Linux, and `/usr/bin/sort` for the Linux external sort route; system libraries on macOS |
+| Sorting | Built-in stable sorting with disk spill |
+| Runtime dependencies | glibc on Linux; system libraries on macOS |
 | Network access | None |
 
 ## Design principles
 
-Native macOS uses the built-in Sort route and private unlinked Spill storage, without a
-Sort supervisor. [ADR 0010: Native Apple Silicon macOS](https://fastmash.io/adr/0010-native-apple-silicon.html)
+Linux and macOS use built-in sorting and private anonymous Spill storage.
+[ADR 0014: Native sorting in one executable](https://fastmash.io/adr/0014-native-sorting-everywhere.html)
+retires the external Sort route.
+[ADR 0010: Native Apple Silicon macOS](https://fastmash.io/adr/0010-native-apple-silicon.html)
 sets its platform scope. [ADR 0011: Qualify and deliver the same native archive](https://fastmash.io/adr/0011-native-release-delivery.html)
 sets its release delivery boundary.
 
@@ -56,8 +58,7 @@ graph TD
     conv["<b>fastmash-conversion</b><br/>number parsing and formatting"]
     pn["<b>fastmash-portable-numerics</b><br/>software arithmetic"]
     nc["<b>fastmash-numeric-contract</b><br/>80-bit value representation"]
-    sp["<b>fastmash-sort-process</b><br/>sort supervisor and its protocol"]
-    sort[["/usr/bin/sort"]]
+    sp["<b>fastmash-sort-process</b><br/>native OS support"]
 
     cli --> conv
     cli --> pn
@@ -65,9 +66,8 @@ graph TD
     cli --> sp
     conv --> nc
     pn --> nc
-    sp -. "spawns and supervises" .-> sort
 ```
-<!-- description: The fastmash program depends on four library crates: fastmash-conversion, fastmash-portable-numerics, fastmash-numeric-contract and fastmash-sort-process. The conversion and portable-numerics crates build on fastmash-numeric-contract, and fastmash-sort-process spawns and supervises /usr/bin/sort. -->
+<!-- description: The fastmash program depends on four library crates: fastmash-conversion, fastmash-portable-numerics, fastmash-numeric-contract and fastmash-sort-process. The conversion and portable-numerics crates build on fastmash-numeric-contract. The sort-process library supplies private native Spill storage, thread policy and Linux signal support. -->
 
 | Crate | Path | Responsibility |
 | --- | --- | --- |
@@ -75,7 +75,7 @@ graph TD
 | `fastmash-conversion` | `crates/conversion` | Reading numbers from bytes and printing them, missing-value detection, locale number conventions. No `unsafe` code |
 | `fastmash-portable-numerics` | `crates/portable-numerics` | Software 80-bit arithmetic for the numerical rules, including fallback `log` and `exp`. No `unsafe` code |
 | `fastmash-numeric-contract` | `crates/numeric-contract` | The 80-bit extended-precision value type and its classification. `no_std`, no `unsafe` code, no dependencies |
-| `fastmash-sort-process` | `crates/sort-process` | The `fastmash-sort-supervisor` executable and the protocol the program uses to control it |
+| `fastmash-sort-process` | `crates/sort-process` | Private native Spill storage, thread policy and Linux signal support. It builds no executable |
 
 The unpublished `fastmash-corpus-driver` crate in `crates/corpus-driver/` is a
 development tool outside the product dependency graph. Its `fastmash-corpus`
@@ -177,32 +177,26 @@ Some points worth knowing when reading the code:
 
 `-s` sorts records by their grouping keys before grouping. Fastmash chooses a
 **sort route** for each command before it reads input (`sort_route.rs`: `plan`,
-then `run`): whether hash grouping comes first, and which sort follows it. The
-external route's startup checks run then, with the others, so the
-sort after hash grouping is known before hash grouping starts:
+then `run`): whether hash grouping comes first, and whether the native sorter
+keeps selected fields or complete records:
 
 ```mermaid
 flowchart TD
     A["-s with grouping keys"] --> R{"Input from a file, or piped<br/>in a language locale;<br/>no --vnlog or rand?"}
     R -- yes --> Y[Hash grouping<br/>collect each group apart,<br/>sort only the groups]
     Y -- "keys repeat, all exact" --> G
-    Y -- "otherwise: read the<br/>input again" --> B
-    R -- no --> B{"Supported by the<br/>native sorter?"}
-    B -- yes --> C[Sort in memory<br/>stable, by projected keys]
+    Y -- "otherwise: read the<br/>input again" --> C
+    R -- no --> C[Sort in memory<br/>stable, by projected keys]
     C --> D{"Chunk full, and memory<br/>too tight to hold the input?"}
     D -- no --> G[Grouping]
     D -- yes --> E[Spill sorted runs to<br/>anonymous files in TMPDIR]
     E --> F[Merge runs]
     F --> G
-    B -- no --> H{"System sort can<br/>run and work here?"}
-    H -- no --> C
-    H -- yes --> X["External route:<br/>sort supervisor runs /usr/bin/sort"]
-    X --> G
 ```
-<!-- description: With -s and grouping keys, jobs whose input comes from a file, or from a pipe in a language locale (without --vnlog or rand), are grouped by hash first: each group's records are collected apart and only the groups are sorted; where that is not exact or pays too little, the input is read again and sorted by the route the job would otherwise take. Jobs the native sorter supports are sorted in memory; a full chunk that memory does not allow to hold the rest of the input is spilled as a sorted run to anonymous files in TMPDIR, and the runs are merged. Other jobs take the external route, where the sort supervisor runs /usr/bin/sort, if the system sort can run and work there; otherwise they are sorted in memory too. Both routes feed grouping. -->
+<!-- description: With -s and grouping keys, eligible jobs group by hash first: each group's records are collected apart and only the groups are sorted. Where that is not exact or pays too little, the input is read again and sorted in memory by projected keys. Other jobs sort in memory directly. A full chunk that memory does not allow to hold the rest of the input is spilled as a sorted run to anonymous files in TMPDIR, and the runs are merged. Every route feeds grouping inside Fastmash. -->
 
-- **Hash grouping** comes first, before the choice between the native and
-  the external route, when standard input is a regular file
+- **Hash grouping** comes first, before sorting individual records, when
+  standard input is a regular file
   (`projected_hash.rs`). GNU datamash sorts
   with a stable `sort -s`, so each of its groups is exactly the records with
   one key tuple, in input order. Hash grouping collects each tuple's records into that
@@ -235,7 +229,7 @@ flowchart TD
   or where a `-z` record holds a newline. `--vnlog` and `rand` (one generator
   across all groups) always sort.
 - The **native route** sorts in process. It covers every sorted calculation
-  in every locale and sorted `rmdup` in the language locales, whose text
+  and sorted `rmdup` in every supported locale. Language locales' text
   ordering comes from pinned Unicode ICU data built into the program rather
   than the host's locale files.
   A language sort key (`locale.rs`) is the ICU collation key, at three
@@ -258,8 +252,9 @@ flowchart TD
   next eight key bytes, round by round; complete keys are compared only in
   small groups and after 64 bytes of a key. Ties keep input order. In the
   language locales, collation keys are computed in batches on several
-  threads, as are the selected-field projections for other means, higher moments,
-  normality tests and paired statistics grouped by one key in the C locales.
+  threads. Selected-field projections for other means, higher moments,
+  normality tests and paired statistics grouped by one key in the C locales
+  are also prepared in parallel.
   The chunk, with the batches' share, stays within its memory target,
   sized for 64 MiB. It takes 16 MiB first. When a chunk fills, it may grow
   instead of spilling: to hold the whole input of a regular file (an estimate
@@ -302,41 +297,14 @@ flowchart TD
   calculations. `rand`, the other means (`geomean`, `harmmean`, `ms`, `rms`),
   skewness, kurtosis, normality tests and paired statistics use its selected-field
   storage where possible, with the same calculation collector and random state.
-- The **external route** remains, in the C locales, for sorted `rmdup`.
-  Its temporary files go in a private
-  directory in `TMPDIR`, which the supervisor creates and removes. Where it
-  cannot run or work (the conditions are in `sort_route::sort`,
-  `sorted_input::available` and `fastmash_sort_process::available`), these
-  jobs take the native route.
-
-### The sort supervisor
-
-When the external route is used, Fastmash does not run `sort` directly. It
-starts `fastmash-sort-supervisor`, which runs `sort` with a fixed argument list
-in a private temporary directory and guarantees clean-up even if the main
-program is killed.
-
-```mermaid
-sequenceDiagram
-    participant I as standard input
-    participant F as fastmash
-    participant S as fastmash-sort-supervisor
-    participant O as /usr/bin/sort
-    F->>S: spawn sibling executable, with a control socket<br/>and a pidfd for fastmash
-    S->>S: create private temporary directory
-    S->>O: spawn with fixed arguments, LC_ALL=C
-    I->>O: unsorted records (inherited input)
-    O-->>F: sorted records (pipe)
-    F->>S: finish (or abort) over the control socket
-    S->>S: wait for sort, remove temporary directory
-    S-->>F: exit and clean-up status
-    Note over S: If fastmash dies, the pidfd tells the<br/>supervisor to stop sort and clean up
-```
-<!-- description: fastmash spawns the sort supervisor with a control socket and a pidfd. The supervisor creates a private temporary directory and starts /usr/bin/sort with fixed arguments and LC_ALL=C. sort reads the unsorted records from standard input and sends sorted records to fastmash through a pipe. fastmash then tells the supervisor to finish or abort; the supervisor waits for sort, removes the directory and reports its status. If fastmash dies, the pidfd tells the supervisor to stop sort and clean up. -->
-
-The control channel is a small fixed-format message protocol defined in
-`crates/sort-process/src/lib.rs`. The supervisor uses Linux pidfds and
-`close_range`, so this route needs Linux 5.11 or later.
+- Sorted **duplicate removal** retains complete records, in stable key order,
+  and compares duplicate keys exactly. Case folding changes sort order, not
+  duplicate-key equality. It shares the native sorter and Spill storage.
+  A later record whose sort key bytes repeat an earlier record's can never be
+  printed, so it is dropped before sorting. Tracking stops adding keys once
+  they would take a quarter of the sort's memory target, held alongside the
+  sort and released before output, and an exact check after sorting still
+  decides what is printed.
 
 ## Numbers
 
@@ -398,9 +366,8 @@ end the process with `SIGABRT`; all of them are bugs.
   and `getentropy` on macOS. Invocation seeds and private temporary names fail
   when required entropy is unavailable. Hash grouping keeps its existing fixed
   fallback when an internal table seed is unavailable.
-- **No network, no shell.** Fastmash never makes network connections and never
-  passes input to a shell. The only child processes are the sort
-  supervisor and the system `sort` it starts, with a fixed argument list.
+- **No network, shell or child processes.** Fastmash performs calculations and
+  sorting inside its single executable.
 - **Dependencies** are few and pinned. See [`Cargo.toml`](https://github.com/pederbe/fastmash/blob/main/crates/cli/Cargo.toml).
 
 ## Dependencies
@@ -427,7 +394,7 @@ end the process with `SIGABRT`; all of them are bugs.
 | Binding named fields and grouping keys to the Input header | `crates/cli/src/binding.rs` |
 | Reading records: comments, vnlog, the input header, read errors | `crates/cli/src/intake.rs` |
 | Records and field splitting | `crates/cli/src/records.rs` |
-| The sort route | `crates/cli/src/sort_route.rs`, `sorted_input.rs` (the system sort) |
+| The sort route | `crates/cli/src/sort_route.rs` |
 | Hash grouping, and holding piped input to read it again | `crates/cli/src/projected_hash.rs`, `replay.rs` |
 | Sorting and spill | `crates/cli/src/projected_sort.rs`, `projected_spill.rs` |
 | A statistic, for example quantiles | `crates/cli/src/ordered_statistics.rs` |

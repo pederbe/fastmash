@@ -33,6 +33,6 @@ Then update the install page and the landing page's install tabs with
 The build compiles `run_test.rs` with the same Rust and C toolchain used for the
 package. `test.source_files` carries this executable into the isolated test
 directory. The test environment needs no compiler, and the checker is not
-installed into the runtime prefix. It verifies both programs, arithmetic,
+installed into the runtime prefix. It verifies the command, arithmetic,
 grouped output and the retained geometric-mean digits, rejecting a failed
 command even if its output happens to match.

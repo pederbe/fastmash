@@ -25,9 +25,9 @@ Please report security problems privately, as described in
 
 ## Development setup
 
-You need Linux x86-64 (or WSL2), or Apple Silicon macOS 15 or later,
-stable Rust. Website checks also need Python 3.10 or later. Linux development
-also needs GNU or uutils coreutils. Native macOS development is verified by the
+To develop Fastmash, use Linux x86-64 (or WSL2), or Apple Silicon macOS 15 or
+later, with stable Rust. Website checks also need Python 3.10 or later.
+Native macOS development is verified by the
 [native checks](TESTING.md#native-apple-silicon-development-gate).
 
 ```sh

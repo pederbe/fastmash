@@ -109,18 +109,6 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     if !binary.is_file() {
         return Err(Error::message(format!("{} is required", binary.display())));
     }
-    let supervisor = binary.with_file_name("fastmash-sort-supervisor");
-    let supervisor_sha256 = if cfg!(target_os = "linux") {
-        if !supervisor.is_file() {
-            return Err(Error::message(format!(
-                "{} requires fastmash-sort-supervisor beside it on Linux",
-                binary.display()
-            )));
-        }
-        Some(digest(&fs::read(&supervisor)?))
-    } else {
-        None
-    };
     let binary_sha256 = digest(&fs::read(&binary)?);
     if let Some(directory) = &options.evidence_dir {
         prepare_evidence(directory)?;
@@ -151,7 +139,6 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     let evidence = json!({
         "platform": if cfg!(target_os="macos") { "darwin" } else { "linux" },
         "binary": binary, "binary_sha256":binary_sha256,
-        "supervisor_sha256":supervisor_sha256,
         "fixture":fixture.path, "fixture_sha256":fixture.fixture_sha256,
         "content_sha256":fixture.content_sha256,
         "provenance":fixture.provenance_path, "provenance_sha256":fixture.provenance_sha256,
@@ -272,11 +259,6 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     if digest(&fs::read(&binary)?) != binary_sha256
         || digest(&fs::read(&fixture.path)?) != fixture.fixture_sha256
         || digest(&fs::read(&fixture.provenance_path)?) != fixture.provenance_sha256
-        || supervisor_sha256.is_some_and(|hash| {
-            fs::read(&supervisor)
-                .map(|bytes| digest(&bytes) != hash)
-                .unwrap_or(true)
-        })
     {
         return Err(Error::message(
             "executable or fixture identity changed during the run",

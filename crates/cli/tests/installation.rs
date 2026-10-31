@@ -1,4 +1,4 @@
-//! Run explicitly against a Cargo-installed pair, outside the checkout.
+//! Run explicitly against a Cargo-installed command, outside the checkout.
 use std::{fs, path::Path, process::Command};
 
 fn invoke(binary: &Path, cwd: &Path, args: &[&str]) -> std::process::Output {
@@ -15,12 +15,12 @@ fn invoke(binary: &Path, cwd: &Path, args: &[&str]) -> std::process::Output {
 
 #[test]
 #[ignore = "requires FASTMASH_INSTALL_PREFIX pointing at a real Cargo installation"]
-fn installed_pair_and_missing_companion() {
+fn installed_command_and_standalone_copy() {
     let prefix = std::path::PathBuf::from(
         std::env::var_os("FASTMASH_INSTALL_PREFIX").expect("installed prefix"),
     );
     let binary = prefix.join("bin/fastmash");
-    assert!(prefix.join("bin/fastmash-sort-supervisor").is_file());
+    assert!(!prefix.join("bin/fastmash-sort-supervisor").exists());
     let cwd = std::env::temp_dir().join(format!("fastmash-installed-{}", std::process::id()));
     fs::create_dir(&cwd).unwrap();
     fs::write(cwd.join("input"), b"1\n2\n3\n").unwrap();
@@ -42,7 +42,7 @@ fn installed_pair_and_missing_companion() {
     assert!(median.status.success());
     assert_eq!(median.stdout, b"2\n");
 
-    // A standalone copy, without the supervisor, sorts such jobs in process.
+    // A standalone copy sorts through the same native route.
     let alone = cwd.join("fastmash");
     fs::copy(&binary, &alone).unwrap();
     fs::write(cwd.join("input"), b"b\t2\t3\na\t1\t2\na\t3\t6\n").unwrap();

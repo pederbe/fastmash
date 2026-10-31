@@ -27,8 +27,7 @@ Requires:       coreutils
 %description
 Fastmash computes statistics and table transformations over delimited text
 using the GNU datamash command language. Software 80-bit arithmetic gives
-portable numerical results. Both the command and its Sort supervisor are
-installed together.
+portable numerical results.
 
 %prep
 %autosetup -n fastmash-%{version}
@@ -58,8 +57,7 @@ bin=%{buildroot}%{_bindir}
 %files
 %license LICENSE-MIT LICENSE-APACHE THIRD-PARTY-LICENSES.md LICENSE.dependencies cargo-vendor.txt
 %doc README.md CHANGELOG.md
-%{_bindir}/fastmash
-%{_bindir}/fastmash-sort-supervisor
+%{_bindir}/fastmash*
 
 %changelog
 * Sat Oct 24 2026 Peder Bergan - 0.2.0-1

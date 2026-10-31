@@ -55,3 +55,4 @@
     - [0011: Native release delivery](adr/0011-native-release-delivery.md)
 - [0012: Release delivery and performance](adr/0012-release-delivery-and-performance.md)
 - [0013: Reuse tested release artifacts](adr/0013-reuse-tested-release-artifacts.md)
+- [0014: Native sorting in one executable](adr/0014-native-sorting-everywhere.md)

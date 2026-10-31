@@ -33,13 +33,13 @@ jobs:
           awk -v v="$version" 'index($0, "## [" v "]") == 1 {on = 1; next}
             on && index($0, "## [") == 1 {exit} on {print}' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           test -s "$RUNNER_TEMP/notes.md"
-      # Two clean builds establish reproducibility. Package one of those pairs.
-      - name: Build reproducible Linux executables
+      # Two clean builds establish reproducibility. Package one of those executables.
+      - name: Build a reproducible Linux executable
         run: |
           bash release/prepare-linux.sh
           mkdir -p out/target/release
           cp "$RUNNER_TEMP/weekly-linux/out/first/release/fastmash" \
-             "$RUNNER_TEMP/weekly-linux/out/first/release/fastmash-sort-supervisor" out/target/release/
+             out/target/release/
           docker run --rm -v "$PWD:/source:ro" -v "$PWD/out:/out" \
             -e CARGO_TARGET_DIR=/out/notices fastmash-weekly-builder bash -c \
             'CARGO_HOME=/tmp/cargo cargo run --locked --release -p fastmash-license-notices --manifest-path /source/Cargo.toml > /out/THIRD-PARTY-LICENSES.md'
@@ -63,7 +63,7 @@ jobs:
         run: |
           name="fastmash-${RELEASE_TAG}-x86_64-unknown-linux-gnu"
           mkdir "$name"
-          cp out/target/release/fastmash out/target/release/fastmash-sort-supervisor \
+          cp out/target/release/fastmash \
              out/THIRD-PARTY-LICENSES.md README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$name/"
           cp release/delivery.sha256 "$name/binary.sha256"
           tar -czf "$name.tar.gz" "$name"

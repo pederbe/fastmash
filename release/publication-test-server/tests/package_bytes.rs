@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-const PROGRAMS: [&str; 2] = ["fastmash", "fastmash-sort-supervisor"];
+const PROGRAMS: [&str; 1] = ["fastmash"];
 
 struct Fixture {
     root: PathBuf,
@@ -36,13 +36,9 @@ impl Fixture {
         };
         fs::create_dir(&fixture.bin).unwrap();
         fs::create_dir_all(fixture.package.join("usr/bin")).unwrap();
-        for (program, bytes) in [
-            (PROGRAMS[0], b"\0\xffqualified CLI\n".repeat(1400)),
-            (PROGRAMS[1], b"sort\0supervisor\xfe\n".repeat(1600)),
-        ] {
-            fs::write(fixture.bin.join(program), &bytes).unwrap();
-            fs::write(fixture.packaged(program), &bytes).unwrap();
-        }
+        let bytes = b"\0\xffqualified CLI\n".repeat(1400);
+        fs::write(fixture.bin.join("fastmash"), &bytes).unwrap();
+        fs::write(fixture.packaged("fastmash"), &bytes).unwrap();
         fixture
     }
 

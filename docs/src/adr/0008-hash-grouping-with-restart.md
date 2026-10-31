@@ -2,6 +2,10 @@
 
 Status: accepted.
 
+[ADR 0014: Native sorting in one executable](0014-native-sorting-everywhere.md)
+retires the system-sort fallback mentioned below. Hash grouping and its replay
+rules are unchanged.
+
 GNU datamash sorts every record for `-s`, with a stable `sort -s`, so each of
 its groups is exactly the records with one key, in input order. Typical inputs
 have far fewer groups than records. When standard input is a regular file,

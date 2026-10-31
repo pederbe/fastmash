@@ -18,13 +18,11 @@ impl Fixture {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
-        for name in ["fastmash", "fastmash-sort-supervisor"] {
-            fs::copy(
-                env!("CARGO_BIN_EXE_fastmash-source-package-fixture"),
-                path.join(name),
-            )
-            .unwrap();
-        }
+        fs::copy(
+            env!("CARGO_BIN_EXE_fastmash-source-package-fixture"),
+            path.join("fastmash"),
+        )
+        .unwrap();
         Self(path)
     }
 
@@ -64,10 +62,10 @@ fn wrong_bytes_and_failed_commands_with_matching_bytes_are_rejected() {
 }
 
 #[test]
-fn missing_and_nonexecutable_supervisors_are_rejected() {
+fn missing_and_nonexecutable_commands_are_rejected() {
     for missing in [true, false] {
         let fixture = Fixture::new();
-        let supervisor = fixture.0.join("fastmash-sort-supervisor");
+        let supervisor = fixture.0.join("fastmash");
         if missing {
             fs::remove_file(supervisor).unwrap();
         } else {

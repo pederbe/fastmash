@@ -21,7 +21,7 @@ CARGO_ENCODED_RUSTFLAGS=$(IFS=$'\x1f'; printf '%s' "${flags[*]}")
 export CARGO_ENCODED_RUSTFLAGS
 test -f /opt/fastmash-link/libgcc_s.a
 cargo build --locked --release -p fastmash --bins
-for binary in fastmash fastmash-sort-supervisor; do
+for binary in fastmash; do
   if readelf -d "$CARGO_TARGET_DIR/release/$binary" | grep -q libgcc_s; then
     echo "$binary still needs libgcc_s: the release link shim did not apply" >&2
     exit 1

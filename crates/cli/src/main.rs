@@ -95,7 +95,6 @@ mod selection;
 #[cfg(test)]
 mod selection_tests;
 mod sort_route;
-mod sorted_input;
 mod standard_io;
 mod standard_stream_io;
 mod table_checks;
@@ -214,20 +213,15 @@ fn initialize_random(
 }
 
 fn initialize_before_input<T>(
-    sorted: bool,
     needs_random: bool,
     explicit_seed: Option<u32>,
     source: &mut impl random::SeedSource,
     command_setup: impl FnOnce() -> Result<(), Failure>,
     startup: impl FnOnce() -> Result<T, Failure>,
-    sort_admit: impl FnOnce() -> Result<(), Failure>,
 ) -> Result<(T, Option<random::RandomState>), Failure> {
     command_setup()?;
     let arithmetic = startup()?;
     let random = initialize_random(needs_random, explicit_seed, source)?;
-    if sorted {
-        sort_admit()?;
-    }
     Ok((arithmetic, random))
 }
 
@@ -418,18 +412,12 @@ fn run_scanned_with_sources(
             }
             preparation::Prepared::Ordinary(prepared) => prepared.into_parts(),
         };
-    let mut cleared = None;
     let (mut arithmetic, mut random) = initialize_before_input(
-        route.is_some_and(|route| route.sort == sort_route::Sort::External),
         needs.random,
         options.seed,
         seed_source,
         setup_sigpipe,
         || numerics::Numerics::with(needs.numerics).map_err(numeric_failure),
-        || {
-            cleared = Some(sorted_input::admit(&policy)?);
-            Ok(())
-        },
     )?;
     if let Some(route) = route {
         return sort_route::run(
@@ -440,7 +428,6 @@ fn run_scanned_with_sources(
             binding,
             &mut arithmetic,
             random.as_mut(),
-            cleared,
             report,
         );
     }
@@ -472,7 +459,7 @@ fn calculate(
     mut binding: binding::Binding<'_>,
     arithmetic: &mut numerics::Numerics,
     random: Option<&mut random::RandomState>,
-    // The Input header, where the external route read it before sorting.
+    // An Input header already read while preparing a sorted stream.
     prepared: Option<Vec<u8>>,
 ) -> Result<(), Failure> {
     if options.csv_in {
@@ -1046,7 +1033,7 @@ mod command_tests {
     }
 
     #[test]
-    fn lifecycle_orders_runtime_entropy_and_sort_admission() {
+    fn lifecycle_orders_runtime_and_entropy() {
         let rand = OperationSet::new(grammar::parse(&args(&["rand", "1"])).ok().unwrap())
             .ok()
             .unwrap()
@@ -1055,37 +1042,22 @@ mod command_tests {
             .random;
         let runtime = unsupported("runtime first");
         let error = initialize_before_input(
-            true,
             rand,
             None,
             &mut PanicSource,
             || Ok(()),
             || Err::<(), _>(runtime),
-            || panic!("sort admission must not precede runtime admission"),
         )
         .err()
         .unwrap();
         assert_eq!(error.message, b"runtime first\n");
 
         let mut source = FailingSource::default();
-        let mut sort_called = false;
-        let error = initialize_before_input(
-            true,
-            rand,
-            None,
-            &mut source,
-            || Ok(()),
-            || Ok(()),
-            || {
-                sort_called = true;
-                Ok(())
-            },
-        )
-        .err()
-        .unwrap();
+        let error = initialize_before_input(rand, None, &mut source, || Ok(()), || Ok(()))
+            .err()
+            .unwrap();
         assert_eq!(error.message, b"unable to initialize random state\n");
         assert_eq!(source.calls, 1);
-        assert!(!sort_called);
     }
 
     fn args(items: &[&str]) -> Vec<std::ffi::OsString> {
@@ -1195,17 +1167,10 @@ mod portable_routing_tests {
                 panic!("no random request")
             }
         }
-        let (session, _) = initialize_before_input(
-            true,
-            needs_random,
-            None,
-            &mut NoEntropy,
-            || Ok(()),
-            || Ok(42u32),
-            || Ok(()),
-        )
-        .ok()
-        .unwrap();
+        let (session, _) =
+            initialize_before_input(needs_random, None, &mut NoEntropy, || Ok(()), || Ok(42u32))
+                .ok()
+                .unwrap();
         assert_eq!(session, 42);
     }
 }

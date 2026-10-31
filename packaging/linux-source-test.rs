@@ -49,13 +49,11 @@ fn run() -> io::Result<()> {
         }
     };
     let bin = Path::new(bin);
-    for name in ["fastmash", "fastmash-sort-supervisor"] {
-        let metadata = fs::metadata(bin.join(name))?;
-        if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
-            return Err(io::Error::other(format!(
-                "missing or nonexecutable program: {name}"
-            )));
-        }
+    let metadata = fs::metadata(bin.join("fastmash"))?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+        return Err(io::Error::other(
+            "missing or nonexecutable program: fastmash",
+        ));
     }
     if let Some(docs) = docs {
         for name in ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"] {
@@ -100,8 +98,7 @@ fn run() -> io::Result<()> {
     expect(&output, b"a\t2\nb\t0\n", "paired operation")?;
     if !matches!(
         output.stderr.as_slice(),
-        b"sort route: system sort\n"
-            | b"sort route: native sort of the selected fields\n"
+        b"sort route: native sort of the selected fields\n"
             | b"sort route: native sort of whole records\n"
     ) {
         return Err(io::Error::other(format!(
@@ -120,14 +117,9 @@ fn run() -> io::Result<()> {
     }
     let rmdup = pipe(rmdup, b"b\t2\na\t1\nb\t3\n")?;
     expect(&rmdup, b"a\t1\nb\t2\n", "sorted rmdup")?;
-    // Current packages run sorted rmdup through the supervisor. Older ones
-    // report no route for it, and the paired operation used it instead.
-    let system = b"sort route: system sort\n".as_slice();
-    if !matches!(rmdup.stderr.as_slice(), b"sort route: system sort\n" | b"")
-        || (rmdup.stderr != system && output.stderr != system)
-    {
+    if rmdup.stderr != b"sort route: native sort of whole records\n" {
         return Err(io::Error::other(format!(
-            "no Command used the system sort through the installed supervisor: {:?}",
+            "sorted rmdup did not use native sorting: {:?}",
             String::from_utf8_lossy(&rmdup.stderr)
         )));
     }

@@ -29,9 +29,6 @@ impl TestRun {
         DirBuilder::new().mode(0o700).create(&root).unwrap();
         let binary = root.join("command");
         fs::copy(env!("CARGO_BIN_EXE_fastmash-corpus-test-command"), &binary).unwrap();
-        // Admission requires the sibling's identity on Linux. The ordinary
-        // fixture command does not execute it, so no product binary is needed.
-        fs::copy(&binary, root.join("fastmash-sort-supervisor")).unwrap();
         let fixture = root.join("cases.jsonl.gz");
         let result = Self {
             root,
@@ -928,9 +925,4 @@ fn fixture_identity_inventory_and_evidence_reuse_fail_closed() {
         case("duplicate", "echo", b"", b"", b"", 0),
     ]);
     assert_eq!(run.run(&[]).status.code(), Some(2));
-    #[cfg(target_os = "linux")]
-    {
-        fs::remove_file(run.root.join("fastmash-sort-supervisor")).unwrap();
-        assert_eq!(run.run(&[]).status.code(), Some(2));
-    }
 }

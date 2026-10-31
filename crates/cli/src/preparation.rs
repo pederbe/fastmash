@@ -5,7 +5,7 @@ use super::{
     options::{Options, Setting},
     projected_sort,
     records::Separator,
-    sort_route, sorted_input, unsupported,
+    sort_route, unsupported,
 };
 
 #[derive(Default)]
@@ -394,15 +394,10 @@ pub(super) fn prepare<'o, 'p>(
                 hash_eligible: projected_sort::hash_eligible(options, &binding.operations),
                 grouping: projected_sort::grouping(environment.grouping.as_deref())?,
                 language: policy.language(),
-                // Every calculation is supported. Storage selection separately
-                // retains whole records where selected fields cannot serve it.
-                covered: true,
                 packed: projected_sort::packed(options, native),
                 hold: sort_route::Hold::setting(environment.pipe_grouping.as_deref())?,
             };
-            Some(sort_route::plan(facts, || {
-                sorted_input::available(options.input)
-            }))
+            Some(sort_route::plan(facts))
         }
     } else {
         None
