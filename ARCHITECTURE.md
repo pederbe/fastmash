@@ -301,9 +301,10 @@ flowchart TD
   and compares duplicate keys exactly. Case folding changes sort order, not
   duplicate-key equality. It shares the native sorter and Spill storage.
   A later record whose sort key bytes repeat an earlier record's can never be
-  printed, so it is dropped before sorting. The keys tracked for this take at
-  most a quarter of the sort's memory target, and an exact check after
-  sorting still decides what is printed.
+  printed, so it is dropped before sorting. Tracking stops adding keys once
+  they would take a quarter of the sort's memory target, held alongside the
+  sort and released before output, and an exact check after sorting still
+  decides what is printed.
 
 ## Numbers
 

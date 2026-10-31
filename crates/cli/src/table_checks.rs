@@ -225,16 +225,17 @@ fn native_dedup<W: Write>(
     } else {
         Filter::of(options)
     });
-    let mut repeats = Repeats::new(options)?;
-    let distinct = std::cell::Cell::new(repeats.distinct);
-    let mut admit = |key: &[u8]| {
-        let admitted = repeats.admit(key);
-        distinct.set(repeats.distinct);
-        admitted
+    let repeats = std::cell::RefCell::new(Some(Repeats::new(options)?));
+    let mut admit = |key: &[u8]| match repeats.borrow_mut().as_mut() {
+        Some(repeats) => repeats.admit(key),
+        None => Err(unsupported("internal dedup admitted after sorting")),
     };
     super::projected_sort::sorted_rows(reader, unsorted, options, &[number], &mut admit, |record| {
-        // Every Record has been admitted before the first is consumed.
-        state.distinct = distinct.get();
+        // Every Record has been admitted before the first is consumed, so the
+        // tracked keys are released then.
+        if let Some(done) = repeats.borrow_mut().take() {
+            state.distinct = done.distinct;
+        }
         match sorted.accept(record)? {
             Accepted::Skipped => Ok(()),
             Accepted::Header => state.header(record, output, options),
@@ -283,7 +284,7 @@ impl KeyTable {
         }
         let hash = hash | 1;
         let mask = self.slots.len() - 1;
-        let mut at = hash as usize & mask;
+        let mut at = (hash >> 1) as usize & mask;
         for _ in 0..limit.min(self.slots.len()) {
             let slot = &self.slots[at];
             if slot.hash == 0 {
@@ -310,14 +311,30 @@ impl KeyTable {
         (self.slots.len() * 2).max(Self::FIRST)
     }
 
-    /// The memory held with `slots` slots and `more` key bytes.
+    /// The memory held with `slots` slots, one more entry and `more` key
+    /// bytes, as the vectors' capacities after amortized growth, and the
+    /// current slots too while they are rehashed into more.
     fn memory(&self, slots: usize, more: usize) -> Option<usize> {
-        let entries = (self.entries.len() + 1).checked_mul(std::mem::size_of::<Entry>())?;
+        fn capacity(capacity: usize, needed: usize) -> usize {
+            if needed > capacity {
+                needed.max(capacity.saturating_mul(2))
+            } else {
+                capacity
+            }
+        }
+        let entries = capacity(self.entries.capacity(), self.entries.len() + 1)
+            .checked_mul(std::mem::size_of::<Entry>())?;
+        let keys = capacity(self.keys.capacity(), self.keys.len().checked_add(more)?);
+        let rehashed = if slots > self.slots.len() {
+            self.slots.len()
+        } else {
+            0
+        };
         slots
+            .checked_add(rehashed)?
             .checked_mul(std::mem::size_of::<Slot>())?
             .checked_add(entries)?
-            .checked_add(self.keys.len())?
-            .checked_add(more)
+            .checked_add(keys)
     }
 
     fn grow(&mut self) -> Result<(), Failure> {
@@ -327,7 +344,7 @@ impl KeyTable {
         slots.resize(size, Slot::default());
         let mask = size - 1;
         for slot in self.slots.iter().filter(|slot| slot.hash != 0) {
-            let mut at = slot.hash as usize & mask;
+            let mut at = (slot.hash >> 1) as usize & mask;
             while slots[at].hash != 0 {
                 at = (at + 1) & mask;
             }

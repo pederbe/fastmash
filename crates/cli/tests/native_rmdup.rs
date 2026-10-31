@@ -212,7 +212,9 @@ fn duplicate_removal_preserves_the_quoted_csv_refusal() {
 }
 
 fn run(args: &[&str], input: &[u8], memory: &str) -> std::process::Output {
-    let root = temp_dir::TempDir::new("native-rmdup-run");
+    static RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let run = RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let root = temp_dir::TempDir::new(&format!("native-rmdup-run-{run}"));
     let path = root.0.join("input");
     fs::write(&path, input).unwrap();
     test_process::bounded(executable::fastmash(), 30)
@@ -265,4 +267,27 @@ fn native_duplicate_removal_keeps_first_records_beyond_tracked_keys() {
         assert!(output.status.success(), "{memory}: {output:?}");
         assert!(output.stdout == expected, "{memory}");
     }
+}
+
+#[test]
+fn native_duplicate_removal_drops_tracked_keys_once_tracking_is_full() {
+    // Frequent repeats keep the filter on while distinct keys fill its table.
+    let mut rows = Vec::new();
+    rows.extend((0..140_000u32).map(|row| format!("hot{}", row % 3)));
+    rows.extend((0..140_000u32).map(|row| format!("cold{:06}", row * 7_919 % 140_000)));
+    rows.extend((0..3_000u32).map(|row| format!("hot{}", row % 3)));
+    rows.extend((0..3_000u32).map(|row| format!("cold{:06}", row * 31 % 140_000)));
+    let mut input = Vec::new();
+    let mut first = std::collections::BTreeMap::new();
+    for (row, key) in rows.into_iter().enumerate() {
+        input.extend_from_slice(format!("{key}\t{row}\n").as_bytes());
+        first.entry(key).or_insert(row);
+    }
+    let expected: Vec<u8> = first
+        .iter()
+        .flat_map(|(key, row)| format!("{key}\t{row}\n").into_bytes())
+        .collect();
+    let output = run(&["-s", "rmdup", "1"], &input, "262144");
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout == expected);
 }
