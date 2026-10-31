@@ -33,6 +33,7 @@ jobs:
       locale: ${{ steps.paths.outputs.locale }}
       packages_repository: ${{ steps.paths.outputs.packages_repository }}
       binstall: ${{ steps.paths.outputs.binstall }}
+      release_changelog: ${{ steps.paths.outputs.release_changelog }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,6 +53,15 @@ jobs:
         id: paths
         with:
           filters: |
+            release_changelog:
+              - 'tools/release-changelog/**'
+              - 'scripts/check-release-changelog.sh'
+              - 'scripts/record-release-changelog.sh'
+              - 'scripts/configure-release-changelog.sh'
+              - 'scripts/prepare-release.sh'
+              - '.github/workflows/release-changelog.yml'
+              - '.github/workflows/release-changelog-check.yml'
+              - '.github/workflows/ci.yml'
             homebrew:
               - '.github/workflows/homebrew.yml'
               - 'packaging/homebrew/**'
@@ -129,6 +139,24 @@ jobs:
               cargo clippy -p "$package" --all-targets --locked -- -D warnings
             done
           fi
+
+  release-changelog:
+    name: Release changelog tooling
+    needs: changes
+    if: >-
+      !cancelled() &&
+      (github.event_name == 'workflow_dispatch' ||
+       (!github.event.repository.private &&
+        (needs.changes.outputs.release_changelog != 'false' || needs.changes.outputs.application != 'false' || needs.changes.outputs.configuration == 'true')))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: "1.99.1"
+          components: rustfmt, clippy
+      - run: bash scripts/check-release-changelog.sh
 
   test:
     name: Test
@@ -214,7 +242,7 @@ jobs:
           printf '61875daad67888798690dea3cb2748279df6ac299c5c6a857d67eed7642473d9  %s\n' "$RUNNER_TEMP/samply.tar.xz" | sha256sum -c -
           tar -xJf "$RUNNER_TEMP/samply.tar.xz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/samply-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
-          cargo install hotpath --version 0.30.0 --bin hotpath-samply --no-default-features --locked
+          cargo install hotpath --version 0.30.2 --bin hotpath-samply --no-default-features --locked
           sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.yama.ptrace_scope=0 kernel.kptr_restrict=0
       - name: Capture attributed CPU samples
         if: runner.os == 'Linux'
@@ -367,7 +395,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, check, test, profiling, msrv, licenses, native, release-linux, documentation, homebrew, locale, packages-repository, binstall]
+    needs: [changes, check, release-changelog, test, profiling, msrv, licenses, native, release-linux, documentation, homebrew, locale, packages-repository, binstall]
     if: always()
     runs-on: ubuntu-26.04
     steps:

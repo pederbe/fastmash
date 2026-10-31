@@ -21,6 +21,17 @@ independent verification. The release notes combine new authored entries with
 commits grouped into breaking changes, additions, fixes and other changes.
 Each tagged changelog keeps the preceding release history.
 
+The release tool replaces the shipping Unreleased heading with the version and
+UTC release date. It accepts a changelog with only dated sections and retains
+the frozen date on retries. It does not create an empty pending section.
+
+After publication, `Release changelog` records the dated notes on `main` through
+a pull request and the maintained documentation checks. It preserves later
+pending entries and historical edits. Publication events and completed Release
+workflows trigger this job. Draft and check-only runs do not update `main`.
+Use the workflow's manual check-only mode to inspect a published tag or retry
+its recording without rebuilding or republishing the release.
+
 Before preparing a release, compare the Unreleased entries with all merged
 changes since the previous published release. Check capabilities, fixes,
 installation, support boundaries, Numerical profile changes and upgrade

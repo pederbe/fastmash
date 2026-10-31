@@ -27,7 +27,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Optional diagnostics only. Ordinary builds do not compile or link hotpath.
-hotpath = { version = "0.30.0", optional = true, default-features = false }
+hotpath = { version = "0.30.2", optional = true, default-features = false }
 fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.2.0" }
 fastmash-conversion = { path = "../conversion", version = "=0.2.0" }
 fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.2.0" }
