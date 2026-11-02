@@ -69,7 +69,8 @@ releases. GitHub automatically merges the batch after the required CI result
 passes, covering every applicable platform, documentation and package check.
 The daily self-hosted run updates Cargo, npm, Actions, container digests and the
 custom tools in `.github/dependency-pins.json`. The synchronization helper keeps
-release archive hashes and compiler versions together before pushing the PR.
+tool download hashes together before pushing the PR. Release builders resolve
+the current stable Rust toolchain and record its actual version in each archive.
 The independent Unicode 15 reference crates in `crates/locale-tools` stay
 fixed. Reconsider those pins when the retained reference contract changes.
 Urgent security fixes may produce separate pull requests outside the daily batch.

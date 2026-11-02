@@ -48,7 +48,7 @@ cargo build --locked --manifest-path release/publication-test-server/Cargo.toml 
 checker=$work/tools/$target/debug/fastmash-check-archive
 if [ "$mode" = release ]; then
     # Stable source and dependency paths make separate clean target trees
-    # comparable. The hosted compiler is pinned by the calling workflow.
+    # comparable. The calling workflow selects the current stable compiler.
     export RUSTFLAGS="--remap-path-prefix=$root=/fastmash --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}/registry/src=/deps"
     unset CARGO_ENCODED_RUSTFLAGS
     export CARGO_TARGET_DIR="$work/first"

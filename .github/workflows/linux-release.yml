@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: "1.99.1"
+          toolchain: stable
       # The tag's CHANGELOG section, dated, becomes the release notes.
       - name: Release notes
         run: |
@@ -66,6 +66,7 @@ jobs:
           cp out/target/release/fastmash \
              out/THIRD-PARTY-LICENSES.md README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$name/"
           cp release/delivery.sha256 "$name/binary.sha256"
+          cp "$RUNNER_TEMP/weekly-linux/out/build-provenance.txt" "$name/build-provenance.txt"
           tar -czf "$name.tar.gz" "$name"
           sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
       - name: Test the archive
