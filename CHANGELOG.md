@@ -8,12 +8,13 @@ may include incompatible changes; they are always listed under **Changed**.
 A change to any numerical output is always listed, together with the
 numerical profile version that introduced it.
 
-## [Unreleased]
+## [0.4.0] - 2026-11-02
 
 ### Development
 
 - Release builds follow stable Rust and record the actual build tools in each
   archive instead of requiring an old compiler and manually synchronized downloads.
+
 - Follow rolling stable Rust and install the standard analysis, source, formatting and lint components with the project toolchain.
 
 ### Fixed
@@ -25,6 +26,7 @@ numerical profile version that introduced it.
 
 - Reduce record copying in ungrouped ordinary-text calculations without
   `--full` or per-row operations.
+
 - Source builds use the latest stable Rust. The Rust 1.88 minimum compiler
   promise and its dedicated compatibility checks have been removed.
 
@@ -52,6 +54,70 @@ numerical profile version that introduced it.
 
 - Homebrew installs prebuilt bottles that follow each release within a day, and
   the installation guide now leads with apt, dnf and Homebrew.
+
+### Other changes
+
+- Borrow buffered records for ungrouped text calculations (#184) ([0535224](https://github.com/pederbe/fastmash/commit/0535224))
+- Use rolling stable Rust for release builds (#181) ([b667e30](https://github.com/pederbe/fastmash/commit/b667e30))
+- Remove the minimum Rust compiler promise (#180) ([f9a8bab](https://github.com/pederbe/fastmash/commit/f9a8bab))
+- Follow rolling stable Rust for development and CI (#178) ([5a5b95b](https://github.com/pederbe/fastmash/commit/5a5b95b))
+- Update daily dependencies (#177) ([bce70a1](https://github.com/pederbe/fastmash/commit/bce70a1))
+- Address review of the repeated-key filter ([f51923c](https://github.com/pederbe/fastmash/commit/f51923c))
+- Update daily dependencies (#175) ([9ac3766](https://github.com/pederbe/fastmash/commit/9ac3766))
+- Skip repeated keys before sorting in sorted rmdup ([16bb453](https://github.com/pederbe/fastmash/commit/16bb453))
+- Record published changelog for v0.3.0 (#174) ([e931c86](https://github.com/pederbe/fastmash/commit/e931c86))
+- Finalize release notes and record publications on main (#172) ([cba9acd](https://github.com/pederbe/fastmash/commit/cba9acd))
+- Keep cgroup writeback Linux-only and trust the Homebrew test formula ([c3f891b](https://github.com/pederbe/fastmash/commit/c3f891b))
+- Complete native error coverage and preserve failed upgrades ([7186181](https://github.com/pederbe/fastmash/commit/7186181))
+- Use native duplicate removal and retire the external sorter ([47370e4](https://github.com/pederbe/fastmash/commit/47370e4))
+- Describe native preparation as field projection ([00776dd](https://github.com/pederbe/fastmash/commit/00776dd))
+- Account for changelog coverage in changes and release preparation (#171) ([fbb7ee9](https://github.com/pederbe/fastmash/commit/fbb7ee9))
+- Use swap_remove for unordered vectors (#170) ([033e444](https://github.com/pederbe/fastmash/commit/033e444))
+- Align glossary, website metadata and delivery checks ([49b5041](https://github.com/pederbe/fastmash/commit/49b5041))
+- Update daily dependencies (#168) ([73ee2af](https://github.com/pederbe/fastmash/commit/73ee2af))
+- Show current pull request CI status in the README badge (#167) ([16449a7](https://github.com/pederbe/fastmash/commit/16449a7))
+- Update daily dependencies (#162) ([aea4221](https://github.com/pederbe/fastmash/commit/aea4221))
+- Enable native dependency auto-merge behind complete CI (#166) ([7fc5fe9](https://github.com/pederbe/fastmash/commit/7fc5fe9))
+- Check cargo-binstall installs the published executables (#163) ([2355d17](https://github.com/pederbe/fastmash/commit/2355d17))
+- Clarify Homebrew verification after publication (#165) ([6ddf28b](https://github.com/pederbe/fastmash/commit/6ddf28b))
+- Publish Homebrew bottles for each release and lead installation with package managers (#161) ([9d96340](https://github.com/pederbe/fastmash/commit/9d96340))
+- Reuse tested release artifacts and separate website deployment (#158) ([a81ea8c](https://github.com/pederbe/fastmash/commit/a81ea8c))
+- Retain checked website assets for manual deployment (#157) ([2f5ea2b](https://github.com/pederbe/fastmash/commit/2f5ea2b))
+- Keep repository RPM signatures compatible with AlmaLinux 8 (#156) ([a7595a9](https://github.com/pederbe/fastmash/commit/a7595a9))
+- Document automatic package publication environment (#155) ([7c9b0e6](https://github.com/pederbe/fastmash/commit/7c9b0e6))
+- Address review of native calculations ([cd1811c](https://github.com/pederbe/fastmash/commit/cd1811c))
+- Test that the merge pipe keeps blank fields from reading on ([90edc89](https://github.com/pederbe/fastmash/commit/90edc89))
+- Rewrap the native calculation changelog entry ([e63eb01](https://github.com/pederbe/fastmash/commit/e63eb01))
+- Keep basic native reductions on serial preparation ([ed53bac](https://github.com/pederbe/fastmash/commit/ed53bac))
+- Include worker projection ranges in the preparation allowance ([97da40a](https://github.com/pederbe/fastmash/commit/97da40a))
+- Charge selected-field metadata to native preparation batches ([6eae332](https://github.com/pederbe/fastmash/commit/6eae332))
+- Check deferred crossing errors against whole-record parsing ([cc34544](https://github.com/pederbe/fastmash/commit/cc34544))
+- Prepare eligible native byte-order records in bounded parallel batches ([7800008](https://github.com/pederbe/fastmash/commit/7800008))
+- Enable route traces in shared key segment coverage ([669048a](https://github.com/pederbe/fastmash/commit/669048a))
+- Reuse exact grouping key segments during native preparation ([122af8a](https://github.com/pederbe/fastmash/commit/122af8a))
+- Revert "Pass native merge records directly to ordered calculations" ([32a25f7](https://github.com/pederbe/fastmash/commit/32a25f7))
+- Pass native merge records directly to ordered calculations ([c85444f](https://github.com/pederbe/fastmash/commit/c85444f))
+- Cover paired cache error order in both selector directions ([95ccec6](https://github.com/pederbe/fastmash/commit/95ccec6))
+- Cache the later field of paired calculations ([e4e7675](https://github.com/pederbe/fastmash/commit/e4e7675))
+- Limit spill writeback to numerical C-locale calculations ([92c33f5](https://github.com/pederbe/fastmash/commit/92c33f5))
+- Bound spill writeback windows to eight MiB ([2c9c56b](https://github.com/pederbe/fastmash/commit/2c9c56b))
+- Flush short dirty tails of completed native spill runs ([d176412](https://github.com/pederbe/fastmash/commit/d176412))
+- Reuse identical central-moment intermediates in Jarque calculations ([53a2427](https://github.com/pederbe/fastmash/commit/53a2427))
+- Experiment with retained clean spill pages after writeback ([50f9c82](https://github.com/pederbe/fastmash/commit/50f9c82))
+- Balance native spill merging, field parsing and calculation ([1bafc94](https://github.com/pederbe/fastmash/commit/1bafc94))
+- Reserve merge pipe buffers only for final streaming merge ([a7021c3](https://github.com/pederbe/fastmash/commit/a7021c3))
+- Overlap native Spill merging with ordered calculation ([d7109dd](https://github.com/pederbe/fastmash/commit/d7109dd))
+- Tune native spill record handling and writeback ([10c39ca](https://github.com/pederbe/fastmash/commit/10c39ca))
+- Keep exercising the installed Linux supervisor through sorted rmdup ([110eeeb](https://github.com/pederbe/fastmash/commit/110eeeb))
+- Admit native calculation traces in installed package checks ([085c8f1](https://github.com/pederbe/fastmash/commit/085c8f1))
+- Update calculation route and descriptor failure expectations ([c1606f9](https://github.com/pederbe/fastmash/commit/c1606f9))
+- Match GNU field parsing in separator regression expectations ([53abfdd](https://github.com/pederbe/fastmash/commit/53abfdd))
+- Cover migrated calculations through hash replay and spill ([044fe16](https://github.com/pederbe/fastmash/commit/044fe16))
+- Remove the superseded numerical sort coverage predicate ([f305ed5](https://github.com/pederbe/fastmash/commit/f305ed5))
+- Route every C-locale calculation through native sorting ([3daace7](https://github.com/pederbe/fastmash/commit/3daace7))
+- Project selected fields for remaining native calculations ([209b710](https://github.com/pederbe/fastmash/commit/209b710))
+
+[Full comparison](https://github.com/pederbe/fastmash/compare/v0.3.0...v0.4.0)
 
 ## [0.3.0] - 2026-10-26
 
