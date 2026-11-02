@@ -221,7 +221,6 @@ impl<'p> Intake<'p> {
         self.accept_data(buffer)
     }
 
-    #[inline]
     fn accept_data(&mut self, buffer: &[u8]) -> Result<Accepted, Failure> {
         let data = match self.filter {
             Filter::None => buffer.len(),
@@ -256,6 +255,10 @@ impl<'p> Intake<'p> {
                     return Ok(());
                 }
             };
+            if available.is_empty() {
+                self.ended = true;
+                return Ok(());
+            }
             let mut consumed = 0;
             while let Some(end) = memchr::memchr(self.terminator, &available[consumed..]) {
                 let bytes = &available[consumed..consumed + end];
@@ -519,6 +522,29 @@ mod tests {
             );
             assert!(intake.finish().is_ok());
         }
+    }
+
+    #[test]
+    fn visiting_records_stops_at_the_first_eof() {
+        struct OneEof(bool);
+        impl io::Read for OneEof {
+            fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+                assert!(!self.0, "read after EOF");
+                self.0 = true;
+                Ok(0)
+            }
+        }
+        let options = options(&["count", "1"]);
+        let mut intake = Intake::new(&options, Header::None);
+        let mut reader = io::BufReader::new(OneEof(false));
+        let mut buffer = Vec::new();
+        for _ in 0..2 {
+            intake
+                .for_each(&mut reader, &mut buffer, |_, _| panic!("no data"))
+                .ok()
+                .unwrap();
+        }
+        assert!(intake.finish().is_ok());
     }
 
     /// Yields one Record and a partial one, then fails; asked again, it panics.
