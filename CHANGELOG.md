@@ -23,6 +23,8 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Reduce record copying in ungrouped ordinary-text calculations without
+  `--full` or per-row operations.
 - Source builds use the latest stable Rust. The Rust 1.88 minimum compiler
   promise and its dedicated compatibility checks have been removed.
 

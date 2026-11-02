@@ -158,6 +158,11 @@ Some points worth knowing when reading the code:
 - **Groups are adjacent records.** Without `-s`, a group ends when its key
   changes, and state for the next group starts fresh. That is what makes
   unsorted grouping a single streaming pass.
+- **Ungrouped text calculations borrow buffered records.** Without `--full`
+  or per-row operations, complete records are processed directly from the
+  reader's buffer. Input headers, records spanning buffers and final
+  unterminated records use checked growable storage. Group representatives
+  keep their existing owned storage.
 - **Ordinary results are written progressively.** Completed groups go to a small output
   buffer that is flushed as it fills (line by line on a terminal). A failure part-way through can leave earlier rows written, which
   is why the exit status must always be checked.
