@@ -21,6 +21,9 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Source builds use the latest stable Rust. The Rust 1.88 minimum compiler
+  promise and its dedicated compatibility checks have been removed.
+
 - Use built-in stable sorting for sorted `rmdup` in every supported locale.
   Fastmash now builds and installs as one executable on Linux and macOS,
   without the system `sort` or a Sort supervisor. Complete retained records,

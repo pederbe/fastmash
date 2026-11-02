@@ -189,8 +189,8 @@ by the release workflow. Build twice from the same clean source into separate
 empty target directories and compare the executable byte for byte. Normal
 Cargo output is suitable for development checks but is not the release artifact.
 
-Run formatting, warnings-denied Clippy, release workspace tests, minimum Rust
-version, license/advisory and documentation checks on that source. Retain the
+Run formatting, warnings-denied Clippy, release workspace tests,
+license/advisory and documentation checks on that source. Retain the
 independent primitive, exact conversion and MPFR challenge checks. Then run the
 command tests and both corpus input modes against the candidate executable.
 The command tests include the

@@ -62,6 +62,8 @@ The published [benchmarks](benchmarks/index.md) measure the qualified Linux 0.1.
 
 ## Building from source
 
+Use the latest stable Rust.
+
 ```sh
 git clone https://github.com/pederbe/fastmash
 cd fastmash
@@ -76,8 +78,8 @@ MACOSX_DEPLOYMENT_TARGET=15.0 cargo build --release --locked --bin fastmash --ta
 # the program is target/aarch64-apple-darwin/release/fastmash
 ```
 
-The macOS build needs Rust 1.88 or later and Apple's Command Line Tools.
-Installing the archive needs neither.
+The macOS build also needs Apple's Command Line Tools.
+Installing the archive needs no Rust compiler or Command Line Tools.
 
 `cargo install` and source builds use your own compiler and settings. They
 omit the prebuilt binaries' branch-alignment tuning for some Intel processors,

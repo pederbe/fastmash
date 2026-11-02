@@ -6,8 +6,8 @@ ICU resource inheritance and records `null` when the fallback language differs
 from the requested language. Scalar ranges precede multicharacter strings,
 which retain ICU's UTF-16 order.
 
-Build separately from the application workspace. The build needs Rust 1.88 or
-newer, ICU development files, pkg-config and libclang. The existing Python
+Build separately from the application workspace. The build needs the latest
+stable Rust, ICU development files, pkg-config and libclang. The existing Python
 producer also used the installed ICU 78 reference. Its runtime library is now
 accessed through `rust_icu_ures`' safe API. The UnicodeSet parser handles literal
 data, ranges and strings. Property expressions and variables are refused to

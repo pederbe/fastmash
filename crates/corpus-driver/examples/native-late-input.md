@@ -37,5 +37,5 @@ leave partial captures and return a nonzero status.
 
 A successful result establishes this terminal-based late-input mechanism.
 Porting the retained fault cases and qualifying full-output faults remain
-separate work. The research workflow checks macOS 15 and 26 with Rust 1.88 and
-1.99.1 and retains their native observations.
+separate work. The research workflow checks macOS 15 and 26 with the latest
+stable Rust and retains their native observations.

@@ -285,34 +285,6 @@ jobs:
             ${{ runner.temp }}/fastmash-cpu/identity.txt
             /tmp/hotpath/**/hp.json.gz
 
-  msrv:
-    name: Minimum supported Rust version
-    needs: changes
-    if: >-
-      !cancelled() &&
-      (github.event_name == 'workflow_dispatch' ||
-       (!github.event.repository.private &&
-        (needs.changes.outputs.application != 'false' || needs.changes.outputs.packages != '')))
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: "1.88" # rust-version in crates/*/Cargo.toml
-      - name: Check affected packages on minimum Rust
-        env:
-          APPLICATION: ${{ needs.changes.outputs.application }}
-          PACKAGES: ${{ needs.changes.outputs.packages }}
-        run: |
-          if [ "$APPLICATION" != false ]; then
-            cargo check --workspace --locked
-            cargo check --manifest-path release/publication-test-server/Cargo.toml --target-dir target --all-targets --locked
-          else
-            for package in $PACKAGES; do
-              cargo check -p "$package" --all-targets --locked
-            done
-          fi
-
   licenses:
     name: Dependency licenses and advisories
     needs: changes
@@ -393,7 +365,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, check, release-changelog, test, profiling, msrv, licenses, native, release-linux, documentation, homebrew, locale, packages-repository, binstall]
+    needs: [changes, check, release-changelog, test, profiling, licenses, native, release-linux, documentation, homebrew, locale, packages-repository, binstall]
     if: always()
     runs-on: ubuntu-26.04
     steps:

@@ -16,13 +16,13 @@ aborts cannot promise a final report.
 
 ## Build and capture
 
-Normal builds retain Rust 1.88 compatibility. Use Rust 1.99.1 for profiling.
+Use the latest stable Rust for ordinary builds and profiling.
 Reuse installed tools and the normal build cache. These commands run from the
 repository root on Linux x86-64 or Apple Silicon macOS 15 or later.
 
 ```sh
-cargo +1.99.1 build --profile profiling --features hotpath-alloc --bin fastmash --example profile-jobs
-measure-lock build -- cargo +1.99.1 run --profile profiling --features hotpath-alloc --example profile-jobs -- /tmp/fastmash-profiling
+cargo +stable build --profile profiling --features hotpath-alloc --bin fastmash --example profile-jobs
+measure-lock build -- cargo +stable run --profile profiling --features hotpath-alloc --example profile-jobs -- /tmp/fastmash-profiling
 ```
 
 Choose a fresh destination. The Rust example creates repeatable datasets and
@@ -110,7 +110,7 @@ use a separate session as required by upstream. This block explicitly uses Bash.
 ```bash
 bash -c '
 set -euo pipefail
-cargo +1.99.1 build --profile profiling --features hotpath-cpu --bin fastmash --example profile-jobs
+cargo +stable build --profile profiling --features hotpath-cpu --bin fastmash --example profile-jobs
 measure-lock build -- setsid -w target/profiling/examples/profile-jobs /tmp/fastmash-cpu decimal
 '
 ```
@@ -138,7 +138,7 @@ This block explicitly uses Bash.
 ```bash
 bash -c '
 set -euo pipefail
-cargo +1.99.1 build --profile profiling --features hotpath-callgrind --bin fastmash
+cargo +stable build --profile profiling --features hotpath-callgrind --bin fastmash
 capture=$(mktemp -d)
 printf "1\n2\n3\n" > "$capture/input"
 measure-lock build -- env HOTPATH_METRICS_SERVER_OFF=1 \
@@ -163,10 +163,9 @@ Run the ordinary application and website checks in [TESTING.md](TESTING.md).
 Also check the profiling configuration on Linux and native macOS
 
 ```sh
-cargo +1.88 check --workspace --locked
-cargo +1.99.1 clippy -p fastmash --all-targets --features hotpath-alloc --locked -- -D warnings
-cargo +1.99.1 test --release -p fastmash --features hotpath-alloc --test profiling --locked
-cargo +1.99.1 check -p fastmash --all-targets --features hotpath-cpu --locked
+cargo +stable clippy -p fastmash --all-targets --features hotpath-alloc --locked -- -D warnings
+cargo +stable test --release -p fastmash --features hotpath-alloc --test profiling --locked
+cargo +stable check -p fastmash --all-targets --features hotpath-cpu --locked
 cargo deny check licenses
 ```
 

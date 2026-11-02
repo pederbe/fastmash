@@ -6,7 +6,6 @@ description = "Fast command-line statistics on text data, compatible with GNU da
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/pederbe/fastmash"
 homepage = "https://fastmash.io"
-rust-version = "1.88"
 keywords = ["statistics", "datamash", "tsv", "csv", "cli"]
 categories = ["command-line-utilities", "science", "text-processing"]
 readme = "../../README.md"
