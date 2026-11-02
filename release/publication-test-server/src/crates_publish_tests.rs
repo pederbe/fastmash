@@ -103,9 +103,31 @@ fn reproducible_build_freezes_delivery_hashes_and_rejects_mismatch() {
     fs::create_dir_all(root.join("bin")).unwrap();
     fs::create_dir(root.join("release")).unwrap();
     fs::write(root.join("release/Containerfile"), "fixture\n").unwrap();
+    for args in [
+        vec!["init", "--quiet"],
+        vec![
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "--quiet",
+            "--allow-empty",
+            "-m",
+            "Fixture source",
+        ],
+    ] {
+        assert!(
+            Command::new("git")
+                .args(args)
+                .current_dir(&root)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
     let historical = "historical qualification is not a delivery manifest\n";
     fs::write(root.join("release/qualified.sha256"), historical).unwrap();
-    executable(&root.join("bin/curl"), "#!/bin/sh\nexit 0\n");
     executable(
         &root.join("bin/docker"),
         r#"#!/bin/bash
@@ -115,7 +137,10 @@ build=
 for arg in "$@"; do
   case "$arg" in CARGO_TARGET_DIR=/out/*) build=${arg##*/};; esac
 done
-test -n "$build"
+if [ -z "$build" ]; then
+  printf 'rustc: fixture stable\ncargo: fixture stable\n'
+  exit 0
+fi
 out="$RUNNER_TEMP/weekly-linux/out/$build/release"
 mkdir -p "$out"
 for binary in fastmash; do
@@ -152,6 +177,11 @@ done
         String::from_utf8_lossy(&reproducible.stderr)
     );
     let manifest = root.join("release/delivery.sha256");
+    let provenance =
+        fs::read_to_string(root.join("reproducible/weekly-linux/out/build-provenance.txt"))
+            .unwrap();
+    assert!(provenance.starts_with("source_revision="));
+    assert!(provenance.contains("rustc: fixture stable"));
     let text = fs::read_to_string(&manifest).unwrap();
     assert_eq!(text.lines().count(), 1);
     assert!(text.contains("  fastmash\n"));

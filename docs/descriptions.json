@@ -42,5 +42,6 @@
   "guide/terminal-color.md": "Control Fastmash terminal styling for help, failure prefixes and readable health reports, with automatic detection and color suppression.",
   "adr/0013-reuse-tested-release-artifacts.md": "Why releases reuse reproducible binaries, test installation once and deploy the website separately.",
   "adr/0012-release-delivery-and-performance.md": "Why weekly releases verify reproducibility and delivered bytes while performance acceptance stays with runtime changes and dated claims.",
-  "adr/0011-native-release-delivery.md": "Why native release delivery reuses the same reproducible archive through qualification, draft upload and installation."
+  "adr/0011-native-release-delivery.md": "Why native release delivery reuses the same reproducible archive through qualification, draft upload and installation.",
+  "adr/0015-stable-release-toolchain.md": "Why release builders select stable Rust automatically and record actual build tools while preserving artifact and runtime checks."
 }

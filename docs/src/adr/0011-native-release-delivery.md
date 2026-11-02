@@ -9,6 +9,8 @@ The Linux performance-manifest prerequisite and manual publication step are
 superseded by [ADR 0012](0012-release-delivery-and-performance.md). The native
 archive reproducibility and installed-delivery guarantees remain in force.
 
+The compiler pin is superseded by [ADR 0015](0015-stable-release-toolchain.md).
+
 ## Decision
 
 Build the Apple Silicon executable twice in separate clean target trees on

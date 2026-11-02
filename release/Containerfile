@@ -1,29 +1,16 @@
-# Release builder: glibc 2.28 userspace (manylinux_2_28, AlmaLinux 8) with the
-# pinned Rust toolchain from checksummed upstream archives. No package manager
-# runs, so the same inputs give the same toolchain files anywhere.
-# Pinned manylinux_2_28_x86_64 snapshot; keep a mirrored copy of
-# this digest (validation/release-builder) in case it is withdrawn.
+# The glibc 2.28 build environment preserves Linux runtime compatibility.
+# Install the current stable Rust toolchain through the standard Rustup installer.
 FROM quay.io/pypa/manylinux_2_28_x86_64@sha256:43f7ce12d79ed98b6dbfa3291d5afe389efd40a7e76de089959ffe99501b6edf
-WORKDIR /tmp/rust
-COPY rustc-1.99.1-x86_64-unknown-linux-gnu.tar.xz cargo-1.99.1-x86_64-unknown-linux-gnu.tar.xz rust-std-1.99.1-x86_64-unknown-linux-gnu.tar.xz ./
-RUN printf '%s\n' \
-      '2ff05ff9c08a90861e7f6e4065b40a8b87463b4576186fd613871c3e37f2091f  rustc-1.99.1-x86_64-unknown-linux-gnu.tar.xz' \
-      '53f3521949404d595efb06a55c12c5658d4ed1c75566f33d3d514eaebe70bd8a  cargo-1.99.1-x86_64-unknown-linux-gnu.tar.xz' \
-      '109b074225bf5b9ea3820890876bfdf4ed161adbfaf94b2b4b5984c85ee5d958  rust-std-1.99.1-x86_64-unknown-linux-gnu.tar.xz' \
-      | sha256sum -c - \
- && for component in rustc cargo rust-std; do \
-      tar -xJf "$component-1.99.1-x86_64-unknown-linux-gnu.tar.xz" \
-      && "./$component-1.99.1-x86_64-unknown-linux-gnu/install.sh" --prefix=/opt/rust --disable-ldconfig \
-      && rm -rf "$component-1.99.1-x86_64-unknown-linux-gnu" "$component-1.99.1-x86_64-unknown-linux-gnu.tar.xz"; \
-    done
-# Rust names -lgcc_s for unwinding; panic=abort needs none of it at run time, so
-# release/build.sh links the static libgcc_eh under that name (one shared
-# library fewer to load at every start). GCC Runtime Library Exception.
+ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
+RUN curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh \
+ && sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain stable --no-modify-path \
+ && rm /tmp/rustup-init.sh
+# Keep the static unwind library and the existing Linux runtime checks.
 RUN test -f /opt/rh/gcc-toolset-14/root/usr/lib/gcc/x86_64-redhat-linux/14/libgcc_eh.a \
  && mkdir /opt/fastmash-link \
  && ln -s /opt/rh/gcc-toolset-14/root/usr/lib/gcc/x86_64-redhat-linux/14/libgcc_eh.a /opt/fastmash-link/libgcc_s.a
 ENTRYPOINT []
-ENV PATH=/opt/rust/bin:/opt/rh/gcc-toolset-14/root/usr/bin:/usr/bin:/bin LC_ALL=C TZ=UTC
+ENV PATH=/opt/cargo/bin:/opt/rh/gcc-toolset-14/root/usr/bin:/usr/bin:/bin LC_ALL=C TZ=UTC
 RUN mkdir /builder && rustc -vV > /builder/rustc.txt && cargo -vV > /builder/cargo.txt \
  && ldd --version | head -n 1 > /builder/glibc.txt && cc --version | head -n 1 > /builder/cc.txt \
  && ld --version | head -n 1 > /builder/ld.txt

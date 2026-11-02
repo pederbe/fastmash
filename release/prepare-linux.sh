@@ -5,11 +5,13 @@ set -euo pipefail
 work="$RUNNER_TEMP/weekly-linux"
 mkdir -p "$work/builder" "$work/out"
 cp release/Containerfile "$work/builder/"
-for component in rustc cargo rust-std; do
-    curl --proto '=https' -fsSLo "$work/builder/$component-1.99.1-x86_64-unknown-linux-gnu.tar.xz" \
-        "https://static.rust-lang.org/dist/$component-1.99.1-x86_64-unknown-linux-gnu.tar.xz"
-done
-docker build -f "$work/builder/Containerfile" -t fastmash-weekly-builder "$work/builder"
+# Do not reuse an installed stable toolchain from a previous image build.
+docker build --pull --no-cache -f "$work/builder/Containerfile" -t fastmash-weekly-builder "$work/builder"
+{
+    printf 'source_revision=%s\n' "$(git rev-parse HEAD)"
+    docker run --rm fastmash-weekly-builder bash -c \
+        'for tool in rustc cargo glibc cc ld; do printf "\n%s:\n" "$tool"; cat "/builder/$tool.txt"; done'
+} > "$work/out/build-provenance.txt"
 for build in first second; do
     docker run --rm -v "$PWD:/source:ro" -v "$work/out:/out" \
         -e CARGO_TARGET_DIR="/out/$build" fastmash-weekly-builder bash /source/release/build.sh
