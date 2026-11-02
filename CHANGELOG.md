@@ -10,6 +10,10 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+### Development
+
+- Follow rolling stable Rust and install the standard analysis, source, formatting and lint components with the project toolchain.
+
 ### Fixed
 
 - The installation guide's cargo-binstall command for macOS names the crate
