@@ -49,22 +49,6 @@
       "enabled": false
     },
     {
-      "description": "Rust 1.88 is the supported minimum compiler baseline. Advance it only when minimum supported Rust policy changes.",
-      "matchManagers": [
-        "github-actions"
-      ],
-      "matchDatasources": [
-        "rust-version"
-      ],
-      "matchFileNames": [
-        ".github/workflows/ci.yml",
-        ".github/workflows/locale-reference.yml",
-        ".github/workflows/native-*.yml"
-      ],
-      "matchCurrentVersion": "/^1\\.88(?:\\.0)?$/",
-      "enabled": false
-    },
-    {
       "description": "The macOS archive is built on the supported macOS 15 baseline and installed unchanged on 15 and 26. Advance this runner only when the archive compatibility contract changes (ADR 0011).",
       "matchManagers": [
         "github-actions"

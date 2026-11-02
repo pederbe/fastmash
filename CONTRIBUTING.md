@@ -26,7 +26,7 @@ Please report security problems privately, as described in
 ## Development setup
 
 To develop Fastmash, use Linux x86-64 (or WSL2), or Apple Silicon macOS 15 or
-later, with stable Rust. Website checks also need Python 3.10 or later.
+later, with the latest stable Rust. Website checks also need Python 3.10 or later.
 Native macOS development is verified by the
 [native checks](TESTING.md#native-apple-silicon-development-gate).
 
@@ -74,9 +74,10 @@ The independent Unicode 15 reference crates in `crates/locale-tools` stay
 fixed. Reconsider those pins when the retained reference contract changes.
 Urgent security fixes may produce separate pull requests outside the daily batch.
 Existing Dependabot security alerts and updates remain enabled.
-Minimum Rust tests and the macOS 15 archive builder remain compatibility
-baselines. The same archive must run unchanged on macOS 15 and 26. Release identities and
-qualification evidence change through the release process, not dependency updates.
+The macOS 15 archive builder remains the operating-system compatibility
+baseline. The same archive must run unchanged on macOS 15 and 26. Release
+identities and qualification evidence change through the release process,
+not dependency updates.
 
 Use current stable dependencies with compatible version ranges and commit the
 lockfiles. The remaining exact external pins, `unicode-case-mapping` 0.5.0,

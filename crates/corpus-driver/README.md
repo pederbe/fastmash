@@ -75,8 +75,7 @@ unselected stream. It is a development helper
 and does not enter product archives.
 
 The pinned MIT-licensed Nix dependency supplies safe Unix signal-mask, session,
-resource-limit and process-group APIs. Its declared Rust 1.69 minimum is below
-this workspace's Rust 1.88 minimum. The private launcher applies limits in a
+resource-limit and process-group APIs. The private launcher applies limits in a
 fresh process and then replaces itself with the selected executable, preserving
 its exit and signal status without a first-party unsafe pre-exec hook. The
 upstream [package declaration](https://docs.rs/crate/nix/0.31.3/source/Cargo.toml),

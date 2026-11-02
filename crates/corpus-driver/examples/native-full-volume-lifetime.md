@@ -47,10 +47,10 @@ The [hdiutil manual](https://keith.github.io/xcode-man-pages/hdiutil.1.html)
 distinguishes image attachment from filesystem mounting. The pinned MIT-licensed
 [plist parser](https://docs.rs/crate/plist/1.10.1/source/Cargo.toml.orig) reads
 the native image/device associations, including non-JSON property-list values.
-Its Rust 1.88 minimum matches this workspace's supported minimum. Text parsing
-or a cached disk identifier cannot establish the same current ownership.
+Text parsing or a cached disk identifier cannot establish the same current
+ownership.
 
-The native workflow runs on macOS 15 and 26 with Rust 1.88 and 1.99.1. This
+The native workflow runs on macOS 15 and 26 with the latest stable Rust. This
 qualifies resource ownership for a development mechanism. Existing full-output
 test transports remain in place until their retained fault cases are ported
 and qualified.

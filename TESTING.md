@@ -425,7 +425,7 @@ margins and hardware.
 | --- | --- |
 | OS | Linux x86-64 with glibc, or WSL2 |
 | Kernel | A supported Linux kernel with native signals and temporary-file support |
-| Tools | Stable Rust (see `rust-version` in `Cargo.toml`); Python 3.10 or later for website checks |
+| Tools | Latest stable Rust; Python 3.10 or later for website checks |
 | Temporary storage | A writable disk-backed `TMPDIR`, such as ext4 |
 
 Under WSL, keep the checkout and `TMPDIR` on the Linux filesystem rather than a

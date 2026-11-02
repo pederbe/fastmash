@@ -22,13 +22,12 @@ defaults:
 
 jobs:
   probe:
-    name: Safe streams on ${{ matrix.os }} with Rust ${{ matrix.rust }}
+    name: Safe streams on ${{ matrix.os }} with stable Rust
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         os: [macos-15, macos-26]
-        rust: ['1.88.0', 'stable']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -36,7 +35,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Record native inputs
@@ -50,7 +49,6 @@ jobs:
           { git rev-parse HEAD; git status --porcelain; uname -a; sw_vers; rustc -Vv; cargo -V; } > "$captures/identity.txt"
           shasum -a 256 Cargo.lock crates/cli/Cargo.toml crates/cli/tests/native_streams.rs crates/cli/tests/text_summaries.rs crates/cli/tests/quantiles.rs crates/cli/tests/grouping.rs crates/cli/tests/dispersion.rs crates/cli/tests/extrema.rs crates/cli/tests/sum_mean.rs crates/cli/tests/presentation.rs crates/cli/tests/selectors.rs crates/cli/tests/weighted_mean.rs crates/cli/tests/csv_input.rs crates/cli/tests/record_separators.rs crates/cli/tests/record_separators/*.rs crates/cli/tests/support/process.rs crates/cli/tests/support/test_process.rs crates/cli/tests/support/temp_dir.rs crates/cli/tests/support/full_output.rs crates/corpus-driver/Cargo.toml crates/corpus-driver/src/*.rs crates/corpus-driver/tests/test_process.rs crates/corpus-driver/tests/command.rs crates/corpus-driver/tests/support/command.rs > "$captures/inputs.sha256"
       - name: Lint with the maintained compiler
-        if: matrix.rust == 'stable'
         run: |
           cargo clippy --locked -p fastmash-corpus-driver --bins --test test_process --test command -p fastmash --test native_streams --test text_summaries --test quantiles --test grouping --test dispersion --test extrema --test sum_mean --test presentation --test selectors --test weighted_mean --test csv_input --test record_separators -- -D warnings > "$CAPTURES/clippy.log" 2>&1
       - name: Build candidate and safe launcher
@@ -91,7 +89,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: native-safe-streams-${{ matrix.os }}-${{ matrix.rust }}
+          name: native-safe-streams-${{ matrix.os }}-stable
           path: ${{ runner.temp }}/native-safe-streams
           if-no-files-found: error
           retention-days: 7

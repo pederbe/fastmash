@@ -2,7 +2,6 @@
 name = "fastmash-locale-tools"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 publish = false
 description = "Development generation and comparison of Fastmash locale tables"

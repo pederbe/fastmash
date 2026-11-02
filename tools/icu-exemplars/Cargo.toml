@@ -2,7 +2,6 @@
 name = "fastmash-icu-exemplars"
 version = "0.0.0"
 edition = "2024"
-rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 publish = false
 description = "Development queries of the independent ICU exemplar reference"
