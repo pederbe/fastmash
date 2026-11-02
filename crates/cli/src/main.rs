@@ -488,6 +488,37 @@ fn calculate(
     })? {
         output.first(spare.bytes(), &binding.operations, &binding.keys)?;
     }
+    if binding.keys.is_empty() && !options.full && !options.linewise {
+        let mut fields = None;
+        let mut any = false;
+        intake.for_each(reader, spare.bytes_mut(), |record, line| {
+            let bytes = record.data();
+            if line == 1 {
+                binding.header(bytes, options)?;
+                output.first(bytes, &binding.operations, &binding.keys)?;
+            }
+            let fields = fields
+                .get_or_insert_with(|| records::FieldIndex::selecting(binding.operations.fields()));
+            fields.clear();
+            binding.operations.collect(
+                bytes,
+                fields,
+                line,
+                options,
+                arithmetic,
+                random.as_deref_mut(),
+            )?;
+            any = true;
+            Ok(())
+        })?;
+        if any {
+            binding
+                .operations
+                .write_ungrouped_results(output, arithmetic, options)?;
+        }
+        output.end(options)?;
+        return intake.finish();
+    }
     while let Some(record) = intake.next(reader, spare.bytes_mut())? {
         let data = record.data().len();
         // Grouping keeps the data view only.

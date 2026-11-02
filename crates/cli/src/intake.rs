@@ -10,8 +10,9 @@
 //! error ends the input like end of file; it is reported by
 //! [`Intake::finish`] once the Mode has finished (datamash.c `close_input`).
 //!
-//! Records are read into the caller's buffer and never copied: a vnlog data
-//! view is a prefix of the raw Record.
+//! `next` reads into the caller's buffer; `for_each` borrows complete buffered
+//! Records when the consumer does not retain them. A vnlog data view is a
+//! prefix of the raw Record in either case.
 use super::{Failure, annotated, failure, options::Options, os_failure, records, standard_io};
 use std::io::{self, BufRead, Write};
 
@@ -217,6 +218,10 @@ impl<'p> Intake<'p> {
         if self.header_pending {
             return self.accept_header(buffer);
         }
+        self.accept_data(buffer)
+    }
+
+    fn accept_data(&mut self, buffer: &[u8]) -> Result<Accepted, Failure> {
         let data = match self.filter {
             Filter::None => buffer.len(),
             Filter::Comments if records::is_comment(buffer) => return Ok(Accepted::Skipped),
@@ -226,6 +231,50 @@ impl<'p> Intake<'p> {
         };
         self.count()?;
         Ok(Accepted::Data(data))
+    }
+
+    /// Visits data Records without retaining them. Complete buffered Records
+    /// borrow the reader; spanning and unterminated Records use `buffer`.
+    /// Read the Input header before calling this method, as with `next`.
+    pub(super) fn for_each<R: BufRead + ?Sized>(
+        &mut self,
+        reader: &mut R,
+        buffer: &mut Vec<u8>,
+        mut visit: impl FnMut(Record<'_>, u64) -> Result<(), Failure>,
+    ) -> Result<(), Failure> {
+        loop {
+            if self.ended {
+                self.warn();
+                return Ok(());
+            }
+            let available = match reader.fill_buf() {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    self.ended = true;
+                    self.error = Some(error);
+                    return Ok(());
+                }
+            };
+            if available.is_empty() {
+                self.ended = true;
+                return Ok(());
+            }
+            let mut consumed = 0;
+            while let Some(end) = memchr::memchr(self.terminator, &available[consumed..]) {
+                let bytes = &available[consumed..consumed + end];
+                if let Accepted::Data(data) = self.accept_data(bytes)? {
+                    visit(Record { bytes, data }, self.lines)?;
+                }
+                consumed += end + 1;
+            }
+            if consumed != 0 {
+                reader.consume(consumed);
+            } else if let Some(record) = self.next(reader, buffer)? {
+                visit(record, self.lines)?;
+            } else {
+                return Ok(());
+            }
+        }
     }
 
     #[cold]
@@ -412,6 +461,92 @@ mod tests {
         assert_eq!(intake.line(), 3);
     }
 
+    #[test]
+    fn visiting_records_preserves_headers_views_and_buffer_boundaries() {
+        for capacity in [1, 4, 128] {
+            let options = options(&["--vnlog", "count", "h"]);
+            let mut intake = Intake::new(&options, Header::First);
+            let mut reader =
+                io::BufReader::with_capacity(capacity, b"# h\n1#x\n#c\n123456789#n\n4".as_slice());
+            let mut buffer = Vec::new();
+            assert!(
+                intake
+                    .header(&mut reader, &mut buffer, |header| {
+                        assert_eq!(header, b"h");
+                        Ok(())
+                    })
+                    .ok()
+                    .unwrap()
+            );
+            let mut rows = Vec::new();
+            intake
+                .for_each(&mut reader, &mut buffer, |record, line| {
+                    rows.push((record.raw().to_vec(), record.data().to_vec(), line));
+                    Ok(())
+                })
+                .ok()
+                .unwrap();
+            assert_eq!(
+                rows,
+                [
+                    (b"1#x".to_vec(), b"1".to_vec(), 2),
+                    (b"123456789#n".to_vec(), b"123456789".to_vec(), 3),
+                    (b"4".to_vec(), b"4".to_vec(), 4),
+                ]
+            );
+            assert!(intake.finish().is_ok());
+        }
+    }
+
+    #[test]
+    fn visiting_nul_records_preserves_empty_and_unterminated_records() {
+        for capacity in [1, 4, 128] {
+            let options = options(&["-z", "count", "1"]);
+            let mut intake = Intake::new(&options, Header::None);
+            let mut reader = io::BufReader::with_capacity(capacity, b"1\nx\0\0last".as_slice());
+            let mut rows = Vec::new();
+            intake
+                .for_each(&mut reader, &mut Vec::new(), |record, line| {
+                    rows.push((record.raw().to_vec(), line));
+                    Ok(())
+                })
+                .ok()
+                .unwrap();
+            assert_eq!(
+                rows,
+                [
+                    (b"1\nx".to_vec(), 1),
+                    (Vec::new(), 2),
+                    (b"last".to_vec(), 3)
+                ]
+            );
+            assert!(intake.finish().is_ok());
+        }
+    }
+
+    #[test]
+    fn visiting_records_stops_at_the_first_eof() {
+        struct OneEof(bool);
+        impl io::Read for OneEof {
+            fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+                assert!(!self.0, "read after EOF");
+                self.0 = true;
+                Ok(0)
+            }
+        }
+        let options = options(&["count", "1"]);
+        let mut intake = Intake::new(&options, Header::None);
+        let mut reader = io::BufReader::new(OneEof(false));
+        let mut buffer = Vec::new();
+        for _ in 0..2 {
+            intake
+                .for_each(&mut reader, &mut buffer, |_, _| panic!("no data"))
+                .ok()
+                .unwrap();
+        }
+        assert!(intake.finish().is_ok());
+    }
+
     /// Yields one Record and a partial one, then fails; asked again, it panics.
     struct Failing(u8);
     impl io::Read for Failing {
@@ -432,6 +567,30 @@ partial"),
         fn consume(&mut self, amount: usize) {
             assert_eq!(amount, 2);
         }
+    }
+
+    #[test]
+    fn visiting_records_defers_read_errors_and_does_not_read_after_failure() {
+        let options = options(&["count", "1"]);
+        let mut intake = Intake::new(&options, Header::None);
+        let mut reader = Failing(0);
+        let mut buffer = Vec::new();
+        let mut rows = Vec::new();
+        intake
+            .for_each(&mut reader, &mut buffer, |record, line| {
+                rows.push((record.raw().to_vec(), line));
+                Ok(())
+            })
+            .ok()
+            .unwrap();
+        assert_eq!(rows, [(b"a".to_vec(), 1)]);
+        intake
+            .for_each(&mut reader, &mut buffer, |_, _| panic!("input ended"))
+            .ok()
+            .unwrap();
+        let error = intake.finish().err().unwrap();
+        assert_eq!(error.status, 1);
+        assert_eq!(error.message, b"read error: Input/output error\n");
     }
 
     #[test]
