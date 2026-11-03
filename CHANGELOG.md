@@ -64,8 +64,9 @@ numerical profile version that introduced it.
 - cargo-binstall no longer falls back to third-party QuickInstall builds, and
   each release checks that it installs the published executables on Linux and macOS.
 
-- Homebrew installs prebuilt bottles that follow each release within a day, and
-  the installation guide now leads with apt, dnf and Homebrew.
+- Homebrew installs the tested release downloads on Linux and macOS instead of
+  rebuilding Fastmash into separate packages. Existing users receive the change
+  through `brew upgrade`. The installation guide leads with apt, dnf and Homebrew.
 
 ## [0.3.0] - 2026-10-26
 
