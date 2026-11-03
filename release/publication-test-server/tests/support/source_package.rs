@@ -6,7 +6,27 @@ use std::os::fd::AsFd;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let args: Vec<_> = std::env::args().skip(1).collect();
+    let raw_args: Vec<_> = std::env::args_os().skip(1).collect();
+    if raw_args
+        .first()
+        .is_some_and(|arg| arg == "--copy-executable")
+    {
+        let [_, source, destination] = raw_args.as_slice() else {
+            eprintln!("copy requires source and destination");
+            return ExitCode::from(2);
+        };
+        return match std::fs::copy(source, destination) {
+            Ok(_) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("copy {source:?} to {destination:?}: {error}");
+                ExitCode::from(2)
+            }
+        };
+    }
+    let args: Vec<_> = raw_args
+        .into_iter()
+        .map(|arg| arg.into_string().unwrap())
+        .collect();
     let mode = std::env::var("SOURCE_PACKAGE_FIXTURE").unwrap_or_default();
     if args == ["--version"] {
         println!("fastmash fixture");

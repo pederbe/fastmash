@@ -7,6 +7,9 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "support/copy_executable.rs"]
+mod copy_executable;
+
 struct Fixture(PathBuf);
 
 impl Fixture {
@@ -20,11 +23,10 @@ impl Fixture {
         fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
         fs::create_dir(path.join("bin")).unwrap();
         fs::create_dir(path.join("docs")).unwrap();
-        fs::copy(
+        copy_executable::copy_executable(
             env!("CARGO_BIN_EXE_fastmash-linux-source-fixture"),
             path.join("bin/fastmash"),
-        )
-        .unwrap();
+        );
         for name in ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"] {
             fs::write(path.join("docs").join(name), b"nonempty\n").unwrap();
         }

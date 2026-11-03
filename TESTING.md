@@ -280,13 +280,19 @@ prepared launcher elsewhere. It sets alarms and selected signal masks in a fresh
 process, creates broken pipes without shared readers, then replaces itself with
 the tested executable. The tests retain its PID and actual signal status.
 
-The native sorting and duplicate-removal fixtures also use that launcher to copy
+The native sorting, duplicate-removal, release-installation and ignored Cargo
+installation fixtures also need that launcher to copy
 standalone executables in a separate process. Parallel launches cannot inherit
 the copy's writable descriptor and make Linux refuse to execute it with
 "Text file busy". The Linux regression
 `standalone_executable_copy_does_not_race_concurrent_launches` stages fresh copies
 while other threads launch commands. It fails on the first unexpected exit,
 without retrying the command.
+
+The publication-check fixtures use their own single-threaded command to copy
+executables before launching them. Their Linux regression
+`copied_release_fixture_starts_during_parallel_launches` checks 1,000 fresh copies
+under concurrent process launches.
 
 The macOS full-output checks in these suites own a calibrated full destination
 until the tested child has been reaped and its parent-side handles are closed.

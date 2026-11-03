@@ -28,7 +28,14 @@ impl TestRun {
         ));
         DirBuilder::new().mode(0o700).create(&root).unwrap();
         let binary = root.join("command");
-        fs::copy(env!("CARGO_BIN_EXE_fastmash-corpus-test-command"), &binary).unwrap();
+        let copied = Command::new(env!("CARGO_BIN_EXE_fastmash-test-process"))
+            .args(["15", "--copy-executable"])
+            .arg(env!("CARGO_BIN_EXE_fastmash-corpus-test-command"))
+            .arg(&binary)
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(copied.status.success(), "copy fixture: {copied:?}");
         let fixture = root.join("cases.jsonl.gz");
         let result = Self {
             root,
