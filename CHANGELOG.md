@@ -12,6 +12,9 @@ numerical profile version that introduced it.
 
 ### Development
 
+- Copy the locale candidate-sort test executable in an isolated process to
+  prevent intermittent "Text file busy" failures during parallel launches.
+
 - Isolate the remaining release, installation and corpus-test executable copies
   from parallel launches that could cause a "Text file busy" failure.
 
