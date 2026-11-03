@@ -12,6 +12,9 @@ numerical profile version that introduced it.
 
 ### Development
 
+- Isolate the remaining release, installation and corpus-test executable copies
+  from parallel launches that could cause a "Text file busy" failure.
+
 - Stage native test executables in a separate process so concurrent launches
   cannot retain their writable descriptors and cause a "Text file busy" exit.
 - Duplicate-removal test failures retain the input-write error, child status,

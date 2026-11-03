@@ -7,6 +7,9 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[path = "support/copy_executable.rs"]
+mod copy_executable;
+
 struct Fixture(PathBuf);
 
 impl Fixture {
@@ -18,11 +21,10 @@ impl Fixture {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
-        fs::copy(
+        copy_executable::copy_executable(
             env!("CARGO_BIN_EXE_fastmash-source-package-fixture"),
             path.join("fastmash"),
-        )
-        .unwrap();
+        );
         Self(path)
     }
 
@@ -39,6 +41,90 @@ impl Drop for Fixture {
     fn drop(&mut self) {
         fs::remove_dir_all(&self.0).unwrap();
     }
+}
+
+#[test]
+fn executable_copy_preserves_opaque_paths_and_reports_errors() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let fixture = Fixture::new();
+    let source = fixture
+        .0
+        .join(std::ffi::OsString::from_vec(b"source-\xff".to_vec()));
+    let destination = fixture
+        .0
+        .join(std::ffi::OsString::from_vec(b"copy-\xfe".to_vec()));
+    fs::rename(fixture.0.join("fastmash"), &source).unwrap();
+    copy_executable::copy_executable(&source, &destination);
+    assert_eq!(fs::read(&source).unwrap(), fs::read(&destination).unwrap());
+    assert_eq!(
+        fs::metadata(&source).unwrap().permissions().mode(),
+        fs::metadata(&destination).unwrap().permissions().mode()
+    );
+    let output = Command::new(&destination)
+        .arg("--version")
+        .env_clear()
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"fastmash fixture\n");
+
+    let missing = fixture.0.join("missing");
+    let failed = Command::new(env!("CARGO_BIN_EXE_fastmash-source-package-fixture"))
+        .arg("--copy-executable")
+        .arg(&missing)
+        .arg(fixture.0.join("failed"))
+        .env_clear()
+        .output()
+        .unwrap();
+    assert_eq!(failed.status.code(), Some(2), "{failed:?}");
+    assert!(failed.stdout.is_empty(), "{failed:?}");
+    assert!(
+        String::from_utf8_lossy(&failed.stderr).contains("missing"),
+        "{failed:?}"
+    );
+    assert!(!fixture.0.join("failed").exists());
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn copied_release_fixture_starts_during_parallel_launches() {
+    use std::sync::atomic::AtomicBool;
+
+    let stop = AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            let stop = &stop;
+            scope.spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let output =
+                        Command::new(env!("CARGO_BIN_EXE_fastmash-source-package-fixture"))
+                            .arg("--version")
+                            .env_clear()
+                            .output()
+                            .unwrap();
+                    assert!(output.status.success(), "{output:?}");
+                }
+            });
+        }
+        let result = std::panic::catch_unwind(|| {
+            for attempt in 0..1000 {
+                let fixture = Fixture::new();
+                let output = Command::new(fixture.0.join("fastmash"))
+                    .arg("--version")
+                    .env_clear()
+                    .output()
+                    .unwrap_or_else(|error| panic!("fixture startup attempt={attempt}: {error}"));
+                assert!(output.status.success(), "attempt={attempt}: {output:?}");
+                assert_eq!(output.stdout, b"fastmash fixture\n");
+                assert!(output.stderr.is_empty(), "attempt={attempt}: {output:?}");
+            }
+        });
+        stop.store(true, Ordering::Relaxed);
+        if let Err(error) = result {
+            std::panic::resume_unwind(error);
+        }
+    });
 }
 
 #[test]

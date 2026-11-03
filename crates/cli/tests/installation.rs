@@ -1,6 +1,9 @@
 //! Run explicitly against a Cargo-installed command, outside the checkout.
 use std::{fs, path::Path, process::Command};
 
+#[path = "support/test_process.rs"]
+mod test_process;
+
 fn invoke(binary: &Path, cwd: &Path, args: &[&str]) -> std::process::Output {
     Command::new(binary)
         .args(args)
@@ -44,7 +47,7 @@ fn installed_command_and_standalone_copy() {
 
     // A standalone copy sorts through the same native route.
     let alone = cwd.join("fastmash");
-    fs::copy(&binary, &alone).unwrap();
+    test_process::copy_executable(&binary, &alone);
     fs::write(cwd.join("input"), b"b\t2\t3\na\t1\t2\na\t3\t6\n").unwrap();
     let complete = invoke(&binary, &cwd, &["-sg1", "pcov", "2:3"]);
     assert!(complete.status.success(), "{complete:?}");

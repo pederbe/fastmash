@@ -8,6 +8,9 @@ use std::{fs, path::Path, process::Command};
 #[path = "support/temp_dir.rs"]
 mod test_dir;
 
+#[path = "support/test_process.rs"]
+mod test_process;
+
 fn prepared_tool(name: &str, variable: &str) -> std::path::PathBuf {
     let path = std::env::var_os(variable)
         .map(std::path::PathBuf::from)
@@ -24,7 +27,7 @@ fn prepared_tool(name: &str, variable: &str) -> std::path::PathBuf {
 }
 
 fn installed_command(directory: &Path) {
-    fs::copy(env!("CARGO_BIN_EXE_fastmash"), directory.join("fastmash")).unwrap();
+    test_process::copy_executable(env!("CARGO_BIN_EXE_fastmash"), directory.join("fastmash"));
     record_checksums(directory);
 }
 
@@ -124,8 +127,8 @@ fn native_layout_check(directory: &Path, version: &str) -> std::process::Output 
             "fastmash-installed-platform-fixture",
             "FASTMASH_INSTALLED_PLATFORM_FIXTURE",
         );
-        fs::copy(&fixture, tools.join("uname")).unwrap();
-        fs::copy(&fixture, tools.join("shasum")).unwrap();
+        test_process::copy_executable(&fixture, tools.join("uname"));
+        test_process::copy_executable(&fixture, tools.join("shasum"));
     }
     let mut path = tools.as_os_str().to_owned();
     path.push(":/usr/bin:/bin");
@@ -149,7 +152,7 @@ fn native_layout_check(directory: &Path, version: &str) -> std::process::Output 
 }
 
 fn native_layout(directory: &Path) {
-    fs::copy(env!("CARGO_BIN_EXE_fastmash"), directory.join("fastmash")).unwrap();
+    test_process::copy_executable(env!("CARGO_BIN_EXE_fastmash"), directory.join("fastmash"));
     let output = Command::new("sha256sum")
         .arg("fastmash")
         .current_dir(directory)
