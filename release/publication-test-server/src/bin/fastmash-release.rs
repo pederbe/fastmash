@@ -48,3 +48,7 @@ fn main() {
 #[cfg(all(test, unix))]
 #[path = "../crates_publish_tests.rs"]
 mod crates_publish_tests;
+
+#[cfg(all(test, unix))]
+#[path = "../../../../crates/cli/tests/support/executable_fixture.rs"]
+mod executable_fixture;

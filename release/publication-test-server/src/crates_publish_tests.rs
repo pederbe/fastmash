@@ -1,8 +1,7 @@
 //! Exercise registry recovery and frozen delivery hashes without network publication.
-use std::{fs, os::unix::fs::PermissionsExt, path::Path, process::Command};
+use std::{fs, path::Path, process::Command};
 fn executable(path: &Path, text: &str) {
-    fs::write(path, text).unwrap();
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    crate::executable_fixture::write(path, text, 0o755);
 }
 #[test]
 fn resumes_only_missing_packages_and_refuses_ambiguous_registry_state() {

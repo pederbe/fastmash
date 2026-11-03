@@ -12,6 +12,9 @@ numerical profile version that introduced it.
 
 ### Development
 
+- Create executable scripts for installer and publication tests in an isolated
+  process to prevent intermittent "Text file busy" failures during parallel launches.
+
 - Copy the locale candidate-sort test executable in an isolated process to
   prevent intermittent "Text file busy" failures during parallel launches.
 
