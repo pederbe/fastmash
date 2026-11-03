@@ -1,6 +1,8 @@
 //! Test the public shell installer through real downloads from a local mirror.
 //! Target-selection fixtures do not establish native macOS support. The ignored
 //! archive test instead installs actual CI-built bytes on the real native host.
+#[path = "support/executable_fixture.rs"]
+mod executable_fixture;
 #[path = "support/temp_dir.rs"]
 mod temp_dir;
 
@@ -148,8 +150,40 @@ fn real_tool(tool: &str) -> PathBuf {
 }
 
 fn script(path: &Path, contents: &str) {
-    fs::write(path, contents).unwrap();
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    executable_fixture::write(path, contents, 0o755);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn executable_script_starts_during_parallel_launches() {
+    let stop = AtomicBool::new(false);
+    thread::scope(|scope| {
+        for _ in 0..8 {
+            let stop = &stop;
+            scope.spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    assert!(Command::new("/bin/true").status().unwrap().success());
+                }
+            });
+        }
+        let result = std::panic::catch_unwind(|| {
+            for attempt in 0..1000 {
+                let root = TempDir::new("executable-script");
+                let path = root.0.join("probe");
+                script(&path, "#!/bin/true\n");
+                let output = Command::new(&path)
+                    .output()
+                    .unwrap_or_else(|error| panic!("script startup attempt={attempt}: {error}"));
+                assert!(output.status.success(), "attempt={attempt}: {output:?}");
+                assert!(output.stdout.is_empty(), "attempt={attempt}: {output:?}");
+                assert!(output.stderr.is_empty(), "attempt={attempt}: {output:?}");
+            }
+        });
+        stop.store(true, Ordering::Relaxed);
+        if let Err(error) = result {
+            std::panic::resume_unwind(error);
+        }
+    });
 }
 
 fn fixture_path(root: &Path, os: &str, arch: &str, version: &str) -> PathBuf {
