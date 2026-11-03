@@ -24,11 +24,14 @@ impl Fixture {
         )
         .unwrap();
         fs::write(root.join("exemplars.json"), r#"{"icu":"78","locales":{"upper":{"alphabet":["ch","é"],"auxiliary":[]},"lower":{"alphabet":null,"auxiliary":null}}}"#).unwrap();
-        fs::copy(
-            env!("CARGO_BIN_EXE_collation-candidate-sort-fixture"),
-            root.join("sort"),
-        )
-        .unwrap();
+        let copied = Command::new(env!("CARGO_BIN_EXE_collation-candidate-sort-fixture"))
+            .arg("--copy-executable")
+            .arg(env!("CARGO_BIN_EXE_collation-candidate-sort-fixture"))
+            .arg(root.join("sort"))
+            .env_clear()
+            .output()
+            .unwrap();
+        assert!(copied.status.success(), "{}: {copied:?}", root.display());
         fs::write(root.join("mode"), "normal").unwrap();
         Self(root)
     }
@@ -57,6 +60,54 @@ impl Drop for Fixture {
             fs::remove_dir_all(&self.0).unwrap();
         }
     }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn candidate_sort_copy_starts_during_parallel_launches() {
+    use std::sync::atomic::AtomicBool;
+
+    let stop = AtomicBool::new(false);
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            let stop = &stop;
+            scope.spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let output =
+                        Command::new(env!("CARGO_BIN_EXE_fastmash-generate-collation-candidates"))
+                            .arg("--help")
+                            .env_clear()
+                            .output()
+                            .unwrap();
+                    assert!(output.status.success(), "{output:?}");
+                }
+            });
+        }
+        let result = std::panic::catch_unwind(|| {
+            for attempt in 0..1000 {
+                let fixture = Fixture::new();
+                fs::write(fixture.0.join("input"), b"a\nA\n").unwrap();
+                let output = Command::new(fixture.0.join("sort"))
+                    .env_clear()
+                    .env("LC_ALL", "upper.UTF-8")
+                    .env("PATH", "/usr/bin:/bin")
+                    .env("TZ", "UTC")
+                    .env("LOCPATH", &fixture.0)
+                    .stdin(fs::File::open(fixture.0.join("input")).unwrap())
+                    .output()
+                    .unwrap_or_else(|error| {
+                        panic!("candidate sort startup attempt={attempt}: {error}")
+                    });
+                assert!(output.status.success(), "attempt={attempt}: {output:?}");
+                assert_eq!(output.stdout, b"A\na\n");
+                assert!(output.stderr.is_empty(), "attempt={attempt}: {output:?}");
+            }
+        });
+        stop.store(true, Ordering::Relaxed);
+        if let Err(error) = result {
+            std::panic::resume_unwind(error);
+        }
+    });
 }
 
 #[test]

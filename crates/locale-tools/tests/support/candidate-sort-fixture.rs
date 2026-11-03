@@ -4,6 +4,19 @@ use std::io::{self, Read, Write};
 use std::process::ExitCode;
 
 fn run() -> io::Result<ExitCode> {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "--copy-executable") {
+        let [_, source, destination] = args.as_slice() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "copy requires source and destination",
+            ));
+        };
+        // Open the destination only in this single-threaded child. It exits
+        // before use, so parallel test launches cannot inherit a writable handle.
+        std::fs::copy(source, destination)?;
+        return Ok(ExitCode::SUCCESS);
+    }
     let mut input = Vec::new();
     io::stdin().read_to_end(&mut input)?;
     let executable = std::env::current_exe()?;
