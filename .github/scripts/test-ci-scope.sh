@@ -14,6 +14,7 @@ printf '[package]\nname = "fastmash"\nversion = "1.0.0"\n[dependencies]\ncommon 
 printf '[package]\nname = "helper"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\ndevlib = "1"\n' > crates/helper/Cargo.toml
 touch crates/app/src/lib.rs crates/helper/src/lib.rs .github/workflows/ci.yml release/publication-test-server/src/weekly.rs scripts/build_site.py
 touch packaging/homebrew/fastmash.rb release/publication-test-server/Cargo.toml
+touch .github/workflows/homebrew.yml .github/workflows/macos.yml
 touch tools/release-changelog/src/main.rs scripts/check-release-changelog.sh scripts/prepare-release.sh \
   scripts/record-release-changelog.sh scripts/configure-release-changelog.sh \
   .github/workflows/release-changelog.yml .github/workflows/release-changelog-check.yml
@@ -62,6 +63,14 @@ expect application=true
 printf '// application change\n' > crates/app/src/lib.rs
 expect application=true
 printf '# workflow change\n' > .github/workflows/ci.yml
+expect application=false configuration=true packages=
+printf '# installer workflow change\n' > .github/workflows/homebrew.yml
+expect application=false configuration=false packages=
+printf '# installer workflow change\n' > .github/workflows/homebrew.yml
+printf '// application change\n' > crates/app/src/lib.rs
+expect application=true configuration=false packages=fastmash
+printf '# installer workflow change\n' > .github/workflows/homebrew.yml
+printf '# archive builder change\n' > .github/workflows/macos.yml
 expect application=false configuration=true packages=
 printf '// release tooling change\n' > release/publication-test-server/src/weekly.rs
 expect application=false configuration=true packages=

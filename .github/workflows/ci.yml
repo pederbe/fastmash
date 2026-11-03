@@ -28,6 +28,7 @@ jobs:
       application: ${{ steps.scope.outputs.application }}
       packages: ${{ steps.scope.outputs.packages }}
       configuration: ${{ steps.scope.outputs.configuration }}
+      release_inputs: ${{ steps.paths.outputs.release_inputs }}
       tag: ${{ steps.scope.outputs.tag }}
       homebrew: ${{ steps.paths.outputs.homebrew }}
       locale: ${{ steps.paths.outputs.locale }}
@@ -53,6 +54,11 @@ jobs:
         id: paths
         with:
           filters: |
+            release_inputs:
+              - 'release/**'
+              - '.github/workflows/macos*.yml'
+              - '.github/workflows/linux-release.yml'
+              - '.github/workflows/release.yml'
             release_changelog:
               - 'tools/release-changelog/**'
               - 'scripts/check-release-changelog.sh'
@@ -309,7 +315,8 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (!github.event.repository.private &&
-       (needs.changes.outputs.application != 'false' || needs.changes.outputs.configuration == 'true'))
+       (needs.changes.outputs.application != 'false' ||
+        (needs.changes.outputs.configuration == 'true' && needs.changes.outputs.release_inputs != 'false')))
     uses: ./.github/workflows/macos.yml
     permissions:
       contents: read
@@ -320,7 +327,8 @@ jobs:
     needs: changes
     if: >-
       !github.event.repository.private &&
-      needs.changes.outputs.configuration == 'true'
+      needs.changes.outputs.configuration == 'true' &&
+      needs.changes.outputs.release_inputs != 'false'
     uses: ./.github/workflows/linux-release.yml
     with:
       tag: ${{ needs.changes.outputs.tag }}

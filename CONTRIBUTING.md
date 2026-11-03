@@ -59,8 +59,10 @@ A branch does not need an update solely because unrelated changes have merged.
 Validation runs before merge. Merging the tested result does not start another
 validation suite. Development-only dependency changes run checks for the affected
 workspace packages. Shared dependency or feature changes retain application checks.
-Workflow-only changes run the check-selection tests. Use the manual CI run when
-a workflow change also needs application or platform execution.
+Workflow-only changes run the check-selection tests or their dedicated
+integration checks. Installer-workflow edits check the published downloads
+without rebuilding Fastmash. Use the manual CI run when a workflow change
+also needs application or platform execution.
 Before closing an implementation ticket, update its acceptance checklist and
 check whether its parent issue is complete.
 
