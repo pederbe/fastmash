@@ -20,6 +20,25 @@ struct Case {
     expected: &'static [u8],
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+fn repeat_native_duplicate_removal_for_diagnostics() {
+    for attempt in 0..200 {
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args(["--skip", "repeat_native_duplicate_removal_for_diagnostics"])
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "attempt {attempt}: status={}\nstdout={}\nstderr={}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        println!("completed attempt {attempt}");
+    }
+}
+
 fn run_case(command: &mut Command, input: &[u8], description: &str) -> Output {
     let mut child = command
         .spawn()
