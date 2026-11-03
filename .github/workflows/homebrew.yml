@@ -28,9 +28,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: Homebrew/actions/setup-homebrew@c262868c096d909fc278daa87ed9772967331ea3 # 2026.11.02.1
       - name: Check the installation recipe against the released files
         run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+            echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
+          fi
+          HOMEBREW_UPDATE_TO_TAG=1 brew update
           brew tap-new --no-git fastmash-qualification/local
           tap=$(brew --repository fastmash-qualification/local)
           formula=fastmash-qualification/local/fastmash
