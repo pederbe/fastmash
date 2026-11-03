@@ -1,6 +1,6 @@
 # The glibc 2.28 build environment preserves Linux runtime compatibility.
 # Install the current stable Rust toolchain through the standard Rustup installer.
-FROM quay.io/pypa/manylinux_2_28_x86_64@sha256:43f7ce12d79ed98b6dbfa3291d5afe389efd40a7e76de089959ffe99501b6edf
+FROM quay.io/pypa/manylinux_2_28_x86_64@sha256:7e41b1c7fd64dfc69703a1124b43c404382973ee06ec5d764b85c34d2221fded
 ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
 RUN curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh \
  && sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain stable --no-modify-path \
