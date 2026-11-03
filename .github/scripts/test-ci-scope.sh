@@ -8,11 +8,12 @@ cd "$fixture"
 git init -q
 git config user.email fixture@example.invalid
 git config user.name fixture
-mkdir -p crates/app/src crates/helper/src .github/workflows release/publication-test-server/src scripts tools/release-changelog/src
+mkdir -p crates/app/src crates/helper/src .github/workflows release/publication-test-server/src scripts tools/release-changelog/src packaging/homebrew
 printf '[workspace]\nmembers = ["crates/app", "crates/helper"]\n' > Cargo.toml
 printf '[package]\nname = "fastmash"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\n' > crates/app/Cargo.toml
 printf '[package]\nname = "helper"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\ndevlib = "1"\n' > crates/helper/Cargo.toml
 touch crates/app/src/lib.rs crates/helper/src/lib.rs .github/workflows/ci.yml release/publication-test-server/src/weekly.rs scripts/build_site.py
+touch packaging/homebrew/fastmash.rb release/publication-test-server/Cargo.toml
 touch tools/release-changelog/src/main.rs scripts/check-release-changelog.sh scripts/prepare-release.sh \
   scripts/record-release-changelog.sh scripts/configure-release-changelog.sh \
   .github/workflows/release-changelog.yml .github/workflows/release-changelog-check.yml
@@ -65,6 +66,10 @@ expect application=false configuration=true packages=
 printf '// release tooling change\n' > release/publication-test-server/src/weekly.rs
 expect application=false configuration=true packages=
 printf '# package signing change\n' > release/package-repository.sh
+expect application=false configuration=true packages=
+printf '# release-file installation recipe\n' > packaging/homebrew/fastmash.rb
+expect application=false configuration=true packages=
+printf '# independent tool manifest change\n' > release/publication-test-server/Cargo.toml
 expect application=false configuration=true packages=
 printf '# website change\n' > scripts/build_site.py
 expect application=false configuration=false packages=

@@ -1,74 +1,52 @@
-# Homebrew formula
+# Homebrew installation
 
-`fastmash.rb` is the recipe published in the
-[maintainer's tap](https://github.com/pederbe/homebrew-tap):
+Homebrew installs the same Linux and macOS programs as the published Fastmash
+release. It does not compile Fastmash or create another packaged build.
 
 ```sh
 brew install pederbe/tap/fastmash
 ```
 
-It builds the published source on Linux and macOS 15 or
-later with the locked Cargo dependencies. Current source installs one
-`fastmash` executable on both platforms. Published older Linux source also
-installs its sort supervisor. Both platforms include the
-project licenses and generated dependency licenses, copyright and notice texts
-for their target. Rust is a build dependency only. The tap publishes bottles,
-which are prebuilt Homebrew packages, for macOS 15, macOS 26 and Linux.
-These Homebrew builds carry no performance claim from the release binaries.
+Existing installations receive updates with `brew upgrade`. Revision 1 of the
+0.4.0 recipe moves existing Homebrew-built installations to the release files.
+The next Fastmash version starts at revision zero again.
 
-The recipe compiles `run_test.rs` from the same source during the build and
-installs the checker under `libexec`. `brew test` runs this checker without a
-compiler in its test dependencies.
+## Maintenance
 
-## How releases reach the tap
+`fastmash.rb` supplies the download layout and installation instructions. Its
+URLs and checksums name the current published release, so the recipe works on
+its own. Keep it compatible with the archives already produced by the release
+pipeline. The archives contain the executable, documentation and licenses.
 
-The tap's `Update` workflow runs daily. When the latest published Fastmash
-release is newer than the tap's formula, it takes this recipe from the release
-tag and sets the tag's source URL and checksum. It then builds and tests
-bottles on GitHub-hosted runners, publishes them, and checks installation,
-upgrade from the previous version and removal from the published tap.
-It does nothing when the versions match. Failed bottle builds leave the tap
-unchanged. A final installation-check failure can occur after the bottles are
-published, and can be checked again without rebuilding them. Neither failure
-affects the Fastmash release or its other packages. See the
-[tap's maintenance guide](https://github.com/pederbe/homebrew-tap/blob/main/CONTRIBUTING.md)
-for retries.
+The installation repository's daily `Update` workflow reads this recipe from
+Fastmash's `main`, selects the latest published release and replaces the URLs
+and checksums with that release's asset metadata. It checks the installation
+and upgrade before committing the recipe. A failed check leaves the existing
+installation recipe available and can be retried without rebuilding Fastmash
+or republishing a release.
 
-Change the recipe here, in the same pull request as any source change it
-depends on. The `Homebrew recipe checks` workflow builds the changed recipe
-from the pull request's own source on macOS 15, macOS 26 and Linux, and
-runs its test, audit, style check and removal check. It also runs for changes
-to the dependency notice tool, which the recipe uses. The `url` and `sha256`
-lines name a published release, so the recipe stays valid on its own. The
-tap's workflow replaces them for each new release.
+Release qualification remains responsible for application correctness. The
+small `check-install.sh` helper checks only the Homebrew delivery path. It
+checks the version, compares the installed executable with the downloaded
+archive and verifies that licenses are installed. The installation repository
+also uses it to check upgrades from the previous recipe. Both repositories
+check removal afterwards.
 
-Homebrew's
-[acceptance policy](https://docs.brew.sh/Package-Acceptance-Policy) includes
-repository age and public-interest requirements for `homebrew/core`.
-Review those requirements before proposing a core submission.
+Changes to this recipe or helper run the existing Homebrew workflow on macOS
+15, macOS 26 and Linux. These jobs install the published archives, not programs
+rebuilt from the pull request. Application changes continue through the
+ordinary application and release checks.
 
-## Build and check locally
-
-Use Homebrew's supported prefix: `/home/linuxbrew/.linuxbrew` on Linux with
-the normal [Linux build prerequisites](https://docs.brew.sh/Homebrew-on-Linux),
-or `/opt/homebrew` on macOS 15 or later.
-Create a local test tap with `brew tap-new OWNER/fastmash-test`, then copy
-`fastmash.rb` into its `Formula/` directory. Substitute your GitHub username
-for `OWNER` in these commands:
+For a local check, create a disposable test repository with
+`brew tap-new --no-git OWNER/fastmash-test`, copy `fastmash.rb` to its `Formula`
+directory, then run:
 
 ```sh
-brew install --build-from-source OWNER/fastmash-test/fastmash
-brew test OWNER/fastmash-test/fastmash
-brew audit --strict OWNER/fastmash-test/fastmash
 brew style OWNER/fastmash-test/fastmash
+brew audit --except=installed OWNER/fastmash-test/fastmash
+bash packaging/homebrew/check-install.sh OWNER/fastmash-test/fastmash
 brew uninstall OWNER/fastmash-test/fastmash
 ```
 
-On both platforms the test requires nonempty licenses and notices, the exact
-version, arithmetic and a transcendental result, and a paired operation.
-Current source requires exact native sorting traces for the paired operation
-and sorted duplicate removal, and confirms that no sort supervisor is installed.
-Historical release tags retain their own checks for the executables they contain.
-
-After removal, confirm that `fastmash` and any legacy `fastmash-sort-supervisor`
-are absent from the prefix's `bin/` and that the formula's Cellar directory is gone.
+See the [installation repository's maintenance guide](https://github.com/pederbe/homebrew-tap/blob/main/CONTRIBUTING.md)
+for automatic updates and recovery.

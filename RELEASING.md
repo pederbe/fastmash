@@ -95,10 +95,10 @@ The GitHub-hosted workflows perform these steps for the frozen version:
    without rebuilding or republishing a release. Cloudflare reports the actual
    website build result after accepting the request.
 7. The Homebrew tap's daily `Update` workflow notices the published release.
-   It builds, tests and publishes bottles from the release tag's
-   [recipe](packaging/homebrew/README.md), then checks an upgrade on each
-   platform. The release does not wait for it, and a tap failure is retried in
-   the tap.
+   It updates the [installation recipe](packaging/homebrew/README.md) to use
+   the published archives and their checksums, then checks installation,
+   upgrade and removal without rebuilding Fastmash. The release does not wait
+   for it, and an installation update failure is retried in the tap.
 
 The workflow binds correctness and installation evidence to the delivered
 bytes. It does not relabel a fresh rebuild as a benchmarked executable. Additional

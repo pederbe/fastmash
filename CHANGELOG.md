@@ -10,6 +10,12 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+### Changed
+
+- Homebrew installs the tested release downloads on Linux and macOS instead of
+  rebuilding Fastmash into separate packages. Existing users receive the change
+  through `brew upgrade`.
+
 ### Development
 
 - Create executable scripts for installer and publication tests in an isolated

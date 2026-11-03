@@ -115,12 +115,13 @@ if base:
             ".github/workflows/release-changelog.yml", ".github/workflows/release-changelog-check.yml",
         }:
             continue  # The standalone changelog job checks this tool without application builds.
-        if path.startswith((".github/workflows/", ".github/scripts/", "release/publication-test-server/tests/")) or path in {
+        if path.startswith((".github/workflows/", ".github/scripts/", "release/publication-test-server/tests/", "packaging/homebrew/")) or path in {
             "release/prepare-linux.sh", "release/check-crate-packages.sh", "release/publish-crates.sh",
             "release/package-repository.sh",  # Dedicated package workflow verifies signing/installation.
             "release/publication-test-server/src/weekly.rs",
             "release/publication-test-server/src/crates_publish_tests.rs",
             "release/publication-test-server/src/bin/fastmash-release.rs",
+            "release/publication-test-server/Cargo.toml",
         }:
             configuration = True
         elif any(path.startswith(str(pathlib.PurePosixPath(m).parent) + "/") for m in after):

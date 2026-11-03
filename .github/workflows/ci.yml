@@ -65,7 +65,6 @@ jobs:
             homebrew:
               - '.github/workflows/homebrew.yml'
               - 'packaging/homebrew/**'
-              - 'crates/license-notices/**'
             binstall:
               - '.github/workflows/cargo-binstall.yml'
             locale:
@@ -88,7 +87,6 @@ jobs:
               - 'crates/cli/tests/release_installation.rs'
               - 'release/publication-test-server/**'
               - 'packaging/conda-forge/**'
-              - 'packaging/homebrew/**'
 
   # Missing filter output runs the checks.
   check:
