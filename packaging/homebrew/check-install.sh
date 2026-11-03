@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Check the package-manager integration, reusing the published executable.
 set -euo pipefail
+export HOMEBREW_NO_INSTALL_CLEANUP=1
 formula=$1
 previous=${2:-}
 name=${formula##*/}

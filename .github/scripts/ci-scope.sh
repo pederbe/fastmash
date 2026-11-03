@@ -115,7 +115,7 @@ if base:
             ".github/workflows/release-changelog.yml", ".github/workflows/release-changelog-check.yml",
         }:
             continue  # The standalone changelog job checks this tool without application builds.
-        if path.startswith((".github/workflows/", ".github/scripts/", "release/publication-test-server/tests/", "packaging/homebrew/")) or path in {
+        if path.startswith((".github/workflows/", ".github/scripts/", "release/publication-test-server/tests/")) or path in {
             "release/prepare-linux.sh", "release/check-crate-packages.sh", "release/publish-crates.sh",
             "release/package-repository.sh",  # Dedicated package workflow verifies signing/installation.
             "release/publication-test-server/src/weekly.rs",
@@ -128,8 +128,8 @@ if base:
             continue
         elif path in {"scripts/build_site.sh", "scripts/build_site.py", "scripts/test_build_site.py"}:
             continue  # Website checks cover these files without rebuilding the application.
-        elif path.startswith("tools/icu-exemplars/"):
-            continue  # Its separate reference workflow covers this standalone tool.
+        elif path.startswith(("tools/icu-exemplars/", "packaging/homebrew/")):
+            continue  # Dedicated checks cover these inputs without application builds.
         else:
             application = True
 

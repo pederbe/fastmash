@@ -68,7 +68,7 @@ expect application=false configuration=true packages=
 printf '# package signing change\n' > release/package-repository.sh
 expect application=false configuration=true packages=
 printf '# release-file installation recipe\n' > packaging/homebrew/fastmash.rb
-expect application=false configuration=true packages=
+expect application=false configuration=false packages=
 printf '# independent tool manifest change\n' > release/publication-test-server/Cargo.toml
 expect application=false configuration=true packages=
 printf '# website change\n' > scripts/build_site.py
