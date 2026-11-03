@@ -9,7 +9,7 @@ cargo run --release --locked -p fastmash-corpus-driver --example native-late-inp
   /path/to/fastmash /tmp/fastmash-late-input-captures
 ```
 
-Use a new capture directory on Linux or Apple Silicon macOS. The probe first
+Use a new capture directory on Linux or macOS. The probe first
 checks ordinary input with a clean end of stream. It then creates a private
 pseudo-terminal and a separate session through safe Nix and Rustix interfaces.
 A coordinator places the candidate's process group in the terminal foreground.

@@ -48,8 +48,8 @@ west	8	4
 
 ## Install
 
-Fastmash runs on **Linux x86-64** (glibc), **Windows through WSL2** and
-**Apple Silicon macOS 15 and later**.
+Fastmash runs on **Linux** (glibc), **Windows through WSL2** and
+**macOS 15 and later**.
 
 Install prebuilt programs with your package manager. On Debian or Ubuntu,
 add the [signed apt repository](https://fastmash.io/install.html#debian-and-ubuntu).
@@ -60,7 +60,7 @@ sudo curl -fsSLo /etc/yum.repos.d/fastmash.repo https://packages.fastmash.io/fas
 sudo dnf install fastmash
 ```
 
-With Homebrew on Apple Silicon macOS or Linux:
+With Homebrew on macOS or Linux:
 
 ```sh
 brew install pederbe/tap/fastmash

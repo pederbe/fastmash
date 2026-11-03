@@ -16,8 +16,8 @@ flowchart LR
 ## Quick start
 
 These checks cover application changes. Documentation-only changes use the
-[website checks](#website-checks). Run from the repository root on Linux x86-64
-or WSL2. The native Apple Silicon development gate below runs on macOS 15 and 26.
+[website checks](#website-checks). Run from the repository root on Linux
+or WSL2. The native macOS development gate below runs on macOS 15 and 26.
 
 ```sh
 cargo fmt --all --check                  # formatting
@@ -423,7 +423,7 @@ margins and hardware.
 
 | | |
 | --- | --- |
-| OS | Linux x86-64 with glibc, or WSL2 |
+| OS | Linux with glibc, or WSL2 |
 | Kernel | A supported Linux kernel with native signals and temporary-file support |
 | Tools | Latest stable Rust; Python 3.10 or later for website checks |
 | Temporary storage | A writable disk-backed `TMPDIR`, such as ext4 |
@@ -431,7 +431,9 @@ margins and hardware.
 Under WSL, keep the checkout and `TMPDIR` on the Linux filesystem rather than a
 Windows drive: tests are much faster there.
 
-## Native Apple Silicon development gate
+<a id="native-apple-silicon-development-gate"></a>
+
+## Native macOS development gate
 
 Application changes run this gate through `ci.yml`. Development-only package
 updates use affected-package checks instead. Manual and release calls remain

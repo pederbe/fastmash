@@ -18,7 +18,7 @@ aborts cannot promise a final report.
 
 Use the latest stable Rust for ordinary builds and profiling.
 Reuse installed tools and the normal build cache. These commands run from the
-repository root on Linux x86-64 or Apple Silicon macOS 15 or later.
+repository root on Linux or macOS 15 or later.
 
 ```sh
 cargo +stable build --profile profiling --features hotpath-alloc --bin fastmash --example profile-jobs
@@ -127,7 +127,7 @@ viewer is wanted. Loading that viewer is separate from static capture.
 CPU instrumentation prevents measured functions from being inlined. Use its
 samples to locate work, then verify the hypothesis in an ordinary build.
 
-## Instruction counts on Linux x86-64
+## Instruction counts on Linux
 
 Hotpath 0.29 can attribute executed instructions to the existing instrumented
 functions using Valgrind's Callgrind tool. This helps distinguish extra work

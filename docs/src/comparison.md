@@ -17,7 +17,7 @@ own documentation (checked September 2026); tell us if something has changed.
 | Quoted CSV fields | Yes, in supported calculation, selection and comparison modes | No | Yes | Yes | Yes |
 | Grouped statistics | Yes | Yes | Yes (`stats1 -g`) | Through `pivotp` or `sqlp` | Yes (`summary -g`) |
 | Joins, filters, reshaping | No | No | Yes | Yes | Yes |
-| Platforms | Linux x86-64, WSL2, Apple Silicon macOS 15+ | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
+| Platforms | Linux, WSL2, macOS 15+ | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
 
 ## GNU datamash
 

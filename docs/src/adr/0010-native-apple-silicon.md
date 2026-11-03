@@ -1,7 +1,7 @@
-# 0010: Native Apple Silicon macOS
+# 0010: Native macOS
 
 Status: accepted for development. The published 0.1.0 platform scope remains
-[ADR 0007: Linux x86-64 first](0007-linux-first.md).
+[ADR 0007: Linux first](0007-linux-first.md).
 
 The Linux external-supervision decision below is superseded by
 [ADR 0014: Native sorting in one executable](0014-native-sorting-everywhere.md).

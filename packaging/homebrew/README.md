@@ -7,13 +7,13 @@
 brew install pederbe/tap/fastmash
 ```
 
-It builds the published source on Linux x86-64 and Apple Silicon macOS 15 or
+It builds the published source on Linux and macOS 15 or
 later with the locked Cargo dependencies. Current source installs one
 `fastmash` executable on both platforms. Published older Linux source also
 installs its sort supervisor. Both platforms include the
 project licenses and generated dependency licenses, copyright and notice texts
 for their target. Rust is a build dependency only. The tap publishes bottles,
-which are prebuilt Homebrew packages, for macOS 15, macOS 26 and Linux x86-64.
+which are prebuilt Homebrew packages, for macOS 15, macOS 26 and Linux.
 These Homebrew builds carry no performance claim from the release binaries.
 
 The recipe compiles `run_test.rs` from the same source during the build and
@@ -36,7 +36,7 @@ for retries.
 
 Change the recipe here, in the same pull request as any source change it
 depends on. The `Homebrew recipe checks` workflow builds the changed recipe
-from the pull request's own source on macOS 15, macOS 26 and Linux x86-64, and
+from the pull request's own source on macOS 15, macOS 26 and Linux, and
 runs its test, audit, style check and removal check. It also runs for changes
 to the dependency notice tool, which the recipe uses. The `url` and `sha256`
 lines name a published release, so the recipe stays valid on its own. The
@@ -51,7 +51,7 @@ Review those requirements before proposing a core submission.
 
 Use Homebrew's supported prefix: `/home/linuxbrew/.linuxbrew` on Linux with
 the normal [Linux build prerequisites](https://docs.brew.sh/Homebrew-on-Linux),
-or `/opt/homebrew` on Apple Silicon macOS 15 or later.
+or `/opt/homebrew` on macOS 15 or later.
 Create a local test tap with `brew tap-new OWNER/fastmash-test`, then copy
 `fastmash.rb` into its `Formula/` directory. Substitute your GitHub username
 for `OWNER` in these commands:

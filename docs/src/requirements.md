@@ -7,14 +7,14 @@ Most Linux systems from 2018 onward need nothing beyond the
 
 | Requirement | Why |
 | --- | --- |
-| Linux x86-64, glibc 2.28 or later (RHEL 8, Debian 10, Ubuntu 20.04 and newer) | Supported platform for the prebuilt binaries |
-| Linux x86-64 with glibc (`x86_64-unknown-linux-gnu`) | Building Linux source; musl and other Linux targets are refused at compile time |
-| Apple Silicon macOS 15 or later (`aarch64-apple-darwin`) | Supported platform for the native archive, checked on macOS 15 and 26 |
+| Linux, glibc 2.28 or later (RHEL 8, Debian 10, Ubuntu 20.04 and newer) | Supported platform for the prebuilt binaries |
+| Linux with glibc (`x86_64-unknown-linux-gnu`) | Building Linux source; musl and other Linux targets are refused at compile time |
+| macOS 15 or later (`aarch64-apple-darwin`) | Supported platform for the native archive, checked on macOS 15 and 26 |
 | `/proc` mounted on Linux | Supplies memory and terminal information. Without it, Fastmash uses conservative sort memory and writes output in 8 KiB blocks, even to a terminal |
 | A writable `TMPDIR` (default `/tmp`) | Temporary data for large sorted jobs |
 
-Fastmash supports Linux x86-64, Windows through WSL2 and
-**Apple Silicon macOS 15 or later** (`aarch64-apple-darwin`), with native checks
+Fastmash supports Linux, Windows through WSL2 and
+**macOS 15 or later** (`aarch64-apple-darwin`), with native checks
 on macOS 15 and 26. Intel macOS, older macOS versions and native Windows are
 outside the scope. See [Homebrew](install.md#homebrew) or the
 [native archive instructions](install.md#macos-archive).
@@ -71,7 +71,7 @@ cargo build --release --locked
 # the program is target/release/fastmash
 ```
 
-To build on Apple Silicon macOS 15 or later, run this command in Bash:
+To build on macOS 15 or later, run this command in Bash:
 
 ```bash
 MACOSX_DEPLOYMENT_TARGET=15.0 cargo build --release --locked --bin fastmash --target aarch64-apple-darwin

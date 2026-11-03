@@ -5,10 +5,10 @@ Fastmash's direction, roughly in order. Plans change as we learn from users;
 [discussions](https://github.com/pederbe/fastmash/discussions) are the best
 way to influence them.
 
-## Available in 0.2.0: macOS on Apple Silicon
+## Available in 0.2.0: macOS
 
-Fastmash 0.2.0 adds native Apple Silicon macOS 15 and later alongside Linux
-x86-64 and WSL2. Its published archive is checked on macOS 15 and 26,
+Fastmash 0.2.0 adds native macOS 15 and later alongside Linux and WSL2.
+Its published archive is checked on macOS 15 and 26,
 including command behavior, numerical results and archive installation.
 
 ## In development: native sorting everywhere
