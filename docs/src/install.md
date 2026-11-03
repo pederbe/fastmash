@@ -1,7 +1,7 @@
 # Install
 
-Fastmash runs on **Linux x86-64** (glibc), **Windows through WSL2** and
-**Apple Silicon macOS 15 and later**. The current release is @VERSION@.
+Fastmash runs on **Linux** (glibc), **Windows through WSL2** and
+**macOS 15 and later**. The current release is @VERSION@.
 
 ## Choose a method
 
@@ -12,7 +12,7 @@ programs and brings you later versions with your other updates.
 | --- | --- | --- |
 | Debian, Ubuntu | [apt repository](#debian-and-ubuntu) | `sudo apt upgrade` |
 | Fedora, RHEL and similar | [dnf repository](#fedora-rhel-and-similar) | `sudo dnf upgrade` |
-| Apple Silicon macOS, or Linux with Homebrew | [Homebrew](#homebrew) | `brew upgrade` |
+| macOS, or Linux with Homebrew | [Homebrew](#homebrew) | `brew upgrade` |
 | Any supported system | [Quick install](#quick-install) | Run it again |
 
 All of these install prebuilt programs. If you prefer to compile Fastmash
@@ -20,7 +20,7 @@ yourself, see [Cargo](#with-cargo).
 
 ## Debian and Ubuntu
 
-The signed apt repository provides updates through apt on Linux x86-64. Install
+The signed apt repository provides updates through apt on Linux. Install
 the tools needed to download and inspect its key:
 
 ```sh
@@ -52,7 +52,7 @@ For Debian 10, Ubuntu 20.04 and newer. Remove it with `sudo apt remove fastmash`
 
 ## Fedora, RHEL and similar
 
-The signed dnf repository provides updates on Linux x86-64, with package and
+The signed dnf repository provides updates on Linux, with package and
 repository signature checks enabled:
 
 ```sh
@@ -69,14 +69,13 @@ For Fedora, RHEL 8 and newer. Remove it with `sudo dnf remove fastmash`.
 
 ## Homebrew
 
-With [Homebrew](https://brew.sh) on Apple Silicon macOS 15 or later, or on
-Linux x86-64:
+With [Homebrew](https://brew.sh) on macOS 15 or later, or on Linux:
 
 ```sh
 brew install pederbe/tap/fastmash
 ```
 
-Homebrew downloads a prebuilt bottle for macOS 15, macOS 26 and Linux x86-64,
+Homebrew downloads a prebuilt bottle for macOS 15, macOS 26 and Linux,
 so you do not need Rust. If no bottle matches your setup, such as a Homebrew
 installed outside its default location, it builds from source automatically.
 This takes a few minutes and needs no action from you. Bottles are built by
@@ -185,8 +184,8 @@ The final command prints `3`.
 If you already use Rust, Cargo offers two routes.
 
 [cargo-binstall](https://github.com/cargo-bins/cargo-binstall) downloads the
-same prebuilt executables as the release archives, without compiling. On Linux
-x86-64 or WSL2, run:
+same prebuilt executables as the release archives, without compiling.
+On Linux or WSL2, run:
 
 ```sh
 cargo binstall fastmash
@@ -195,7 +194,7 @@ cargo binstall fastmash
 Existing published Linux releases may also install their Sort supervisor.
 Releases containing the native sorting migration install only `fastmash`.
 
-On Apple Silicon macOS 15 or later, select its single executable:
+On macOS 15 or later, select its single executable:
 
 ```sh
 cargo binstall fastmash --bin fastmash
@@ -212,7 +211,7 @@ To compile Fastmash from source with `cargo install`, use the latest stable
 cargo install --locked fastmash
 ```
 
-On Apple Silicon macOS 15 or later, select its single executable:
+On macOS 15 or later, select its single executable:
 
 ```sh
 cargo install --locked --bin fastmash fastmash

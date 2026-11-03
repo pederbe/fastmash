@@ -1,6 +1,6 @@
 # Nix package
 
-`package.nix` builds the published 0.1.0 source for Linux x86-64. The source
+`package.nix` builds the published 0.1.0 source for Linux. The source
 archive and vendored Cargo dependencies have verified hashes. Both executables
 are installed in `bin/`, with project licenses and generated dependency
 licenses, copyright and notices in `share/doc/fastmash/`.

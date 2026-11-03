@@ -1,9 +1,9 @@
 # 0011: Qualify and deliver the same native archive
 
 Status: accepted for 0.2.0 release delivery. Supersedes the development-only
-archive boundary in [ADR 0010: Native Apple Silicon macOS](0010-native-apple-silicon.md).
+archive boundary in [ADR 0010: Native macOS](0010-native-apple-silicon.md).
 With the publication of 0.2.0, this also supersedes the Linux-only scope of
-[ADR 0007: Linux x86-64 first](0007-linux-first.md).
+[ADR 0007: Linux first](0007-linux-first.md).
 
 The Linux performance-manifest prerequisite and manual publication step are
 superseded by [ADR 0012](0012-release-delivery-and-performance.md). The native
@@ -13,7 +13,7 @@ The compiler pin is superseded by [ADR 0015](0015-stable-release-toolchain.md).
 
 ## Decision
 
-Build the Apple Silicon executable twice in separate clean target trees on
+Build the macOS executable twice in separate clean target trees on
 macOS 15, using the pinned Rust compiler, remapped source paths and a macOS 15
 deployment target. Require identical executable bytes, then package one copy
 with target-specific notices, its executable checksum and build provenance.

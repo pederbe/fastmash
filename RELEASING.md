@@ -75,7 +75,7 @@ The GitHub-hosted workflows perform these steps for the frozen version:
 2. Run workspace tests and both regression-corpus input modes against that
    executable. Package the same bytes into the archive,
    `.deb` and `.rpm`, then test extraction, installation, Commands and removal.
-3. Build the Apple Silicon executable twice on macOS 15 with the pinned compiler,
+3. Build the macOS executable twice on macOS 15 with the pinned compiler,
    remapped paths and deployment target 15.0. Freeze one archive and its SHA-256.
 4. Attest the platform archives and Linux packages and upload a draft release.
    Verify downloaded Linux assets against the build's retained checksums and
@@ -86,8 +86,8 @@ The GitHub-hosted workflows perform these steps for the frozen version:
    Package repository at the same tag and wait for its signed apt/dnf update and
    installed-client checks. Publish the remaining crates in dependency order
    using the existing crates.io trusted publisher. A separate job then
-   installs the release with cargo-binstall on Linux x86-64 and Apple Silicon
-   macOS and checks the installed bytes against the release archives. Its
+   installs the release with cargo-binstall on Linux and macOS and checks the
+   installed bytes against the release archives. Its
    failure is reported without holding up the next step.
 6. Advance the `release` branch after package delivery succeeds. A separate
    Website deployment workflow requests the fixed-`main` Cloudflare build.
@@ -268,7 +268,7 @@ and announcements remain separate work.
 
 ## Native macOS release delivery
 
-Apple Silicon macOS 15 or later is the main addition in the published 0.2.0 release.
+macOS 15 or later is the main addition in the published 0.2.0 release.
 The 0.1.0 release and its qualified Linux files remain unchanged.
 Intel macOS is outside this scope. See [ADR 0011: Qualify and deliver the same
 native archive](docs/src/adr/0011-native-release-delivery.md).

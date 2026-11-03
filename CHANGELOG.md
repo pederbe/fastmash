@@ -23,6 +23,8 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Use plain Linux and macOS names throughout the README, website and
+  documentation. Supported build targets are unchanged.
 - Reduce record copying in ungrouped ordinary-text calculations without
   `--full` or per-row operations.
 - Source builds use the latest stable Rust. The Rust 1.88 minimum compiler
@@ -47,8 +49,7 @@ numerical profile version that introduced it.
   they go. Sorted `rmdup` now reports its route under `FASTMASH_SORT_TRACE`.
 
 - cargo-binstall no longer falls back to third-party QuickInstall builds, and
-  each release checks that it installs the published executables on Linux
-  x86-64 and Apple Silicon macOS.
+  each release checks that it installs the published executables on Linux and macOS.
 
 - Homebrew installs prebuilt bottles that follow each release within a day, and
   the installation guide now leads with apt, dnf and Homebrew.
@@ -58,11 +59,11 @@ numerical profile version that introduced it.
 ### Added
 
 - Optional local timing, allocation and CPU profiling with reproducible Command
-  jobs and separate static reports, plus Callgrind instruction counts on Linux
-  x86-64. Ordinary builds keep profiling disabled.
+  jobs and separate static reports, plus Callgrind instruction counts on Linux.
+  Ordinary builds keep profiling disabled.
 
 - Signed apt and dnf repositories at `packages.fastmash.io`, with package-manager
-  updates on Linux x86-64. Installation, upgrade from 0.1.0 to 0.2.0 and removal
+  updates on Linux. Installation, upgrade from 0.1.0 to 0.2.0 and removal
   are verified on Debian 12, Ubuntu 24.04 and AlmaLinux 8.
 
 ### Fixed
@@ -285,11 +286,11 @@ numerical profile version that introduced it.
 
 ### Added
 
-- Homebrew installation on Linux x86-64 through `pederbe/tap/fastmash`,
+- Homebrew installation on Linux through `pederbe/tap/fastmash`,
   with both executables, license notices and installed system-sort checks.
   Source recipes for Nix and Fedora are also prepared; their repository
   admission remains pending.
-- Native Apple Silicon macOS 15 and later, with built-in sorting and disk spill.
+- Native macOS 15 and later, with built-in sorting and disk spill.
   Release archives include license notices, checksums and build provenance.
   Installation and command checks run against the same archive on macOS 15
   and 26 before and after release upload.
@@ -314,7 +315,7 @@ numerical profile version that introduced it.
 
 ### Added
 
-- The GNU datamash 1.9 command language on Linux x86-64 and WSL2: aggregate
+- The GNU datamash 1.9 command language on Linux and WSL2: aggregate
   statistics, grouping (`-g`, `groupby`) with optional sorting (`-s`),
   `crosstab`, field modes (`reverse`, `noop`), table modes (`check`,
   `transpose`, `rmdup`) and per-row operations (`cut`, rounding, binning,

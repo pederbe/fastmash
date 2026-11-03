@@ -1,6 +1,6 @@
 # Fedora source package
 
-`fastmash.spec` compiles the published 0.2.0 source for Linux x86-64, using
+`fastmash.spec` compiles the published 0.2.0 source for Linux, using
 Fedora's Rust RPM macros and an offline copy of the locked Cargo dependencies.
 This is a source package proposal for Fedora, separate from the prebuilt RPM
 on the releases page. Fedora's compiler and build flags produce different

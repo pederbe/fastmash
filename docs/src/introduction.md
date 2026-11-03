@@ -60,7 +60,7 @@ switching means changing one word.
 
 ## Get started
 
-- [Install Fastmash](install.md) on Linux x86-64 or WSL2
+- [Install Fastmash](install.md) on Linux, macOS or Windows through WSL2
 - [Quick start](quick-start.md): a five-minute tour
 - [Operations](guide/operations.md): every statistic and transformation
 - [Quoted CSV and result names](guide/csv-and-result-names.md): structured input and useful report labels
