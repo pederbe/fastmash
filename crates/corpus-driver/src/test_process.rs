@@ -128,6 +128,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let binary = args.next().ok_or("test-process executable is required")?;
     let arguments: Vec<OsString> = args.collect();
+    if binary == "--copy-executable" {
+        let [source, destination] = arguments.as_slice() else {
+            return Err("test-process copy requires source and destination".into());
+        };
+        alarm::set(seconds);
+        // This process never spawns children. Its writable copy descriptor is
+        // closed before the multithreaded caller can launch the new executable.
+        std::fs::copy(source, destination)?;
+        return Ok(());
+    }
     let ignored = selected(IGNORE_PIPE)?;
     let broken = selected(BROKEN_OUTPUT)?;
     let mut mask = SigSet::empty();

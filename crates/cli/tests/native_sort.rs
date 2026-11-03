@@ -45,9 +45,9 @@ fn standalone(pool: &Mutex<Weak<temp_dir::TempDir>>) -> Arc<temp_dir::TempDir> {
     let root = Arc::new(temp_dir::TempDir::new(&format!(
         "native-sort-executable-{id}"
     )));
-    // Publish only after copying closes its writable descriptor. Every live
-    // fixture retains this owner, so another copy cannot overlap its children.
-    fs::copy(executable::fastmash(), root.0.join("fastmash")).unwrap();
+    // Every live fixture retains this owner, so another copy cannot overlap
+    // its children.
+    test_process::copy_executable(executable::fastmash(), root.0.join("fastmash"));
     *owner = Arc::downgrade(&root);
     root
 }

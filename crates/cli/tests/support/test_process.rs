@@ -1,6 +1,28 @@
 #![forbid(unsafe_code)]
-//! Child-only alarm setup through the prepared safe launcher.
-use std::{ffi::OsStr, path::PathBuf, process::Command};
+//! Fresh-process fixture setup and isolated executable copies.
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+    process::Command,
+};
+
+#[allow(dead_code)] // Only the standalone-executable suites need a copy.
+pub fn copy_executable(source: impl AsRef<Path>, destination: impl AsRef<Path>) {
+    // Parallel forks must not inherit a writable descriptor for this executable.
+    // The fresh copier opens it after exec and exits before this function returns.
+    let output = bounded("--copy-executable", 15)
+        .arg(source.as_ref())
+        .arg(destination.as_ref())
+        .env_clear()
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "copy {:?} to {:?}: {output:?}",
+        source.as_ref(),
+        destination.as_ref(),
+    );
+}
 
 pub fn bounded(binary: impl AsRef<OsStr>, seconds: u32) -> Command {
     assert!((1..=60).contains(&seconds));
