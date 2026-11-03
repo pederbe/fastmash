@@ -48,12 +48,18 @@ fn executable_copy_preserves_opaque_paths_and_reports_errors() {
     use std::os::unix::ffi::OsStringExt;
 
     let fixture = Fixture::new();
+    // macOS filesystems require Unicode names. Linux also accepts opaque bytes.
+    let (source_name, destination_name): (&[u8], &[u8]) = if cfg!(target_os = "linux") {
+        (b"source-\xff", b"copy-\xfe")
+    } else {
+        ("source-é".as_bytes(), "copy-é".as_bytes())
+    };
     let source = fixture
         .0
-        .join(std::ffi::OsString::from_vec(b"source-\xff".to_vec()));
+        .join(std::ffi::OsString::from_vec(source_name.to_vec()));
     let destination = fixture
         .0
-        .join(std::ffi::OsString::from_vec(b"copy-\xfe".to_vec()));
+        .join(std::ffi::OsString::from_vec(destination_name.to_vec()));
     fs::rename(fixture.0.join("fastmash"), &source).unwrap();
     copy_executable::copy_executable(&source, &destination);
     assert_eq!(fs::read(&source).unwrap(), fs::read(&destination).unwrap());
