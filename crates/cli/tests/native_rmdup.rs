@@ -20,16 +20,28 @@ struct Case {
     expected: &'static [u8],
 }
 
-fn run_case(command: &mut Command, input: &[u8], _description: &str) -> Output {
-    let mut child = command.spawn().unwrap();
+fn run_case(command: &mut Command, input: &[u8], description: &str) -> Output {
+    let mut child = command
+        .spawn()
+        .unwrap_or_else(|error| panic!("{description}: cannot start child: {error}"));
     thread::scope(|scope| {
         let writer = child
             .stdin
             .take()
-            .map(|mut stdin| scope.spawn(move || stdin.write_all(input).unwrap()));
-        let output = child.wait_with_output().unwrap();
+            .map(|mut stdin| scope.spawn(move || stdin.write_all(input)));
+        let output = child
+            .wait_with_output()
+            .unwrap_or_else(|error| panic!("{description}: cannot collect child output: {error}"));
         if let Some(writer) = writer {
-            writer.join().unwrap();
+            let result = writer.join();
+            assert!(
+                matches!(&result, Ok(Ok(()))),
+                "{description}\ninput writer: {result:?}\nchild status: {} (code {:?})\nstdout: {:?}\nstderr: {:?}",
+                output.status,
+                output.status.code(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
         }
         output
     })
@@ -75,7 +87,10 @@ fn early_input_close_reports_the_child_and_case_instead_of_only_the_writer() {
             "stderr:",
             diagnostic,
         ] {
-            assert!(message.contains(expected), "missing {expected:?}: {message}");
+            assert!(
+                message.contains(expected),
+                "missing {expected:?}: {message}"
+            );
         }
     }
 }
@@ -186,16 +201,8 @@ fn native_duplicate_removal_preserves_records_keys_headers_and_separators() {
                         case.args
                     );
                     let output = run_case(&mut command, case.input, &description);
-                    assert!(
-                        output.status.success(),
-                        "{locale} {memory} {file} {:?}: {output:?}",
-                        case.args
-                    );
-                    assert_eq!(
-                        output.stdout, case.expected,
-                        "{locale} {memory} {file} {:?}",
-                        case.args
-                    );
+                    assert!(output.status.success(), "{description}: {output:?}",);
+                    assert_eq!(output.stdout, case.expected, "{description}",);
                     let trace = String::from_utf8_lossy(&output.stderr);
                     assert!(trace.contains("native sort"), "{trace}");
                     assert!(!trace.contains("system sort"), "{trace}");
