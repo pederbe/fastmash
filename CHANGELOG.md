@@ -12,6 +12,8 @@ numerical profile version that introduced it.
 
 ### Development
 
+- Stage native test executables in a separate process so concurrent launches
+  cannot retain their writable descriptors and cause a "Text file busy" exit.
 - Duplicate-removal test failures retain the input-write error, child status,
   output and active case details when the child closes its input early.
 - Release builds follow stable Rust and record the actual build tools in each

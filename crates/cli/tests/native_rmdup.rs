@@ -22,21 +22,61 @@ struct Case {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn repeat_native_duplicate_removal_for_diagnostics() {
-    for attempt in 0..200 {
-        let output = Command::new(std::env::current_exe().unwrap())
-            .args(["--skip", "repeat_native_duplicate_removal_for_diagnostics"])
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "attempt {attempt}: status={}\nstdout={}\nstderr={}",
-            output.status,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        );
-        println!("completed attempt {attempt}");
-    }
+fn standalone_executable_copy_does_not_race_concurrent_launches() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let stop = AtomicBool::new(false);
+    thread::scope(|scope| {
+        for _ in 0..8 {
+            let stop = &stop;
+            scope.spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    let output = test_process::bounded(executable::fastmash(), 15)
+                        .arg("--help")
+                        .output()
+                        .unwrap();
+                    assert!(output.status.success(), "{output:?}");
+                }
+            });
+        }
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            for attempt in 0..1000 {
+                let root = temp_dir::TempDir::new(&format!("native-rmdup-startup-{attempt}"));
+                let binary = root.0.join("fastmash");
+                test_process::copy_executable(executable::fastmash(), &binary);
+                let mut command = test_process::bounded(&binary, 15);
+                command
+                    .args(["-s", "rmdup", "1"])
+                    .env_clear()
+                    .env("LC_ALL", "C")
+                    .env("PATH", "/nonexistent")
+                    .env("TMPDIR", &root.0)
+                    .env("FASTMASH_SORT_MEMORY_BYTES", "1")
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
+                let output = run_case(
+                    &mut command,
+                    b"b\tfirst-b\na\tfirst-a\nb\tlast-b\na\tlast-a\n",
+                    &format!(
+                        "startup attempt={attempt} locale=C memory=1 input=pipe args=[-s, rmdup, 1]"
+                    ),
+                );
+                assert!(
+                    output.status.success(),
+                    "startup attempt={attempt}: status={} stdout={:?} stderr={:?}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr),
+                );
+                assert_eq!(output.stdout, b"a\tfirst-a\nb\tfirst-b\n");
+            }
+        }));
+        stop.store(true, Ordering::Relaxed);
+        if let Err(error) = result {
+            std::panic::resume_unwind(error);
+        }
+    });
 }
 
 fn run_case(command: &mut Command, input: &[u8], description: &str) -> Output {
@@ -118,7 +158,7 @@ fn early_input_close_reports_the_child_and_case_instead_of_only_the_writer() {
 fn native_duplicate_removal_preserves_records_keys_headers_and_separators() {
     let root = temp_dir::TempDir::new("native-rmdup");
     let binary = root.0.join("fastmash");
-    fs::copy(executable::fastmash(), &binary).unwrap();
+    test_process::copy_executable(executable::fastmash(), &binary);
     let cases = [
         Case {
             args: &["-s", "rmdup", "1"],

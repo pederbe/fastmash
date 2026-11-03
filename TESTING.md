@@ -280,6 +280,14 @@ prepared launcher elsewhere. It sets alarms and selected signal masks in a fresh
 process, creates broken pipes without shared readers, then replaces itself with
 the tested executable. The tests retain its PID and actual signal status.
 
+The native sorting and duplicate-removal fixtures also use that launcher to copy
+standalone executables in a separate process. Parallel launches cannot inherit
+the copy's writable descriptor and make Linux refuse to execute it with
+"Text file busy". The Linux regression
+`standalone_executable_copy_does_not_race_concurrent_launches` stages fresh copies
+while other threads launch commands. It fails on the first unexpected exit,
+without retrying the command.
+
 The macOS full-output checks in these suites own a calibrated full destination
 until the tested child has been reaped and its parent-side handles are closed.
 They then verify cleanup. Failed cleanup retains the private image and evidence.
