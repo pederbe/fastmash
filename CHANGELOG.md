@@ -12,6 +12,8 @@ numerical profile version that introduced it.
 
 ### Development
 
+- Duplicate-removal test failures retain the input-write error, child status,
+  output and active case details when the child closes its input early.
 - Release builds follow stable Rust and record the actual build tools in each
   archive instead of requiring an old compiler and manually synchronized downloads.
 - Follow rolling stable Rust and install the standard analysis, source, formatting and lint components with the project toolchain.

@@ -7,12 +7,92 @@ mod temp_dir;
 #[path = "support/test_process.rs"]
 mod test_process;
 
-use std::{fs, io::Write, process::Stdio, thread};
+use std::{
+    fs,
+    io::Write,
+    process::{Command, Output, Stdio},
+    thread,
+};
 
 struct Case {
     args: &'static [&'static str],
     input: &'static [u8],
     expected: &'static [u8],
+}
+
+fn run_case(command: &mut Command, input: &[u8], description: &str) -> Output {
+    let mut child = command
+        .spawn()
+        .unwrap_or_else(|error| panic!("{description}: cannot start child: {error}"));
+    thread::scope(|scope| {
+        let writer = child
+            .stdin
+            .take()
+            .map(|mut stdin| scope.spawn(move || stdin.write_all(input)));
+        let output = child
+            .wait_with_output()
+            .unwrap_or_else(|error| panic!("{description}: cannot collect child output: {error}"));
+        if let Some(writer) = writer {
+            let result = writer.join();
+            assert!(
+                matches!(&result, Ok(Ok(()))),
+                "{description}\ninput writer: {result:?}\nchild status: {} (code {:?})\nstdout: {:?}\nstderr: {:?}",
+                output.status,
+                output.status.code(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
+        output
+    })
+}
+
+#[test]
+fn early_input_close_reports_the_child_and_case_instead_of_only_the_writer() {
+    // Neither command reads stdin. More than a pipe can buffer makes the write
+    // fail even when the writer runs before the child exits.
+    let input = vec![b'x'; 8 * 1024 * 1024];
+    for (argument, code, diagnostic) in [
+        (
+            "--native-rmdup-diagnostic-fixture",
+            1,
+            "unrecognized option '--native-rmdup-diagnostic-fixture'",
+        ),
+        ("--help", 0, "Usage:"),
+    ] {
+        let mut command = test_process::bounded(executable::fastmash(), 15);
+        command
+            .arg(argument)
+            .env_clear()
+            .env("LC_ALL", "C")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let description = format!("locale=C memory=1 input=pipe args=[{argument:?}]");
+        let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_case(&mut command, &input, &description)
+        }))
+        .expect_err("an incomplete input write must still fail the case");
+        let message = failure
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| failure.downcast_ref::<&str>().copied())
+            .expect("the case failure must have a text diagnostic");
+        for expected in [
+            description.as_str(),
+            "BrokenPipe",
+            "child status:",
+            &format!("code Some({code})"),
+            "stdout:",
+            "stderr:",
+            diagnostic,
+        ] {
+            assert!(
+                message.contains(expected),
+                "missing {expected:?}: {message}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -115,27 +195,14 @@ fn native_duplicate_removal_preserves_records_keys_headers_and_separators() {
                     } else {
                         command.stdin(Stdio::piped());
                     }
-                    let mut child = command.spawn().unwrap();
-                    let output = thread::scope(|scope| {
-                        let writer = child.stdin.take().map(|mut stdin| {
-                            scope.spawn(move || stdin.write_all(case.input).unwrap())
-                        });
-                        let output = child.wait_with_output().unwrap();
-                        if let Some(writer) = writer {
-                            writer.join().unwrap();
-                        }
-                        output
-                    });
-                    assert!(
-                        output.status.success(),
-                        "{locale} {memory} {file} {:?}: {output:?}",
+                    let description = format!(
+                        "locale={locale} memory={memory} input={} args={:?}",
+                        if file { "file" } else { "pipe" },
                         case.args
                     );
-                    assert_eq!(
-                        output.stdout, case.expected,
-                        "{locale} {memory} {file} {:?}",
-                        case.args
-                    );
+                    let output = run_case(&mut command, case.input, &description);
+                    assert!(output.status.success(), "{description}: {output:?}",);
+                    assert_eq!(output.stdout, case.expected, "{description}",);
                     let trace = String::from_utf8_lossy(&output.stderr);
                     assert!(trace.contains("native sort"), "{trace}");
                     assert!(!trace.contains("system sort"), "{trace}");
