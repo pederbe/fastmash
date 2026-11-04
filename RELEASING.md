@@ -132,6 +132,10 @@ retries only failed jobs before selecting another version. Existing draft assets
 must match the frozen assets byte for byte. Already published crate versions
 must match their source-package checksums before a partial upload resumes.
 
+After a manual recovery finishes package delivery, advance the `release` branch
+to the unchanged version tag and refresh the website. The weekly workflow treats
+that pointer as completed delivery, even if the original run failed.
+
 If a source fix is needed, merge it through the normal pull request checks, then
 dispatch Weekly release with `supersede_failed=true`. It creates a higher version
 while preserving the failed tag and its evidence. Older runs cannot move the

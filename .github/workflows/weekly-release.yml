@@ -40,10 +40,11 @@ jobs:
           set -euo pipefail
           previous=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
           newest=$(git tag --list 'v*' --sort=-version:refname | head -1)
+          previous_sha=$(git rev-parse "$previous^{commit}")
+          delivered=$(git ls-remote --heads origin refs/heads/release | cut -f1)
           # Publication may have succeeded before a downstream registry update
-          # failed. Finish that same release before considering another version.
-          if [ "$newest" = "$previous" ] && [ "$SUPERSEDE_FAILED" != true ]; then
-            previous_sha=$(git rev-parse "$previous^{commit}")
+          # failed. The release branch records completed delivery, including recovery.
+          if [ "$newest" = "$previous" ] && [ "$delivered" != "$previous_sha" ] && [ "$SUPERSEDE_FAILED" != true ]; then
             recent=$(gh run list --workflow release.yml --commit "$previous_sha" --json databaseId,status,conclusion --limit 1)
             if [ "$(jq 'length' <<< "$recent")" = 1 ] && [ "$(jq -r '.[0].conclusion' <<< "$recent")" != success ]; then
               if [ "$(jq -r '.[0].status' <<< "$recent")" = completed ]; then
