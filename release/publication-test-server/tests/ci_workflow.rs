@@ -12,6 +12,21 @@ fn workflow() -> String {
     fs::read_to_string(root().join(".github/workflows/ci.yml")).unwrap()
 }
 
+#[test]
+fn release_dispatch_can_find_the_repository_without_a_checkout() {
+    let workflow = fs::read_to_string(root().join(".github/workflows/release.yml")).unwrap();
+    let publish = workflow.split_once("\n  publish:\n").unwrap().1;
+    let step = publish
+        .split_once("      - name: Publish verified release and start package repository update\n")
+        .unwrap()
+        .1
+        .split_once("        run: |\n")
+        .unwrap()
+        .0;
+    // gh run/workflow commands otherwise infer the repository from .git.
+    assert!(step.contains("          GH_REPO: ${{ github.repository }}\n"));
+}
+
 #[cfg(unix)]
 #[test]
 fn installer_selects_the_latest_available_registry_version() {
