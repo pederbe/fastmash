@@ -13,6 +13,44 @@ fn workflow() -> String {
 }
 
 #[test]
+fn installed_evidence_upload_recovers_once_without_hiding_failure() {
+    let workflow = fs::read_to_string(root().join(".github/workflows/macos-install.yml")).unwrap();
+    let (_, uploads) = workflow
+        .split_once("      - name: Retain installation and hosted comparison evidence\n")
+        .unwrap();
+    let (first, retry) = uploads
+        .split_once("      - name: Retry installation evidence upload\n")
+        .expect("an artifact service failure must get one retry");
+    assert!(first.contains("        id: installation-evidence\n"));
+    assert!(first.contains("        if: always()\n"));
+    assert!(first.contains("        continue-on-error: true\n"));
+    assert!(retry.contains(
+        "        if: ${{ !cancelled() && steps.installation-evidence.outcome == 'failure' }}\n"
+    ));
+    assert!(
+        !retry.contains("continue-on-error:"),
+        "a second failure must fail CI"
+    );
+    assert!(retry.contains("          overwrite: true\n"));
+    // Both attempts must retain the same evidence with the same pinned action.
+    let action = first.lines().find(|line| line.contains("uses:")).unwrap();
+    assert!(retry.lines().any(|line| line == action));
+    for line in first
+        .split_once("        with:\n")
+        .unwrap()
+        .1
+        .lines()
+        .take_while(|line| line.starts_with("          "))
+    {
+        assert!(
+            retry.lines().any(|other| other == line),
+            "missing retry input: {line}"
+        );
+    }
+    assert_eq!(retry.matches("uses: actions/upload-artifact@").count(), 1);
+}
+
+#[test]
 fn required_ci_waits_for_every_job_and_every_pr_workflow() {
     let workflow = workflow();
     let jobs = workflow.split_once("\njobs:\n").unwrap().1;

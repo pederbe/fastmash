@@ -128,9 +128,20 @@ jobs:
           cargo build --release --locked -p fastmash --example hosted_comparison 2>&1 | tee "$EVIDENCE/comparison-build.log"
           target/release/examples/hosted_comparison "$FASTMASH_TEST_BINARY" "$reference" "$EVIDENCE/hosted-comparison" 2>&1 | tee "$EVIDENCE/comparison.log"
       - name: Retain installation and hosted comparison evidence
+        id: installation-evidence
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installed-contract-${{ inputs.source }}-${{ matrix.os }}
           path: ${{ runner.temp }}/installed-contract/
           if-no-files-found: error
+      # Retry the upload without rebuilding or rerunning the command contract.
+      - name: Retry installation evidence upload
+        if: ${{ !cancelled() && steps.installation-evidence.outcome == 'failure' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installed-contract-${{ inputs.source }}-${{ matrix.os }}
+          path: ${{ runner.temp }}/installed-contract/
+          if-no-files-found: error
+          overwrite: true
