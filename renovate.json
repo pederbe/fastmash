@@ -121,6 +121,7 @@
         "\"hotpath\":\\s*\"(?<currentValue>[^\"\\s]+)\""
       ],
       "depNameTemplate": "hotpath",
+      "depTypeTemplate": "profiling tool",
       "packageNameTemplate": "hotpath",
       "datasourceTemplate": "crate",
       "versioningTemplate": "semver"
