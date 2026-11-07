@@ -122,9 +122,12 @@ aligned.
 
 ### Changes that need extra care
 
-The maintainer runs release qualification on the measurement hosts for each
-release. Pull requests run CI and the regression corpus; additional performance
-qualification on those hosts is needed for pull requests that change performance.
+Runtime, dependency and build-recipe changes that can affect performance need
+comparison with the previous accepted build during change review. New speed
+claims need dated measurements identifying the actual executable and conditions.
+Weekly releases do not start a whole-release benchmark campaign. See
+[ADR 0012](docs/src/adr/0012-release-delivery-and-performance.md) for the
+separation between performance acceptance and release delivery.
 
 - **Numerical output.** Anything that can change a printed number, however
   slightly, needs a new numerical profile version and independent verification.
