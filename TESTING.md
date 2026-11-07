@@ -41,10 +41,14 @@ tests invoke the prepared checker without starting another Cargo build. If the
 tools are built elsewhere, set `FASTMASH_INSTALLED_CHECKER` and
 `FASTMASH_INSTALLED_PLATFORM_FIXTURE` to their executable paths.
 
-A change is ready for review when all of these checks pass locally. CI runs
-on pull requests against `main` once the repository is public, or by manual
-dispatch. Merging does not start another validation suite. Private automatic
-runs skip their jobs, while manual runs remain available.
+Focused local checks are optional development aids. You can open a pull request
+without completing the full suite locally. The applicable checks run on standard
+GitHub-hosted runners and must pass before merging. Performance measurements
+retain their separate host and measurement requirements.
+
+CI runs on pull requests against `main` once the repository is public, or by
+manual dispatch. Merging does not start another validation suite. Private
+automatic runs skip their jobs, while manual runs remain available.
 
 ## Layers
 
