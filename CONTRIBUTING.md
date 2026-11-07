@@ -50,10 +50,12 @@ changes. For planned work, agree on the scope and acceptance criteria in a
 public issue before implementing it.
 
 The maintainer creates a `contrib/` branch in this repository. Other contributors
-create a branch in their fork. Open the pull request against `main` after the
-local checks below pass, and link the issue when there is one.
+create a branch in their fork. Follow [Testing](TESTING.md#quick-start) for
+focused local checks and final CI validation. Open the pull request against
+`main` once the local implementation and checks are settled, and link the issue
+when there is one.
 
-The maintainer reviews and merges the pull request after the required CI checks
+The maintainer reviews and merges the pull request after the applicable CI checks
 pass. Update the branch with `main` when intervening changes could affect it.
 A branch does not need an update solely because unrelated changes have merged.
 Validation runs before merge. Merging the tested result does not start another
@@ -109,7 +111,8 @@ aligned.
 2. Keep each pull request to one change. Separate refactoring from behavior changes.
 3. Add tests. Bug fixes need a test that fails without the fix. Behavior
    changes need regression cases. See [TESTING.md](TESTING.md).
-4. Run the checks for what changed. Documentation uses the
+4. Select checks for what changed, following [Testing](TESTING.md#quick-start).
+   Documentation uses the
    [website checks](TESTING.md#website-checks), application code uses the
    [application checks](TESTING.md#quick-start), and build or CI tooling needs
    checks of the affected tooling and workflow filters.
