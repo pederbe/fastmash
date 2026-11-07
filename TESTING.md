@@ -41,10 +41,15 @@ tests invoke the prepared checker without starting another Cargo build. If the
 tools are built elsewhere, set `FASTMASH_INSTALLED_CHECKER` and
 `FASTMASH_INSTALLED_PLATFORM_FIXTURE` to their executable paths.
 
-Focused local checks are optional development aids. You can open a pull request
-without completing the full suite locally. The applicable checks run on standard
-GitHub-hosted runners and must pass before merging. Performance measurements
-retain their separate host and measurement requirements.
+Use focused local checks during development to verify affected behavior and
+investigate failures. Reuse valid results, and repeat or broaden checks when a
+change or finding warrants it.
+
+Submit a settled change to hosted CI for final validation. A complete local
+replay of CI is not required. Use CI for platform coverage unavailable locally.
+After review or CI finds a problem, repair it with focused checks where feasible
+before resubmitting. Applicable CI checks must pass before merging. Performance
+measurements retain their separate requirements.
 
 CI runs on pull requests against `main` once the repository is public, or by
 manual dispatch. Merging does not start another validation suite. Private

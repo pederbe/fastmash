@@ -60,9 +60,10 @@ All changes enter `main` through a pull request. The maintainer uses a
 `contrib/` branch in this repository; contributors use a branch in their fork.
 Follow the development workflow in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Run the required local checks before opening a pull request. Leave review and
-merging to the maintainer once CI passes. Before closing a ticket, update its
-acceptance checklist and check whether its parent can close.
+Follow [Testing](TESTING.md#quick-start) for focused local checks and final CI
+validation. Leave review and merging to the maintainer once CI passes. Before
+closing a ticket, update its acceptance checklist and check whether its parent
+can close.
 
 Describe what changed, why, how it was tested, and any effect on output,
 exit statuses, performance or documentation. Keep each pull request to one concern.
