@@ -455,10 +455,13 @@ available for native qualification.
 
 `macos.yml` requires actual `Darwin`, `arm64`, the expected macOS major version
 and the `aarch64-apple-darwin` compiler host. Both `macos-15` and `macos-26` run
-formatting, warnings-denied Clippy, the complete applicable release workspace
-tests, and all 3,137 frozen cases with piped input plus the ordinary-input cases
-with regular-file input. Successful version actions use the explicit development
-version; their error and transport expectations stay frozen.
+formatting, warnings-denied Clippy and the complete applicable release workspace
+tests. Pull requests run all 3,137 frozen cases with piped input plus the
+ordinary-input cases with regular-file input against the installed archive on
+both systems. Manual and release qualification also run both corpus modes
+against the source-built executable, as do calls with installation checks
+disabled. Successful version actions use the explicit development version;
+their error and transport expectations stay frozen.
 
 The workspace builds the Rust test tools used by these gates. To run the same
 gate locally on a supported native Mac, use this Bash block:
@@ -517,7 +520,7 @@ actual Spill, read-failure and cancellation coverage.
 After both source gates pass, one macOS 15 job builds the checksummed development
 archive with a macOS 15 deployment target. Both installation jobs download those
 same bytes, execute the documented method outside the source checkout, and check
-checksum/download failure preservation. They repeat both corpus modes and the
+checksum/download failure preservation. They run both corpus modes and the
 ordinary CLI suites through the installed executable, with explicit executable
 overrides. The existing opt-in prepared quantile headers, wide sorted headers
 and migration-example tests also run because their installed-binary prerequisite
