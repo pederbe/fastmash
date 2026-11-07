@@ -96,7 +96,7 @@ jobs:
         run: |
           cargo test --release --workspace --locked -- --list 2>&1 | tee "$EVIDENCE/test-inventory.txt"
           cargo test --release --workspace --locked --no-fail-fast 2>&1 | tee "$EVIDENCE/workspace-tests.log"
-      - name: Execute the frozen corpus through both input modes
+      - name: Build the native workspace and record the executable
         run: |
           cargo build --release --workspace --locked 2>&1 | tee "$EVIDENCE/build.log"
           binary="$GITHUB_WORKSPACE/target/release/fastmash"
@@ -104,6 +104,12 @@ jobs:
           shasum -a 256 "$binary" | tee "$EVIDENCE/binary.sha256"
           "$binary" --version | tee "$EVIDENCE/version.txt"
           "$binary" --help > "$EVIDENCE/help.txt"
+      # PRs exercise both modes against the installed archive on each OS.
+      # Manual, release and source-only calls retain the source corpus too.
+      - name: Execute the source corpus through both input modes
+        if: github.event_name != 'pull_request' || !inputs.check-installation
+        run: |
+          binary="$GITHUB_WORKSPACE/target/release/fastmash"
           version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
           target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/corpus-pipe" 2>&1 | tee "$EVIDENCE/corpus-pipe.log"
           target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/corpus-file" 2>&1 | tee "$EVIDENCE/corpus-file.log"
