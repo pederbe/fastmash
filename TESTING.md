@@ -41,9 +41,10 @@ tests invoke the prepared checker without starting another Cargo build. If the
 tools are built elsewhere, set `FASTMASH_INSTALLED_CHECKER` and
 `FASTMASH_INSTALLED_PLATFORM_FIXTURE` to their executable paths.
 
-A change is ready for review when all of these checks pass locally. CI also runs
-on pushes and pull requests against `main` once the repository is public;
-private automatic runs skip their jobs, while manual runs remain available.
+A change is ready for review when all of these checks pass locally. CI runs
+on pull requests against `main` once the repository is public, or by manual
+dispatch. Merging does not start another validation suite. Private automatic
+runs skip their jobs, while manual runs remain available.
 
 ## Layers
 
@@ -570,8 +571,9 @@ running the site builder again, since the builder transforms the generated HTML.
 
 | Workflow | When | What |
 | --- | --- | --- |
-| `ci.yml` | Public pushes and pull requests against `main` with application or tooling changes, or manual dispatch | Format, Clippy, release-mode tests, regression corpus on Ubuntu. Required jobs skip documentation-only changes |
-| `macos.yml` | Public pushes and pull requests against `main` with application or tooling changes, or manual dispatch | Complete native source checks on macOS 15/26, one development archive, both installations, installed command/corpus checks and scoped hosted GNU observations |
-| `docs.yml` | Public pushes and pull requests against `main`, or manual dispatch | Builds the website and checks links |
-| `release.yml` | Manual dispatch on a version tag | Builds and tests release assets, then creates a draft release |
-| `package-repository-checks.yml` | Public pushes and pull requests changing package-repository tooling, or manual dispatch | Checks shell and Rust tooling, then apt/dnf clients across interrupted and interleaved uploads using signed fixture packages |
+| `ci.yml` | Public pull requests against `main`, or manual dispatch | Selects affected application, package and tooling checks. Documentation checks run for every PR, including documentation-only changes |
+| `macos.yml` | Called by CI when native checks are selected, by the release workflow, or by manual dispatch | Complete native source checks on macOS 15/26, one archive, both installations when enabled, installed command/corpus checks and scoped hosted GNU observations |
+| `docs.yml` | Called by CI for every public PR or manual CI run, or by its own manual dispatch | Builds the website and checks links |
+| `weekly-release.yml` | Weekly schedule on public `main`, or manual dispatch | Prepares or resumes a frozen release and dispatches the release workflow when needed |
+| `release.yml` | Dispatch on a version tag, including dispatch by the weekly release workflow | Builds, tests and publishes release assets, then updates package delivery |
+| `package-repository-checks.yml` | Called by CI for package-repository tooling changes or manual CI runs, or by its own manual dispatch | Checks shell and Rust tooling, then apt/dnf clients across interrupted and interleaved uploads using signed fixture packages |
