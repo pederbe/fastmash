@@ -52,7 +52,7 @@ public issue before implementing it.
 The maintainer creates a `contrib/` branch in this repository. Other contributors
 create a branch in their fork. Open the pull request against `main`, and link
 the issue when there is one. Focused local checks are optional development aids.
-you do not need to complete the full suite locally before opening a pull request.
+You do not need to complete the full suite locally before opening a pull request.
 
 The maintainer reviews and merges the pull request after the applicable CI checks
 pass on standard GitHub-hosted runners. Update the branch with `main` when
