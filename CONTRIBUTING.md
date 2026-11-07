@@ -50,11 +50,13 @@ changes. For planned work, agree on the scope and acceptance criteria in a
 public issue before implementing it.
 
 The maintainer creates a `contrib/` branch in this repository. Other contributors
-create a branch in their fork. Open the pull request against `main` after the
-local checks below pass, and link the issue when there is one.
+create a branch in their fork. Open the pull request against `main`, and link
+the issue when there is one. Focused local checks are optional development aids.
+You do not need to complete the full suite locally before opening a pull request.
 
-The maintainer reviews and merges the pull request after the required CI checks
-pass. Update the branch with `main` when intervening changes could affect it.
+The maintainer reviews and merges the pull request after the applicable CI checks
+pass on standard GitHub-hosted runners. Update the branch with `main` when
+intervening changes could affect it.
 A branch does not need an update solely because unrelated changes have merged.
 Validation runs before merge. Merging the tested result does not start another
 validation suite. Development-only dependency changes run checks for the affected
@@ -109,10 +111,11 @@ aligned.
 2. Keep each pull request to one change. Separate refactoring from behavior changes.
 3. Add tests. Bug fixes need a test that fails without the fix. Behavior
    changes need regression cases. See [TESTING.md](TESTING.md).
-4. Run the checks for what changed. Documentation uses the
+4. Identify the checks for what changed. Documentation uses the
    [website checks](TESTING.md#website-checks), application code uses the
    [application checks](TESTING.md#quick-start), and build or CI tooling needs
-   checks of the affected tooling and workflow filters.
+   checks of the affected tooling and workflow filters. The applicable hosted
+   CI checks must pass before merging.
 
 5. Update the user guide under `docs/` and `--help` text when user-visible
    behavior changes. Follow the [changelog guidance](#releases) in the same PR.
