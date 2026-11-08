@@ -905,7 +905,7 @@ fn unseeded_random_sort_uses_native_entropy_without_a_sort_supervisor() {
 fn text_and_csv_spill_keep_exact_reports_with_terminal_output() {
     let fixture = Fixture::new("native-spill-terminal");
     for csv in [false, true] {
-        let mut args = vec!["-s", "-g1", "wmean", "2:3", "dotprod", "2:3"];
+        let mut args = vec!["--no-color", "-s", "-g1", "wmean", "2:3", "dotprod", "2:3"];
         if csv {
             args.insert(0, "--csv");
         }
