@@ -12,7 +12,7 @@ use super::{
     unsupported,
 };
 use std::io::{self, Write};
-use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
+use std::sync::{Condvar, Mutex};
 
 const BUFFER: usize = 16 << 10;
 pub(super) const MEMORY: usize = 192 << 10;
@@ -43,54 +43,90 @@ impl Batch {
 // Two checked batches circulate between the threads. Numbers retain their
 // admitted type, and Record boundaries need no second delimiter scan.
 // Long Records span batches without growing the transfer buffers.
-struct Reader {
-    incoming: Receiver<Batch>,
-    free: SyncSender<Batch>,
+struct Transfer {
+    ready: Option<Batch>,
+    free: [Option<Batch>; 2],
+    reader_closed: bool,
+    writer_closed: bool,
+}
+struct Handoff {
+    state: Mutex<Transfer>,
+    changed: Condvar,
+}
+impl Handoff {
+    // Linux's Mutex and Condvar keep their futex state inline. Constructing
+    // this owner needs no allocation after the checked batch reservations.
+    const fn new(second: Batch) -> Self {
+        Self {
+            state: Mutex::new(Transfer {
+                ready: None,
+                free: [Some(second), None],
+                reader_closed: false,
+                writer_closed: false,
+            }),
+            changed: Condvar::new(),
+        }
+    }
+    fn pair(&self, first: Batch) -> (Reader<'_>, Writer<'_>) {
+        (
+            Reader {
+                handoff: self,
+                buffer: Batch::default(),
+                at: 0,
+                byte_at: 0,
+            },
+            Writer {
+                handoff: self,
+                buffer: first,
+                numbers: [None; 2],
+            },
+        )
+    }
+}
+struct Reader<'a> {
+    handoff: &'a Handoff,
     buffer: Batch,
     at: usize,
     byte_at: usize,
 }
-struct Writer {
-    outgoing: SyncSender<Batch>,
-    free: Receiver<Batch>,
+struct Writer<'a> {
+    handoff: &'a Handoff,
     buffer: Batch,
     numbers: [Option<numerics::Value>; 2],
 }
 fn disconnected() -> io::Error {
     io::Error::from(io::ErrorKind::BrokenPipe)
 }
-fn buffers() -> Option<(Reader, Writer)> {
+fn buffers() -> Option<(Batch, Handoff)> {
     let first = Batch::new()?;
     let second = Batch::new()?;
-    let (outgoing, incoming) = sync_channel(1);
-    let (return_buffer, free) = sync_channel(1);
-    return_buffer.send(second).ok()?;
-    Some((
-        Reader {
-            incoming,
-            free: return_buffer,
-            buffer: Batch::default(),
-            at: 0,
-            byte_at: 0,
-        },
-        Writer {
-            outgoing,
-            free,
-            buffer: first,
-            numbers: [None; 2],
-        },
-    ))
+    Some((first, Handoff::new(second)))
 }
-impl Reader {
+impl Reader<'_> {
     #[cold]
     #[inline(never)]
     fn refill(&mut self) {
+        let mut state = self.handoff.state.lock().unwrap_or_else(|e| e.into_inner());
         if self.buffer.bytes.capacity() != 0 {
-            // The writer may already have finished. Its last buffered
-            // bytes remain readable after the return channel closes.
-            let _ = self.free.send(std::mem::take(&mut self.buffer));
+            // Both batches can be returned before a woken writer runs.
+            let free = state
+                .free
+                .iter_mut()
+                .find(|slot| slot.is_none())
+                .expect("two batches have at most two free owners");
+            *free = Some(std::mem::take(&mut self.buffer));
         }
-        self.buffer = self.incoming.recv().unwrap_or_default();
+        while state.ready.is_none() && !state.writer_closed {
+            // A waiting writer may need the returned storage to publish.
+            self.handoff.changed.notify_one();
+            state = self
+                .handoff
+                .changed
+                .wait(state)
+                .unwrap_or_else(|e| e.into_inner());
+        }
+        self.buffer = state.ready.take().unwrap_or_default();
+        self.handoff.changed.notify_one();
         self.at = 0;
         self.byte_at = 0;
     }
@@ -126,20 +162,31 @@ impl Reader {
         }
     }
 }
-impl Writer {
-    fn ready(&mut self) -> io::Result<()> {
-        if self.buffer.bytes.capacity() == 0 {
-            self.buffer = self.free.recv().map_err(|_| disconnected())?;
-            self.buffer.bytes.clear();
-            self.buffer.entries.clear();
-        }
-        Ok(())
+impl Drop for Reader<'_> {
+    fn drop(&mut self) {
+        self.handoff
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .reader_closed = true;
+        self.handoff.changed.notify_one();
     }
+}
+impl Drop for Writer<'_> {
+    fn drop(&mut self) {
+        self.handoff
+            .state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .writer_closed = true;
+        self.handoff.changed.notify_one();
+    }
+}
+impl Writer<'_> {
     fn begin(&mut self, numbers: [Option<numerics::Value>; 2]) -> io::Result<()> {
         if self.buffer.entries.len() == ENTRIES || self.buffer.bytes.len() == BUFFER {
             self.flush()?;
         }
-        self.ready()?;
         self.numbers = numbers;
         Ok(())
     }
@@ -154,7 +201,6 @@ impl Writer {
     #[inline(never)]
     fn write_all_cold(&mut self, mut bytes: &[u8]) -> io::Result<()> {
         while !bytes.is_empty() {
-            self.ready()?;
             let count = bytes.len().min(BUFFER - self.buffer.bytes.len());
             self.buffer.bytes.extend_from_slice(&bytes[..count]);
             bytes = &bytes[count..];
@@ -183,9 +229,35 @@ impl Writer {
     }
     fn flush(&mut self) -> io::Result<()> {
         if !self.buffer.entries.is_empty() {
-            self.outgoing
-                .send(std::mem::take(&mut self.buffer))
-                .map_err(|_| disconnected())?;
+            let mut state = self.handoff.state.lock().unwrap_or_else(|e| e.into_inner());
+            while state.ready.is_some() && !state.reader_closed {
+                state = self
+                    .handoff
+                    .changed
+                    .wait(state)
+                    .unwrap_or_else(|e| e.into_inner());
+            }
+            if state.reader_closed {
+                return Err(disconnected());
+            }
+            state.ready = Some(std::mem::take(&mut self.buffer));
+            self.handoff.changed.notify_one();
+            loop {
+                if state.reader_closed {
+                    return Err(disconnected());
+                }
+                if let Some(batch) = state.free.iter_mut().find_map(Option::take) {
+                    self.buffer = batch;
+                    self.buffer.bytes.clear();
+                    self.buffer.entries.clear();
+                    break;
+                }
+                state = self
+                    .handoff
+                    .changed
+                    .wait(state)
+                    .unwrap_or_else(|e| e.into_inner());
+            }
         }
         Ok(())
     }
@@ -349,9 +421,10 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
                     && !kind.converts_numeric_field()
             })
     });
-    let Some((mut reader, mut writer)) = buffers() else {
+    let Some((first, handoff)) = buffers() else {
         return Ok(None);
     };
+    let (mut reader, mut writer) = handoff.pair(first);
     let index = records::FieldIndex::selecting(layout.selected.iter().copied());
     let mut spare = Prepared::new(keys.len(), index.fresh(), fields)?;
     std::thread::scope(|scope| {
@@ -482,9 +555,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn synchronization_is_const_constructible() {
+        const EMPTY: Handoff = Handoff::new(Batch {
+            bytes: Vec::new(),
+            entries: Vec::new(),
+        });
+        let handoff = EMPTY;
+        let (mut reader, writer) = handoff.pair(Batch::default());
+        drop(writer);
+        assert!(reader.record(&mut Vec::new()).ok().unwrap().is_none());
+    }
+
+    #[test]
     fn recycled_buffers_preserve_long_writes_short_tails_and_eof() {
         let expected: Vec<_> = (0..BUFFER * 3 + 29).map(|at| (at % 251) as u8).collect();
-        let (mut reader, mut writer) = buffers().unwrap();
+        let (first, handoff) = buffers().unwrap();
+        let (mut reader, mut writer) = handoff.pair(first);
         std::thread::scope(|scope| {
             let expected = &expected;
             let producer = scope.spawn(move || {
@@ -516,7 +602,8 @@ mod tests {
 
     #[test]
     fn dropping_the_reader_unblocks_a_buffered_writer() {
-        let (mut reader, mut writer) = buffers().unwrap();
+        let (first, handoff) = buffers().unwrap();
+        let (mut reader, mut writer) = handoff.pair(first);
         std::thread::scope(|scope| {
             let producer = scope.spawn(move || {
                 writer.begin([None; 2])?;
@@ -555,7 +642,8 @@ mod tests {
                         *number = Some(numerics::Numerics::admit(expected).unwrap());
                     }
                 }
-                let (mut reader, mut writer) = buffers().unwrap();
+                let (first, handoff) = buffers().unwrap();
+                let (mut reader, mut writer) = handoff.pair(first);
                 writer.begin(numbers).unwrap();
                 writer.end(true);
                 writer.flush().unwrap();
@@ -574,7 +662,8 @@ mod tests {
     }
     #[test]
     fn incomplete_record_is_rejected() {
-        let (mut reader, mut writer) = buffers().unwrap();
+        let (first, handoff) = buffers().unwrap();
+        let (mut reader, mut writer) = handoff.pair(first);
         writer.begin([None; 2]).unwrap();
         writer.write_all(&vec![b'x'; BUFFER + 1]).unwrap();
         drop(writer);

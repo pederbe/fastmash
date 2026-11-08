@@ -291,7 +291,9 @@ flowchart TD
   numbers through two reusable batches, within the final merge's buffer
   allowance, and the calculation reads them in order. Each batch keeps text
   bytes, record boundaries and admitted numbers, avoiding a second number
-  decode and delimiter scan. Long records span batches. Records whose numbers
+  decode and delimiter scan. The threads borrow a stack-owned mutex and
+  condition variable. Batch storage uses checked allocation. Long records
+  span batches. Records whose numbers
   read on across a separator, and other platforms, use the serial path.
 - **Quoted CSV sorting** uses its own complete decoded-record route, without
   hash replay or a text-format fallback. Record bytes, field ends, original
