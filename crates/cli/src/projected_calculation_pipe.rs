@@ -556,11 +556,11 @@ mod tests {
 
     #[test]
     fn synchronization_is_const_constructible() {
-        const EMPTY: Handoff = Handoff::new(Batch {
+        static EMPTY: Handoff = Handoff::new(Batch {
             bytes: Vec::new(),
             entries: Vec::new(),
         });
-        let handoff = EMPTY;
+        let handoff = &EMPTY;
         let (mut reader, writer) = handoff.pair(Batch::default());
         drop(writer);
         assert!(reader.record(&mut Vec::new()).ok().unwrap().is_none());
