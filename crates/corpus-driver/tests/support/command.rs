@@ -230,7 +230,8 @@ fn main() {
         }
         "facts" => {
             assert_eq!(name.as_bytes(), b"fastmash");
-            assert_eq!(std::env::vars_os().count(), 4);
+            assert_eq!(std::env::vars_os().count(), 5);
+            assert_eq!(std::env::var("NO_COLOR").unwrap(), "1");
             assert_eq!(std::env::var("PATH").unwrap(), "/usr/bin:/bin");
             assert_eq!(std::env::var("LC_ALL").unwrap(), "C");
             assert_eq!(std::env::var("TZ").unwrap(), "UTC");
