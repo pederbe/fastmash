@@ -61,6 +61,7 @@ pub(super) struct Results<'a, W> {
     csv: bool,
     record_end: u8,
     named: bool,
+    implicit: bool,
     enabled: bool,
     full: bool,
     vnlog: bool,
@@ -80,6 +81,8 @@ impl<'a, W: Write> Results<'a, W> {
             },
         );
         let mut output = Self::plain(buffer, options);
+        output.implicit = output.buffer.is_terminal_table() && !options.explicit_header_out;
+        output.named &= !output.implicit;
         output.enabled |= output.buffer.is_terminal_table();
         output
     }
@@ -93,6 +96,7 @@ impl<'a, W: Write> Results<'a, W> {
             csv: options.csv_out,
             record_end: options.record_end,
             named: options.header_in,
+            implicit: false,
             enabled: options.header_out,
             full: options.full,
             vnlog: options.vnlog,
@@ -146,7 +150,11 @@ impl<W: Write> Results<'_, W> {
         keys: &[u64],
     ) -> Result<(), Failure> {
         for &key in keys.iter().filter(|_| !self.full) {
-            let bytes = field(key)?;
+            let bytes = if self.implicit {
+                b"".as_slice()
+            } else {
+                field(key)?
+            };
             if self.buffer.is_terminal_table() {
                 let generated = (!self.named).then(|| headers::generated(key));
                 let label = generated
@@ -174,7 +182,13 @@ impl<W: Write> Results<'_, W> {
             let mut failure = Ok(());
             headers::render_fields(
                 &requests,
-                field,
+                |index| {
+                    if self.implicit {
+                        Ok(b"".as_slice())
+                    } else {
+                        field(index)
+                    }
+                },
                 (self.output, self.record_end, self.profile),
                 self.named,
                 self.result_names,

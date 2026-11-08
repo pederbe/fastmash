@@ -508,8 +508,8 @@ fn copied_header_fields<'r>(
     }
     while let Some((index, bytes)) = fields.next() {
         if output.is_terminal_table() {
-            let generated =
-                (!options.header_in).then(|| super::headers::generated(index as u64 + 1));
+            let generated = (!(options.header_in && options.explicit_header_out))
+                .then(|| super::headers::generated(index as u64 + 1));
             let label = generated
                 .as_ref()
                 .map_or_else(|| super::headers::label(bytes), |name| name.as_bytes());

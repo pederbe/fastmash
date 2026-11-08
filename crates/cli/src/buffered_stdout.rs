@@ -96,7 +96,8 @@ impl<'a, W: Write> BufferedStdout<'a, W> {
         let table = self.table.as_mut().expect("terminal table");
         super::command_memory::reserve(&mut table.widths, 1)?;
         let first = table.widths.is_empty();
-        table.widths.push(width);
+        // Bound repeated alignment spaces, without truncating labels or values.
+        table.widths.push(width.min(32));
         let (style, title) = (table.style, table.title);
         if first {
             self.styled(style, Role::Heading, title);

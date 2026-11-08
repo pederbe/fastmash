@@ -406,3 +406,74 @@ fn terminal_results_align_unicode_labels_and_values_by_displayed_columns() {
     let text = String::from_utf8(terminal::strip_styles(&output.stdout)).unwrap();
     assert!(text.contains("     é       2\n    界       1\n"), "{text}");
 }
+
+#[test]
+fn automatic_terminal_headers_do_not_read_input_labels() {
+    for (args, input, label, result) in [
+        (
+            vec!["--header-in", "sum", "2"],
+            b"label\n1\t2\n".as_slice(),
+            "sum(field-2)",
+            "2",
+        ),
+        (
+            vec!["--header-in", "-g2", "sum", "1"],
+            b"label\n1\tk\n2\tk\n",
+            "field-2",
+            "3",
+        ),
+        (
+            vec!["--header-in", "sum", "1"],
+            b"\x1b]0;spoof\x07\n1\n",
+            "sum(field-1)",
+            "1",
+        ),
+        (
+            vec!["--header-in", "top:1", "1"],
+            b"\x1b]0;spoof\x07\n1\n",
+            "field-1",
+            "1",
+        ),
+        (
+            vec!["--csv-in", "--header-in", "sum", "1"],
+            b"\"spoof\nlabel\"\n1\n",
+            "sum(field-1)",
+            "1",
+        ),
+    ] {
+        let output = PROGRAM.invoke(&args, input, &[], true, false);
+        assert!(output.status.success(), "{output:?}");
+        let plain = terminal::strip_styles(&output.stdout);
+        let text = String::from_utf8(plain).unwrap();
+        assert!(text.contains(label), "{text}");
+        assert!(!text.contains("spoof"), "{text}");
+        let row = text.lines().rev().nth(1).unwrap();
+        assert_eq!(row.split_whitespace().last(), Some(result), "{text}");
+        let redirected = PROGRAM.invoke(&args, input, &[], false, false);
+        assert!(redirected.status.success(), "{redirected:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&redirected.stdout)
+                .split_whitespace()
+                .last(),
+            Some(result)
+        );
+    }
+}
+
+#[test]
+fn long_terminal_labels_do_not_multiply_row_padding() {
+    let label = "x".repeat(64 * 1024);
+    let input = format!("{label}\n1\n2\n");
+    let output = PROGRAM.invoke(&["-H", "cut", "1"], input.as_bytes(), &[], true, false);
+    assert!(output.status.success(), "{output:?}");
+    let plain = terminal::strip_styles(&output.stdout);
+    assert!(
+        plain
+            .windows(label.len())
+            .any(|bytes| bytes == label.as_bytes())
+    );
+    assert!(plain.len() < label.len() + 1024, "{} bytes", plain.len());
+    let text = String::from_utf8(plain).unwrap();
+    assert!(text.lines().any(|row| row.trim() == "1"));
+    assert!(text.lines().any(|row| row.trim() == "2"));
+}

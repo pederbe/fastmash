@@ -6,8 +6,10 @@ metadata uses gray. All styles use your terminal's default background.
 
 Ordinary calculations and Top-N selection show labeled, aligned fields and a
 `✔ Completed` footer after successful processing. Headers appear even without
-`--header-out`. Results still stream as they become available. Field widths come
-from their labels, so a longer value expands its field rather than being clipped.
+`--header-out`. Automatic headers use positional labels such as `sum(field-1)`.
+Use `-H` or `--header-out` to request labels from an input header. Results still
+stream as they become available. Alignment uses at most 32 columns per field,
+while labels and values are always printed in full.
 A failure can leave earlier results visible, followed by a diagnostic. It does
 not receive a completion mark. Numerical values and their formatting are unchanged.
 
