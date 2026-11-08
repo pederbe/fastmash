@@ -10,6 +10,37 @@ mod executable;
 mod temp_dir;
 
 #[test]
+fn calculation_reports_include_moment_and_paired_summaries() {
+    let directory = temp_dir::TempDir::new("profiling-calculations");
+    let input = directory.0.join("input");
+    fs::write(&input, b"b\t-1\t-2\na\t-1\t-2\nb\t1\t2\na\t1\t2\n").unwrap();
+    let report = directory.0.join("report.json");
+    let output = Command::new(executable::fastmash())
+        .arg0("fastmash")
+        .env_clear()
+        .env("LC_ALL", "C")
+        .env("FASTMASH_GROUPING", "sort")
+        .env("HOTPATH_OUTPUT_PATH", &report)
+        .env("HOTPATH_OUTPUT_FORMAT", "json")
+        .env("HOTPATH_METRICS_SERVER_OFF", "1")
+        .args(["-s", "-g1", "pskew", "2", "pcov", "2:3"])
+        .stdin(fs::File::open(input).unwrap())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert_eq!(output.stdout, b"a\t0\t2\nb\t0\t2\n");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    let report = fs::read_to_string(report).unwrap();
+    for name in [
+        "moments::sample_mean",
+        "moments::skewness",
+        "paired::PairSamples::summarize",
+    ] {
+        assert!(report.contains(name), "missing {name}: {report}");
+    }
+}
+
+#[test]
 fn static_reports_preserve_success_error_and_refusal_streams() {
     let directory = temp_dir::TempDir::new("profiling-command");
     let input = directory.0.join("input");

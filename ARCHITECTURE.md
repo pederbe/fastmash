@@ -264,8 +264,9 @@ flowchart TD
   sized for 64 MiB. It takes 16 MiB first. When a chunk fills, it may grow
   instead of spilling: to hold the whole input of a regular file (an estimate
   from the bytes read so far, at most the buffer GNU `sort` would use for the
-  file), or to twice its size for piped input, when the memory read at that
-  moment allows it. The chunk may take at most a quarter of the available
+  file), or to twice its size for piped input. If doubling does not fit, it
+  tries a 50% chunk increase. Growth depends on the memory read at that
+  moment. The chunk may take at most a quarter of the available
   memory, half of what is free under each cgroup memory limit, a share per
   running Fastmash of what is free under that limit after a reserve and of the
   host's available memory (so that sorts running together share them), and
@@ -283,11 +284,16 @@ flowchart TD
   On Linux, a numerical calculation's runs under a cgroup memory limit are
   written back to storage every 8 MiB (`fdatasync`), so that dirty pages do
   not throttle the writer against the limit. Elsewhere runs use ordinary I/O.
-- On Linux, a numerical calculation whose final merge reads one level of runs
-  can overlap that merge with calculation (`projected_calculation_pipe.rs`):
+- On Linux, a numerical calculation over a large in-memory sort or a final
+  merge reading one level of runs can overlap emission with calculation
+  (`projected_calculation_pipe.rs`):
   a merge thread writes each record's selected fields and up to two parsed
-  numbers through an anonymous pipe, within the final merge's buffer
-  allowance, and the calculation reads them in order. Records whose numbers
+  numbers through two reusable batches, within the final merge's buffer
+  allowance, and the calculation reads them in order. Each batch keeps text
+  bytes, record boundaries and admitted numbers, avoiding a second number
+  decode and delimiter scan. The threads borrow a stack-owned mutex and
+  condition variable. Batch storage uses checked allocation. Long records
+  span batches. Records whose numbers
   read on across a separator, and other platforms, use the serial path.
 - **Quoted CSV sorting** uses its own complete decoded-record route, without
   hash replay or a text-format fallback. Record bytes, field ends, original

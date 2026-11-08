@@ -1508,8 +1508,18 @@ impl<S: Codec> Finished<S> {
     pub(super) fn can_pipe(&self) -> bool {
         self.buffer >= super::calculation_pipe::MEMORY
             // Intermediate folds still need their own writer allowance.
-            && self.levels.iter().filter(|runs| !runs.is_empty()).count() == 1
+            && match self.levels.iter().filter(|runs| !runs.is_empty()).count() {
+                // A small in-memory sort cannot repay thread and pipe setup.
+                0 => self.entries.len() >= 8192,
+                1 => true,
+                _ => false,
+            }
             && fastmash_sort_process::sort_threads() >= 2
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn in_memory(&self) -> bool {
+        self.levels.iter().all(Vec::is_empty)
     }
 
     /// Hands every record to `consume` in order: the chunk's records as
@@ -1783,6 +1793,12 @@ mod tests {
         assert!(!finished.can_pipe());
         finished.levels[0].clear();
         assert!(!finished.can_pipe());
+        finished.buffer += 1;
+        finished.entries.resize(8191, Entry::default());
+        assert!(!finished.can_pipe());
+        finished.entries.push(Entry::default());
+        assert_eq!(finished.can_pipe(), threads);
+        assert!(finished.in_memory());
     }
     fn rejected_run_writer() -> File {
         #[cfg(target_os = "linux")]

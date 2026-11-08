@@ -72,6 +72,41 @@ fn jobs() -> Vec<Job> {
             status: 77,
         },
     ];
+    // Each Group has equally many -1/+1 signals and -2/+2 factors.
+    // Thus population skewness is 0, covariance is 2 and RMS is 1.
+    // With 100,000 Records per Group, Jarque-Bera's p-value rounds to 0.
+    let calculations = b"0\tb\t-1\t-2\n1\ta\t-1\t-2\n2\tb\t1\t2\n3\ta\t1\t2\n".repeat(50_000);
+    for (name, args, stdout) in [
+        (
+            "pskew",
+            &["-s", "-g2", "pskew", "3"][..],
+            &b"a\t0\nb\t0\n"[..],
+        ),
+        (
+            "jarque",
+            &["-s", "-g2", "jarque", "3"][..],
+            &b"a\t0\nb\t0\n"[..],
+        ),
+        (
+            "pcov",
+            &["-s", "-g2", "pcov", "3:4"][..],
+            &b"a\t2\nb\t2\n"[..],
+        ),
+        (
+            "mixed",
+            &["-s", "-g2", "rms", "3", "pcov", "3:4", "last", "1"][..],
+            &b"a\t1\t2\t3\nb\t1\t2\t2\n"[..],
+        ),
+    ] {
+        jobs.push(Job {
+            name,
+            args,
+            input: calculations.clone(),
+            stdout: stdout.to_vec(),
+            stderr: b"",
+            status: 0,
+        });
+    }
     for (name, record) in [
         ("csv-short", b"a,b,c,1\n".to_vec()),
         ("csv-long", [vec![b'x'; 1024], b",1\n".to_vec()].concat()),
@@ -224,7 +259,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .filter(|job| selected.as_ref().is_none_or(|name| name == job.name))
         .collect();
     if jobs.is_empty() {
-        return Err("unknown job, use small, decimal, grouping, spill, error, refusal, csv-short, csv-long, csv-quoted, csv-escaped, csv-copy, csv-copy-sort, csv-copy-spill, csv-copy-top, csv-copy-sort-top or csv-copy-wide".into());
+        return Err("unknown job, use small, decimal, grouping, spill, error, refusal, pskew, jarque, pcov, mixed, csv-short, csv-long, csv-quoted, csv-escaped, csv-copy, csv-copy-sort, csv-copy-spill, csv-copy-top, csv-copy-sort-top or csv-copy-wide".into());
     }
     fs::create_dir(&destination)?;
     let root = fs::canonicalize(destination)?;

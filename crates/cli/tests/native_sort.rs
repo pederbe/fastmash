@@ -194,6 +194,57 @@ fn exact(output: &Output, stdout: &[u8]) {
 
 #[test]
 #[cfg(target_os = "linux")]
+fn in_memory_calculation_pipe_preserves_moments_pairs_and_seeded_order() {
+    let fixture = Fixture::new("native-in-memory-calculation-pipe");
+    let mut input = b"key\tx\ty\tsequence\n".to_vec();
+    for row in 0..16_384 {
+        let key = if row % 2 == 0 { "b" } else { "a" };
+        let sign = if row % 4 < 2 { -1 } else { 1 };
+        writeln!(&mut input, "{key}\t{sign}\t{}\t{row}", 2 * sign).unwrap();
+    }
+    let args = [
+        "-H", "--seed", "17", "-s", "-g1", "pskew", "2", "jarque", "2", "pcov", "2:3", "pcov",
+        "3:2", "last", "4", "rand", "4", "last", "2",
+    ];
+    for file in [false, true] {
+        let invoke = |threads| {
+            let mut command = fixture.command(&args, "67108864");
+            command
+                .env("FASTMASH_SORT_TRACE", "1")
+                .env("OMP_NUM_THREADS", "2")
+                .env("OMP_THREAD_LIMIT", threads);
+            fixture.invoke(&mut command, &input, file)
+        };
+        let serial = invoke("1");
+        assert!(serial.status.success(), "{serial:?}");
+        for (row, last) in serial
+            .stdout
+            .split(|&b| b == b'\n')
+            .skip(1)
+            .filter(|row| !row.is_empty())
+            .zip([b"16383".as_slice(), b"16382"])
+        {
+            let fields: Vec<_> = row.split(|&b| b == b'\t').collect();
+            assert_eq!(&fields[1..5], [b"0", b"0", b"2", b"2"]);
+            assert_eq!(fields[5], last);
+            assert_eq!(fields[7], b"1");
+        }
+        let piped = invoke("2");
+        exact(&piped, &serial.stdout);
+        for output in [&serial, &piped] {
+            assert!(!output.stderr.windows(SPILL.len()).any(|part| part == SPILL));
+        }
+        assert!(
+            String::from_utf8_lossy(&piped.stderr)
+                .contains("sort calculation: native merge pipe\n")
+        );
+        assert!(!String::from_utf8_lossy(&serial.stderr).contains("native merge pipe"));
+        fixture.clean();
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn native_merge_pipe_preserves_numerics_seeded_draws_headers_and_full_records() {
     let fixture = Fixture::new("native-merge-pipe-results");
     for (flags, header, end) in [

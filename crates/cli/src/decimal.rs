@@ -1028,6 +1028,7 @@ impl NumberError {
     }
 }
 
+#[inline(always)]
 pub(super) fn add(
     left: numerics::Value,
     right: numerics::Value,
@@ -1111,6 +1112,7 @@ fn normal_sum(left: Value80, right: Value80, subtract: bool) -> Option<Value80> 
     ))
 }
 
+#[inline(always)]
 pub(super) fn subtract(
     left: numerics::Value,
     right: numerics::Value,
@@ -1127,6 +1129,7 @@ pub(super) fn subtract(
     })
 }
 
+#[inline(always)]
 pub(super) fn divide(
     left: numerics::Value,
     right: numerics::Value,
@@ -1143,6 +1146,7 @@ pub(super) fn divide(
 }
 
 /// The nearest-even quotient of two normal values when it is normal.
+#[inline(always)]
 fn normal_quotient(left: Value80, right: Value80) -> Option<Value80> {
     let (a, b) = (left.raw(), right.raw());
     if !(1..0x7fff).contains(&a.exponent()) || !(1..0x7fff).contains(&b.exponent()) {
@@ -1160,6 +1164,7 @@ fn normal_quotient(left: Value80, right: Value80) -> Option<Value80> {
     .ok()
 }
 
+#[inline(always)]
 pub(super) fn multiply(
     left: numerics::Value,
     right: numerics::Value,
@@ -1175,6 +1180,7 @@ pub(super) fn multiply(
     })
 }
 
+#[inline(always)]
 fn normal_product(left: Value80, right: Value80) -> Option<Value80> {
     let (a, b) = (left.raw(), right.raw());
     if !(1..0x7fff).contains(&a.exponent()) || !(1..0x7fff).contains(&b.exponent()) {
@@ -1188,22 +1194,21 @@ fn normal_product(left: Value80, right: Value80) -> Option<Value80> {
         return None;
     }
     // Keep the exact remainder until the only nearest-even rounding decision.
-    let mut significand = product >> shift;
-    let remainder = product & ((1u128 << shift) - 1);
-    let half = 1u128 << (shift - 1);
+    // The discarded part is at most one word: shift is exactly 63 or 64.
+    let mut significand = (product >> shift) as u64;
+    let remainder = product as u64 & (u64::MAX >> (64 - shift));
+    let half = 1u64 << (shift - 1);
     if remainder > half || (remainder == half && significand & 1 != 0) {
-        significand += 1;
-    }
-    if significand == 1u128 << 64 {
-        significand >>= 1;
-        exponent += 1;
+        let (rounded, carry) = significand.overflowing_add(1);
+        significand = if carry { 1 << 63 } else { rounded };
+        exponent += i32::from(carry);
     }
     if exponent >= 0x7fff {
         return None;
     }
     Value80::from_raw(Raw80::new(
         exponent as u16 | ((a.sign_exponent() ^ b.sign_exponent()) & 0x8000),
-        significand as u64,
+        significand,
     ))
     .ok()
 }
@@ -1477,6 +1482,47 @@ mod tests {
                 Some(_) if a.exponent().abs_diff(b.exponent()) >= 2 => SumBranch::FarDifference,
                 Some(_) => SumBranch::NearDifference,
             }
+        }
+    }
+
+    #[test]
+    fn multiplication_is_commutative_including_special_values() {
+        let special = [
+            Raw80::new(0, 0),
+            Raw80::new(0x8000, 0),
+            Raw80::new(0, 1),
+            Raw80::new(0x8000, (1 << 63) - 1),
+            Raw80::new(1, 1 << 63),
+            Raw80::new(0x3fff, 1 << 63),
+            Raw80::new(0xbfff, u64::MAX),
+            Raw80::new(0x7ffe, u64::MAX),
+            Raw80::new(0xfffe, u64::MAX),
+            Raw80::new(0x7fff, 1 << 63),
+            Raw80::new(0xffff, 1 << 63),
+            Raw80::new(0x7fff, 0xc000_0000_0000_0001),
+            Raw80::new(0xffff, 0xc000_0000_0000_0001),
+            Raw80::new(0xffff, 0xc000_0000_0000_0002),
+        ];
+        let check = |a, b| {
+            let (a, b) = (numerics::canonical(a), numerics::canonical(b));
+            let forward = numerics::Numerics::value80(
+                multiply(a, b).unwrap_or_else(|_| panic!("multiply {a:?} {b:?}")),
+            )
+            .raw();
+            let reverse = numerics::Numerics::value80(
+                multiply(b, a).unwrap_or_else(|_| panic!("multiply {b:?} {a:?}")),
+            )
+            .raw();
+            assert_eq!(forward, reverse, "{a:?} {b:?}");
+        };
+        for a in special {
+            for b in special {
+                check(a, b);
+            }
+        }
+        let mut random = XorShift(0x6a09_e667_f3bc_c909);
+        for _ in 0..10_000 {
+            check(random.normal(), random.normal());
         }
     }
 

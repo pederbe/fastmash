@@ -5,7 +5,8 @@
 //! regular file, enough to hold the rest of the input (an estimate from the
 //! bytes read and the chunk's memory so far, with a tenth to spare) and at
 //! most the buffer GNU `sort` would fill for that file; for piped input,
-//! twice its memory. Either only when the memory it would take stays within
+//! twice its memory, or a 50% chunk increase when doubling does not fit.
+//! Either only when the memory it would take stays within
 //! every limit read at that moment:
 //!
 //! - at each cgroup level with a limit, half of what is left under it, and a
@@ -192,7 +193,15 @@ pub(super) fn next(facts: &Facts, memory: u64) -> Result<u64, &'static str> {
         let target = wanted(facts, memory)?;
         // Below `START`, a chunk asks for at least `START`.
         let target = if below { target.max(start) } else { target };
-        within(facts, host, memory, target)
+        match within(facts, host, memory, target) {
+            // Piped input has no size estimate. If doubling would exceed
+            // headroom, try half that growth before spilling, under the same
+            // limits. A nearly complete input may fit without another run.
+            Err(_) if facts.input.is_none() && !below => {
+                within(facts, host, memory, memory + (target - memory) / 2)
+            }
+            result => result,
+        }
     });
     match grown {
         // Below `START`, only a cgroup limit refuses the chunk `START` itself:
@@ -772,6 +781,27 @@ mod tests {
             ),
             Err("host memory unreadable")
         );
+    }
+
+    #[test]
+    fn piped_growth_tries_a_smaller_step_under_the_same_limits() {
+        let memory = 128 * MIB;
+        let facts = Facts {
+            cgroups: Some(vec![Headroom {
+                limit: 512 * MIB,
+                used: 128 * MIB,
+            }]),
+            ..roomy()
+        };
+        assert_eq!(next(&facts, memory), Ok(192 * MIB));
+        let full = Facts {
+            cgroups: Some(vec![Headroom {
+                limit: 512 * MIB,
+                used: 176 * MIB,
+            }]),
+            ..facts
+        };
+        assert_eq!(next(&full, memory), Err("cgroup memory limit"));
     }
 
     #[test]

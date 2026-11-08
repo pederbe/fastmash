@@ -86,6 +86,7 @@ of the available memory, half of what is free under any cgroup memory limit,
 a share of what is free under that limit or on the host (one per running
 Fastmash), and with less than half the swap in use. For piped input it asks
 for 64 MiB, then twice its memory each time it fills, within the same bounds.
+If doubling does not fit, it tries a 50% chunk increase before spilling.
 Otherwise the first chunk takes 64 MiB unless a cgroup memory limit lacks
 room for it, and then the sort spills. In language locales, and for other
 means, higher moments, normality tests and paired statistics grouped by one
