@@ -382,6 +382,10 @@ fn run_scanned_with_sources(
         unreachable!("informational action already handled")
     };
     options.presentation.profile = profile;
+    // Data destinations stay plain even when color is explicitly forced.
+    if environment.terminal.stdout_terminal {
+        options.terminal = style;
+    }
     options.sort_memory = environment.sort_memory.take();
     let command = grammar::command_for_format(
         &options.operands,
@@ -390,6 +394,14 @@ fn run_scanned_with_sources(
         profile,
         policy.utf8,
     )?;
+    if options.styled_results()
+        && matches!(
+            command.mode,
+            grammar::Mode::Aggregate | grammar::Mode::Line | grammar::Mode::Select(_)
+        )
+    {
+        options.header_out = true;
+    }
     let (options, binding, needs, route) =
         match preparation::prepare(&mut options, command, &environment, name)? {
             preparation::Prepared::Comparison(prepared) => {
@@ -398,7 +410,8 @@ fn run_scanned_with_sources(
             }
             preparation::Prepared::Health(prepared) => {
                 setup_sigpipe()?;
-                return health::run(reader, writer, prepared.into_options(), style, report);
+                let options = prepared.into_options();
+                return health::run(reader, writer, options, options.terminal, report);
             }
             preparation::Prepared::Table(prepared) => {
                 let (options, mode, keys) = prepared.into_parts();

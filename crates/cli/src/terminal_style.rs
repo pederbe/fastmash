@@ -57,27 +57,37 @@ fn environment_suppresses() -> bool {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(super) enum Role {
     Heading,
     Syntax,
     Advisory,
     Failure,
+    Value,
+    Success,
+    Muted,
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(super) struct Style(bool);
 
 impl Style {
+    pub(super) fn enabled(self) -> bool {
+        self.0
+    }
+
     pub(super) fn start(self, role: Role) -> &'static [u8] {
         if !self.0 {
             return b"";
         }
         match role {
-            Role::Heading => b"\x1b[1m",
-            Role::Syntax => b"\x1b[36m",
-            Role::Advisory => b"\x1b[33m",
-            Role::Failure => b"\x1b[31m",
+            Role::Heading => b"\x1b[1;38;2;189;147;249m",
+            Role::Syntax => b"\x1b[38;2;92;184;255m",
+            Role::Value => b"\x1b[1;38;2;92;184;255m",
+            Role::Advisory => b"\x1b[1;38;2;243;156;18m",
+            Role::Failure => b"\x1b[1;38;2;255;92;87m",
+            Role::Success => b"\x1b[1;38;2;90;247;142m",
+            Role::Muted => b"\x1b[38;2;112;120;140m",
         }
     }
 
@@ -111,10 +121,10 @@ mod tests {
                         ] {
                             let style = detection.style(mode, destination);
                             for (role, sequence) in [
-                                (Role::Heading, b"\x1b[1m".as_slice()),
-                                (Role::Syntax, b"\x1b[36m"),
-                                (Role::Advisory, b"\x1b[33m"),
-                                (Role::Failure, b"\x1b[31m"),
+                                (Role::Heading, b"\x1b[1;38;2;189;147;249m".as_slice()),
+                                (Role::Syntax, b"\x1b[38;2;92;184;255m"),
+                                (Role::Advisory, b"\x1b[1;38;2;243;156;18m"),
+                                (Role::Failure, b"\x1b[1;38;2;255;92;87m"),
                             ] {
                                 assert_eq!(style.start(role), if enabled { sequence } else { b"" });
                             }

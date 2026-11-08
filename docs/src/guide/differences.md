@@ -27,9 +27,9 @@ limits; no comparative workflow speed or memory claim is implied.
 - [Dataset comparison](dataset-comparison.md) summarizes two raw datasets and
   reports their numerical changes, with complete Comparison keys and optional
   ranking.
-- [Terminal color](terminal-color.md) styles help, failure prefixes and readable
-  health reports on eligible terminals, or under explicit controls. Data output,
-  health TSV and version bytes remain plain, even when color is forced.
+- [Terminal presentation](terminal-color.md) adds colored headings, aligned
+  results and status symbols to calculations, Top-N selection and readable health
+  reports on eligible terminals. Files, pipes and explicit data formats remain plain.
 
 ## Numbers
 

@@ -53,6 +53,13 @@ pub(super) fn write_prefix(
 ) -> io::Result<()> {
     let prefix = writer
         .write_all(style.start(Role::Failure))
+        .and_then(|()| {
+            if style.enabled() {
+                writer.write_all("✗ ".as_bytes())
+            } else {
+                Ok(())
+            }
+        })
         .and_then(|()| writer.write_all(program))
         .and_then(|()| writer.write_all(b": "));
     // A partially written styled prefix can leave a terminal colored. Attempt
@@ -212,7 +219,10 @@ mod tests {
                 message: b"first\nsecond\0\xff\x1b[36m\nhint: use --help\n".to_vec(),
             };
             for (mode, prefix) in [
-                (ColorMode::Always, b"\x1b[31mfastmash: \x1b[0m".as_slice()),
+                (
+                    ColorMode::Always,
+                    b"\x1b[1;38;2;255;92;87m\xe2\x9c\x97 fastmash: \x1b[0m".as_slice(),
+                ),
                 (ColorMode::Never, b"fastmash: "),
             ] {
                 let mut bytes = Vec::new();
@@ -229,7 +239,10 @@ mod tests {
             style(ColorMode::Always),
         )
         .unwrap();
-        assert_eq!(bytes, b"\x1b[31m\xffprogram: \x1b[0mchecked limit\n");
+        assert_eq!(
+            bytes,
+            b"\x1b[1;38;2;255;92;87m\xe2\x9c\x97 \xffprogram: \x1b[0mchecked limit\n"
+        );
     }
 
     #[test]
@@ -241,7 +254,7 @@ mod tests {
         write(&mut bytes, b"fastmash", &refusal, style(ColorMode::Always)).unwrap();
         assert_eq!(
             bytes,
-            b"\x1b[31mfastmash: \x1b[0mmemory allocation failed\n"
+            b"\x1b[1;38;2;255;92;87m\xe2\x9c\x97 fastmash: \x1b[0mmemory allocation failed\n"
         );
         assert_eq!(refusal.status, 77);
     }
@@ -271,13 +284,23 @@ mod tests {
                     crate::test_terminal::output(&mut command, b"", false, stderr_terminal);
                 assert_eq!(output.status.code(), Some(77), "{output:?}");
                 assert_eq!(
-                    output.stderr.starts_with(b"\x1b[31mfastmash: \x1b[0m"),
+                    output
+                        .stderr
+                        .starts_with(b"\x1b[1;38;2;255;92;87m\xe2\x9c\x97 fastmash: \x1b[0m"),
                     stderr_terminal && eligible,
                     "{environment:?}: {output:?}"
                 );
                 assert_eq!(
                     crate::test_terminal::strip_styles(&output.stderr),
-                    b"fastmash: memory allocation failed\n"
+                    [
+                        if stderr_terminal && eligible {
+                            "✗ ".as_bytes()
+                        } else {
+                            b""
+                        },
+                        b"fastmash: memory allocation failed\n"
+                    ]
+                    .concat()
                 );
             }
         }
@@ -365,7 +388,7 @@ mod tests {
                 panic!("a failed prefix stops before the body and flush")
             }
         }
-        let prefix = b"\x1b[31mfastmash: ";
+        let prefix = b"\x1b[1;38;2;255;92;87m\xe2\x9c\x97 fastmash: ";
         for fail_at in 0..prefix.len() {
             for fail_reset in [false, true] {
                 let mut sink = Transient {
@@ -462,7 +485,7 @@ mod tests {
                     assert_eq!(attempts, 2);
                     if !diagnostic_fails {
                         let prefix = if mode == ColorMode::Always {
-                            b"\x1b[31mfastmash: \x1b[0m".as_slice()
+                            b"\x1b[1;38;2;255;92;87m\xe2\x9c\x97 fastmash: \x1b[0m".as_slice()
                         } else {
                             b"fastmash: ".as_slice()
                         };

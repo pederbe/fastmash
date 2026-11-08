@@ -390,7 +390,7 @@ pub(super) fn run(
     let (capacity, line_buffered) = writer.buffering();
     let buffer = buffered_stdout::BufferedStdout::new(writer, capacity, line_buffered)
         .map_err(|error| os_failure(&error, false))?;
-    let mut output = command_output::Results::new(buffer, options);
+    let mut output = command_output::Results::plain(buffer, options);
     let result = (|| {
         let before = sources
             .with_source(reader, &request.before, |input| {

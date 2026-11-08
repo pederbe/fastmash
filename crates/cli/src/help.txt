@@ -180,11 +180,15 @@ Options:
                          Use one literal byte between text-list values
   -h, --help             Show this help without reading input
   -V, --version          Show the package version without reading input
-  --color=auto|always|never Style eligible help, diagnostics and readable health
+  --color=auto|always|never Style terminal results, health, help and diagnostics
   --no-color             Same as --color=never; the last color control wins
   --                     End option processing
 
 By default, fields and results are tab-separated; records end with LF. With -z, LF is data.
+On eligible terminals, calculations and Top-N selection show labeled, aligned
+results and completion marks. Files and pipes retain the plain data format.
+--no-color also disables this terminal presentation. Explicit CSV, NUL records,
+output delimiters and structured reports retain their data formats on terminals.
 The final input record may omit its terminator. CR bytes are retained.
 For text output, the input separator also sets the output separator unless explicitly overridden.
 Unique and collapse list values are comma-separated unless -c specifies another byte.

@@ -352,7 +352,8 @@ Numerical behavior is where Fastmash differs most from a straightforward port.
 | 77 | Refusal | Unsupported feature or locale, checked allocation failure, numerical capacity reached |
 | 70 | Internal failure | A violated numerical invariant or a failed numerical table identity check; please report it |
 
-Diagnostics are written to standard error as `fastmash: message`, sometimes
+Diagnostics are written to standard error as `fastmash: message`, with a colored
+`✗` prefix on eligible terminals, sometimes
 followed by a `hint:` line suggesting a fix. When one failure follows another
 (for example a failed write of the output after an error), the more serious
 status wins: 70 over 77 over 1 (`failure::combine`). A diagnostic that cannot

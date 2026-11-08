@@ -357,12 +357,73 @@ pub(super) fn readable<W: Write>(
     output.raw(style.start(Role::Heading));
     output.raw(b"Table health report");
     output.raw(style.reset());
+    if style.enabled() {
+        output.raw(b"\n");
+        let violated = report
+            .findings
+            .iter()
+            .any(super::health::Finding::is_violation);
+        let (role, message): (_, &[u8]) = if violated {
+            (
+                Role::Failure,
+                if settings.validate {
+                    "✗ Validation failed · supplied expectations violated".as_bytes()
+                } else {
+                    "✗ Supplied expectations violated".as_bytes()
+                },
+            )
+        } else if settings.validate {
+            (
+                Role::Success,
+                "✔ Validation passed · supplied expectations met".as_bytes(),
+            )
+        } else if report.findings.is_empty() {
+            (
+                Role::Syntax,
+                "▶ Inspection complete · no findings".as_bytes(),
+            )
+        } else {
+            (
+                Role::Advisory,
+                "⚠ Inspection complete · advisory findings".as_bytes(),
+            )
+        };
+        output.styled(style, role, message);
+    }
     output.raw(b"\nData records: ");
     number(output, report.data_records);
-    output.raw(b"\nHeader records: ");
+    output.raw(if style.enabled() {
+        " · header records: ".as_bytes()
+    } else {
+        b"\nHeader records: "
+    });
     number(output, report.header_records);
-    output.raw(b"\nAccepted records: ");
+    output.raw(if style.enabled() {
+        " · accepted records: ".as_bytes()
+    } else {
+        b"\nAccepted records: "
+    });
     number(output, report.accepted_records);
+    if !style.enabled() {
+        metadata(output, options, settings, style);
+    }
+    widths(output, report);
+    details(output, report, style);
+    if style.enabled() {
+        output.raw(b"\n");
+        output.styled(style, Role::Heading, b"Input and reporting");
+        metadata(output, options, settings, style);
+        output.raw(b"\n");
+    }
+}
+
+fn metadata<W: Write>(
+    output: &mut BufferedStdout<'_, W>,
+    options: &Options,
+    settings: &Settings,
+    style: Style,
+) {
+    output.raw(style.start(Role::Muted));
     output.raw(b"\nInput separator: ");
     match options.input {
         Separator::Literal(byte) => {
@@ -395,7 +456,12 @@ pub(super) fn readable<W: Write>(
     number(output, settings.examples as u64);
     output.raw(b" per finding\nSample byte limit: ");
     number(output, SAMPLE_BYTES as u64);
-    output.raw(b" raw bytes\nBaseline width: ");
+    output.raw(b" raw bytes");
+    output.raw(style.reset());
+}
+
+fn widths<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report) {
+    output.raw(b"\nBaseline width: ");
     if let Some(width) = report.baseline.width() {
         number(output, width as u64);
         output.raw(b" fields (");
@@ -414,6 +480,12 @@ pub(super) fn readable<W: Write>(
         output.raw(b"unavailable");
     }
     output.raw(b"\n");
+}
+
+fn details<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report, style: Style) {
+    if style.enabled() {
+        output.raw(b"\n");
+    }
     output.raw(style.start(Role::Heading));
     output.raw(b"Field observations (data-record cells):");
     output.raw(style.reset());
@@ -427,17 +499,41 @@ pub(super) fn readable<W: Write>(
         number(output, field as u64 + 1);
         output.raw(b", name \"");
         escaped(output, report.header.get(field).map_or(&[], Vec::as_slice));
-        output.raw(b"\": absent_values ");
+        output.raw(if style.enabled() {
+            b"\"\n    Absent "
+        } else {
+            b"\": absent_values "
+        });
         number(output, state.absent);
-        output.raw(b"; empty_values ");
+        output.raw(if style.enabled() {
+            " · empty ".as_bytes()
+        } else {
+            b"; empty_values "
+        });
         number(output, state.empty);
-        output.raw(b"; missing_values ");
+        output.raw(if style.enabled() {
+            " · missing ".as_bytes()
+        } else {
+            b"; missing_values "
+        });
         number(output, state.missing);
-        output.raw(b"; integer_values ");
+        output.raw(if style.enabled() {
+            b"\n    Integer "
+        } else {
+            b"; integer_values "
+        });
         number(output, state.integer);
-        output.raw(b"; other_number_values ");
+        output.raw(if style.enabled() {
+            " · other number ".as_bytes()
+        } else {
+            b"; other_number_values "
+        });
         number(output, state.other_number);
-        output.raw(b"; text_values ");
+        output.raw(if style.enabled() {
+            " · text ".as_bytes()
+        } else {
+            b"; text_values "
+        });
         number(output, state.text);
         output.raw(b"\n    type_expectation ");
         output.raw(state.expectation.id());
@@ -455,6 +551,9 @@ pub(super) fn readable<W: Write>(
             output.raw(b" (declared)\n");
         }
     }
+    if style.enabled() {
+        output.raw(b"\n");
+    }
     output.raw(style.start(Role::Heading));
     output.raw(b"Findings (counts may overlap):");
     output.raw(style.reset());
@@ -464,20 +563,29 @@ pub(super) fn readable<W: Write>(
         return;
     }
     for finding in &report.findings {
-        output.raw(b"  ");
-        output.raw(finding.category.id());
-        output.raw(b" [");
-        output.raw(finding.basis.id());
-        output.raw(b", ");
         let (role, marker): (_, &[u8]) = if finding.is_violation() {
             (Role::Failure, b"violation")
         } else {
             (Role::Advisory, b"advisory")
         };
-        output.raw(style.start(role));
+        if style.enabled() {
+            output.raw(style.start(role));
+            output.raw(if finding.is_violation() {
+                "✗ ".as_bytes()
+            } else {
+                "⚠ ".as_bytes()
+            });
+        } else {
+            output.raw(b"  ");
+        }
+        output.raw(finding.category.id());
+        output.raw(b" [");
+        output.raw(finding.basis.id());
+        output.raw(b", ");
         output.raw(marker);
+        output.raw(b"]");
         output.raw(style.reset());
-        output.raw(b"]: ");
+        output.raw(if style.enabled() { b"\n  " } else { b": " });
         number(output, finding.count);
         output.raw(b" ");
         output.raw(finding.category.unit());
@@ -499,7 +607,11 @@ pub(super) fn readable<W: Write>(
             escaped(output, report.header.get(field).map_or(&[], Vec::as_slice));
             output.raw(b"\"");
         }
-        output.raw(b"; examples retained ");
+        output.raw(if style.enabled() {
+            b"\n  examples retained "
+        } else {
+            b"; examples retained "
+        });
         number(output, finding.examples.len() as u64);
         output.raw(b", omitted ");
         number(output, finding.candidates - finding.examples.len() as u64);
@@ -523,6 +635,9 @@ pub(super) fn readable<W: Write>(
             escaped(output, &example.bytes[..example.length]);
             output.raw(b"\"; truncated ");
             output.raw(if example.truncated { b"yes\n" } else { b"no\n" });
+        }
+        if style.enabled() {
+            output.raw(b"\n");
         }
     }
 }

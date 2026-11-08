@@ -1,10 +1,12 @@
 # Numbers, output and locales
 
-Calculation results always contain plain data, including when terminal color
-is forced. Use [quoted CSV](csv-and-result-names.md) to encode complete output
+Calculation results sent to files or other programs contain plain data, even
+when color is forced. Eligible terminals show labeled, aligned results with
+color and completion marks. `--no-color` selects the plain format on a terminal.
+Use [quoted CSV](csv-and-result-names.md) to encode complete output
 fields, and `--result-name=INDEX:NAME` with an output header to replace generated
-result labels. [Terminal color](terminal-color.md) covers human-readable help,
-health reports and failure prefixes.
+result labels. [Terminal presentation](terminal-color.md) describes styled
+results, help, health reports and failure prefixes.
 
 ## Reading numbers
 

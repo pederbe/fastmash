@@ -25,9 +25,17 @@ use std::{
     process::Stdio,
 };
 
-const PREFIX: &[u8] = b"\x1b[31mfastmash: \x1b[0m";
+const PREFIX: &[u8] = b"\x1b[1;38;2;255;92;87m\xe2\x9c\x97 fastmash: \x1b[0m";
 
 const PROGRAM: terminal::Program = terminal::Program;
+
+fn diagnostic_text(bytes: &[u8]) -> Vec<u8> {
+    let plain = terminal::strip_styles(bytes);
+    plain
+        .strip_prefix("✗ ".as_bytes())
+        .unwrap_or(&plain)
+        .to_vec()
+}
 
 #[test]
 fn argument_input_and_refusal_diagnostics_style_only_the_existing_prefix() {
@@ -51,7 +59,7 @@ fn argument_input_and_refusal_diagnostics_style_only_the_existing_prefix() {
         assert_eq!(colored.stdout, plain.stdout, "{args:?}");
         let body = plain.stderr.strip_prefix(b"fastmash: ").unwrap();
         assert_eq!(colored.stderr, [PREFIX, body].concat(), "{args:?}");
-        assert_eq!(terminal::strip_styles(&colored.stderr), plain.stderr);
+        assert_eq!(diagnostic_text(&colored.stderr), plain.stderr);
     }
 }
 
@@ -100,10 +108,13 @@ fn automatic_diagnostics_use_stderr_eligibility_independently_of_stdout() {
                     "stdout={stdout_terminal}, stderr={stderr_terminal}, {environment:?}"
                 );
                 assert_eq!(
-                    terminal::strip_styles(&output.stderr),
+                    diagnostic_text(&output.stderr),
                     b"fastmash: invalid numeric value in line 1 field 1: 'bad'\n"
                 );
-                assert!(output.stdout.is_empty());
+                if !stdout_terminal || !eligible {
+                    assert!(output.stdout.is_empty());
+                }
+                assert!(!String::from_utf8_lossy(&output.stdout).contains("Completed"));
             }
         }
     }
@@ -183,7 +194,7 @@ fn help_output_failures_retain_selected_diagnostic_color() {
         assert_eq!(output.status.code(), Some(1));
         assert_eq!(output.stderr.starts_with(PREFIX), mode == "--color=always");
         assert_eq!(
-            terminal::strip_styles(&output.stderr),
+            diagnostic_text(&output.stderr),
             b"fastmash: write error: No space left on device\n"
         );
     }

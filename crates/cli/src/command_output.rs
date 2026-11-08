@@ -68,7 +68,23 @@ pub(super) struct Results<'a, W> {
     result_names: &'a super::result_names::ResultNames,
 }
 impl<'a, W: Write> Results<'a, W> {
-    pub fn new(buffer: BufferedStdout<'a, W>, options: &'a options::Options) -> Self {
+    pub fn new(mut buffer: BufferedStdout<'a, W>, options: &'a options::Options) -> Self {
+        buffer.terminal_table(
+            options,
+            if options.group.is_some() {
+                b"Grouped summary"
+            } else if options.linewise {
+                b"Per-row results"
+            } else {
+                b"Summary"
+            },
+        );
+        let mut output = Self::plain(buffer, options);
+        output.enabled |= output.buffer.is_terminal_table();
+        output
+    }
+
+    pub fn plain(buffer: BufferedStdout<'a, W>, options: &'a options::Options) -> Self {
         Self {
             buffer,
             table: options.crosstab.then(super::crosstab::Table::default),
@@ -86,19 +102,23 @@ impl<'a, W: Write> Results<'a, W> {
     }
 }
 impl<W: Write> Results<'_, W> {
-    fn full_header<'r>(&mut self, fields: impl Iterator<Item = &'r [u8]>) {
+    fn full_header<'r>(&mut self, fields: impl Iterator<Item = &'r [u8]>) -> Result<(), Failure> {
         for (index, bytes) in fields.enumerate() {
             let generated = (!self.named).then(|| headers::generated(index as u64 + 1));
             let label = generated
                 .as_ref()
                 .map_or_else(|| headers::label(bytes), |label| label.as_bytes());
-            if self.csv {
+            if self.buffer.is_terminal_table() {
+                self.buffer.table_header(&[label], false)?;
+                continue;
+            } else if self.csv {
                 self.buffer.csv_field(label);
             } else {
                 self.buffer.formatted(label);
             }
             self.buffer.emit(headers::Part::Separator(self.output));
         }
+        Ok(())
     }
 
     /// The Output header of a sorted record that keeps only its selected
@@ -127,7 +147,14 @@ impl<W: Write> Results<'_, W> {
     ) -> Result<(), Failure> {
         for &key in keys.iter().filter(|_| !self.full) {
             let bytes = field(key)?;
-            if self.csv {
+            if self.buffer.is_terminal_table() {
+                let generated = (!self.named).then(|| headers::generated(key));
+                let label = generated
+                    .as_ref()
+                    .map_or_else(|| headers::label(bytes), |label| label.as_bytes());
+                self.buffer.table_header(&[label], false)?;
+                continue;
+            } else if self.csv {
                 let generated = (!self.named).then(|| headers::generated(key));
                 let label = generated
                     .as_ref()
@@ -143,6 +170,26 @@ impl<W: Write> Results<'_, W> {
         let mut requests = Vec::new();
         super::command_memory::reserve(&mut requests, operations.len())?;
         requests.extend(operations.requests());
+        if self.buffer.is_terminal_table() {
+            let mut failure = Ok(());
+            headers::render_fields(
+                &requests,
+                field,
+                (self.output, self.record_end, self.profile),
+                self.named,
+                self.result_names,
+                |header, separator| {
+                    if failure.is_ok() {
+                        header.with_fragments(|parts| {
+                            failure = self
+                                .buffer
+                                .table_header(parts, separator == self.record_end)
+                        });
+                    }
+                },
+            )?;
+            return failure;
+        }
         if self.csv {
             return headers::render_fields(
                 &requests,
@@ -196,7 +243,7 @@ impl<W: Write> CommandOutput for Results<'_, W> {
             self.full_header(
                 records::fields(record, self.input)
                     .map(|span| &record[span.start..span.start + span.length]),
-            );
+            )?;
         }
         // One pass over the record serves every key and request.
         let mut index =
@@ -209,7 +256,9 @@ impl<W: Write> CommandOutput for Results<'_, W> {
         self.selected(field, operations, keys)
     }
     fn key(&mut self, bytes: &[u8], separator: u8) {
-        if self.csv {
+        if self.buffer.is_terminal_table() {
+            self.buffer.table_cell(bytes, false, false);
+        } else if self.csv {
             self.buffer.csv_field(bytes);
             self.buffer.emit(headers::Part::Separator(b','));
         } else {
@@ -227,13 +276,16 @@ impl<W: Write> CommandOutput for Results<'_, W> {
             return Ok(());
         }
         if self.full {
-            self.full_header(record.fields());
+            self.full_header(record.fields())?;
         }
         self.selected(|field| record.field(field), operations, keys)
             .map_err(|error| record.location.annotate(error))
     }
     fn result(&mut self, bytes: &[u8], separator: u8) {
-        if self.csv {
+        if self.buffer.is_terminal_table() {
+            self.buffer
+                .table_cell(bytes, separator == self.record_end, true);
+        } else if self.csv {
             self.buffer.csv_field(bytes);
             self.buffer
                 .emit(headers::Part::Separator(if separator == self.record_end {
@@ -289,6 +341,9 @@ pub(super) fn complete<W: Write>(
 ) -> i32 {
     let mut status = 0;
     let mut diagnostics_ok = true;
+    if result.is_ok() {
+        buffer.table_complete();
+    }
     if let Err(error) = result {
         buffer.before_diagnostic();
         status = error.status;
