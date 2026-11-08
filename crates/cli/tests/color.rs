@@ -376,3 +376,33 @@ fn terminal_results_keep_partial_values_without_a_success_marker() {
     assert!(!text.contains("Completed"), "{text}");
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid numeric value in line 2"));
 }
+
+#[test]
+fn terminal_results_align_unicode_labels_and_values_by_displayed_columns() {
+    for (label, row) in [
+        ("é", "       1       2\n"),
+        ("界", "        1       2\n"),
+        ("e\u{301}", "       1       2\n"),
+    ] {
+        let input = format!("{label}\tx\n1\t2\n");
+        let output = PROGRAM.invoke(
+            &["-H", "sum", "1", "sum", "2"],
+            input.as_bytes(),
+            &[],
+            true,
+            false,
+        );
+        assert!(output.status.success());
+        let text = String::from_utf8(terminal::strip_styles(&output.stdout)).unwrap();
+        assert!(text.contains(row), "{text}");
+    }
+    let output = PROGRAM.invoke(
+        &["-H", "top:2", "points"],
+        "name\tpoints\né\t2\n界\t1\n".as_bytes(),
+        &[],
+        true,
+        false,
+    );
+    let text = String::from_utf8(terminal::strip_styles(&output.stdout)).unwrap();
+    assert!(text.contains("     é       2\n    界       1\n"), "{text}");
+}

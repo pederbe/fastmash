@@ -5,6 +5,11 @@
 //! reported in GNU's order (`command_output::complete`).
 use super::headers::Part;
 use std::io::{self, Write};
+use unicode_width::UnicodeWidthStr;
+
+fn columns(bytes: &[u8]) -> usize {
+    std::str::from_utf8(bytes).map_or(bytes.len(), UnicodeWidthStr::width)
+}
 
 struct TerminalTable {
     style: super::terminal_style::Style,
@@ -86,7 +91,7 @@ impl<'a, W: Write> BufferedStdout<'a, W> {
         use super::terminal_style::Role;
         let width = parts
             .iter()
-            .try_fold(0usize, |width, part| width.checked_add(part.len()))
+            .try_fold(0usize, |width, part| width.checked_add(columns(part)))
             .ok_or_else(|| super::unsupported("terminal header exceeds addressable capacity"))?;
         let table = self.table.as_mut().expect("terminal table");
         super::command_memory::reserve(&mut table.widths, 1)?;
@@ -119,7 +124,7 @@ impl<'a, W: Write> BufferedStdout<'a, W> {
         let style = table.style;
         table.column = if last { 0 } else { table.column + 1 };
         self.raw(b"  ");
-        let mut padding = width.saturating_sub(bytes.len());
+        let mut padding = width.saturating_sub(columns(bytes));
         const SPACES: &[u8] = b"                                                                ";
         while padding > 0 {
             let count = padding.min(SPACES.len());
