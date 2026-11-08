@@ -1194,22 +1194,21 @@ fn normal_product(left: Value80, right: Value80) -> Option<Value80> {
         return None;
     }
     // Keep the exact remainder until the only nearest-even rounding decision.
-    let mut significand = product >> shift;
-    let remainder = product & ((1u128 << shift) - 1);
-    let half = 1u128 << (shift - 1);
+    // The discarded part is at most one word: shift is exactly 63 or 64.
+    let mut significand = (product >> shift) as u64;
+    let remainder = product as u64 & (u64::MAX >> (64 - shift));
+    let half = 1u64 << (shift - 1);
     if remainder > half || (remainder == half && significand & 1 != 0) {
-        significand += 1;
-    }
-    if significand == 1u128 << 64 {
-        significand >>= 1;
-        exponent += 1;
+        let (rounded, carry) = significand.overflowing_add(1);
+        significand = if carry { 1 << 63 } else { rounded };
+        exponent += i32::from(carry);
     }
     if exponent >= 0x7fff {
         return None;
     }
     Value80::from_raw(Raw80::new(
         exponent as u16 | ((a.sign_exponent() ^ b.sign_exponent()) & 0x8000),
-        significand as u64,
+        significand,
     ))
     .ok()
 }

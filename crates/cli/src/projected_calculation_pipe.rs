@@ -11,34 +11,56 @@ use super::{
     Failure, Intake, Selector, failure, grouping, intake, numerics, operation_set, records, spill,
     unsupported,
 };
-use std::io::{self, BufRead, Read, Write};
+use std::io::{self, Write};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 
 const BUFFER: usize = 64 << 10;
 pub(super) const MEMORY: usize = 3 * BUFFER;
 
-// Transfer complete buffers rather than waking the reader for every small
-// kernel-pipe fragment. Two checked buffers circulate between the threads.
-// Records can cross any number of buffers; their size is not bounded here.
+#[derive(Clone, Copy)]
+struct Entry {
+    end: usize,
+    numbers: [Option<numerics::Value>; 2],
+    complete: bool,
+}
+// Metadata for both batches uses at most one additional byte-buffer allowance.
+// This bounds a batch, not the number or size of Records in the Command.
+const ENTRIES: usize = BUFFER / (2 * std::mem::size_of::<Entry>());
+#[derive(Default)]
+struct Batch {
+    bytes: Vec<u8>,
+    entries: Vec<Entry>,
+}
+impl Batch {
+    fn new() -> Option<Self> {
+        let mut batch = Self::default();
+        batch.bytes.try_reserve_exact(BUFFER).ok()?;
+        batch.entries.try_reserve_exact(ENTRIES).ok()?;
+        Some(batch)
+    }
+}
+// Two checked batches circulate between the threads. Numbers retain their
+// admitted type, and Record boundaries need no second delimiter scan.
+// Long Records span batches without growing the transfer buffers.
 struct Reader {
-    incoming: Receiver<Vec<u8>>,
-    free: SyncSender<Vec<u8>>,
-    buffer: Vec<u8>,
+    incoming: Receiver<Batch>,
+    free: SyncSender<Batch>,
+    buffer: Batch,
     at: usize,
+    byte_at: usize,
 }
 struct Writer {
-    outgoing: SyncSender<Vec<u8>>,
-    free: Receiver<Vec<u8>>,
-    buffer: Vec<u8>,
+    outgoing: SyncSender<Batch>,
+    free: Receiver<Batch>,
+    buffer: Batch,
+    numbers: [Option<numerics::Value>; 2],
 }
 fn disconnected() -> io::Error {
     io::Error::from(io::ErrorKind::BrokenPipe)
 }
 fn buffers() -> Option<(Reader, Writer)> {
-    let mut first = Vec::new();
-    let mut second = Vec::new();
-    first.try_reserve_exact(BUFFER).ok()?;
-    second.try_reserve_exact(BUFFER).ok()?;
+    let first = Batch::new()?;
+    let second = Batch::new()?;
     let (outgoing, incoming) = sync_channel(1);
     let (return_buffer, free) = sync_channel(1);
     return_buffer.send(second).ok()?;
@@ -46,117 +68,120 @@ fn buffers() -> Option<(Reader, Writer)> {
         Reader {
             incoming,
             free: return_buffer,
-            buffer: Vec::new(),
+            buffer: Batch::default(),
             at: 0,
+            byte_at: 0,
         },
         Writer {
             outgoing,
             free,
             buffer: first,
+            numbers: [None; 2],
         },
     ))
-}
-impl BufRead for Reader {
-    #[inline]
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        if self.at == self.buffer.len() {
-            self.refill();
-        }
-        Ok(&self.buffer[self.at..])
-    }
-    #[inline]
-    fn consume(&mut self, count: usize) {
-        self.at = self.at.saturating_add(count).min(self.buffer.len());
-    }
-}
-impl Read for Reader {
-    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
-        if out.is_empty() {
-            return Ok(0);
-        }
-        let available = self.fill_buf()?;
-        let count = out.len().min(available.len());
-        out[..count].copy_from_slice(&available[..count]);
-        self.consume(count);
-        Ok(count)
-    }
-    #[inline]
-    fn read_exact(&mut self, out: &mut [u8]) -> io::Result<()> {
-        if out.len() <= self.buffer.len().wrapping_sub(self.at) {
-            out.copy_from_slice(&self.buffer[self.at..self.at + out.len()]);
-            self.at += out.len();
-            Ok(())
-        } else {
-            self.read_exact_cold(out)
-        }
-    }
 }
 impl Reader {
     #[cold]
     #[inline(never)]
     fn refill(&mut self) {
-        if self.buffer.capacity() != 0 {
+        if self.buffer.bytes.capacity() != 0 {
             // The writer may already have finished. Its last buffered
             // bytes remain readable after the return channel closes.
             let _ = self.free.send(std::mem::take(&mut self.buffer));
         }
         self.buffer = self.incoming.recv().unwrap_or_default();
         self.at = 0;
+        self.byte_at = 0;
     }
-    #[cold]
-    #[inline(never)]
-    fn read_exact_cold(&mut self, mut out: &mut [u8]) -> io::Result<()> {
-        while !out.is_empty() {
-            let count = self.read(out)?;
-            if count == 0 {
-                return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+    fn record(
+        &mut self,
+        bytes: &mut Vec<u8>,
+    ) -> Result<Option<[Option<numerics::Value>; 2]>, Failure> {
+        bytes.clear();
+        let mut partial = false;
+        loop {
+            if self.at == self.buffer.entries.len() {
+                self.refill();
+                if self.buffer.entries.is_empty() {
+                    return if partial {
+                        Err(pipe_error(io::Error::from(io::ErrorKind::UnexpectedEof)))
+                    } else {
+                        Ok(None)
+                    };
+                }
             }
-            out = &mut out[count..];
+            let entry = self.buffer.entries[self.at];
+            let part = &self.buffer.bytes[self.byte_at..entry.end];
+            bytes
+                .try_reserve(part.len())
+                .map_err(|_| unsupported("record memory allocation failed"))?;
+            bytes.extend_from_slice(part);
+            self.at += 1;
+            self.byte_at = entry.end;
+            if entry.complete {
+                return Ok(Some(entry.numbers));
+            }
+            partial = true;
         }
-        Ok(())
     }
 }
 impl Writer {
+    fn ready(&mut self) -> io::Result<()> {
+        if self.buffer.bytes.capacity() == 0 {
+            self.buffer = self.free.recv().map_err(|_| disconnected())?;
+            self.buffer.bytes.clear();
+            self.buffer.entries.clear();
+        }
+        Ok(())
+    }
+    fn begin(&mut self, numbers: [Option<numerics::Value>; 2]) -> io::Result<()> {
+        if self.buffer.entries.len() == ENTRIES || self.buffer.bytes.len() == BUFFER {
+            self.flush()?;
+        }
+        self.ready()?;
+        self.numbers = numbers;
+        Ok(())
+    }
+    fn end(&mut self, complete: bool) {
+        self.buffer.entries.push(Entry {
+            end: self.buffer.bytes.len(),
+            numbers: self.numbers,
+            complete,
+        });
+    }
     #[cold]
     #[inline(never)]
     fn write_all_cold(&mut self, mut bytes: &[u8]) -> io::Result<()> {
         while !bytes.is_empty() {
-            if self.buffer.capacity() == 0 {
-                self.buffer = self.free.recv().map_err(|_| disconnected())?;
-                self.buffer.clear();
-            }
-            let count = bytes.len().min(BUFFER - self.buffer.len());
-            self.buffer.extend_from_slice(&bytes[..count]);
+            self.ready()?;
+            let count = bytes.len().min(BUFFER - self.buffer.bytes.len());
+            self.buffer.bytes.extend_from_slice(&bytes[..count]);
             bytes = &bytes[count..];
             if !bytes.is_empty() {
+                self.end(false);
                 self.flush()?;
             }
         }
         Ok(())
-    }
-}
-impl Write for Writer {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.write_all(bytes)?;
-        Ok(bytes.len())
     }
     #[inline]
     fn write_all(&mut self, bytes: &[u8]) -> io::Result<()> {
         if bytes.len()
             <= self
                 .buffer
+                .bytes
                 .capacity()
                 .min(BUFFER)
-                .wrapping_sub(self.buffer.len())
+                .wrapping_sub(self.buffer.bytes.len())
         {
-            self.buffer.extend_from_slice(bytes);
+            self.buffer.bytes.extend_from_slice(bytes);
             Ok(())
         } else {
             self.write_all_cold(bytes)
         }
     }
     fn flush(&mut self) -> io::Result<()> {
-        if !self.buffer.is_empty() {
+        if !self.buffer.entries.is_empty() {
             self.outgoing
                 .send(std::mem::take(&mut self.buffer))
                 .map_err(|_| disconnected())?;
@@ -261,33 +286,6 @@ impl GroupRecord for Prepared {
     }
 }
 
-fn read_numbers(
-    reader: &mut impl BufRead,
-) -> Result<Option<[Option<numerics::Value>; 2]>, Failure> {
-    if reader.fill_buf().map_err(pipe_error)?.is_empty() {
-        return Ok(None);
-    }
-    let mut mask = [0];
-    reader.read_exact(&mut mask).map_err(pipe_error)?;
-    if mask[0] & !3 != 0 {
-        return Err(unsupported("invalid native sort pipe values"));
-    }
-    let mut numbers = [None; 2];
-    for (at, number) in numbers.iter_mut().enumerate() {
-        if mask[0] & (1 << at) != 0 {
-            let mut raw = [0; 10];
-            reader.read_exact(&mut raw).map_err(pipe_error)?;
-            let value = fastmash_numeric_contract::Value80::from_le_bytes(raw)
-                .map_err(|_| unsupported("invalid native sort pipe value"))?;
-            *number = Some(
-                numerics::Numerics::admit(value)
-                    .map_err(|_| unsupported("invalid native sort pipe value"))?,
-            );
-        }
-    }
-    Ok(Some(numbers))
-}
-
 fn pipe_error(error: impl std::fmt::Display) -> Failure {
     failure(format!("native sort pipe I/O error: {error}\n").into_bytes())
 }
@@ -387,14 +385,7 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
                             })
                             .flatten()
                     });
-                    let mask =
-                        u8::from(numbers[0].is_some()) | (u8::from(numbers[1].is_some()) << 1);
-                    writer.write_all(&[mask]).map_err(pipe_error)?;
-                    for value in numbers.into_iter().flatten() {
-                        writer
-                            .write_all(&numerics::Numerics::value80(value).to_le_bytes())
-                            .map_err(pipe_error)?;
-                    }
+                    writer.begin(numbers).map_err(pipe_error)?;
                     if let Some(bytes) = record.original() {
                         writer.write_all(bytes).map_err(pipe_error)?;
                     } else {
@@ -422,7 +413,8 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
                             }
                         }
                     }
-                    writer.write_all(&[options.record_end]).map_err(pipe_error)
+                    writer.end(true);
+                    Ok(())
                 })?;
                 writer.flush().map_err(pipe_error)?;
                 Ok(())
@@ -440,18 +432,16 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
         let mut transport_error = None;
         let result = (|| {
             loop {
-                let numbers = match read_numbers(&mut reader) {
+                let numbers = match reader.record(spare.raw.bytes_mut()) {
                     Ok(Some(numbers)) => numbers,
                     Ok(None) => break,
+                    Err(error) if error.status == 77 => return Err(error),
                     Err(error) => {
                         transport_error = Some(error);
                         break;
                     }
                 };
-                if intake.next(&mut reader, spare.raw.bytes_mut())?.is_none() {
-                    transport_error = Some(pipe_error("missing native sort pipe record"));
-                    break;
-                }
+                intake.accept(spare.raw.bytes_mut())?;
                 for (slot, value) in spare.numbers.iter_mut().zip(numbers) {
                     slot.1 = value;
                 }
@@ -494,18 +484,31 @@ mod tests {
     fn recycled_buffers_preserve_long_writes_short_tails_and_eof() {
         let expected: Vec<_> = (0..BUFFER * 3 + 29).map(|at| (at % 251) as u8).collect();
         let (mut reader, mut writer) = buffers().unwrap();
-        assert_eq!(reader.read(&mut []).unwrap(), 0);
-        writer.write_all(&[]).unwrap();
         std::thread::scope(|scope| {
             let expected = &expected;
             let producer = scope.spawn(move || {
+                writer.begin([None; 2]).unwrap();
                 writer.write_all(expected).unwrap();
+                writer.end(true);
+                for at in 0..ENTRIES * 3 {
+                    writer.begin([None; 2]).unwrap();
+                    writer.write_all(&[at as u8]).unwrap();
+                    writer.end(true);
+                }
+                writer.begin([None; 2]).unwrap();
+                writer.end(true);
                 writer.flush().unwrap();
             });
             let mut actual = Vec::new();
-            reader.read_to_end(&mut actual).unwrap();
+            assert!(reader.record(&mut actual).ok().unwrap().is_some());
             assert_eq!(&actual, expected);
-            assert_eq!(reader.read(&mut [0]).unwrap(), 0);
+            for at in 0..ENTRIES * 3 {
+                assert!(reader.record(&mut actual).ok().unwrap().is_some());
+                assert_eq!(actual, [at as u8]);
+            }
+            assert!(reader.record(&mut actual).ok().unwrap().is_some());
+            assert!(actual.is_empty());
+            assert!(reader.record(&mut actual).ok().unwrap().is_none());
             producer.join().unwrap();
         });
     }
@@ -514,8 +517,12 @@ mod tests {
     fn dropping_the_reader_unblocks_a_buffered_writer() {
         let (mut reader, mut writer) = buffers().unwrap();
         std::thread::scope(|scope| {
-            let producer = scope.spawn(move || writer.write_all(&vec![b'x'; BUFFER * 8]));
-            assert_eq!(reader.read(&mut [0]).unwrap(), 1);
+            let producer = scope.spawn(move || {
+                writer.begin([None; 2])?;
+                writer.write_all(&vec![b'x'; BUFFER * 8])
+            });
+            reader.refill();
+            assert!(!reader.buffer.entries.is_empty());
             drop(reader);
             assert_eq!(
                 producer.join().unwrap().unwrap_err().kind(),
@@ -541,37 +548,36 @@ mod tests {
         for mask in 0..4u8 {
             for bits in patterns {
                 let expected = fastmash_numeric_contract::Value80::try_from_bits(bits).unwrap();
-                let mut frame = vec![mask];
-                for at in 0..2 {
+                let mut numbers = [None; 2];
+                for (at, number) in numbers.iter_mut().enumerate() {
                     if mask & (1 << at) != 0 {
-                        frame.extend_from_slice(&expected.to_le_bytes());
+                        *number = Some(numerics::Numerics::admit(expected).unwrap());
                     }
                 }
-                let mut reader = std::io::Cursor::new(frame);
-                let values = read_numbers(&mut reader).ok().unwrap().unwrap();
+                let (mut reader, mut writer) = buffers().unwrap();
+                writer.begin(numbers).unwrap();
+                writer.end(true);
+                writer.flush().unwrap();
+                drop(writer);
+                let mut bytes = Vec::new();
+                let values = reader.record(&mut bytes).ok().unwrap().unwrap();
                 for (at, value) in values.into_iter().enumerate() {
                     assert_eq!(value.is_some(), mask & (1 << at) != 0);
                     if let Some(value) = value {
                         assert!(numerics::Numerics::value80(value).same_bits(expected));
                     }
                 }
-                assert!(read_numbers(&mut reader).ok().unwrap().is_none());
+                assert!(reader.record(&mut bytes).ok().unwrap().is_none());
             }
         }
     }
     #[test]
-    fn incomplete_or_invalid_cached_numbers_are_rejected() {
-        for frame in [vec![4], vec![1], vec![3; 11]] {
-            assert!(read_numbers(&mut std::io::Cursor::new(frame)).is_err());
-        }
-        for bits in [1u128 << 64, 0x7fff8000000000000001] {
-            let mut frame = vec![1];
-            frame.extend_from_slice(
-                &fastmash_numeric_contract::Raw80::try_from_bits(bits)
-                    .unwrap()
-                    .to_le_bytes(),
-            );
-            assert!(read_numbers(&mut std::io::Cursor::new(frame)).is_err());
-        }
+    fn incomplete_record_is_rejected() {
+        let (mut reader, mut writer) = buffers().unwrap();
+        writer.begin([None; 2]).unwrap();
+        writer.write_all(&vec![b'x'; BUFFER + 1]).unwrap();
+        drop(writer);
+        let error = reader.record(&mut Vec::new()).err().unwrap();
+        assert_eq!(error.status, 1);
     }
 }
