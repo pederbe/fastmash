@@ -57,7 +57,11 @@ pub(super) fn skewness(
             let cube = decimal::multiply(delta, square)?;
             moment3 = decimal::add(moment3, cube)?;
         }
-        let result = finished_skew(moment2, moment3, n, arithmetic)?;
+        let divisor = integer(n);
+        let moment2 = decimal::divide(moment2, divisor)?;
+        let moment3 = decimal::divide(moment3, divisor)?;
+        let squared_moment2 = decimal::multiply(moment2, moment2)?;
+        let result = finished_skew(moment2, moment3, squared_moment2, arithmetic)?;
         cache.skew = Some(result);
         result
     };
@@ -101,7 +105,11 @@ pub(super) fn excess_kurtosis(
             let fourth = decimal::multiply(delta, cube)?;
             moment4 = decimal::add(moment4, fourth)?;
         }
-        let result = finished_kurtosis(moment2, moment4, n)?;
+        let divisor = integer(n);
+        let moment2 = decimal::divide(moment2, divisor)?;
+        let moment4 = decimal::divide(moment4, divisor)?;
+        let squared_moment2 = decimal::multiply(moment2, moment2)?;
+        let result = finished_kurtosis(moment4, squared_moment2)?;
         cache.kurtosis = Some(result);
         result
     };
@@ -125,26 +133,19 @@ pub(super) fn excess_kurtosis(
 fn finished_skew(
     moment2: numerics::Value,
     moment3: numerics::Value,
-    n: u64,
+    squared_moment2: numerics::Value,
     arithmetic: &mut numerics::Numerics,
 ) -> Result<numerics::Value, Failure> {
-    let moment2 = decimal::divide(moment2, integer(n))?;
-    let moment3 = decimal::divide(moment3, integer(n))?;
-    let squared_moment2 = decimal::multiply(moment2, moment2)?;
     let cubed_moment2 = decimal::multiply(moment2, squared_moment2)?;
     let denominator = arithmetic.sqrt(cubed_moment2).map_err(numeric_failure)?;
     decimal::divide(moment3, denominator)
 }
 
 fn finished_kurtosis(
-    moment2: numerics::Value,
     moment4: numerics::Value,
-    n: u64,
+    squared_moment2: numerics::Value,
 ) -> Result<numerics::Value, Failure> {
-    let moment2 = decimal::divide(moment2, integer(n))?;
-    let moment4 = decimal::divide(moment4, integer(n))?;
-    let denominator = decimal::multiply(moment2, moment2)?;
-    let result = decimal::divide(moment4, denominator)?;
+    let result = decimal::divide(moment4, squared_moment2)?;
     decimal::subtract(result, integer(3))
 }
 
@@ -176,8 +177,18 @@ pub(super) fn prepare_normality(
         moment3 = decimal::add(moment3, cube)?;
     }
     // Jarque-Bera finishes kurtosis before skewness, including on failure.
-    cache.kurtosis = Some(finished_kurtosis(moment2, moment4, n)?);
-    cache.skew = Some(finished_skew(moment2, moment3, n, arithmetic)?);
+    let divisor = integer(n);
+    let moment2 = decimal::divide(moment2, divisor)?;
+    let moment4 = decimal::divide(moment4, divisor)?;
+    let squared_moment2 = decimal::multiply(moment2, moment2)?;
+    cache.kurtosis = Some(finished_kurtosis(moment4, squared_moment2)?);
+    let moment3 = decimal::divide(moment3, divisor)?;
+    cache.skew = Some(finished_skew(
+        moment2,
+        moment3,
+        squared_moment2,
+        arithmetic,
+    )?);
     Ok(())
 }
 

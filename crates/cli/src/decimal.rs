@@ -1129,6 +1129,7 @@ pub(super) fn subtract(
     })
 }
 
+#[inline(always)]
 pub(super) fn divide(
     left: numerics::Value,
     right: numerics::Value,
