@@ -14,8 +14,8 @@ use super::{
 use std::io::{self, Write};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 
-const BUFFER: usize = 64 << 10;
-pub(super) const MEMORY: usize = 3 * BUFFER;
+const BUFFER: usize = 16 << 10;
+pub(super) const MEMORY: usize = 192 << 10;
 
 #[derive(Clone, Copy)]
 struct Entry {
@@ -23,9 +23,10 @@ struct Entry {
     numbers: [Option<numerics::Value>; 2],
     complete: bool,
 }
-// Metadata for both batches uses at most one additional byte-buffer allowance.
+// Small selected Records fill metadata before text. Split the unchanged
+// allowance between two byte buffers and two metadata arrays.
 // This bounds a batch, not the number or size of Records in the Command.
-const ENTRIES: usize = BUFFER / (2 * std::mem::size_of::<Entry>());
+const ENTRIES: usize = (MEMORY / 2 - BUFFER) / std::mem::size_of::<Entry>();
 #[derive(Default)]
 struct Batch {
     bytes: Vec<u8>,
@@ -290,7 +291,7 @@ fn pipe_error(error: impl std::fmt::Display) -> Failure {
     failure(format!("native sort pipe I/O error: {error}\n").into_bytes())
 }
 
-/// Two circulating byte buffers fit within the otherwise unused final-merge
+/// Two circulating batches fit within the otherwise unused final-merge
 /// writer allowance, including for an in-memory sort. Accumulation, random
 /// draws and output stay on the caller.
 /// `None` leaves sort emission and calculation untouched for the serial route.
