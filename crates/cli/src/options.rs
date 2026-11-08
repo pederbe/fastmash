@@ -49,11 +49,23 @@ pub(super) struct Options {
     pub ignore_case: bool,
     pub seed: Option<u32>,
     pub presentation: super::presentation::Presentation,
+    pub terminal: super::terminal_style::Style,
     pub locale: super::locale::Policy,
     /// `FASTMASH_SORT_MEMORY_BYTES` from the environment, which only the
     /// native sort reads (and refuses when it is invalid).
     pub sort_memory: Option<OsString>,
     pub(super) controls: super::preparation::Controls,
+}
+
+impl Options {
+    pub(super) fn styled_results(&self) -> bool {
+        self.terminal.enabled()
+            && !self.csv_out
+            && self.record_end == b'\n'
+            && !self.supplied_output
+            && !self.vnlog
+            && !self.crosstab
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -365,6 +377,7 @@ fn parse_options(
             utf8: locale.utf8,
             ..Default::default()
         },
+        terminal: Default::default(),
         locale,
         sort_memory: None,
         controls: Default::default(),
@@ -630,6 +643,7 @@ impl Options {
             ignore_case: _,
             seed: _,
             presentation: _,
+            terminal: _,
             locale: _,
             sort_memory: _,
             controls: _,

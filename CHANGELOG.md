@@ -29,6 +29,11 @@ numerical profile version that introduced it.
 
 ### Changed
 
+- Style terminal calculations, Top-N selection and readable health reports with
+  colored headings, aligned results and status symbols. Files and pipes retain
+  their existing plain output, including when color is forced. Numerical values
+  and their formatting are unchanged.
+
 - Use plain Linux and macOS names throughout the README, website and
   documentation. Supported build targets are unchanged.
 

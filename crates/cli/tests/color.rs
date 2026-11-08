@@ -12,12 +12,12 @@ fn help_styles_have_exact_plain_counterpart_and_small_roles() {
     assert!(colored.status.success(), "{colored:?}");
     assert_eq!(terminal::strip_styles(&colored.stdout), plain.stdout);
     for styled in [
-        b"\x1b[1mOperations:\x1b[0m".as_slice(),
-        b"\x1b[36msum\x1b[0m",
-        b"\x1b[36mq1\x1b[0m",
-        b"\x1b[36mq3\x1b[0m",
-        b"\x1b[36m--group\x1b[0m=FIELDS",
-        b"\x1b[36mfastmash\x1b[0m",
+        b"\x1b[1;38;2;189;147;249mOperations:\x1b[0m".as_slice(),
+        b"\x1b[38;2;92;184;255msum\x1b[0m",
+        b"\x1b[38;2;92;184;255mq1\x1b[0m",
+        b"\x1b[38;2;92;184;255mq3\x1b[0m",
+        b"\x1b[38;2;92;184;255m--group\x1b[0m=FIELDS",
+        b"\x1b[38;2;92;184;255mfastmash\x1b[0m",
     ] {
         assert!(
             colored
@@ -129,12 +129,12 @@ fn primary_help_declarations_style_names_without_their_descriptions() {
             .unwrap();
         let styled: Vec<_> = line
             .split(|byte| *byte == 0x1b)
-            .filter_map(|part| part.strip_prefix(b"[36m"))
+            .filter_map(|part| part.strip_prefix(b"[38;2;92;184;255m"))
             .collect();
         let expected: Vec<_> = names.iter().map(|name| name.as_bytes()).collect();
         assert_eq!(styled, expected, "wrong syntax roles in {prefix:?}");
     }
-    let exact = b"\x1b[36mcut\x1b[0m/\x1b[36mecho\x1b[0m FIELD is a per-row operation that prints the selected fields.\n";
+    let exact = b"\x1b[38;2;92;184;255mcut\x1b[0m/\x1b[38;2;92;184;255mecho\x1b[0m FIELD is a per-row operation that prints the selected fields.\n";
     assert!(
         output
             .stdout
@@ -155,7 +155,7 @@ fn primary_help_declarations_style_names_without_their_descriptions() {
         );
     }
     for word in ["and", "or", "lines", "fields", "absolute", "percent"] {
-        let styled = format!("\x1b[36m{word}\x1b[0m");
+        let styled = format!("\x1b[38;2;92;184;255m{word}\x1b[0m");
         assert!(
             !output
                 .stdout
@@ -167,8 +167,8 @@ fn primary_help_declarations_style_names_without_their_descriptions() {
     assert!(
         output
             .stdout
-            .windows(b"\x1b[36m--\x1b[0m".len())
-            .any(|bytes| bytes == b"\x1b[36m--\x1b[0m")
+            .windows(b"\x1b[38;2;92;184;255m--\x1b[0m".len())
+            .any(|bytes| bytes == b"\x1b[38;2;92;184;255m--\x1b[0m")
     );
 }
 
@@ -302,7 +302,7 @@ fn forced_color_does_not_change_data_or_version_bytes() {
         let plain = PROGRAM.invoke(args, input, &[], false, false);
         let mut colored_args = vec!["--color=always"];
         colored_args.extend(args);
-        let colored = PROGRAM.invoke(&colored_args, input, &[], true, false);
+        let colored = PROGRAM.invoke(&colored_args, input, &[], false, false);
         assert_eq!(colored.status, plain.status, "{args:?}");
         assert_eq!(colored.stdout, plain.stdout, "{args:?}");
         assert!(plain.status.success(), "{args:?}: {plain:?}");
@@ -325,4 +325,155 @@ fn forced_color_does_not_change_data_or_version_bytes() {
     assert!(colored.status.success(), "{colored:?}");
     assert_eq!(colored.stdout, plain.stdout);
     std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn terminal_results_style_calculations_and_selection_but_leave_pipes_plain() {
+    for (args, input, heading) in [
+        (
+            vec!["sum", "1", "mean", "1"],
+            b"1\n2\n3\n".as_slice(),
+            "Summary",
+        ),
+        (
+            vec!["-s", "-H", "-g", "team", "sum", "points", "mean", "points"],
+            b"team\tpoints\nBlue\t12\nRed\t8\nBlue\t18\n",
+            "Grouped summary",
+        ),
+        (
+            vec!["-H", "top:2", "points"],
+            b"team\tpoints\nBlue\t12\nRed\t8\nBlue\t18\n",
+            "Top-N selection",
+        ),
+        (vec!["round", "1"], b"12.34\n8.76\n", "Per-row results"),
+    ] {
+        let styled = PROGRAM.invoke(&args, input, &[], true, false);
+        assert!(styled.status.success(), "{styled:?}");
+        let text = String::from_utf8(terminal::strip_styles(&styled.stdout)).unwrap();
+        assert!(text.starts_with(heading), "{text}");
+        assert!(text.ends_with("✔ Completed\n"), "{text}");
+        assert!(String::from_utf8_lossy(&styled.stdout).contains("38;2;92;184;255"));
+        let plain = PROGRAM.invoke(&args, input, &[], false, false);
+        let mut forced = vec!["--color=always"];
+        forced.extend(&args);
+        let redirected = PROGRAM.invoke(&forced, input, &[], false, true);
+        assert_eq!(redirected.stdout, plain.stdout);
+        let mut disabled = vec!["--no-color"];
+        disabled.extend(&args);
+        assert_eq!(
+            PROGRAM.invoke(&disabled, input, &[], true, false).stdout,
+            plain.stdout
+        );
+    }
+}
+
+#[test]
+fn terminal_results_keep_partial_values_without_a_success_marker() {
+    let output = PROGRAM.invoke(&["round", "1"], b"12.34\noops\n", &[], true, true);
+    assert_eq!(output.status.code(), Some(1));
+    let text = String::from_utf8(terminal::strip_styles(&output.stdout)).unwrap();
+    assert!(text.contains("12"), "{text}");
+    assert!(!text.contains("Completed"), "{text}");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid numeric value in line 2"));
+}
+
+#[test]
+fn terminal_results_align_unicode_labels_and_values_by_displayed_columns() {
+    for (label, row) in [
+        ("é", "       1       2\n"),
+        ("界", "        1       2\n"),
+        ("e\u{301}", "       1       2\n"),
+    ] {
+        let input = format!("{label}\tx\n1\t2\n");
+        let output = PROGRAM.invoke(
+            &["-H", "sum", "1", "sum", "2"],
+            input.as_bytes(),
+            &[],
+            true,
+            false,
+        );
+        assert!(output.status.success());
+        let text = String::from_utf8(terminal::strip_styles(&output.stdout)).unwrap();
+        assert!(text.contains(row), "{text}");
+    }
+    let output = PROGRAM.invoke(
+        &["-H", "top:2", "points"],
+        "name\tpoints\né\t2\n界\t1\n".as_bytes(),
+        &[],
+        true,
+        false,
+    );
+    let text = String::from_utf8(terminal::strip_styles(&output.stdout)).unwrap();
+    assert!(text.contains("     é       2\n    界       1\n"), "{text}");
+}
+
+#[test]
+fn automatic_terminal_headers_do_not_read_input_labels() {
+    for (args, input, label, result) in [
+        (
+            vec!["--header-in", "sum", "2"],
+            b"label\n1\t2\n".as_slice(),
+            "sum(field-2)",
+            "2",
+        ),
+        (
+            vec!["--header-in", "-g2", "sum", "1"],
+            b"label\n1\tk\n2\tk\n",
+            "field-2",
+            "3",
+        ),
+        (
+            vec!["--header-in", "sum", "1"],
+            b"\x1b]0;spoof\x07\n1\n",
+            "sum(field-1)",
+            "1",
+        ),
+        (
+            vec!["--header-in", "top:1", "1"],
+            b"\x1b]0;spoof\x07\n1\n",
+            "field-1",
+            "1",
+        ),
+        (
+            vec!["--csv-in", "--header-in", "sum", "1"],
+            b"\"spoof\nlabel\"\n1\n",
+            "sum(field-1)",
+            "1",
+        ),
+    ] {
+        let output = PROGRAM.invoke(&args, input, &[], true, false);
+        assert!(output.status.success(), "{output:?}");
+        let plain = terminal::strip_styles(&output.stdout);
+        let text = String::from_utf8(plain).unwrap();
+        assert!(text.contains(label), "{text}");
+        assert!(!text.contains("spoof"), "{text}");
+        let row = text.lines().rev().nth(1).unwrap();
+        assert_eq!(row.split_whitespace().last(), Some(result), "{text}");
+        let redirected = PROGRAM.invoke(&args, input, &[], false, false);
+        assert!(redirected.status.success(), "{redirected:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&redirected.stdout)
+                .split_whitespace()
+                .last(),
+            Some(result)
+        );
+    }
+}
+
+#[test]
+fn long_terminal_labels_do_not_multiply_row_padding() {
+    let label = "x".repeat(64 * 1024);
+    let input = format!("{label}\n1\n2\n");
+    let output = PROGRAM.invoke(&["-H", "cut", "1"], input.as_bytes(), &[], true, false);
+    assert!(output.status.success(), "{output:?}");
+    let plain = terminal::strip_styles(&output.stdout);
+    assert!(
+        plain
+            .windows(label.len())
+            .any(|bytes| bytes == label.as_bytes())
+    );
+    assert!(plain.len() < label.len() + 1024, "{} bytes", plain.len());
+    let text = String::from_utf8(plain).unwrap();
+    assert!(text.lines().any(|row| row.trim() == "1"));
+    assert!(text.lines().any(|row| row.trim() == "2"));
 }

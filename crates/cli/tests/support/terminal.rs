@@ -140,7 +140,17 @@ pub fn strip_styles(bytes: &[u8]) -> Vec<u8> {
                 .unwrap();
             let code = &bytes[at + 2..at + 2 + end];
             assert!(
-                [b"0".as_slice(), b"1", b"31", b"33", b"36"].contains(&code),
+                [
+                    b"0".as_slice(),
+                    b"1;38;2;189;147;249",
+                    b"38;2;92;184;255",
+                    b"1;38;2;92;184;255",
+                    b"1;38;2;243;156;18",
+                    b"1;38;2;255;92;87",
+                    b"1;38;2;90;247;142",
+                    b"38;2;112;120;140"
+                ]
+                .contains(&code),
                 "unexpected generated style: {code:?}"
             );
             at += end + 3;

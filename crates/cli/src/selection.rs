@@ -158,6 +158,7 @@ pub(super) fn run(
     let (capacity, line_buffered) = writer.buffering();
     let mut output = BufferedStdout::new(writer, capacity, line_buffered)
         .map_err(|error| os_failure(&error, false))?;
+    output.terminal_table(options, b"Top-N selection");
     let result = if options.csv_in {
         collect_decoded(reader, &mut output, options, selection, binding)
     } else {
@@ -184,16 +185,16 @@ fn collect(
     let header = intake.header(reader, &mut buffer, |record| {
         binding.header(record, options)
     })?;
-    if header && options.header_out {
-        copied_header(output, &buffer, options);
+    if header && (options.header_out || output.is_terminal_table()) {
+        copied_header(output, &buffer, options)?;
     }
     let mut groups = Adjacent::new(binding.keys().len())?;
     let mut index =
         records::FieldIndex::selecting(binding.keys().iter().copied().chain([binding.ranking()]));
     let mut visit = |record: &[u8], ordinal: u64, phase| {
         if phase == projected_sort::RecordPhase::ObserveSource {
-            if ordinal == 1 && options.header_out {
-                copied_header(output, record, options);
+            if ordinal == 1 && (options.header_out || output.is_terminal_table()) {
+                copied_header(output, record, options)?;
             }
             return Ok(());
         }
@@ -297,8 +298,8 @@ fn observe_decoded(
         if options.header_in {
             binding.decoded_header(record, options)?;
         }
-        if options.header_out {
-            copied_header_fields(output, record.fields(), options);
+        if options.header_out || output.is_terminal_table() {
+            copied_header_fields(output, record.fields(), options)?;
         }
         if options.header_in {
             return Ok(false);
@@ -487,25 +488,34 @@ fn copied_header(
     output: &mut BufferedStdout<'_, impl std::io::Write>,
     record: &[u8],
     options: &Options,
-) {
+) -> Result<(), Failure> {
     copied_header_fields(
         output,
         records::fields(record, options.input)
             .map(|span| &record[span.start..span.start + span.length]),
         options,
-    );
+    )
 }
 
 fn copied_header_fields<'r>(
     output: &mut BufferedStdout<'_, impl std::io::Write>,
     fields: impl Iterator<Item = &'r [u8]>,
     options: &Options,
-) {
+) -> Result<(), Failure> {
     let mut fields = fields.enumerate().peekable();
     if fields.peek().is_none() {
         output.emit(super::headers::Part::Separator(options.record_end));
     }
     while let Some((index, bytes)) = fields.next() {
+        if output.is_terminal_table() {
+            let generated = (!(options.header_in && options.explicit_header_out))
+                .then(|| super::headers::generated(index as u64 + 1));
+            let label = generated
+                .as_ref()
+                .map_or_else(|| super::headers::label(bytes), |name| name.as_bytes());
+            output.table_header(&[label], fields.peek().is_none())?;
+            continue;
+        }
         if options.header_in {
             copied_field(
                 output,
@@ -522,6 +532,7 @@ fn copied_header_fields<'r>(
             );
         }
     }
+    Ok(())
 }
 
 fn copied_record<'r>(
@@ -541,7 +552,10 @@ fn copied_field(
     last: bool,
     options: &Options,
 ) {
-    if options.csv_out {
+    if output.is_terminal_table() {
+        output.table_cell(bytes, last, true);
+        return;
+    } else if options.csv_out {
         output.csv_field(bytes);
     } else {
         output.raw(bytes);

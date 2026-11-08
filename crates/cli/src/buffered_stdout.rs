@@ -5,6 +5,18 @@
 //! reported in GNU's order (`command_output::complete`).
 use super::headers::Part;
 use std::io::{self, Write};
+use unicode_width::UnicodeWidthStr;
+
+fn columns(bytes: &[u8]) -> usize {
+    std::str::from_utf8(bytes).map_or(bytes.len(), UnicodeWidthStr::width)
+}
+
+struct TerminalTable {
+    style: super::terminal_style::Style,
+    title: &'static [u8],
+    widths: Vec<usize>,
+    column: usize,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct IoFailure {
@@ -37,9 +49,111 @@ pub(crate) struct BufferedStdout<'a, W> {
     active: bool,
     first_error: Option<IoFailure>,
     unsupported_write: bool,
+    table: Option<TerminalTable>,
 }
 
 impl<'a, W: Write> BufferedStdout<'a, W> {
+    pub(super) fn terminal_table(
+        &mut self,
+        options: &super::options::Options,
+        title: &'static [u8],
+    ) {
+        if options.styled_results() {
+            self.table = Some(TerminalTable {
+                style: options.terminal,
+                title,
+                widths: Vec::new(),
+                column: 0,
+            });
+        }
+    }
+
+    pub(super) fn is_terminal_table(&self) -> bool {
+        self.table.is_some()
+    }
+
+    pub(super) fn styled(
+        &mut self,
+        style: super::terminal_style::Style,
+        role: super::terminal_style::Role,
+        bytes: &[u8],
+    ) {
+        self.raw(style.start(role));
+        self.raw(bytes);
+        self.raw(style.reset());
+    }
+
+    pub(super) fn table_header(
+        &mut self,
+        parts: &[&[u8]],
+        last: bool,
+    ) -> Result<(), super::Failure> {
+        use super::terminal_style::Role;
+        let width = parts
+            .iter()
+            .try_fold(0usize, |width, part| width.checked_add(columns(part)))
+            .ok_or_else(|| super::unsupported("terminal header exceeds addressable capacity"))?;
+        let table = self.table.as_mut().expect("terminal table");
+        super::command_memory::reserve(&mut table.widths, 1)?;
+        let first = table.widths.is_empty();
+        // Bound repeated alignment spaces, without truncating labels or values.
+        table.widths.push(width.min(32));
+        let (style, title) = (table.style, table.title);
+        if first {
+            self.styled(style, Role::Heading, title);
+            self.raw(b"\n");
+            self.styled(
+                style,
+                Role::Muted,
+                "────────────────────────────────\n".as_bytes(),
+            );
+        }
+        self.raw(b"  ");
+        for part in parts {
+            self.styled(style, Role::Heading, part);
+        }
+        if last {
+            self.raw(b"\n");
+        }
+        Ok(())
+    }
+
+    pub(super) fn table_cell(&mut self, bytes: &[u8], last: bool, highlight: bool) {
+        use super::terminal_style::Role;
+        let table = self.table.as_mut().expect("terminal table");
+        let width = table.widths.get(table.column).copied().unwrap_or(0);
+        let style = table.style;
+        table.column = if last { 0 } else { table.column + 1 };
+        self.raw(b"  ");
+        let mut padding = width.saturating_sub(columns(bytes));
+        const SPACES: &[u8] = b"                                                                ";
+        while padding > 0 {
+            let count = padding.min(SPACES.len());
+            self.raw(&SPACES[..count]);
+            padding -= count;
+        }
+        if highlight {
+            self.styled(style, Role::Value, bytes);
+        } else {
+            self.raw(bytes);
+        }
+        if last {
+            self.raw(b"\n");
+        }
+    }
+
+    pub(super) fn table_complete(&mut self) {
+        if let Some(table) = &self.table
+            && !table.widths.is_empty()
+            && self.first_error.is_none()
+            && self.flush().is_ok()
+        {
+            let style = self.table.as_ref().unwrap().style;
+            self.styled(style, super::terminal_style::Role::Success, "✔".as_bytes());
+            self.styled(style, super::terminal_style::Role::Muted, b" Completed\n");
+        }
+    }
+
     pub fn new(writer: &'a mut W, capacity: usize, line_buffered: bool) -> io::Result<Self> {
         if !(1..=8192).contains(&capacity) {
             return Err(io::ErrorKind::InvalidInput.into());
@@ -52,6 +166,7 @@ impl<'a, W: Write> BufferedStdout<'a, W> {
             active: false,
             first_error: None,
             unsupported_write: false,
+            table: None,
         })
     }
 

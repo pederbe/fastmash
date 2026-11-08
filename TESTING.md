@@ -31,6 +31,8 @@ target/release/fastmash-corpus --binary target/release/fastmash --expected-versi
 
 Run the full suite with `--release`: memory-limit tests exercise the optimized
 CLI. Debug builds can exceed those limits before reaching the behavior under test.
+The frozen corpus sets `NO_COLOR=1` to compare the plain data contract, including
+raw-terminal buffering. The color integration tests cover styled presentation.
 Installer tests exercise both Linux and macOS archive layouts, so Linux test
 environments also need `shasum` on `PATH`. On Arch-based systems, it is supplied
 at `/usr/bin/core_perl/shasum`; add that directory to the test environment's

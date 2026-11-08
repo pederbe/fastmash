@@ -179,6 +179,8 @@ pub(crate) fn invoke(
         ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
         ("LC_ALL".to_owned(), case.locale.clone()),
         ("TZ".to_owned(), "UTC".to_owned()),
+        // Frozen cases check the plain data contract, including on raw terminals.
+        ("NO_COLOR".to_owned(), "1".to_owned()),
     ]);
     if let Some(value) = &case.posixly_correct {
         env.insert("POSIXLY_CORRECT".to_owned(), value.clone());

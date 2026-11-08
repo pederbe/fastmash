@@ -13,21 +13,19 @@ fastmash --header-in health type price number nonmissing id width 3 validate < t
 fastmash --header-in health tsv type price number nonmissing id validate < table.tsv > health.tsv
 ```
 
-Readable reports use bold headings, yellow `advisory` markers and red `violation`
-markers. Finding categories, their inferred or declared basis, counts, Field
-names, observations and examples keep the default foreground. The wording carries
-the same meaning without color. An advisory can appear in a successful
+Readable terminal reports use purple headings, amber `⚠` advisory markers and red
+`✗` violation markers. They put the outcome first, followed by field observations
+and findings, with input metadata below. Counts, field names, observations and
+examples keep the default foreground. An advisory can appear in a successful
 `validate` report; only violations of supplied Health expectations make validation
 fail.
 
-Styling is automatic on eligible stdout terminals. Pipes and redirected reports
-stay plain by default; `TERM=dumb` and a nonempty `NO_COLOR` also suppress automatic
-styling. Use `--color=always` to force it, or `--color=never` or `--no-color` to
-suppress every style, including bold. These global controls work with `health`;
-see [terminal color](terminal-color.md) for detection, precedence and examples.
-Styles reset immediately after each heading or marker. Removing the generated
-style sequences reproduces the complete plain report, including escaped bytes
-and example limits.
+Styling is automatic on eligible stdout terminals. Files and pipes retain the
+existing plain report even with `--color=always`. `TERM=dumb` and a nonempty
+`NO_COLOR` also suppress automatic styling. Use `--color=never` or `--no-color`
+for the plain report on a terminal. See [terminal presentation](terminal-color.md)
+for detection, precedence and examples. Both presentations retain escaped bytes,
+example limits, finding counts and validation status.
 
 The Table health report states the data-record, header-record and accepted-record
 counts, effective input settings, numeric decimal separator, baseline width,
