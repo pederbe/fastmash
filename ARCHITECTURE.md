@@ -287,7 +287,7 @@ flowchart TD
   merge reading one level of runs can overlap emission with calculation
   (`projected_calculation_pipe.rs`):
   a merge thread writes each record's selected fields and up to two parsed
-  numbers through an anonymous pipe, within the final merge's buffer
+  numbers through two reusable byte buffers, within the final merge's buffer
   allowance, and the calculation reads them in order. Records whose numbers
   read on across a separator, and other platforms, use the serial path.
 - **Quoted CSV sorting** uses its own complete decoded-record route, without

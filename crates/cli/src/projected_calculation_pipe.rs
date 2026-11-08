@@ -1,4 +1,4 @@
-//! Overlap native sorted emission with calculation through an anonymous pipe.
+//! Overlap native sorted emission with calculation through reusable buffers.
 //! Only selected fields need text again. A `_` in each unselected field
 //! preserves selector positions, field-count diagnostics and where a blank
 //! field's number would stop. Numeric crossings use the
@@ -11,10 +11,159 @@ use super::{
     Failure, Intake, Selector, failure, grouping, intake, numerics, operation_set, records, spill,
     unsupported,
 };
-use std::io::{BufRead, Write};
+use std::io::{self, BufRead, Read, Write};
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 
 const BUFFER: usize = 64 << 10;
 pub(super) const MEMORY: usize = 3 * BUFFER;
+
+// Transfer complete buffers rather than waking the reader for every small
+// kernel-pipe fragment. Two checked buffers circulate between the threads.
+// Records can cross any number of buffers; their size is not bounded here.
+struct Reader {
+    incoming: Receiver<Vec<u8>>,
+    free: SyncSender<Vec<u8>>,
+    buffer: Vec<u8>,
+    at: usize,
+}
+struct Writer {
+    outgoing: SyncSender<Vec<u8>>,
+    free: Receiver<Vec<u8>>,
+    buffer: Vec<u8>,
+}
+fn disconnected() -> io::Error {
+    io::Error::from(io::ErrorKind::BrokenPipe)
+}
+fn buffers() -> Option<(Reader, Writer)> {
+    let mut first = Vec::new();
+    let mut second = Vec::new();
+    first.try_reserve_exact(BUFFER).ok()?;
+    second.try_reserve_exact(BUFFER).ok()?;
+    let (outgoing, incoming) = sync_channel(1);
+    let (return_buffer, free) = sync_channel(1);
+    return_buffer.send(second).ok()?;
+    Some((
+        Reader {
+            incoming,
+            free: return_buffer,
+            buffer: Vec::new(),
+            at: 0,
+        },
+        Writer {
+            outgoing,
+            free,
+            buffer: first,
+        },
+    ))
+}
+impl BufRead for Reader {
+    #[inline]
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        if self.at == self.buffer.len() {
+            self.refill();
+        }
+        Ok(&self.buffer[self.at..])
+    }
+    #[inline]
+    fn consume(&mut self, count: usize) {
+        self.at = self.at.saturating_add(count).min(self.buffer.len());
+    }
+}
+impl Read for Reader {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        if out.is_empty() {
+            return Ok(0);
+        }
+        let available = self.fill_buf()?;
+        let count = out.len().min(available.len());
+        out[..count].copy_from_slice(&available[..count]);
+        self.consume(count);
+        Ok(count)
+    }
+    #[inline]
+    fn read_exact(&mut self, out: &mut [u8]) -> io::Result<()> {
+        if out.len() <= self.buffer.len().wrapping_sub(self.at) {
+            out.copy_from_slice(&self.buffer[self.at..self.at + out.len()]);
+            self.at += out.len();
+            Ok(())
+        } else {
+            self.read_exact_cold(out)
+        }
+    }
+}
+impl Reader {
+    #[cold]
+    #[inline(never)]
+    fn refill(&mut self) {
+        if self.buffer.capacity() != 0 {
+            // The writer may already have finished. Its last buffered
+            // bytes remain readable after the return channel closes.
+            let _ = self.free.send(std::mem::take(&mut self.buffer));
+        }
+        self.buffer = self.incoming.recv().unwrap_or_default();
+        self.at = 0;
+    }
+    #[cold]
+    #[inline(never)]
+    fn read_exact_cold(&mut self, mut out: &mut [u8]) -> io::Result<()> {
+        while !out.is_empty() {
+            let count = self.read(out)?;
+            if count == 0 {
+                return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+            }
+            out = &mut out[count..];
+        }
+        Ok(())
+    }
+}
+impl Writer {
+    #[cold]
+    #[inline(never)]
+    fn write_all_cold(&mut self, mut bytes: &[u8]) -> io::Result<()> {
+        while !bytes.is_empty() {
+            if self.buffer.capacity() == 0 {
+                self.buffer = self.free.recv().map_err(|_| disconnected())?;
+                self.buffer.clear();
+            }
+            let count = bytes.len().min(BUFFER - self.buffer.len());
+            self.buffer.extend_from_slice(&bytes[..count]);
+            bytes = &bytes[count..];
+            if !bytes.is_empty() {
+                self.flush()?;
+            }
+        }
+        Ok(())
+    }
+}
+impl Write for Writer {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.write_all(bytes)?;
+        Ok(bytes.len())
+    }
+    #[inline]
+    fn write_all(&mut self, bytes: &[u8]) -> io::Result<()> {
+        if bytes.len()
+            <= self
+                .buffer
+                .capacity()
+                .min(BUFFER)
+                .wrapping_sub(self.buffer.len())
+        {
+            self.buffer.extend_from_slice(bytes);
+            Ok(())
+        } else {
+            self.write_all_cold(bytes)
+        }
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        if !self.buffer.is_empty() {
+            self.outgoing
+                .send(std::mem::take(&mut self.buffer))
+                .map_err(|_| disconnected())?;
+        }
+        Ok(())
+    }
+}
 
 // At most two numeric fields can be parsed on the merge worker. Other
 // fields and all failed conversions still use the ordinary collector.
@@ -143,7 +292,7 @@ fn pipe_error(error: impl std::fmt::Display) -> Failure {
     failure(format!("native sort pipe I/O error: {error}\n").into_bytes())
 }
 
-/// Read, write and kernel pipe buffers share the otherwise unused final-merge
+/// Two circulating byte buffers fit within the otherwise unused final-merge
 /// writer allowance, including for an in-memory sort. Accumulation, random
 /// draws and output stay on the caller.
 /// `None` leaves sort emission and calculation untouched for the serial route.
@@ -191,31 +340,15 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
             }
         }
     }
-    let Ok((reader, writer)) = std::io::pipe() else {
+    let Some((mut reader, mut writer)) = buffers() else {
         return Ok(None);
     };
-    if !matches!(
-        nix::fcntl::fcntl(&reader, nix::fcntl::FcntlArg::F_GETPIPE_SZ),
-        Ok(size) if size > 0 && size as usize <= BUFFER
-    ) {
-        return Ok(None);
-    }
-    let mut reader = spill::RunReader::new(BUFFER, reader)?;
-    let mut writer = spill::RunWriter::new(BUFFER, writer)?;
     let index = records::FieldIndex::selecting(layout.selected.iter().copied());
     let mut spare = Prepared::new(keys.len(), index.fresh(), fields)?;
     std::thread::scope(|scope| {
         let merge = std::thread::Builder::new()
             .name("sort-merge".into())
             .spawn_scoped(scope, move || {
-                // Cancellation closes our reader. Keep that pipe's SIGPIPE
-                // local to this disposable thread, leaving stdout's default
-                // signal behaviour unchanged on the calling thread.
-                use nix::sys::signal::{SigSet, SigmaskHow, Signal, pthread_sigmask};
-                let mut blocked = SigSet::empty();
-                blocked.add(Signal::SIGPIPE);
-                pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&blocked), None)
-                    .map_err(|_| unsupported("unable to block native sort pipe signal"))?;
                 let crossings = super::Crossings::default();
                 sorted.emit(|record| {
                     let mut whole_index = records::FieldIndex::default();
@@ -277,7 +410,7 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
                     }
                     writer.write_all(&[options.record_end]).map_err(pipe_error)
                 })?;
-                writer.into_inner().map_err(pipe_error)?;
+                writer.flush().map_err(pipe_error)?;
                 Ok(())
             });
         let Ok(merge) = merge else {
@@ -342,6 +475,40 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recycled_buffers_preserve_long_writes_short_tails_and_eof() {
+        let expected: Vec<_> = (0..BUFFER * 3 + 29).map(|at| (at % 251) as u8).collect();
+        let (mut reader, mut writer) = buffers().unwrap();
+        assert_eq!(reader.read(&mut []).unwrap(), 0);
+        writer.write_all(&[]).unwrap();
+        std::thread::scope(|scope| {
+            let expected = &expected;
+            let producer = scope.spawn(move || {
+                writer.write_all(expected).unwrap();
+                writer.flush().unwrap();
+            });
+            let mut actual = Vec::new();
+            reader.read_to_end(&mut actual).unwrap();
+            assert_eq!(&actual, expected);
+            assert_eq!(reader.read(&mut [0]).unwrap(), 0);
+            producer.join().unwrap();
+        });
+    }
+
+    #[test]
+    fn dropping_the_reader_unblocks_a_buffered_writer() {
+        let (mut reader, mut writer) = buffers().unwrap();
+        std::thread::scope(|scope| {
+            let producer = scope.spawn(move || writer.write_all(&vec![b'x'; BUFFER * 8]));
+            assert_eq!(reader.read(&mut [0]).unwrap(), 1);
+            drop(reader);
+            assert_eq!(
+                producer.join().unwrap().unwrap_err().kind(),
+                io::ErrorKind::BrokenPipe
+            );
+        });
+    }
     #[test]
     fn cached_numbers_keep_every_binary80_bit() {
         let patterns = [
