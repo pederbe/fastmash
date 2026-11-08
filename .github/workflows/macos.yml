@@ -110,7 +110,7 @@ jobs:
         if: github.event_name != 'pull_request' || !inputs.check-installation
         run: |
           binary="$GITHUB_WORKSPACE/target/release/fastmash"
-          version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
+          version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)
           target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --keep-going --evidence-dir "$EVIDENCE/corpus-pipe" 2>&1 | tee "$EVIDENCE/corpus-pipe.log"
           target/release/fastmash-corpus --binary "$binary" --expected-version "$version" --stdin-file --keep-going --evidence-dir "$EVIDENCE/corpus-file" 2>&1 | tee "$EVIDENCE/corpus-file.log"
       - name: Collect failed full-volume receipts

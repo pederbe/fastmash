@@ -13,8 +13,8 @@ The release pull request updates Cargo versions, exact dependency requirements,
 the lockfile and a dated [CHANGELOG.md](CHANGELOG.md) section from conventional
 pull request titles. All five published crates participate in versioning, and
 library commits appear in the binary's combined notes. A version group propagates
-library features and breaking changes to the binary. Unchanged libraries can
-retain their published versions. Before 1.0, new features and breaking changes
+library features and breaking changes to the binary. A shared Cargo workspace
+version keeps all five crates synchronized. Before 1.0, new features and breaking changes
 raise the minor version.
 
 Notes reach `main` before tagging and stay under their dated heading. Keep
@@ -245,9 +245,9 @@ campaign, and unchanged dated claims do not need regenerated charts.
 After two identical clean builds, the Linux release job writes the actual
 candidate hashes to its local `release/delivery.sha256` and includes that manifest
 in the archive. Release-plz versions metadata and creates the tag and draft.
-Preserve historical qualified manifests unchanged. Verify that the tag, binary
-crate version, notes and executable version agree, and that internal dependency
-requirements resolve to the intended library versions.
+Preserve historical qualified manifests unchanged. Verify that the tag, workspace
+version, published crate versions, notes and executable version agree, and that
+internal dependency requirements resolve to that version.
 
 The Release workflow checks those hashes, runs the workspace and candidate
 Command checks plus both corpus modes, and produces a draft with the archive,
