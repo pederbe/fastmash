@@ -1459,6 +1459,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
         && collator.is_none()
         && matches!(options.input, records::Separator::Literal(b'\t'))
         && sorted.can_pipe()
+        && (!sorted.in_memory() || parallel_numeric)
         && intake.read_error().is_none()
     {
         let mut context = grouping::Context::new(

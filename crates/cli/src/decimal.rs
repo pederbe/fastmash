@@ -1503,8 +1503,14 @@ mod tests {
         ];
         let check = |a, b| {
             let (a, b) = (numerics::canonical(a), numerics::canonical(b));
-            let forward = numerics::Numerics::value80(multiply(a, b).unwrap()).raw();
-            let reverse = numerics::Numerics::value80(multiply(b, a).unwrap()).raw();
+            let forward = numerics::Numerics::value80(
+                multiply(a, b).unwrap_or_else(|_| panic!("multiply {a:?} {b:?}")),
+            )
+            .raw();
+            let reverse = numerics::Numerics::value80(
+                multiply(b, a).unwrap_or_else(|_| panic!("multiply {b:?} {a:?}")),
+            )
+            .raw();
             assert_eq!(forward, reverse, "{a:?} {b:?}");
         };
         for a in special {
