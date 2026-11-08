@@ -578,6 +578,8 @@ fn buffered_output(
         env: BTreeMap::from([
             ("LC_ALL".to_owned(), locale.to_owned()),
             ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
+            // Buffered fault checks compare the plain data contract on a PTY.
+            ("NO_COLOR".to_owned(), "1".to_owned()),
         ]),
         barrier: Barrier::InputDrained,
         full_output: full.is_some(),
