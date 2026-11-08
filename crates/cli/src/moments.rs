@@ -19,6 +19,7 @@ fn sample_correction_product(n: u64) -> u64 {
     n.wrapping_mul(n - 1)
 }
 
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 fn sample_mean(values: &[numerics::Value], cache: &mut Cache) -> Result<numerics::Value, Failure> {
     if let Some(mean) = cache.mean {
         return Ok(mean);
@@ -32,6 +33,7 @@ fn sample_mean(values: &[numerics::Value], cache: &mut Cache) -> Result<numerics
     Ok(mean)
 }
 
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn skewness(
     values: &[numerics::Value],
     sample: bool,
@@ -74,6 +76,7 @@ pub(super) fn skewness(
     }
 }
 
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn excess_kurtosis(
     values: &[numerics::Value],
     sample: bool,
@@ -147,7 +150,9 @@ fn finished_kurtosis(
 
 /// Jarque-Bera needs both central moments. Share only identical scalar
 /// subexpressions, retaining each input-order accumulation and its round points.
-/// Keep both cube operand orders exactly as in the separate kernels.
+/// Multiplication is commutative for admitted values, including the CLI's
+/// symmetric NaN policy, so the rounded cube serves both accumulations.
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn prepare_normality(
     values: &[numerics::Value],
     arithmetic: &mut numerics::Numerics,
@@ -168,7 +173,6 @@ pub(super) fn prepare_normality(
         let cube = decimal::multiply(square, delta)?;
         let fourth = decimal::multiply(delta, cube)?;
         moment4 = decimal::add(moment4, fourth)?;
-        let cube = decimal::multiply(delta, square)?;
         moment3 = decimal::add(moment3, cube)?;
     }
     // Jarque-Bera finishes kurtosis before skewness, including on failure.

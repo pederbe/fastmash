@@ -1,4 +1,4 @@
-//! Overlap a native Spill merge with calculation through an anonymous pipe.
+//! Overlap native sorted emission with calculation through an anonymous pipe.
 //! Only selected fields need text again. A `_` in each unselected field
 //! preserves selector positions, field-count diagnostics and where a blank
 //! field's number would stop. Numeric crossings use the
@@ -144,7 +144,8 @@ fn pipe_error(error: impl std::fmt::Display) -> Failure {
 }
 
 /// Read, write and kernel pipe buffers share the otherwise unused final-merge
-/// writer allowance. Accumulation, random draws and output stay on the caller.
+/// writer allowance, including for an in-memory sort. Accumulation, random
+/// draws and output stay on the caller.
 /// `None` leaves sort emission and calculation untouched for the serial route.
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
@@ -153,18 +154,22 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
     context: &mut grouping::Context<'_, O>,
 ) -> Result<Option<()>, Failure> {
     let (options, keys) = (context.options, context.keys);
-    // Leave one conversion on the caller for a lone paired Operation. With
-    // several numeric Operations, parsing two fields balances the extra work.
-    // Cache the later field of a lone pair, leaving the caller a shorter scan.
-    let width = context
-        .operations
-        .requests()
-        .filter(|(kind, selector)| {
-            kind.converts_numeric_field() || matches!(selector, Selector::Pair { .. })
-        })
-        .take(2)
-        .count()
-        .max(1);
+    // In-memory emission leaves time for both conversions. A Spill merge
+    // already does more work: leave one conversion on the caller for a lone
+    // paired Operation, caching its later field for a shorter caller scan.
+    let width = if sorted.in_memory() {
+        2
+    } else {
+        context
+            .operations
+            .requests()
+            .filter(|(kind, selector)| {
+                kind.converts_numeric_field() || matches!(selector, Selector::Pair { .. })
+            })
+            .take(2)
+            .count()
+            .max(1)
+    };
     let mut fields = [0; 2];
     let mut count = 0;
     'fields: for (kind, selector) in context.operations.requests() {

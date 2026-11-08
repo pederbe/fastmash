@@ -42,6 +42,21 @@ Use `--features hotpath` instead for timing without allocation tracking.
 For a single job, add its name after the destination, for example `decimal`
 or `spill`. The other names are `small`, `grouping`, `error` and `refusal`.
 
+The calculation jobs are `pskew`, `jarque`, `pcov` and `mixed`. Each sorts
+200,000 Records into two Groups and checks its exact output. Balanced signals
+of -1 and +1 with factors of -2 and +2 give skewness 0, covariance 2 and RMS 1.
+At this Group size the Jarque-Bera probability rounds to 0. The mixed job also
+checks stable contribution order with `last`. For example:
+
+```sh
+measure-lock build --timeout 900 -- cargo +stable run --profile profiling --features hotpath-alloc --example profile-jobs -- /var/tmp/fastmash-pskew pskew
+```
+
+Reports distinguish preparation and final emission from the Group's moment
+and paired summaries. Moment reports include the ordered mean separately.
+Use the retained input with the CPU or Callgrind commands below to attribute
+individual arithmetic primitives without instrumenting every sample.
+
 The CSV decoding jobs are `csv-short`, `csv-long`, `csv-quoted` and
 `csv-escaped`. Each counts 4,096 Records and checks the exact result. They cover
 short fields, 1,024-byte fields, quoted fields with embedded CRLF, and escaped
@@ -90,8 +105,8 @@ Inspect `JOB.json` with a JSON viewer or `jq . JOB.json`. Function timings
 include instrumented callees, so nested totals cannot be added. Allocation
 reports attribute Rust allocations exclusively by default. They are neither
 peak resident memory nor total process memory.
-Instrumentation stays at command and sort boundaries rather than individual
-records or arithmetic primitives.
+Instrumentation stays at Command, sort and Group-summary boundaries rather
+than individual Records or arithmetic primitives.
 
 ## CPU sampling
 

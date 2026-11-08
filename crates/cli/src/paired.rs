@@ -22,12 +22,15 @@ pub(super) trait Arithmetic {
 }
 
 impl Arithmetic for numerics::Numerics {
+    #[inline(always)]
     fn add(&mut self, left: Value, right: Value) -> Result<Value, Failure> {
         decimal::add(left, right)
     }
+    #[inline(always)]
     fn subtract(&mut self, left: Value, right: Value) -> Result<Value, Failure> {
         decimal::subtract(left, right)
     }
+    #[inline(always)]
     fn multiply(&mut self, left: Value, right: Value) -> Result<Value, Failure> {
         decimal::multiply(left, right)
     }
@@ -72,6 +75,7 @@ impl PairSamples {
         self.right.clear();
     }
 
+    #[cfg_attr(feature = "hotpath", hotpath::measure(impl_type = "PairSamples"))]
     pub(super) fn summarize(
         &self,
         kind: Kind,

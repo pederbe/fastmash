@@ -283,8 +283,9 @@ flowchart TD
   On Linux, a numerical calculation's runs under a cgroup memory limit are
   written back to storage every 8 MiB (`fdatasync`), so that dirty pages do
   not throttle the writer against the limit. Elsewhere runs use ordinary I/O.
-- On Linux, a numerical calculation whose final merge reads one level of runs
-  can overlap that merge with calculation (`projected_calculation_pipe.rs`):
+- On Linux, a numerical calculation over a large in-memory sort or a final
+  merge reading one level of runs can overlap emission with calculation
+  (`projected_calculation_pipe.rs`):
   a merge thread writes each record's selected fields and up to two parsed
   numbers through an anonymous pipe, within the final merge's buffer
   allowance, and the calculation reads them in order. Records whose numbers
