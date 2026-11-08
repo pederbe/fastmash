@@ -1146,6 +1146,7 @@ pub(super) fn divide(
 }
 
 /// The nearest-even quotient of two normal values when it is normal.
+#[inline(always)]
 fn normal_quotient(left: Value80, right: Value80) -> Option<Value80> {
     let (a, b) = (left.raw(), right.raw());
     if !(1..0x7fff).contains(&a.exponent()) || !(1..0x7fff).contains(&b.exponent()) {
@@ -1179,6 +1180,7 @@ pub(super) fn multiply(
     })
 }
 
+#[inline(always)]
 fn normal_product(left: Value80, right: Value80) -> Option<Value80> {
     let (a, b) = (left.raw(), right.raw());
     if !(1..0x7fff).contains(&a.exponent()) || !(1..0x7fff).contains(&b.exponent()) {
