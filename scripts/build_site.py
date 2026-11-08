@@ -86,7 +86,7 @@ def descriptions():
 
 
 def version():
-    manifest = (ROOT / 'crates' / 'cli' / 'Cargo.toml').read_text(encoding='utf-8')
+    manifest = (ROOT / 'Cargo.toml').read_text(encoding='utf-8')
     return re.search(r'^version = "([^"]+)"', manifest, re.M).group(1)
 
 

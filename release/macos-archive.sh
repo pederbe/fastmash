@@ -27,7 +27,7 @@ test -z "$(git status --porcelain)" ||
     { echo 'build from a clean source checkout so provenance identifies the source' >&2; exit 1; }
 
 source_revision=$(git rev-parse HEAD)
-version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/cli/Cargo.toml | head -n 1)
+version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)
 label=$version-macos-test-${source_revision:0:12}
 kind=development-test
 if [ "$mode" = release ]; then

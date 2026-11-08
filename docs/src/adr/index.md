@@ -21,3 +21,4 @@ can be revisited; do so with a new record that supersedes the old one.
 | [0013](0013-reuse-tested-release-artifacts.md) | Reuse tested release artifacts |
 | [0014](0014-native-sorting-everywhere.md) | Native sorting in one executable |
 | [0015](0015-stable-release-toolchain.md) | Build releases with current stable Rust |
+| [0016](0016-release-plz.md) | Version releases with release-plz while retaining qualified publication |

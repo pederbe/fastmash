@@ -1,4 +1,8 @@
 //! Exercise registry recovery and frozen delivery hashes without network publication.
+#![cfg(unix)]
+#[path = "../../../crates/cli/tests/support/executable_fixture.rs"]
+mod executable_fixture;
+
 use std::{fs, path::Path, process::Command};
 fn executable(path: &Path, text: &str) {
     crate::executable_fixture::write(path, text, 0o755);

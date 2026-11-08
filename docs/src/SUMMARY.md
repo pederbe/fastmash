@@ -57,3 +57,4 @@
 - [0013: Reuse tested release artifacts](adr/0013-reuse-tested-release-artifacts.md)
 - [0014: Native sorting in one executable](adr/0014-native-sorting-everywhere.md)
 - [0015: Stable release toolchain](adr/0015-stable-release-toolchain.md)
+- [0016: Release-plz](adr/0016-release-plz.md)

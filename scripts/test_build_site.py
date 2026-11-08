@@ -18,8 +18,8 @@ class SiteBuildTests(unittest.TestCase):
             (book / 'fonts/source-code-pro-v11-all-charsets-500.woff2').write_text('fixture')
             build_site.landing(book)
             page = (book / 'index.html').read_text()
-            self.assertIn('/download/v0.2.0/fastmash_0.2.0_amd64.deb', page)
-            self.assertIn('"softwareVersion": "0.2.0"', page)
+            self.assertIn('/download/v0.4.0/fastmash_0.4.0_amd64.deb', page)
+            self.assertIn('"softwareVersion": "0.4.0"', page)
             self.assertNotIn('/download/v0.1.0/', page)
 
     def test_homepage_follows_the_published_release_pointer(self):

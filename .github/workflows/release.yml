@@ -66,6 +66,7 @@ jobs:
           set -euo pipefail
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft > "$RUNNER_TEMP/release-state.json"; then
             jq -e .isDraft "$RUNNER_TEMP/release-state.json" > /dev/null
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --notes-file assets/notes.md
           else
             gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
               --title "Fastmash ${GITHUB_REF_NAME#v}" --notes-file assets/notes.md --draft
