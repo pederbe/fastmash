@@ -264,8 +264,9 @@ flowchart TD
   sized for 64 MiB. It takes 16 MiB first. When a chunk fills, it may grow
   instead of spilling: to hold the whole input of a regular file (an estimate
   from the bytes read so far, at most the buffer GNU `sort` would use for the
-  file), or to twice its size for piped input, when the memory read at that
-  moment allows it. The chunk may take at most a quarter of the available
+  file), or to twice its size for piped input. If doubling does not fit, it
+  tries a 50% chunk increase. Growth depends on the memory read at that
+  moment. The chunk may take at most a quarter of the available
   memory, half of what is free under each cgroup memory limit, a share per
   running Fastmash of what is free under that limit after a reserve and of the
   host's available memory (so that sorts running together share them), and

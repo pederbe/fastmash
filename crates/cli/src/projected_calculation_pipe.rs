@@ -340,6 +340,16 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
             }
         }
     }
+    // Successful cached numbers need no second text copy unless a key or a
+    // text Operation also reads that Field. Failed/skipped conversions keep
+    // their original bytes for the ordinary collector and its diagnostics.
+    let omit_text = fields.map(|field| {
+        !keys.contains(&field)
+            && !context.operations.requests().any(|(kind, selector)| {
+                matches!(selector, Selector::Single(number) if number == field)
+                    && !kind.converts_numeric_field()
+            })
+    });
     let Some((mut reader, mut writer)) = buffers() else {
         return Ok(None);
     };
@@ -395,11 +405,15 @@ pub(super) fn calculate<S: spill::Codec, O: CommandOutput>(
                             }
                             if selected.peek().is_some_and(|number| **number == field) {
                                 selected.next();
-                                writer
-                                    .write_all(
-                                        record.segment(layout.segment(field, record.key_count())),
-                                    )
-                                    .map_err(pipe_error)?;
+                                let cached = fields.iter().enumerate().any(|(at, &number)| {
+                                    number == field && omit_text[at] && numbers[at].is_some()
+                                });
+                                let bytes = if cached {
+                                    b"_".as_slice()
+                                } else {
+                                    record.segment(layout.segment(field, record.key_count()))
+                                };
+                                writer.write_all(bytes).map_err(pipe_error)?;
                             } else {
                                 // A non-blank stand-in keeps the field present
                                 // and stops a blank selected field before it

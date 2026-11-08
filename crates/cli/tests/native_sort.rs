@@ -204,7 +204,7 @@ fn in_memory_calculation_pipe_preserves_moments_pairs_and_seeded_order() {
     }
     let args = [
         "-H", "--seed", "17", "-s", "-g1", "pskew", "2", "jarque", "2", "pcov", "2:3", "pcov",
-        "3:2", "last", "4", "rand", "4",
+        "3:2", "last", "4", "rand", "4", "last", "2",
     ];
     for file in [false, true] {
         let invoke = |threads| {
@@ -227,6 +227,7 @@ fn in_memory_calculation_pipe_preserves_moments_pairs_and_seeded_order() {
             let fields: Vec<_> = row.split(|&b| b == b'\t').collect();
             assert_eq!(&fields[1..5], [b"0", b"0", b"2", b"2"]);
             assert_eq!(fields[5], last);
+            assert_eq!(fields[7], b"1");
         }
         let piped = invoke("2");
         exact(&piped, &serial.stdout);
