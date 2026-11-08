@@ -35,6 +35,11 @@ if [ "$mode" = --cloudflare ]; then
         git fetch --depth=1 origin refs/heads/release:refs/remotes/origin/release
         FASTMASH_SITE_RELEASE_VERSION=$(git show refs/remotes/origin/release:Cargo.toml |
             sed -n 's/^version = "\([^"]*\)"$/\1/p' | head -1)
+        # Published tags before shared workspace versioning keep it in the CLI.
+        if [ -z "$FASTMASH_SITE_RELEASE_VERSION" ]; then
+            FASTMASH_SITE_RELEASE_VERSION=$(git show refs/remotes/origin/release:crates/cli/Cargo.toml |
+                sed -n 's/^version = "\([^"]*\)"$/\1/p' | head -1)
+        fi
         export FASTMASH_SITE_RELEASE_VERSION
     fi
 fi

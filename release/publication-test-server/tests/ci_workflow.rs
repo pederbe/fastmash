@@ -63,6 +63,38 @@ fn release_dispatch_can_find_the_repository_without_a_checkout() {
 
 #[cfg(unix)]
 #[test]
+fn website_reads_published_versions_before_and_after_workspace_inheritance() {
+    let script = fs::read_to_string(root().join("scripts/build_site.sh")).unwrap();
+    let script = script
+        .split_once("        FASTMASH_SITE_RELEASE_VERSION=")
+        .unwrap()
+        .1
+        .split_once("        export FASTMASH_SITE_RELEASE_VERSION")
+        .unwrap()
+        .0;
+    let script = format!(
+        "git() {{ case \"$*\" in\n\
+         *:Cargo.toml) printf '%s\\n' \"$WORKSPACE_MANIFEST\" ;;\n\
+         *:crates/cli/Cargo.toml) printf 'version = \\\"0.4.0\\\"\\n' ;;\n\
+         *) return 99 ;; esac; }}\n\
+         FASTMASH_SITE_RELEASE_VERSION={script}\nprintf '%s' \"$FASTMASH_SITE_RELEASE_VERSION\""
+    );
+    for (manifest, expected) in [
+        ("[workspace]\nmembers = []\n", "0.4.0"),
+        ("[workspace.package]\nversion = \"0.5.0\"\n", "0.5.0"),
+    ] {
+        let output = std::process::Command::new("bash")
+            .args(["-e", "-o", "pipefail", "-c", &script])
+            .env("WORKSPACE_MANIFEST", manifest)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn installer_selects_the_latest_available_registry_version() {
     let workflow = fs::read_to_string(root().join(".github/workflows/cargo-binstall.yml")).unwrap();
     let step = workflow
