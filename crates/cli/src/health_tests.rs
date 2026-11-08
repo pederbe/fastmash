@@ -68,6 +68,15 @@ impl command_output::Transport for Output {
 }
 
 fn command(input: &mut Input<'_>, output: &mut Output, args: &[&str]) -> (i32, Vec<Vec<u8>>) {
+    command_on(input, output, args, false)
+}
+
+fn command_on(
+    input: &mut Input<'_>,
+    output: &mut Output,
+    args: &[&str],
+    terminal: bool,
+) -> (i32, Vec<Vec<u8>>) {
     let args: Vec<std::ffi::OsString> = args.iter().map(Into::into).collect();
     let environment = Environment {
         locale: Default::default(),
@@ -75,7 +84,10 @@ fn command(input: &mut Input<'_>, output: &mut Output, args: &[&str]) -> (i32, V
         grouping: None,
         sort_memory: None,
         pipe_grouping: None,
-        terminal: Default::default(),
+        terminal: terminal_style::Detection {
+            stdout_terminal: terminal,
+            ..Default::default()
+        },
     };
     let mut diagnostics = Vec::new();
     let mut report = |failure: &Failure| {
@@ -267,6 +279,9 @@ fn health_retains_complete_reports_across_segmentation_and_short_writes() {
 
 #[test]
 fn health_styling_preserves_short_writes_and_partial_failure_completion() {
+    let command = |input: &mut Input<'_>, output: &mut Output, args: &[&str]| {
+        command_on(input, output, args, true)
+    };
     for mode in ["--color=never", "--color=always"] {
         for format in [None, Some("tsv")] {
             for (bytes, validation_status) in [(b"1\n2\n".as_slice(), 0), (b"1\n2\nword\nNA\n", 1)]
