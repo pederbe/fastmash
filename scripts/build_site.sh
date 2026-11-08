@@ -33,7 +33,8 @@ if [ "$mode" = --cloudflare ]; then
     release_ref=$(git ls-remote origin refs/heads/release)
     if [ -n "$release_ref" ]; then
         git fetch --depth=1 origin refs/heads/release:refs/remotes/origin/release
-        FASTMASH_SITE_RELEASE_VERSION=$(git show refs/remotes/origin/release:site/release-version.txt)
+        FASTMASH_SITE_RELEASE_VERSION=$(git show refs/remotes/origin/release:crates/cli/Cargo.toml |
+            sed -n 's/^version = "\([^"]*\)"$/\1/p' | head -1)
         export FASTMASH_SITE_RELEASE_VERSION
     fi
 fi

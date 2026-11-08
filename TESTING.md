@@ -583,6 +583,6 @@ running the site builder again, since the builder transforms the generated HTML.
 | `ci.yml` | Public pull requests against `main`, or manual dispatch | Selects affected application, package and tooling checks. Documentation checks run for every PR, including documentation-only changes |
 | `macos.yml` | Called by CI when native checks are selected, by the release workflow, or by manual dispatch | Complete native source checks on macOS 15/26, one archive, both installations when enabled, installed command/corpus checks and scoped hosted GNU observations |
 | `docs.yml` | Called by CI for every public PR or manual CI run, or by its own manual dispatch | Builds the website and checks links |
-| `weekly-release.yml` | Weekly schedule on public `main`, or manual dispatch | Prepares or resumes a frozen release and dispatches the release workflow when needed |
-| `release.yml` | Dispatch on a version tag, including dispatch by the weekly release workflow | Builds, tests and publishes release assets, then updates package delivery |
+| `release-plz.yml` | Monday schedule or manual dispatch on public `main`, and pushes that refresh an open release PR | Prepares and auto-merges a checked version/changelog PR, then creates its tag and draft and dispatches delivery |
+| `release.yml` | Dispatch on a version tag, including dispatch by release-plz | Builds, tests and publishes release assets, then uploads crates and updates package delivery |
 | `package-repository-checks.yml` | Called by CI for package-repository tooling changes or manual CI runs, or by its own manual dispatch | Checks shell and Rust tooling, then apt/dnf clients across interrupted and interleaved uploads using signed fixture packages |

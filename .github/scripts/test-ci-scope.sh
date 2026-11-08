@@ -8,16 +8,14 @@ cd "$fixture"
 git init -q
 git config user.email fixture@example.invalid
 git config user.name fixture
-mkdir -p crates/app/src crates/helper/src .github/workflows release/publication-test-server/src scripts tools/release-changelog/src packaging/homebrew
+mkdir -p crates/app/src crates/helper/src .github/workflows release/publication-test-server/tests scripts packaging/homebrew
 printf '[workspace]\nmembers = ["crates/app", "crates/helper"]\n' > Cargo.toml
 printf '[package]\nname = "fastmash"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\n' > crates/app/Cargo.toml
 printf '[package]\nname = "helper"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\ndevlib = "1"\n' > crates/helper/Cargo.toml
-touch crates/app/src/lib.rs crates/helper/src/lib.rs .github/workflows/ci.yml release/publication-test-server/src/weekly.rs scripts/build_site.py
+touch crates/app/src/lib.rs crates/helper/src/lib.rs .github/workflows/ci.yml release/publication-test-server/tests/release_delivery.rs scripts/build_site.py
 touch packaging/homebrew/fastmash.rb release/publication-test-server/Cargo.toml
 touch .github/workflows/homebrew.yml .github/workflows/macos.yml
-touch tools/release-changelog/src/main.rs scripts/check-release-changelog.sh scripts/prepare-release.sh \
-  scripts/record-release-changelog.sh scripts/configure-release-changelog.sh \
-  .github/workflows/release-changelog.yml .github/workflows/release-changelog-check.yml
+touch release-plz.toml .github/workflows/release-plz.yml
 cat > Cargo.lock <<'LOCK'
 version = 4
 [[package]]
@@ -72,7 +70,11 @@ expect application=true configuration=false packages=fastmash
 printf '# installer workflow change\n' > .github/workflows/homebrew.yml
 printf '# archive builder change\n' > .github/workflows/macos.yml
 expect application=false configuration=true packages=
-printf '// release tooling change\n' > release/publication-test-server/src/weekly.rs
+printf '// release tooling change\n' > release/publication-test-server/tests/release_delivery.rs
+expect application=false configuration=true packages=
+printf '# release configuration change\n' > release-plz.toml
+expect application=false configuration=true packages=
+printf '# release workflow change\n' > .github/workflows/release-plz.yml
 expect application=false configuration=true packages=
 printf '# package signing change\n' > release/package-repository.sh
 expect application=false configuration=true packages=
@@ -82,15 +84,9 @@ printf '# independent tool manifest change\n' > release/publication-test-server/
 expect application=false configuration=true packages=
 printf '# website change\n' > scripts/build_site.py
 expect application=false configuration=false packages=
-for path in tools/release-changelog/src/main.rs scripts/check-release-changelog.sh scripts/prepare-release.sh \
-  scripts/record-release-changelog.sh scripts/configure-release-changelog.sh \
-  .github/workflows/release-changelog.yml .github/workflows/release-changelog-check.yml; do
-  printf '# changelog tooling change\n' > "$path"
-  expect application=false configuration=false packages=
-done
-printf '// changelog tooling change\n' > tools/release-changelog/src/main.rs
+printf '# release configuration change\n' > release-plz.toml
 printf '// application change\n' > crates/app/src/lib.rs
-expect application=true configuration=false packages=fastmash
+expect application=true configuration=true packages=fastmash
 printf '# documentation\n' > README.md
 expect application=false packages=
 rm README.md

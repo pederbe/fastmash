@@ -145,8 +145,12 @@ separation between performance acceptance and release delivery.
 
 ## Commit messages
 
-Write a short summary line in the imperative mood ("Add trimmean parameter
-validation", not "Added…"), followed by a blank line and an explanation of *why*
+Use a conventional pull request title with a short imperative summary, such as
+`fix: Validate trimmean parameters` or `feat: Add a table operation`. Use `perf:`
+for measured performance changes, `docs:` for documentation and `fix(deps):`
+for user-facing dependency updates. Internal work uses `ci:`, `build:`, `chore:`,
+`test:` or `refactor:`. The squash commit retains the pull request title and body.
+Follow the summary with a blank line and an explanation of *why*
 when that is not obvious. Reference public issues as `#123` in commits and
 discussions. Use full public issue links in source comments so their repository
 is explicit. CI checks tracked files for private references.
@@ -161,17 +165,19 @@ review it, test it and be able to explain it.
 
 ## Releases
 
-Maintainers release as described in [RELEASING.md](RELEASING.md), including its
-comparison of the notes with merged changes before release preparation.
+Release-plz generates dated entries in [CHANGELOG.md](CHANGELOG.md) from merged
+pull request titles. Keep `[Unreleased]` empty for future changes. Review the
+title as the sentence users will read about capabilities, fixes, installation
+or changes to command-line behavior. Explain compatibility consequences and
+required user action in the pull request description. Numerical-output changes
+name their new Numerical profile. Keep performance claims tied to measured
+workloads. See [RELEASING.md](RELEASING.md) for weekly publication.
 
-Include a concise entry under `[Unreleased]` in
-[CHANGELOG.md](https://github.com/pederbe/fastmash/blob/main/CHANGELOG.md) in
-the same pull request as a user-visible change. Cover capabilities, fixes,
-installation and changes to command-line behavior or output. Explain
-compatibility consequences and any action users need to take. Numerical-output
-changes name their Numerical profile. Keep performance claims tied to their
-measured workloads. If no entry is needed, explain why in the pull request's
-Changelog section.
+Use `!` in the title for a breaking change, such as `feat!: Rename an option`,
+and put a `BREAKING CHANGE:` paragraph with the full upgrade instructions at
+the end of the description, after all other sections. Release notes retain that
+paragraph. Use `feat(remove)!:` for removals and `feat(deprecate):` for
+deprecations so they have their own changelog sections.
 
 ## Code of conduct
 

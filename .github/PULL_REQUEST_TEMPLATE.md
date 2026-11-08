@@ -4,9 +4,12 @@
 
 ## Changelog
 
-<!-- For user-visible work, update Unreleased in CHANGELOG.md and summarize
-     compatibility consequences, Numerical profile changes and required user
-     action. Otherwise, explain why no entry is needed. See CONTRIBUTING.md. -->
+<!-- Use a conventional, user-facing title, such as "fix: ..." or "feat: ...".
+     Summarize compatibility consequences, Numerical profile changes and required
+     user action here. Release-plz generates CHANGELOG.md. Use ci:, chore:, test:
+     or refactor: for internal changes. See CONTRIBUTING.md.
+     Put any BREAKING CHANGE: paragraph at the end of the description, after
+     all other sections, with the full upgrade instructions. -->
 
 ## How you tested it
 

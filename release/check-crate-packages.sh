@@ -4,8 +4,8 @@
 set -euo pipefail
 version=${1:?usage: check-crate-packages.sh VERSION}
 cargo metadata --no-deps --format-version 1 --locked |
-    jq -e --arg version "$version" 'all(.packages[] | select(.publish != []); .version == $version)' > /dev/null ||
-    { echo "crate versions differ from $version" >&2; exit 1; }
+    jq -e --arg version "$version" 'any(.packages[]; .name == "fastmash" and .version == $version)' > /dev/null ||
+    { echo "executable crate version differs from $version" >&2; exit 1; }
 for package in fastmash-numeric-contract fastmash-conversion fastmash-portable-numerics fastmash-sort-process fastmash; do
     files=$(cargo package --list --locked --registry crates-io -p "$package")
     printf '%s package contents:\n%s\n' "$package" "$files"

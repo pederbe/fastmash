@@ -14,50 +14,35 @@ fn workflow() -> String {
 
 #[cfg(unix)]
 #[test]
-fn weekly_release_does_not_retry_completed_manual_delivery() {
-    let workflow = fs::read_to_string(root().join(".github/workflows/weekly-release.yml")).unwrap();
+fn weekly_release_only_refreshes_open_pull_requests_between_schedules() {
+    let workflow = fs::read_to_string(root().join(".github/workflows/release-plz.yml")).unwrap();
     let script = workflow.split_once("        run: |\n").unwrap().1;
-    let script = script.split_once("          minimum=()\n").unwrap().0;
+    let script = script.split_once("      - uses:").unwrap().0;
     let script = script
         .lines()
-        .map(|line| line.strip_prefix("          ").unwrap())
+        .map(|line| line.strip_prefix("          ").unwrap_or(line))
         .collect::<Vec<_>>()
         .join("\n");
-    let script = format!(
-        "git() {{ case \"$1\" in\n\
-           tag) printf 'v0.4.0\\n' ;;\n\
-           rev-parse) printf 'frozen-source\\n' ;;\n\
-           ls-remote) printf '%s\\trefs/heads/release\\n' \"$DELIVERED_SHA\" ;;\n\
-           *) return 99 ;; esac; }}\n\
-         gh() {{ case \"$1 $2\" in\n\
-           api*) printf 'v0.4.0\\n' ;;\n\
-           'run list') printf '%s\\n' \"$RECENT_RUN\" ;;\n\
-           'run rerun') printf 'retry\\n' ;;\n\
-           *) return 99 ;; esac; }}\n\
-         {script}\nprintf 'prepare\\n'"
-    );
-    let failed = r#"[{"databaseId":42,"status":"completed","conclusion":"failure"}]"#;
-    let running = r#"[{"databaseId":42,"status":"in_progress","conclusion":""}]"#;
-    let success = r#"[{"databaseId":42,"status":"completed","conclusion":"success"}]"#;
-    for (delivered, recent, supersede, expected) in [
-        ("frozen-source", failed, "false", "prepare\n"),
-        ("previous-source", failed, "false", "retry\n"),
-        ("", failed, "false", "retry\n"),
-        ("previous-source", running, "false", ""),
-        ("previous-source", success, "false", "prepare\n"),
-        ("previous-source", failed, "true", "prepare\n"),
+    let script = format!("gh() {{ printf '%s\\n' \"$OPEN_RELEASE_PRS\"; }}\n{script}");
+    for (event, open, expected) in [
+        ("push", "0", "run=false\n"),
+        ("push", "1", "run=true\n"),
+        ("schedule", "0", "run=true\n"),
+        ("workflow_dispatch", "0", "run=true\n"),
     ] {
+        let file =
+            std::env::temp_dir().join(format!("fastmash-release-env-{}", std::process::id()));
         let output = std::process::Command::new("bash")
             .args(["-ec", &script])
-            .env("DELIVERED_SHA", delivered)
-            .env("RECENT_RUN", recent)
-            .env("SUPERSEDE_FAILED", supersede)
+            .env("EVENT", event)
+            .env("OPEN_RELEASE_PRS", open)
             .env("GITHUB_REPOSITORY", "pederbe/fastmash")
-            .env("GITHUB_STEP_SUMMARY", "/dev/null")
+            .env("GITHUB_OUTPUT", &file)
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
-        assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+        assert_eq!(fs::read_to_string(&file).unwrap(), expected);
+        fs::remove_file(file).unwrap();
     }
 }
 

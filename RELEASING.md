@@ -2,43 +2,43 @@
 
 ## Weekly releases
 
-Every Monday at 06:17 UTC, the Weekly release workflow checks for product,
-dependency and packaging changes since the last published release. Documentation
-and website changes alone do not create a release. Run it manually for an urgent
-fix, selecting an automatic, minor or major version increment. Disable its
-schedule to stop recurring publication.
+Every Monday at 06:17 UTC, [release-plz](https://release-plz.dev) opens or updates
+one release pull request when there are unreleased user-facing changes. Required
+CI checks must pass before it merges automatically. Pushes to `main` refresh an
+already-open release pull request, without opening a new one on every merge.
+Internal changes alone do not trigger a release. Disable the schedule to stop
+recurring preparation. Manual dispatch prepares an additionally authorized release.
 
-The workflow creates a versioned metadata commit and tag without advancing
-`main`. Published crates, exact internal dependency pins, the lockfile and the
-executable version stay aligned. Before 1.0, a minor version may change behavior.
-Breaking commit markers (`type!:` or `BREAKING CHANGE:`), and new authored
-**Added**, **Changed** or **Removed** entries, select a minor version before 1.0.
+The release pull request updates Cargo versions, exact dependency requirements,
+the lockfile and a dated [CHANGELOG.md](CHANGELOG.md) section from conventional
+pull request titles. All five published crates participate in versioning, and
+library commits appear in the binary's combined notes. A version group propagates
+library features and breaking changes to the binary. Unchanged libraries can
+retain their published versions. Before 1.0, new features and breaking changes
+raise the minor version.
 
-[CHANGELOG.md](CHANGELOG.md) keeps user-facing entries under `[Unreleased]`.
-Use **Added**, **Changed**, **Fixed**, **Removed** and **Security** headings.
-A numerical-output change must name its new Numerical profile and receive
-independent verification. The release notes combine new authored entries with
-commits grouped into breaking changes, additions, fixes and other changes.
-Each tagged changelog keeps the preceding release history.
+Notes reach `main` before tagging and stay under their dated heading. Keep
+`[Unreleased]` empty for future changes. Existing pending notes from the previous
+release machinery are retained for the first release-plz release. Describe
+compatibility consequences and required actions in the pull request description.
+Use an actual `BREAKING CHANGE:` paragraph at the end for upgrade instructions.
+A numerical-output change still needs its new Numerical profile and independent
+verification. Use `fix(security):` for security notes and `feat(remove)!:` or
+`feat(deprecate):` for removals and deprecations.
 
-The release tool replaces the shipping Unreleased heading with the version and
-UTC release date. It accepts a changelog with only dated sections and retains
-the frozen date on retries. It does not create an empty pending section.
+After the release pull request merges, release-plz creates `vVERSION` and a
+GitHub draft, then explicitly dispatches Release at that tag. Workflow-token
+events do not start other workflows. Only the binary gets a tag and GitHub
+release. Cargo uploads remain disabled in release-plz and occur through the
+existing qualified delivery below, using the unchanged trusted publisher in
+`release.yml` and environment `crates-io`. No routine manual approval is needed.
+See [ADR 0016](docs/src/adr/0016-release-plz.md).
 
-After publication, `Release changelog` records the dated notes on `main` through
-a pull request and the maintained documentation checks. It preserves later
-pending entries and historical edits. Publication events and completed Release
-workflows trigger this job. Draft and check-only runs do not update `main`.
-Use the workflow's manual check-only mode to inspect a published tag or retry
-its recording without rebuilding or republishing the release.
-
-Before preparing a release, compare the Unreleased entries with all merged
-changes since the previous published release. Check capabilities, fixes,
-installation, support boundaries, Numerical profile changes and upgrade
-instructions. Resolve omissions before freezing the notes. Generated commit
-history supplements the user-facing summary rather than replacing it. For the
-scheduled workflow, account for this coverage in each change review so it can
-reuse the maintained entries without a separate manual approval.
+The repository needs auto-merge enabled and the required `CI` check on `main`.
+`RELEASE_PLZ_TOKEN` is a repository-scoped token with Contents and Pull requests
+write access, allowing release pull requests to run CI. Squash defaults must use
+the pull request title and body so conventional titles and upgrade instructions
+survive merging. Release-plz uses the built-in workflow token for tags and drafts.
 
 ## Performance acceptance
 
@@ -127,19 +127,25 @@ without rebuilding published binaries.
 
 ## Failures and urgent fixes
 
-A failed run retains its immutable tag and any draft assets. The next weekly run
-retries only failed jobs before selecting another version. Existing draft assets
-must match the frozen assets byte for byte. Already published crate versions
-must match their source-package checksums before a partial upload resumes.
+A failed delivery retains its immutable tag and draft assets. Rerun the failed
+Release jobs at the original tag after fixing the reported cause. Existing draft
+assets must match the frozen assets byte for byte. Already published crate
+versions must match their source-package checksums before a partial upload
+resumes. A green release-plz run does not establish successful delivery.
 
-After a manual recovery finishes package delivery, advance the `release` branch
-to the unchanged version tag and refresh the website. The weekly workflow treats
-that pointer as completed delivery, even if the original run failed.
+Tag creation, draft creation and workflow dispatch are separate operations.
+Release-plz skips an existing tag on retry. If its tag exists but draft creation
+failed, restore only the missing draft with `gh release create --draft
+--verify-tag --notes-file`, using the dated notes from that tag's exact source.
+Then dispatch `release.yml` on that tag. Also dispatch it explicitly if the
+original dispatch failed after creating the draft. Do not move tags or overwrite
+published releases. Cargo uploads are still handled by Release, not release-plz.
 
-If a source fix is needed, merge it through the normal pull request checks, then
-dispatch Weekly release with `supersede_failed=true`. It creates a higher version
-while preserving the failed tag and its evidence. Older runs cannot move the
-published version backward.
+If source changes are needed, merge them through the normal checked pull request
+route and let release-plz prepare a higher version. Preserve the failed tag and
+its evidence. Older runs cannot move the published version backward. After a
+manual recovery finishes package delivery, advance `release` to the unchanged
+version tag and refresh the website.
 
 ## Patch releases
 
@@ -184,9 +190,8 @@ Review the complete diff from the previous tag, including dependency and builder
 ### Build and verify the patch candidate
 
 Apply the hosted build and delivery checks above to the selected patch source.
-Set published crate versions and exact internal dependency pins to the patch
-version, update the
-lockfile, and keep only its user-visible fixes under `[Unreleased]`. Record the
+Prepare the patch versions, exact internal dependency requirements, lockfile and
+dated release notes with release-plz on the selected source. Record the
 full source revision, lockfile hash, builder identity, compiler and flags.
 Use the pinned `release/Containerfile` and `release/build.sh` recipe already used
 by the release workflow. Build twice from the same clean source into separate
@@ -239,10 +244,10 @@ campaign, and unchanged dated claims do not need regenerated charts.
 
 After two identical clean builds, the Linux release job writes the actual
 candidate hashes to its local `release/delivery.sha256` and includes that manifest
-in the archive. Weekly preparation only versions metadata and creates the tag.
-Preserve historical qualified manifests unchanged. Move selected changelog entries
-into the dated patch section when tagging.
-Verify that the tag, crate versions, notes and executable version agree.
+in the archive. Release-plz versions metadata and creates the tag and draft.
+Preserve historical qualified manifests unchanged. Verify that the tag, binary
+crate version, notes and executable version agree, and that internal dependency
+requirements resolve to the intended library versions.
 
 The Release workflow checks those hashes, runs the workspace and candidate
 Command checks plus both corpus modes, and produces a draft with the archive,

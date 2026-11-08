@@ -1,4 +1,8 @@
 //! Exercise registry recovery and frozen delivery hashes without network publication.
+#![cfg(unix)]
+#[path = "../../../crates/cli/tests/support/executable_fixture.rs"]
+mod executable_fixture;
+
 use std::{fs, path::Path, process::Command};
 fn executable(path: &Path, text: &str) {
     crate::executable_fixture::write(path, text, 0o755);
@@ -20,11 +24,22 @@ fn resumes_only_missing_packages_and_refuses_ambiguous_registry_state() {
         r#"#!/bin/bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$FIXTURE_TRACE"
+if [ "$1" = metadata ]; then
+  printf '{"packages":['
+  separator=
+  for package in fastmash-numeric-contract fastmash-conversion fastmash-portable-numerics fastmash-sort-process fastmash; do
+    version=0.3.0
+    [ "$package" != fastmash-numeric-contract ] || version=0.2.0
+    printf '%s{"name":"%s","version":"%s"}' "$separator" "$package" "$version"
+    separator=,
+  done
+  printf ']}\n'
+fi
 if [ "$1" = package ]; then
   while [ "$1" != -p ]; do shift; done
   shift
   mkdir -p "$CARGO_TARGET_DIR/package"
-  printf existing > "$CARGO_TARGET_DIR/package/$1-0.3.0.crate"
+  printf existing > "$CARGO_TARGET_DIR/package/$1-0.2.0.crate"
 fi
 "#,
     );
@@ -39,7 +54,8 @@ done
 if [ "$FIXTURE_HTTP" = 403 ]; then printf 403; exit; fi
 if [[ "${!#}" = */fastmash-numeric-contract/* ]]; then
   hash=$(printf existing | sha256sum | cut -d' ' -f1)
-  printf '{"version":{"num":"0.3.0","yanked":false,"checksum":"%s"}}' "$hash" > "$output"
+  [[ "${!#}" = */0.2.0 ]] || exit 99
+  printf '{"version":{"num":"0.2.0","yanked":false,"checksum":"%s"}}' "$hash" > "$output"
   printf 200
 else
   printf 404
@@ -85,7 +101,10 @@ fi
     let output = run("403");
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("HTTP 403"));
-    assert_eq!(fs::read_to_string(&trace).unwrap(), "");
+    assert_eq!(
+        fs::read_to_string(&trace).unwrap(),
+        "metadata --no-deps --format-version 1 --locked\n"
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
