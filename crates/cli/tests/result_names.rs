@@ -83,7 +83,7 @@ fn result_names_replace_selected_labels_in_text_reports() {
 
 #[test]
 fn invalid_result_names_fail_before_emitting_any_header() {
-    let invalid = "--result-name requires a positive INDEX:NAME\n";
+    let invalid = "--result-name requires INDEX:NAME, with INDEX starting at 1 and NAME nonempty\nhint: for example, --result-name=1:total\n";
     for (value, diagnostic) in [
         ("0:x", invalid),
         ("-1:x", invalid),
@@ -96,7 +96,7 @@ fn invalid_result_names_fail_before_emitting_any_header() {
         ("18446744073709551616:x", invalid),
         (
             "2:x",
-            "--result-name target exceeds the number of results\n",
+            "--result-name index exceeds the number of calculated results\nhint: count results from 1, excluding grouping keys and copied fields\n",
         ),
         (
             "1:a\tb",
@@ -155,7 +155,7 @@ fn invalid_result_names_fail_before_emitting_any_header() {
             assert!(output.stdout.is_empty());
             assert_eq!(
                 output.stderr,
-                b"fastmash: --result-name target exceeds the number of results\n"
+                b"fastmash: --result-name index exceeds the number of calculated results\nhint: count results from 1, excluding grouping keys and copied fields\n"
             );
         }
     }
@@ -173,7 +173,7 @@ fn invalid_result_names_fail_before_emitting_any_header() {
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(
         output.stderr,
-        b"fastmash: --result-name target is repeated\n"
+        b"fastmash: --result-name repeats a result index\n"
     );
     assert!(output.stdout.is_empty());
 }
@@ -195,7 +195,7 @@ fn result_names_refuse_excluded_modes_before_reading_input() {
         assert!(output.stdout.is_empty());
         assert_eq!(
             output.stderr,
-            b"fastmash: --result-name is supported only for aggregate and per-row operations\n"
+            b"fastmash: --result-name is supported only for aggregate and per-row operations and dataset comparison\n"
         );
     }
 }

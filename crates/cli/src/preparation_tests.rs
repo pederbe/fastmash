@@ -24,7 +24,7 @@ fn restricted_controls_keep_the_first_explicit_option() {
         (
             vec!["--filler=-", "--vnlog", "health"],
             1,
-            &b"health does not support calculation option '--filler'\n"[..],
+            &b"health does not support option '--filler'\n"[..],
         ),
         (
             vec!["--round=14", "--round=14", "--seed=0", "top:1", "1"],

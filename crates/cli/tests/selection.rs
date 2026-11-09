@@ -240,7 +240,7 @@ fn missing_value_removal_applies_only_to_whole_ranking_tokens() {
             assert!(output.stdout.is_empty());
             assert_eq!(
                 output.stderr,
-                b"fastmash: invalid input: field 2 in line 2 has unordered NaN ranking value\n"
+                b"fastmash: invalid input: field 2 in line 2 is NaN and cannot be ranked\nhint: correct the ranking value. --narm skips only plain NA, N/A and NaN tokens\n"
             );
         }
     }
@@ -840,7 +840,7 @@ fn sorted_input_errors_keep_original_locations_across_spill() {
                     vec!["-s", "-g", "1", "top:1", "2"],
                     b"Z\t2\nB\tnan\nA\t3\n",
                     b"A\t3\n",
-                    b"fastmash: invalid input: field 2 in line 2 has unordered NaN ranking value\n",
+                    b"fastmash: invalid input: field 2 in line 2 is NaN and cannot be ranked\nhint: correct the ranking value. --narm skips only plain NA, N/A and NaN tokens\n",
                 ),
             ] {
                 let output = invoke_in(
@@ -1596,7 +1596,7 @@ fn csv_sorted_validation_keeps_original_locations_and_checks_omitted_records() {
                     "1",
                     b"key,value,note\nz,NaN,last\na,3,first\nb,nan(payload),late\n",
                     b"key,value,note\na,3,first\n",
-                    b"fastmash: invalid input: field 2 in line 4 has unordered NaN ranking value\nCSV record 4 starts at physical line 4\n",
+                    b"fastmash: invalid input: field 2 in line 4 is NaN and cannot be ranked\nhint: correct the ranking value. --narm skips only plain NA, N/A and NaN tokens\nCSV record 4 starts at physical line 4\n",
                 ),
                 (
                     "1",

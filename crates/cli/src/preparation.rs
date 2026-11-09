@@ -116,7 +116,7 @@ fn validate_csv(options: &Options, mode: super::grammar::Mode) -> Result<(), Fai
             | super::grammar::Mode::Compare
     ) {
         return Err(unsupported(
-            "CSV is supported only for aggregate and per-row operations",
+            "CSV is supported only for aggregate and per-row operations, Top-N selection and dataset comparison",
         ));
     }
     Ok(())
@@ -124,13 +124,22 @@ fn validate_csv(options: &Options, mode: super::grammar::Mode) -> Result<(), Fai
 
 fn validate_health(options: &Options) -> Result<(), Failure> {
     if let Some(option) = options.controls.calculation {
-        return Err(failure(
+        let mut error = failure(
             format!(
-                "health does not support calculation option '--{}'\n",
+                "health does not support option '--{}'\n",
                 String::from_utf8_lossy(option)
             )
             .into_bytes(),
-        ));
+        );
+        let hint: Option<&[u8]> = match option {
+            b"csv-out" => Some(b"use health tsv for a tab-separated report"),
+            b"csv-in" | b"csv" => Some(b"health reads delimited text. Export quoted CSV as delimited text before inspection"),
+            _ => None,
+        };
+        if let Some(hint) = hint {
+            super::append(&mut error, &[b"hint: ", hint, b"\n"]);
+        }
+        return Err(error);
     }
     if options.vnlog && options.input != Separator::Whitespace {
         return Err(failure(

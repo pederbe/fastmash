@@ -491,7 +491,7 @@ fn health_declaration_binding_errors_precede_data_reads_and_report_emission() {
         (
             b"a\ta\n".as_slice(),
             vec!["required", "a"],
-            b"health: field name 'a' is ambiguous in Input header\n".as_slice(),
+            b"health: field name 'a' is ambiguous in input header\nhint: give each header field a unique name\n".as_slice(),
         ),
         (
             b"a\tb\n",
@@ -501,7 +501,7 @@ fn health_declaration_binding_errors_precede_data_reads_and_report_emission() {
         (
             b"a\0tail\n",
             vec!["required", "a"],
-            b"health: field name 'a' not found in Input header\n",
+            b"health: field name 'a' not found in input header\nhint: check the field name against the input header\n",
         ),
     ] {
         let mut input = Input {

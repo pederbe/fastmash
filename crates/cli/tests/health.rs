@@ -1281,27 +1281,27 @@ fn missing_or_ambiguous_names_are_command_errors_but_positions_remain_available(
         (
             vec!["health", "required", "name"],
             b"name\n1\n".as_slice(),
-            "named fields require an Input header",
+            "named fields require --header-in or -H",
         ),
         (
             vec!["-H", "health", "required", "name"],
             b"other\n1\n",
-            "not found in Input header",
+            "not found in input header",
         ),
         (
             vec!["-H", "health", "required", "a"],
             b"a\0tail\n1\n",
-            "not found in Input header",
+            "not found in input header",
         ),
         (
             vec!["-H", "health", "required", "name"],
             b"name\tname\n1\t2\n",
-            "is ambiguous in Input header",
+            "is ambiguous in input header",
         ),
         (
             vec!["-H", "health", "required", "name"],
             b"",
-            "not found in Input header",
+            "not found in input header",
         ),
     ] {
         for file in [false, true] {
@@ -1331,7 +1331,7 @@ fn missing_or_ambiguous_names_are_command_errors_but_positions_remain_available(
     assert!(
         String::from_utf8(error.stderr)
             .unwrap()
-            .contains("not found in Input header")
+            .contains("not found in input header")
     );
 }
 
@@ -2025,7 +2025,7 @@ fn calculation_only_options_are_rejected_even_when_their_values_are_defaults() {
         assert!(
             String::from_utf8(output.stderr.clone())
                 .unwrap()
-                .contains("health does not support calculation option"),
+                .contains("health does not support option"),
             "{arguments:?}: {output:?}"
         );
     }
@@ -2219,6 +2219,59 @@ fn unknown_incomplete_conflicting_controls_and_invalid_limits_emit_no_report() {
         output.stderr,
         b"fastmash: health example limit exceeds checked capacity\n"
     );
+}
+
+#[test]
+fn unknown_controls_are_identified_without_terminal_control_bytes() {
+    for file in [false, true] {
+        for (locale, quoted) in [("C", "'req\\n\\033[31m'"), ("C.UTF-8", "‘req\\n\\033[31m’")] {
+            let output = invoke_in(&["health", "req\n\x1b[31m"], b"1\n", file, locale);
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            assert_eq!(output.stderr, format!("fastmash: health: unknown control {quoted}\nhint: use examples, type, required, nonmissing, width, validate or tsv\n").as_bytes());
+            assert!(!output.stderr.contains(&0x1b));
+        }
+    }
+}
+
+#[test]
+fn health_recovery_hints_lead_to_valid_commands() {
+    for file in [false, true] {
+        let input = b"price\n2\n";
+        let missing_header = invoke(&["health", "required", "price"], input, file);
+        assert_eq!(missing_header.status.code(), Some(1));
+        assert!(missing_header.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&missing_header.stderr).contains("--header-in or -H"));
+        let named = invoke(&["--header-in", "health", "required", "price"], input, file);
+        assert!(named.status.success(), "{named:?}");
+        assert!(named.stderr.is_empty());
+        let numbered = invoke(&["health", "required", "1"], b"2\n", file);
+        assert!(numbered.status.success(), "{numbered:?}");
+        let missing_field = invoke(&["health", "required"], input, file);
+        assert_eq!(missing_field.status.code(), Some(1));
+        assert_eq!(
+            missing_field.stderr,
+            b"fastmash: health: required needs a field number or header name\n"
+        );
+        let no_rule = invoke(&["health", "validate"], b"2\n", file);
+        assert_eq!(no_rule.status.code(), Some(1));
+        assert!(
+            String::from_utf8_lossy(&no_rule.stderr)
+                .contains("type, required, nonmissing or width")
+        );
+        let validated = invoke(
+            &["health", "type", "1", "integer", "validate"],
+            b"2\n",
+            file,
+        );
+        assert!(validated.status.success(), "{validated:?}");
+        let csv_output = invoke(&["--csv-out", "health"], b"2\n", file);
+        assert_eq!(csv_output.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&csv_output.stderr).contains("health tsv"));
+        let tsv = invoke(&["health", "tsv"], b"2\n", file);
+        assert!(tsv.status.success(), "{tsv:?}");
+        assert!(tsv.stdout.starts_with(TSV_HEADER));
+    }
 }
 
 #[test]

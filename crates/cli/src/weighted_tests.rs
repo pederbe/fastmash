@@ -1214,7 +1214,7 @@ fn weighted_headers_keep_aggregate_timing_and_required_pair_fields() {
         (
             1,
             vec![],
-            vec![b"--result-name target exceeds the number of results\n".to_vec()]
+            vec![b"--result-name index exceeds the number of calculated results\nhint: count results from 1, excluding grouping keys and copied fields\n".to_vec()]
         ),
     );
     assert_eq!(

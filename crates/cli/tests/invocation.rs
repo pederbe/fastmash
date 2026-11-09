@@ -85,6 +85,28 @@ fn help_and_version_are_incremental_and_product_specific() {
 }
 
 #[test]
+fn unsupported_sort_command_explains_working_alternatives() {
+    let binary = candidate();
+    let refused = invoke(
+        &binary,
+        &arguments(&["--sort-cmd=sort", "-s", "-g", "1", "sum", "2"]),
+        false,
+    );
+    assert_eq!(refused.status.code(), Some(77));
+    assert!(refused.stdout.is_empty());
+    assert_eq!(refused.stderr, b"fastmash: unsupported option '--sort-cmd=sort'\nhint: remove --sort-cmd for built-in sorting, or sort input separately and omit -s\n");
+    for args in [
+        vec!["-s", "-g", "1", "sum", "2"],
+        vec!["-g", "1", "sum", "2"],
+    ] {
+        let output = invoke(&binary, &arguments(&args), false);
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(output.stdout, b"a\t2\nb\t3\n");
+        assert!(output.stderr.is_empty());
+    }
+}
+
+#[test]
 fn useful_argument_sizes_have_no_private_raw_cap() {
     let mut args = vec![OsString::from("-W"); 10_000];
     args.extend(arguments(&["count", "1"]));

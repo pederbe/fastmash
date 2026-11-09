@@ -85,7 +85,13 @@ impl Settings {
                 b"tsv" => tsv = true,
                 b"type" | b"required" | b"nonmissing" => {
                     let argument = arguments.next().ok_or_else(|| {
-                        failure(b"health: field rule requires a field\n".to_vec())
+                        failure(
+                            format!(
+                                "health: {} needs a field number or header name\n",
+                                control.to_string_lossy()
+                            )
+                            .into_bytes(),
+                        )
                     })?;
                     let field = grammar::single_field(
                         argument,
@@ -95,7 +101,7 @@ impl Settings {
                     )?;
                     if matches!(field, grammar::Field::Name(_)) && !options.header_in {
                         return Err(failure(
-                            b"health: named fields require an Input header\n".to_vec(),
+                            b"health: named fields require --header-in or -H\nhint: use a header option if the first record names the fields, or use field numbers\n".to_vec(),
                         ));
                     }
                     let rule = match control.as_bytes() {
@@ -117,15 +123,20 @@ impl Settings {
                     declarations.push(Declaration { field, rule });
                 }
                 _ => {
-                    return Err(failure(
-                        b"health: unknown or unavailable control\n".to_vec(),
-                    ));
+                    let mut message = b"health: unknown control ".to_vec();
+                    super::named_fields::quote_with(
+                        control.as_bytes(),
+                        &mut message,
+                        options.locale.utf8,
+                    );
+                    message.extend_from_slice(b"\nhint: use examples, type, required, nonmissing, width, validate or tsv\n");
+                    return Err(failure(message));
                 }
             }
         }
         if validate && width.is_none() && declarations.is_empty() {
             return Err(failure(
-                b"health: validate requires at least one supplied rule\n".to_vec(),
+                b"health: validate requires a type, required, nonmissing or width rule\n".to_vec(),
             ));
         }
         Ok(Self {
@@ -465,9 +476,9 @@ fn bind(report: &mut Report, settings: &Settings, utf8: bool) -> Result<(), Fail
                     .filter(|(_, label)| *label == name);
                 let first = matches.next();
                 let reason = if first.is_none() {
-                    Some(b" not found in Input header\n".as_slice())
+                    Some(b" not found in input header\nhint: check the field name against the input header\n".as_slice())
                 } else if matches.next().is_some() {
-                    Some(b" is ambiguous in Input header\n".as_slice())
+                    Some(b" is ambiguous in input header\nhint: give each header field a unique name\n".as_slice())
                 } else {
                     None
                 };
