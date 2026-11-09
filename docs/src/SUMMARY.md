@@ -35,7 +35,6 @@
 # Project
 
 - [FAQ](faq.md)
-- [Roadmap](roadmap.md)
 - [Contributing](contributing/index.md)
   - [Architecture](contributing/architecture.md)
   - [Testing](contributing/testing.md)
