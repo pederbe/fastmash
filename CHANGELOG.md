@@ -10,6 +10,26 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-09
+
+### Added
+
+- Style terminal results and health reports ([#211](https://github.com/pederbe/fastmash/pull/211))
+
+### Performance
+
+- Speed up large grouped moment and paired calculations ([#209](https://github.com/pederbe/fastmash/pull/209))
+
+### Other changes
+
+- Use plain Linux and macOS names in documentation ([#185](https://github.com/pederbe/fastmash/pull/185))
+- Preserve native duplicate-removal test failure diagnostics ([#187](https://github.com/pederbe/fastmash/pull/187))
+- Avoid executable-copy races in native command tests ([#188](https://github.com/pederbe/fastmash/pull/188))
+- Isolate remaining release-test executable copies ([#189](https://github.com/pederbe/fastmash/pull/189))
+- Isolate generated executable scripts in parallel tests ([#191](https://github.com/pederbe/fastmash/pull/191))
+- Update dependencies and repair installation checks ([#196](https://github.com/pederbe/fastmash/pull/196))
+- Update daily dependencies ([#199](https://github.com/pederbe/fastmash/pull/199))
+
 ### Development
 
 - Create executable scripts for installer and publication tests in an isolated
