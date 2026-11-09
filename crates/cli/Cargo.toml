@@ -27,10 +27,10 @@ path = "src/main.rs"
 [dependencies]
 # Optional diagnostics only. Ordinary builds do not compile or link hotpath.
 hotpath = { version = "0.31.1", optional = true, default-features = false }
-fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.4.0" }
-fastmash-conversion = { path = "../conversion", version = "=0.4.0" }
-fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.4.0" }
-fastmash-sort-process = { path = "../sort-process", version = "=0.4.0" }
+fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.5.0" }
+fastmash-conversion = { path = "../conversion", version = "=0.5.0" }
+fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.5.0" }
+fastmash-sort-process = { path = "../sort-process", version = "=0.5.0" }
 rustc_apfloat = "0.2.3"
 libc = "0.2.191"
 # Safe descriptor observations, closure, resource-limit and signal-mask queries.

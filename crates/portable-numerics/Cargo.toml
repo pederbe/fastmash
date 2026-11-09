@@ -8,4 +8,4 @@ repository = "https://github.com/pederbe/fastmash"
 homepage = "https://fastmash.io"
 
 [dependencies]
-fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.4.0" }
+fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.5.0" }
