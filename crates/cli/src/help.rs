@@ -1,10 +1,12 @@
-//! Help's existing text with styling confined to headings and syntax.
+//! Help text with styling confined to headings and syntax.
 use super::terminal_style::{Role, Style};
 use std::io::{self, Write};
 
 const TEXT: &[u8] = include_bytes!("help.txt");
 const HEADINGS: &[&[u8]] = &[
     b"Usage:",
+    b"Fields and grouping:",
+    b"Input and output:",
     b"Top-N selection:",
     b"Dataset comparison:",
     b"Operations:",
@@ -16,6 +18,9 @@ const HEADINGS: &[&[u8]] = &[
     b"Binning:",
     b"Table modes:",
     b"Table health:",
+    b"Sorting locales:",
+    b"Exit statuses:",
+    b"More information:",
 ];
 
 #[derive(Clone, Copy, Default)]
@@ -81,16 +86,12 @@ const DECLARATIONS: &[Declaration] = &[
     ),
     declaration(
         b"",
-        b"Crosstab/ct KEY1,KEY2 [OP FIELD]",
-        &[b"Crosstab", b"ct"],
+        b"crosstab/ct KEY1,KEY2 [OP FIELD]",
+        &[b"crosstab", b"ct"],
     ),
     declaration(b"", b"cut/echo FIELD", &[b"cut", b"echo"]),
     declaration(b" ", b"reverse reverses", &[b"reverse"]),
-    declaration(
-        b"changing widths); ",
-        b"nop/noop consumes",
-        &[b"nop", b"noop"],
-    ),
+    declaration(b"", b"nop/noop consumes", &[b"nop", b"noop"]),
     declaration(b" ", b"getnum[:TYPE] FIELD", &[b"getnum"]),
     declaration(
         b"",
@@ -98,23 +99,16 @@ const DECLARATIONS: &[Declaration] = &[
         &[b"round", b"floor", b"ceil", b"trunc", b"frac"],
     ),
     declaration(b" ", b"bin[:WIDTH] FIELD", &[b"bin"]),
-    declaration(b"width 100). ", b"strbin[:COUNT] FIELD", &[b"strbin"]),
+    declaration(b"", b"strbin[:COUNT] FIELD", &[b"strbin"]),
     declaration(b" ", b"check [N lines] [N fields]", &[b"check"]),
     declaration(b"", b"transpose exchanges", &[b"transpose"]),
     declaration(b"", b"rmdup/dedup FIELD", &[b"rmdup", b"dedup"]),
     declaration(b" ", b"health inspects", &[b"health"]),
     declaration(b"", b"type FIELD integer|number|text", &[b"type"]),
-    declaration(
-        b"",
-        b"required FIELD rejects absent and empty values; nonmissing FIELD",
-        &[b"required", b"nonmissing"],
-    ),
-    declaration(
-        b"rule. Literal NA can pass required/text checks. ",
-        b"width N",
-        &[b"width"],
-    ),
-    declaration(b"findings. ", b"validate requires", &[b"validate"]),
+    declaration(b"", b"required FIELD", &[b"required"]),
+    declaration(b"", b"nonmissing FIELD", &[b"nonmissing"]),
+    declaration(b"", b"width N", &[b"width"]),
+    declaration(b"", b"validate requires", &[b"validate"]),
     declaration(b"", b"examples N", &[b"examples"]),
     declaration(b"", b"tsv selects", &[b"tsv"]),
     declaration(b"", b"base64 FIELD", &[b"base64"]),

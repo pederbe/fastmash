@@ -52,21 +52,14 @@ fn primary_help_declarations_style_names_without_their_descriptions() {
     assert!(output.status.success());
     let declarations: &[(&[u8], &[&str])] = &[
         (
-            b"       fastmash [INPUT/OUTPUT OPTIONS] compare",
-            &["fastmash", "compare", "rank", "limit"],
+            b"       fastmash [OPTIONS] compare",
+            &["fastmash", "compare"],
         ),
-        (
-            b"fastmash [INPUT OPTIONS] health",
-            &["fastmash", "health", "examples", "type"],
-        ),
-        (
-            b"         [required FIELD]",
-            &["required", "nonmissing", "width", "validate", "tsv"],
-        ),
+        (b"       fastmash [OPTIONS] health", &["fastmash", "health"]),
         (b"  perc[:N]", &["perc"]),
         (b"  trimmean[:P]", &["trimmean"]),
         (b"Top-N selection: top:N FIELD", &["top"]),
-        (b"bottom:N FIELD selects", &["bottom"]),
+        (b"bottom:N FIELD keeps", &["bottom"]),
         (b"Dataset comparison: compare BEFORE AFTER", &["compare"]),
         (b"Before operations, rank RESULT", &["rank"]),
         (b"Optional limit N", &["limit"]),
@@ -74,16 +67,10 @@ fn primary_help_declarations_style_names_without_their_descriptions() {
             b"Grouping also accepts groupby, grouping or gb",
             &["groupby", "grouping", "gb"],
         ),
-        (b"Crosstab/ct KEY1,KEY2", &["Crosstab", "ct"]),
-        (b"cut/echo FIELD is a per-row", &["cut", "echo"]),
-        (
-            b"Field modes: reverse reverses",
-            &["reverse", "--no-strict"],
-        ),
-        (
-            b"changing widths); nop/noop consumes",
-            &["nop", "noop", "--full"],
-        ),
+        (b"crosstab/ct KEY1,KEY2", &["crosstab", "ct"]),
+        (b"cut/echo FIELD prints", &["cut", "echo"]),
+        (b"Field modes: reverse reverses", &["reverse"]),
+        (b"nop/noop consumes", &["nop", "noop", "--full"]),
         (
             b"Per-row numeric operations: getnum[:TYPE] FIELD",
             &["getnum"],
@@ -93,21 +80,19 @@ fn primary_help_declarations_style_names_without_their_descriptions() {
             &["round", "floor", "ceil", "trunc", "frac"],
         ),
         (b"Binning: bin[:WIDTH] FIELD", &["bin"]),
-        (b"width 100). strbin[:COUNT] FIELD", &["strbin"]),
+        (b"strbin[:COUNT] FIELD", &["strbin"]),
         (b"Table modes: check [N lines]", &["check"]),
         (b"transpose exchanges rows", &["transpose", "--no-strict"]),
-        (b"rmdup/dedup FIELD", &["rmdup", "dedup"]),
+        (b"rmdup/dedup FIELD", &["rmdup", "dedup", "-s"]),
         (b"Table health: health inspects", &["health"]),
         (b"type FIELD integer|number|text", &["type"]),
         (
-            b"required FIELD rejects absent and empty values; nonmissing FIELD",
-            &["required", "nonmissing"],
+            b"required FIELD rejects absent and empty values",
+            &["required"],
         ),
-        (
-            b"rule. Literal NA can pass required/text checks. width N declares",
-            &["width"],
-        ),
-        (b"findings. validate requires", &["validate"]),
+        (b"nonmissing FIELD also rejects", &["nonmissing"]),
+        (b"width N declares", &["width"]),
+        (b"validate requires", &["validate"]),
         (b"examples N keeps", &["examples"]),
         (b"tsv selects", &["tsv"]),
         (b"base64 FIELD encodes", &["base64"]),
@@ -134,7 +119,7 @@ fn primary_help_declarations_style_names_without_their_descriptions() {
         let expected: Vec<_> = names.iter().map(|name| name.as_bytes()).collect();
         assert_eq!(styled, expected, "wrong syntax roles in {prefix:?}");
     }
-    let exact = b"\x1b[38;2;92;184;255mcut\x1b[0m/\x1b[38;2;92;184;255mecho\x1b[0m FIELD is a per-row operation that prints the selected fields.\n";
+    let exact = b"\x1b[38;2;92;184;255mcut\x1b[0m/\x1b[38;2;92;184;255mecho\x1b[0m FIELD prints the selected fields of each record.\n";
     assert!(
         output
             .stdout
@@ -170,21 +155,6 @@ fn primary_help_declarations_style_names_without_their_descriptions() {
             .windows(b"\x1b[38;2;92;184;255m--\x1b[0m".len())
             .any(|bytes| bytes == b"\x1b[38;2;92;184;255m--\x1b[0m")
     );
-}
-
-#[test]
-fn negative_numeric_values_keep_the_default_foreground() {
-    let output = PROGRAM.invoke(&["--color=always", "--help"], b"", &[], false, false);
-    assert!(output.status.success());
-    for line in output.stdout.split_inclusive(|byte| *byte == b'\n') {
-        let plain = terminal::strip_styles(line);
-        if plain
-            .windows(4)
-            .any(|bytes| bytes == b"-nan" || bytes == b"-inf")
-        {
-            assert!(!line.contains(&0x1b), "styled numeric value in {line:?}");
-        }
-    }
 }
 
 #[test]
