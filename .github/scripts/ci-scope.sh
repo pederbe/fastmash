@@ -120,7 +120,11 @@ if base:
             configuration = True
         elif any(path.startswith(str(pathlib.PurePosixPath(m).parent) + "/") for m in after):
             continue
-        elif path in {"scripts/build_site.sh", "scripts/build_site.py", "scripts/test_build_site.py"}:
+        elif path in {
+            "scripts/build_site.sh", "scripts/build_site.py", "scripts/test_build_site.py",
+            "site/index.html", "site/landing.js", "site/landing.css", "site/landing-noscript.css",
+            "scripts/test_landing_page.mjs",
+        }:
             continue  # Website checks cover these files without rebuilding the application.
         elif path.startswith("scripts/demo/") or path in {
             "site/demo.gif", "site/demo.mp4", "site/demo.webm", "site/demo-poster.png", "site/og.png",

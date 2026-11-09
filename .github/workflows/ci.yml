@@ -34,7 +34,7 @@ jobs:
       locale: ${{ steps.paths.outputs.locale }}
       packages_repository: ${{ steps.paths.outputs.packages_repository }}
       binstall: ${{ steps.paths.outputs.binstall }}
-      demo: ${{ steps.paths.outputs.demo }}
+      browser: ${{ steps.paths.outputs.browser }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -54,7 +54,15 @@ jobs:
         id: paths
         with:
           filters: |
-            demo:
+            browser:
+              - 'site/index.html'
+              - 'site/landing.js'
+              - 'site/landing.css'
+              - 'site/landing-noscript.css'
+              - 'scripts/test_landing_page.mjs'
+              - 'scripts/build_site.sh'
+              - 'scripts/build_site.py'
+              - 'scripts/test_build_site.py'
               - 'scripts/demo/**'
               - 'site/demo.gif'
               - 'site/demo.mp4'
@@ -321,7 +329,7 @@ jobs:
     needs: changes
     uses: ./.github/workflows/docs.yml
     with:
-      demo: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.demo != 'false' }}
+      browser: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.browser != 'false' }}
 
   homebrew:
     needs: changes
