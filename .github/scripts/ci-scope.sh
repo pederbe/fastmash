@@ -120,16 +120,13 @@ if base:
             configuration = True
         elif any(path.startswith(str(pathlib.PurePosixPath(m).parent) + "/") for m in after):
             continue
-        elif path in {
+        elif path.startswith(("site/", "scripts/demo/")) or path in {
             "scripts/build_site.sh", "scripts/build_site.py", "scripts/test_build_site.py",
-            "site/index.html", "site/landing.js", "site/landing.css", "site/landing-noscript.css",
-            "scripts/test_landing_page.mjs",
+            "scripts/check_public_references.py", "scripts/test_check_public_references.py",
+            "scripts/benchmark_chart.py", "scripts/test_landing_page.mjs", "scripts/test_docs.mjs",
+            "package.json", "package-lock.json", "wrangler.jsonc",
         }:
-            continue  # Website checks cover these files without rebuilding the application.
-        elif path.startswith("scripts/demo/") or path in {
-            "site/demo.gif", "site/demo.mp4", "site/demo.webm", "site/demo-poster.png", "site/og.png",
-        }:
-            continue  # Website and demo rendering checks cover these inputs.
+            continue  # Website build, browser and rendering checks own these inputs.
         elif path.startswith(("tools/icu-exemplars/", "packaging/homebrew/")):
             continue  # Dedicated checks cover these inputs without application builds.
         else:

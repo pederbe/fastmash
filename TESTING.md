@@ -578,14 +578,17 @@ npm run test:docs
 Use mdBook 0.5.4, as pinned by `scripts/build_site.sh`. Rebuild the book before
 running the site builder again, since the builder transforms the generated HTML.
 
-Landing-page-only changes (`site/index.html`, `site/landing*.css`,
-`site/landing.js` and `scripts/test_landing_page.mjs`) run the website build,
-link checks, browser checks and demo preview rendering. Demo-only changes under
-`scripts/demo/` and its generated media in `site/` use the same focused checks.
-The preview checks all six milestone frames and the link preview image without
-encoding videos or replacing assets. They do not run the application, profiling
-or native installation suites. Changes that also affect application code retain
-those suites. Manual CI runs still select the full checks.
+Website-only changes use the website build, link checks, browser checks and
+preview rendering instead of the application, profiling or native installation
+suites. This includes `docs/**`, `site/**`, demo sources, maintained website
+scripts, npm manifests and `wrangler.jsonc`. Root Markdown files included in the
+book also select browser checks. These cover both the landing
+page and generated documentation. Rendering checks exercise the benchmark chart,
+the six demo milestones and link preview, while a Wrangler dry run validates the
+static-site configuration without uploading it. Checks do not replace assets.
+
+Mixed application changes, installation scripts and unrelated scripts retain
+application checks. Manual CI runs retain full coverage.
 
 ## Continuous integration
 
