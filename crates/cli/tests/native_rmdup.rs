@@ -333,7 +333,7 @@ fn duplicate_removal_preserves_the_quoted_csv_refusal() {
     assert!(output.stdout.is_empty());
     assert_eq!(
         output.stderr,
-        b"fastmash: CSV is supported only for aggregate and per-row operations\n"
+        b"fastmash: CSV is supported only for aggregate and per-row operations, Top-N selection and dataset comparison\n"
     );
 }
 

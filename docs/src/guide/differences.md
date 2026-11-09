@@ -155,7 +155,9 @@ invalid UTF-8 is therefore refused too.
 ## Diagnostics
 
 Error messages use the same wording as GNU datamash where it matters to
-scripts, but some messages differ, and they begin with the program name, `fastmash:`. A few
+scripts, but some messages differ, and they begin with the program name, `fastmash:`.
+Errors for Fastmash extensions include their own field-selection guidance,
+supported modes and examples of valid option syntax. A few
 failure paths also differ in detail: for example, a read error in input sorted
 with `-s` can give just "read error: Input/output error", where GNU datamash
 prints the system `sort`'s message and "read error (on close)". When standard

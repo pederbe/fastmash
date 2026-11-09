@@ -10,7 +10,9 @@ pub(super) struct ResultNames {
 
 impl ResultNames {
     pub(super) fn add(&mut self, argument: &[u8]) -> Result<(), Failure> {
-        let invalid = || failure(b"--result-name requires a positive INDEX:NAME\n".to_vec());
+        let invalid = || {
+            failure(b"--result-name requires INDEX:NAME, with INDEX starting at 1 and NAME nonempty\nhint: for example, --result-name=1:total\n".to_vec())
+        };
         let colon = argument
             .iter()
             .position(|&byte| byte == b':')
@@ -32,7 +34,7 @@ impl ResultNames {
             .entries
             .binary_search_by_key(&index, |&(index, _)| index)
             .map_or_else(Ok, |_| {
-                Err(failure(b"--result-name target is repeated\n".to_vec()))
+                Err(failure(b"--result-name repeats a result index\n".to_vec()))
             })?;
         let mut bytes = Vec::new();
         reserve(&mut bytes, name.len())?;
@@ -63,7 +65,7 @@ impl ResultNames {
         }
         if !matches!(mode, Mode::Aggregate | Mode::Line) {
             return Err(unsupported(
-                "--result-name is supported only for aggregate and per-row operations",
+                "--result-name is supported only for aggregate and per-row operations and dataset comparison",
             ));
         }
         if !explicit_header_out {
@@ -77,7 +79,7 @@ impl ResultNames {
             .is_some_and(|&(index, _)| index >= results)
         {
             return Err(failure(
-                b"--result-name target exceeds the number of results\n".to_vec(),
+                b"--result-name index exceeds the number of calculated results\nhint: count results from 1, excluding grouping keys and copied fields\n".to_vec(),
             ));
         }
         if !csv

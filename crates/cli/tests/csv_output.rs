@@ -135,7 +135,7 @@ fn csv_options_reject_conflicts_and_exclusions_before_input_in_either_order() {
             before_input(
                 &arguments,
                 77,
-                b"CSV is supported only for aggregate and per-row operations\n",
+                b"CSV is supported only for aggregate and per-row operations, Top-N selection and dataset comparison\n",
             );
         }
     }
@@ -170,7 +170,12 @@ fn csv_options_reject_conflicts_and_exclusions_before_input_in_either_order() {
         before_input(&[flag, "count", "1"], 1, diagnostic.as_bytes());
     }
     for flag in ["--csv-in", "--csv-out", "--csv"] {
-        let diagnostic = format!("health does not support calculation option '{flag}'\n");
+        let hint = if flag == "--csv-out" {
+            "use health tsv for a tab-separated report"
+        } else {
+            "health reads delimited text. Export quoted CSV as delimited text before inspection"
+        };
+        let diagnostic = format!("health does not support option '{flag}'\nhint: {hint}\n");
         before_input(&[flag, "health"], 1, diagnostic.as_bytes());
         before_input(&["health", "-H", flag], 1, diagnostic.as_bytes());
     }
@@ -200,19 +205,19 @@ fn csv_names_preserve_argument_bytes_and_retain_mapping_errors() {
     for (flags, diagnostic) in [
         (
             &["--result-name=2:x"][..],
-            b"--result-name target exceeds the number of results\n".as_slice(),
+            b"--result-name index exceeds the number of calculated results\nhint: count results from 1, excluding grouping keys and copied fields\n".as_slice(),
         ),
         (
             &["--result-name=1:x", "--result-name=01:y"][..],
-            b"--result-name target is repeated\n".as_slice(),
+            b"--result-name repeats a result index\n".as_slice(),
         ),
         (
             &["--result-name=0:x"][..],
-            b"--result-name requires a positive INDEX:NAME\n".as_slice(),
+            b"--result-name requires INDEX:NAME, with INDEX starting at 1 and NAME nonempty\nhint: for example, --result-name=1:total\n".as_slice(),
         ),
         (
             &["--result-name=1:"][..],
-            b"--result-name requires a positive INDEX:NAME\n".as_slice(),
+            b"--result-name requires INDEX:NAME, with INDEX starting at 1 and NAME nonempty\nhint: for example, --result-name=1:total\n".as_slice(),
         ),
     ] {
         let mut args = vec!["--csv-out", "--header-out"];

@@ -255,7 +255,7 @@ fn match_long(token: &[u8], spelling: &[u8], name: &[u8]) -> Result<&'static Des
     Err(diagnostic(&[&message], name))
 }
 
-fn unavailable(bytes: &[u8]) -> Failure {
+fn unavailable_sort_command(bytes: &[u8]) -> Failure {
     let escaped: String = bytes
         .iter()
         .take(80)
@@ -264,7 +264,7 @@ fn unavailable(bytes: &[u8]) -> Failure {
         .collect();
     unsupported_hint(
         &format!("unsupported option '{escaped}'"),
-        "use --help to see supported options.",
+        "remove --sort-cmd for built-in sorting, or sort input separately and omit -s",
     )
 }
 fn seed(bytes: &[u8]) -> Result<u32, Failure> {
@@ -558,7 +558,7 @@ fn parse_options(
                         false
                     };
                     if !extended_mode {
-                        return Err(unavailable(bytes));
+                        return Err(unavailable_sort_command(bytes));
                     }
                     options.controls.record_unavailable(option.long);
                 }

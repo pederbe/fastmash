@@ -393,7 +393,7 @@ fn ordered_rank(rank: numerics::Value, field: u64, ordinal: u64) -> Result<(), F
     ) {
         return Err(failure(
             format!(
-                "invalid input: field {field} in line {ordinal} has unordered NaN ranking value\n"
+                "invalid input: field {field} in line {ordinal} is NaN and cannot be ranked\nhint: correct the ranking value. --narm skips only plain NA, N/A and NaN tokens\n"
             )
             .into_bytes(),
         ));
