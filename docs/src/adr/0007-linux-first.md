@@ -1,14 +1,13 @@
 # 0007: Linux first
 
-Status: accepted.
+Status: superseded by [ADR 0011: Native release delivery](0011-native-release-delivery.md), which published macOS support in 0.2.0.
 
-Fastmash supports Linux with glibc, and Windows through WSL2. Portable
-arithmetic already makes results independent of the platform, but process
-supervision, temporary files and signal handling are Linux-specific.
+The initial release supported Linux with glibc and Windows through WSL2.
+Although software arithmetic was already portable, process supervision,
+temporary storage and signal handling used Linux-specific interfaces.
 
-Support is kept to what can be tested and maintained with the hardware and
-continuous integration available to the project: current desktop and laptop
-Linux systems, one long-term-support Linux baseline for release binaries, and
-hosted CI. macOS is a later target, to be added when it can be
-built and tested on the same terms. Windows users run the Linux version through
-WSL2; native Windows is outside the current product scope.
+Limiting the first release to Linux allowed native command and installation
+checks against a defined compatibility baseline. Cross-compiling alone would
+not establish runtime support on another platform. Native macOS support followed
+through [0010](0010-native-apple-silicon.md) and 0011. Native Windows remains
+outside the product scope.

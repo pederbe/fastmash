@@ -2,9 +2,10 @@
 
 **Fast command-line statistics for delimited text.**
 
-Fastmash summarizes, groups and reshapes delimited text and quoted CSV. It
+Fastmash summarizes delimited text and quoted CSV, with grouping and statistics
+for each category. It also reshapes ordinary delimited text. It
 accepts the command language of [GNU datamash](https://www.gnu.org/software/datamash/),
-so if you already use `datamash`, you already know how to use Fastmash.
+so existing datamash workflows can move over with few or no changes.
 
 It also reads quoted CSV directly, gives your result columns stable names,
 calculates weighted means and selects the highest or lowest complete records.
@@ -19,9 +20,12 @@ east	4
 west	6
 west	7
 $ fastmash -H -s -g site count reading median reading < readings.tsv
-GroupBy(site)	count(reading)	median(reading)
-east	1	4
-west	3	6
+Grouped summary
+────────────────────────────────
+  site  count(reading)  median(reading)
+  east               1                4
+  west               3                6
+✔ Completed
 ```
 
 Install it with one command, or see [other ways](install.md):
@@ -45,16 +49,16 @@ job are slower on native Linux.
 
 | Feature | GNU datamash 1.9 | Fastmash |
 | --- | --- | --- |
-| Results | Depend on the CPU and the C math library | **Identical on every machine**: all arithmetic in software |
-| Locales | Need locale data installed; silently fall back to `C` without it | **Built in**: numbers in 318 locales, sorting in 194 |
+| Results | Depend on the CPU and the C math library | **Repeatable across supported machines** with the same version, input and settings |
+| Locales | Need locale data installed. Silently fall back to `C` without it | **Built in**: numbers in 318 locales, sorting in 194 |
 | `perc:100` | Can read past the end of the values | **Returns the largest value** |
 | `rmdup` on several key fields | Crashes on an assertion | **A clear refusal** |
 | Malformed parameters such as `strbin:2.0` | Misleading errors or undefined behavior | **An accurate error message** |
 | `crosstab` labels over 511 bytes | Truncated | **Kept in full** |
 
-Everything else works the same: over 70 operations and modes, the same
-options, field selectors, grouping, headers and output. For most scripts,
-switching means changing one word.
+Fastmash supports over 70 operations and modes with familiar field selectors,
+grouping and headers. Most scripts can switch by changing one word. Check the
+documented differences when migrating a workflow.
 [Migrating from datamash](guide/migrating.md) ·
 [All differences](guide/differences.md)
 

@@ -39,7 +39,7 @@ For operations that transform each record instead, see
 | `harmmean` | Harmonic mean |
 | `ms` | Mean of the squared values |
 | `rms` | Root mean square |
-| `trimmean[:P]` | Mean after removing the fraction `P` of values from each end (default 0; `0.5` gives the median) |
+| `trimmean[:P]` | Mean after removing the fraction `P` of values from each end (default 0, with `0.5` giving the median) |
 | `wmean VALUE:WEIGHT` | Weighted mean, with finite nonnegative contribution weights |
 
 `wmean` takes one value/weight pair per result, for example `wmean price:units`
@@ -93,7 +93,11 @@ These take a pair of fields, `LEFT:RIGHT`:
 
 ```console
 $ printf '1\t2\n2\t4\n3\t7\n' | fastmash scov 1:2 spearson 1:2
-2.5	0.99339926779878
+Summary
+────────────────────────────────
+  scov(field-1,field-2)  spearson(field-1,field-2)
+                    2.5           0.99339926779878
+✔ Completed
 ```
 
 `spearson` is the *sample* Pearson coefficient, not Spearman's rank correlation.
@@ -103,10 +107,10 @@ $ printf '1\t2\n2\t4\n3\t7\n' | fastmash scov 1:2 spearson 1:2
 - `jarque` and `dpo` keep GNU datamash's formulas, including its tail
   cancellation: very small p-values can print as `0`.
 - Sample statistics need enough values: `svar` and `sstdev` give `nan` for a
-  single value; `sskew` needs at least three and `skurt` at least four.
+  single value. `sskew` needs at least three and `skurt` at least four.
 - When every value in a group is missing (with `--narm`), `count` and `sum`
-  give `0`; `mean`, `median` and most statistics give `nan`; `min` and `max`
-  give `-inf` and `inf`; `first` and `last` give `N/A`.
+  give `0`. `mean`, `median` and most statistics give `nan`. `min` and `max`
+  give `-inf` and `inf`. `first` and `last` give `N/A`.
 - An empty input produces no output line.
 
 ## Memory use

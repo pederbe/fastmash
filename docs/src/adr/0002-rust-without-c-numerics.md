@@ -1,13 +1,12 @@
-# 0002: Write everything in Rust, including the numerics
+# 0002: Rust for the program and numerical libraries
 
 Status: accepted.
 
-Fastmash is written entirely in Rust. The alternative was to keep the
-numerical kernels in C, using the C library's `long double` functions, which
-would match GNU datamash's arithmetic most directly. Fastmash implements them
-in Rust instead, using C only as a comparison baseline during development, so
-that the most delicate code stays within Rust's safety checks and the project
-stays a single-language codebase.
+Fastmash's executable and numerical libraries are written in Rust. Keeping the
+numerical kernels in C with the host's `long double` functions would match GNU
+datamash's arithmetic more directly. Implementing them in Rust keeps the
+numerical code within Rust's safety checks and avoids a second implementation
+language in the product.
 
 **Consequence:** Fastmash implements its own 80-bit arithmetic, parsing,
 formatting and transcendental functions, verified against independent

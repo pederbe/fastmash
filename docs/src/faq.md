@@ -15,23 +15,20 @@ Try it on your own data, and tell us about jobs where it is slower.
 
 ## Why does Fastmash refuse my locale?
 
-Fastmash has the number rules of every glibc locale built in, `@` modifier
-locales included, but sorts only in the language locales where its Unicode
-collation was checked to order letters and digits as glibc does (194 of them,
-such as `fr_FR`, `es_ES` and `pl_PL`); punctuation and symbols follow glibc's
-own table there, with a few exceptions, such as some keys with punctuation
-next to digits (see [Differences](guide/differences.md)). In other locales, such as `cs_CZ` or `nb_NO`, it refuses to
-sort. It refuses numbers only where it cannot write a locale's separators:
-`ps_AF`, whose decimal separator is not one byte, and a character set other
-than UTF-8 when the thousands separator is not ASCII (such as `fr_FR` in
-Latin-1). A name glibc has no locale for behaves as `C`, as in GNU datamash.
-Set `LC_COLLATE=C.UTF-8` (or `LC_ALL=C.UTF-8`) for byte ordering.
+Some locales use sorting rules or numeric separators Fastmash does not support.
+Set `LC_ALL=C.UTF-8` to use decimal points and byte ordering:
+
+```sh
+LC_ALL=C.UTF-8 fastmash -s -g 1 sum 2 < data.tsv
+```
+
+If you need language-specific ordering or decimal commas, see
+[Locales](guide/output.md#locales) for supported settings and limitations.
 
 ## Can it read CSV files?
 
 Yes. `--csv-in` reads strict quoted CSV, `--csv-out` encodes output fields, and
-`--csv` selects both. Quoted fields can contain commas, quotes and line breaks;
-format switches do not infer headers. Aggregates, per-row operations, Top-N
+`--csv` selects both. Quoted fields can contain commas, quotes and line breaks. Format switches do not infer headers. Aggregates, per-row operations, Top-N
 selection and dataset comparison support CSV, including their supported grouped
 workflows. Table health and legacy table/field modes remain ordinary-text only.
 `-t,` still means literal comma splitting, as in GNU datamash. See
@@ -50,15 +47,13 @@ for scripts. See [Table health reports](guide/table-health.md).
 Yes. With `-H`, named fields bind independently to each input header.
 `fastmash -H -g category compare before.tsv after.tsv sum revenue` reports each
 key's before, after, signed difference and percentage, including added and
-removed keys. Keys consolidate across each whole dataset; they need not be
+removed keys. Keys consolidate across each whole dataset. They need not be
 adjacent. See [Dataset comparison](guide/dataset-comparison.md).
 
-## Will terminal color change data in a pipeline?
+## Can I use Fastmash in pipelines?
 
-No. Only help, the program prefix on failures and readable health reports use
-color. Calculation results, CSV, health TSV and version output remain plain even
-with `--color=always`. Styling defaults to automatic terminal detection;
-`--no-color` disables it. See [Terminal color](guide/terminal-color.md).
+Yes. Fastmash reads standard input and writes results for the next program.
+Results written to a file or another program keep their plain data format.
 
 ## Does sorting need another program?
 
@@ -74,8 +69,9 @@ from status 1, which means the command or the input is wrong. See
 ## Why do results sometimes differ from GNU datamash in the last digit?
 
 Fastmash computes with the same 80-bit precision, but in software, including
-its logarithms and exponentials. Its results are the same on
-every machine; GNU datamash's depend on the hardware and C library. See
+its logarithms and exponentials. The same Fastmash version, input and settings
+give the same numerical results on every supported machine. GNU datamash's
+results depend on the hardware and C library. See
 [Portable results](guide/output.md#portable-results).
 
 ## Does it work on macOS or Windows?

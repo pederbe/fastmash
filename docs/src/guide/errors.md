@@ -22,9 +22,6 @@ fastmash: invalid numeric value in line 3 field 2: 'n/a'
 ```
 
 Some are followed by a `hint:` line suggesting a fix.
-In a terminal, a red `✗` mark precedes the red program prefix. The message body keeps the
-default foreground. [Color controls](terminal-color.md) change presentation,
-never the exit status or calculated values.
 
 ## Always check the exit status
 

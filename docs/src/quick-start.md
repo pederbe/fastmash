@@ -5,7 +5,7 @@ This tour takes about five minutes. It assumes Fastmash is
 paste it straight into a terminal.
 
 > **Locale.** The examples use decimal points. If your shell uses a locale with
-> decimal commas or one Fastmash doesn't know (see
+> decimal commas or an unsupported locale (see
 > [Locales](guide/output.md#locales)), run `export LC_ALL=C.UTF-8` first.
 
 ## Your first summary
@@ -15,11 +15,15 @@ or more **operations** to selected fields:
 
 ```console
 $ printf '1\t2\n3\t4\n' | fastmash sum 1 mean 2
-4	3
+Summary
+────────────────────────────────
+  sum(field-1)  mean(field-2)
+             4              3
+✔ Completed
 ```
 
-`sum 1` adds up field 1; `mean 2` averages field 2. Results are printed in the
-order you ask for them, separated by tabs.
+`sum 1` adds up field 1 and `mean 2` averages field 2. The summary shows both
+results in the order you requested.
 
 ## Several fields at once
 
@@ -27,7 +31,11 @@ A field list or range applies an operation to each field:
 
 ```console
 $ printf '1\t2\t3\n4\t5\t6\n' | fastmash sum 1-3
-5	7	9
+Summary
+────────────────────────────────
+  sum(field-1)  sum(field-2)  sum(field-3)
+             5             7             9
+✔ Completed
 ```
 
 ## Grouping
@@ -36,8 +44,12 @@ $ printf '1\t2\t3\n4\t5\t6\n' | fastmash sum 1-3
 
 ```console
 $ printf 'A\t1\nA\t2\nB\t4\n' | fastmash -g 1 sum 2 count 2
-A	3	2
-B	4	1
+Grouped summary
+────────────────────────────────
+  field-1  sum(field-2)  count(field-2)
+        A             3               2
+        B             4               1
+✔ Completed
 ```
 
 Groups are made from **adjacent** records with the same key. If equal keys
@@ -45,8 +57,12 @@ can be scattered through the input, add `-s` to sort first:
 
 ```console
 $ printf 'b\t2\na\t1\na\t3\n' | fastmash -s -g 1 sum 2
-a	4
-b	2
+Grouped summary
+────────────────────────────────
+  field-1  sum(field-2)
+        a             4
+        b             2
+✔ Completed
 ```
 
 ## Headers and named fields
@@ -55,12 +71,15 @@ With a header line, use `-H` to name fields and label the output:
 
 ```console
 $ printf 'site\treading\nwest\t2\neast\t4\nwest\t6\n' | fastmash -H -s -g site sum reading mean reading
-GroupBy(site)	sum(reading)	mean(reading)
-east	4	4
-west	8	4
+Grouped summary
+────────────────────────────────
+  site  sum(reading)  mean(reading)
+  east             4              4
+  west             8              4
+✔ Completed
 ```
 
-`--header-in` reads the names without printing an output header.
+`--header-in` reads field names. `-H` also uses them in result labels.
 
 ## Other separators
 
@@ -69,9 +88,17 @@ and tabs:
 
 ```console
 $ printf '1,2\n3,4\n' | fastmash -t, sum 1-2
-4,6
+Summary
+────────────────────────────────
+  sum(field-1)  sum(field-2)
+             4             6
+✔ Completed
 $ printf '1  2\n3   4\n' | fastmash -W sum 2
-6
+Summary
+────────────────────────────────
+  sum(field-2)
+             6
+✔ Completed
 ```
 
 `-t,` splits on every comma, preserving datamash's literal separator behavior.
@@ -92,7 +119,11 @@ describes the supported modes and quoting rules.
 
 ```console
 $ printf '2\n4\n4\n4\n5\n5\n7\n9\n' | fastmash median 1 q1 1 q3 1 pstdev 1 perc:90 1
-4.5	4	5.5	2	7.6
+Summary
+────────────────────────────────
+  median(field-1)  q1(field-1)  q3(field-1)  pstdev(field-1)  perc:90(field-1)
+              4.5            4          5.5                2               7.6
+✔ Completed
 ```
 
 See [Operations](guide/operations.md) for the full list: means, variances,
@@ -104,10 +135,14 @@ Give each value a contribution weight with `wmean VALUE:WEIGHT`:
 
 ```console
 $ printf '10\t1\n20\t3\n' | fastmash wmean 1:2
-17.5
+Summary
+────────────────────────────────
+  wmean(field-1,field-2)
+                    17.5
+✔ Completed
 ```
 
-Weights must be finite and nonnegative; a nonempty calculation needs positive
+Weights must be finite and nonnegative. A nonempty calculation needs positive
 retained weight. See [Weighted mean](guide/weighted-mean.md).
 
 ## Keep the highest records
@@ -116,8 +151,12 @@ Top-N selection retains complete records and keeps earlier input records on ties
 
 ```console
 $ printf 'A\t8\nB\t10\nC\t10\nD\t9\n' | fastmash top:2 2
-B	10
-C	10
+Top-N selection
+────────────────────────────────
+  field-1  field-2
+        B       10
+        C       10
+✔ Completed
 ```
 
 Use `bottom:N` for the lowest records, and `-s -g` for a cutoff in each group.
@@ -129,7 +168,11 @@ Some operations transform each record instead of summarizing:
 
 ```console
 $ printf '3.14159\thello\n' | fastmash round 1 md5 2
-3	5d41402abc4b2a76b9719d911017c592
+Per-row results
+────────────────────────────────
+  round(field-1)  md5(field-2)
+               3  5d41402abc4b2a76b9719d911017c592
+✔ Completed
 ```
 
 ## Missing values
@@ -138,7 +181,11 @@ $ printf '3.14159\thello\n' | fastmash round 1 md5 2
 
 ```console
 $ printf '1\nNA\n3\n' | fastmash --narm mean 1
-2
+Summary
+────────────────────────────────
+  mean(field-1)
+              2
+✔ Completed
 ```
 
 ## Next steps

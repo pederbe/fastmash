@@ -14,7 +14,11 @@ command.
 
 ```console
 $ printf 'a\tb\tc\n' | fastmash cut 3,1
-c	a
+Per-row results
+────────────────────────────────
+  cut(field-3)  cut(field-1)
+             c             a
+✔ Completed
 ```
 
 ### Numbers
@@ -35,10 +39,18 @@ number gives `0`.
 
 ```console
 $ printf 'item-42.5kg\n' | fastmash getnum 1
-42.5
+Per-row results
+────────────────────────────────
+  getnum(field-1)
+             42.5
+✔ Completed
 $ printf '17\n183\n' | fastmash bin:50 1
-0
-150
+Per-row results
+────────────────────────────────
+  bin(field-1)
+             0
+           150
+✔ Completed
 ```
 
 ### Text
@@ -52,14 +64,14 @@ $ printf '17\n183\n' | fastmash bin:50 1
 
 MD5 and SHA-1 are provided for compatibility and checksums, not for security.
 
-Path operations work on the text alone; they don't touch the filesystem.
+Path operations work on the text alone. They don't touch the filesystem.
 
 ## Field modes
 
 | Mode | Effect |
 | --- | --- |
 | `reverse` | Reverse the order of fields in each record |
-| `noop`, `nop` | Read the input and print nothing (useful for validation); with `--full`, print each record |
+| `noop`, `nop` | Read the input and print nothing (useful for validation). With `--full`, print each record |
 
 ```console
 $ printf 'a\tb\tc\n' | fastmash reverse
@@ -93,7 +105,7 @@ consistent, or reports the first inconsistent record and exits with status 1.
 
 [Table health reports](table-health.md) inspect the complete accepted input,
 with readable or schema-version-1 TSV output and bounded examples. Inferred
-findings are advisory; `validate` fails only for violations of supplied type,
+findings are advisory. `validate` fails only for violations of supplied type,
 presence or width rules. Health accepts ordinary text input, not quoted CSV.
 
 ## Selecting complete records

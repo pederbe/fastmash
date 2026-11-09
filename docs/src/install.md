@@ -91,12 +91,6 @@ Downloads the latest release archive for your system, checks its checksum and
 installs it into `~/.local/bin`. Add that directory to your `PATH` if needed.
 Run the same command again to update.
 
-When upgrading from a two-executable Linux release, the installer removes the
-old Sort supervisor only if its checksum matches the ownership receipt from
-an earlier installation. An older installation without that receipt, or a
-changed helper, stays in place. After upgrading, you may remove that unused
-`fastmash-sort-supervisor` yourself if it belongs to this installation.
-
 Set `FASTMASH_INSTALL_DIR` to choose another installation directory, or
 `FASTMASH_VERSION` to choose a release.
 
@@ -132,16 +126,11 @@ sha256sum -c $name.tar.gz.sha256
 tar -xzf $name.tar.gz
 mkdir -p ~/.local/bin
 cp "$name/fastmash" ~/.local/bin/
-if [ -f "$name/fastmash-sort-supervisor" ]; then
-  cp "$name/fastmash-sort-supervisor" ~/.local/bin/
-fi
 EOF
 ```
 
-Replace `@VERSION@` with the version you want. Existing published Linux archives
-may also contain `fastmash-sort-supervisor`. When present, keep that helper
-beside `fastmash` from the same release. Archives built with native sorting
-everywhere contain only `fastmash`.
+Replace `@VERSION@` with the version you want. For releases before 0.4.0, see
+[older Linux installations](#older-linux-installations).
 
 ### macOS archive
 
@@ -188,9 +177,6 @@ On Linux or WSL2, run:
 cargo binstall fastmash
 ```
 
-Existing published Linux releases may also install their Sort supervisor.
-Releases containing the native sorting migration install only `fastmash`.
-
 On macOS 15 or later, select its single executable:
 
 ```sh
@@ -220,7 +206,7 @@ cargo install --locked --bin fastmash fastmash
 printf '1\t2\n3\t4\n' | fastmash sum 1 mean 2
 ```
 
-This prints `4` and `3`, separated by a tab. Next: the
+The summary shows `4` for the sum and `3` for the mean. Next: the
 [quick start](quick-start.md).
 
 ## On Windows
@@ -237,8 +223,6 @@ For the quick installer or a downloaded archive:
 
 ```sh
 rm ~/.local/bin/fastmash
-# If installed by an earlier Linux release, also remove its helper:
-rm ~/.local/bin/fastmash-sort-supervisor
 ```
 
 If you installed with Cargo or cargo-binstall:
@@ -248,6 +232,22 @@ cargo uninstall fastmash
 ```
 
 Fastmash keeps no configuration files, caches or background services.
+
+## Older Linux installations
+
+Releases before 0.4.0 used a second executable, `fastmash-sort-supervisor`.
+When installing one of those archives by hand, copy its helper beside
+`fastmash` from the same release.
+
+The quick installer removes an old helper during an upgrade when its checksum
+matches the earlier installation's ownership receipt. An installation without
+a receipt, or with a changed helper, leaves that file in place. Current releases
+do not use it. You can remove it if it belongs to the installation you upgraded
+or uninstalled:
+
+```sh
+rm ~/.local/bin/fastmash-sort-supervisor
+```
 
 See [System requirements](requirements.md) for building from source and
 [verifying release archives](requirements.md#verifying-a-release-archive).

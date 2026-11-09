@@ -22,16 +22,19 @@
 
 ---
 
-Fastmash summarizes, groups and reshapes tab-separated text and quoted CSV from
-the command line. It accepts the command language of
+Fastmash summarizes and groups delimited text and quoted CSV from the command
+line. It also reshapes ordinary delimited text. It accepts the command language of
 [GNU datamash](https://www.gnu.org/software/datamash/), so most existing scripts can
 switch by changing one word.
 
 ```console
 $ printf 'site\treading\nwest\t2\neast\t4\nwest\t6\n' | fastmash -H -s -g site sum reading mean reading
-GroupBy(site)	sum(reading)	mean(reading)
-east	4	4
-west	8	4
+Grouped summary
+────────────────────────────────
+  site  sum(reading)  mean(reading)
+  east             4              4
+  west             8              4
+✔ Completed
 ```
 
 ## Why Fastmash

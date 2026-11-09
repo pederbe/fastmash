@@ -1,21 +1,21 @@
 # Benchmarks
 
-Performance-affecting changes are compared with the previous accepted build
-before merging. Published benchmarks identify the measured version and include
-both wins and losses. Routine version bumps do not create new benchmark claims.
+These measurements compare Fastmash 0.1.0 with GNU datamash 1.9 on two Linux
+systems. They include both faster and slower jobs. Results apply to the named
+version and measurement conditions.
 
 ## Fastmash 0.1.0
 
 {{#include core-jobs.svg}}
 
-Mean of the two sessions' median elapsed times, in milliseconds; lower is
+Mean of the two sessions' median elapsed times, in milliseconds. Lower is
 better. Measured with the
 0.1.0 release binaries themselves (`fastmash` sha256 `1f1fec94…`), the
 same bytes retained in that release. The chart is generated from
 [core-jobs.tsv](core-jobs.tsv) by `scripts/benchmark_chart.py`.
 
 The animated demo replays the Intel laptop's RefGene quartile job below.
-Playback is slowed 20 times so that both runs are visible; its clocks show
+Playback is slowed 20 times so that both runs are visible. Its clocks show
 the measured times.
 
 | Job | Data | Intel laptop, native Linux<br>GNU → Fastmash | AMD desktop, native Linux<br>GNU → Fastmash |
@@ -53,11 +53,9 @@ cell shows the two session medians in milliseconds:
 | Intel laptop | Many keys | 788.6 / 772.0 | 959.4 / 970.9 | 171–199 ms |
 | Intel laptop | Geometric mean, 200,000 distinct values | 37.3 / 37.5 | 44.7 / 44.9 | 7.4 ms |
 
-These individual costs are accepted for 0.1.0. The AMD spill medians reach
-1.83 times GNU's time on these invocations. Lower CPU work and charged peak
-memory in the spill measurements are separate observations; the elapsed
-verdicts remain regressions. The geometric mean keeps the existing numerical
-precision and range checks.
+The AMD spill medians reach 1.83 times GNU's time on these invocations.
+Lower CPU work and peak charged memory in the spill measurements are separate
+observations. They do not remove the elapsed-time slowdowns.
 
 Three further comparisons are inconclusive under the two-session rule:
 
@@ -67,17 +65,13 @@ Three further comparisons are inconclusive under the two-session rule:
 | Intel laptop | Dedicated disk spill | 580.7 / 961.9 | 714.8 / 832.3 |
 | Intel laptop | Larger disk spill | 1943.6 / 892.4 | 1088.4 / 1069.7 |
 
-These uncertain results are also accepted as named limitations. They establish
-neither a GNU competitiveness pass nor a win. All samples remain in the record,
-including an Intel dedicated-spill Fastmash run of 4.887 seconds. Session
-medians give no tail-latency guarantee or upper bound for other input sizes.
+These comparisons do not establish a win or consistent competitiveness with
+GNU datamash. An Intel dedicated-spill Fastmash run took 4.887 seconds. Session
+medians give no upper bound for individual runs or other input sizes.
 
-The decision retains the measured implementation: every predecessor elapsed
-and CPU guard passes, both hosts meet the workload-family and small-command
-rules, and all checked outputs match. The numbers concern the recorded
-warm-cache, disk-backed, 512 MiB command cgroup conditions on these two native
-Linux hosts. Untimed observations confirm actual spilling and correct output;
-they do not establish an I/O bottleneck.
+The measurements use warm-cache, disk-backed storage and a 512 MiB command
+cgroup limit on these two native Linux hosts. Untimed observations confirm
+actual spilling and correct output. They do not establish an I/O bottleneck.
 
 ## Run them yourself
 

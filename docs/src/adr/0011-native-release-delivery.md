@@ -1,56 +1,24 @@
 # 0011: Qualify and deliver the same native archive
 
-Status: accepted for 0.2.0 release delivery. Supersedes the development-only
-archive boundary in [ADR 0010: Native macOS](0010-native-apple-silicon.md).
-With the publication of 0.2.0, this also supersedes the Linux-only scope of
-[ADR 0007: Linux first](0007-linux-first.md).
+Status: accepted for archive reproducibility and installed delivery. Supersedes
+the development-only boundary in [0010](0010-native-apple-silicon.md) and the
+Linux-only platform scope in [0007](0007-linux-first.md).
 
-The Linux performance-manifest prerequisite and manual publication step are
-superseded by [ADR 0012](0012-release-delivery-and-performance.md). The native
-archive reproducibility and installed-delivery guarantees remain in force.
+Build the macOS executable twice in clean target trees within one hosted run.
+Require identical bytes, package one build, and test that same archive on each
+supported baseline before delivering it. This establishes reproducibility
+within the run, not identical future builds under different SDK images.
 
-The compiler pin is superseded by [ADR 0015](0015-stable-release-toolchain.md).
+Rebuilding for upload would sever the connection between tested and delivered
+bytes. Committing a future macOS checksum would assume that a later hosted SDK
+can recreate the same executable. Neither is needed when the tested archive
+can be retained. A development CI artifact also cannot establish that a public
+release is available.
 
-## Decision
-
-Build the macOS executable twice in separate clean target trees on
-macOS 15, using the pinned Rust compiler, remapped source paths and a macOS 15
-deployment target. Require identical executable bytes, then package one copy
-with target-specific notices, its executable checksum and build provenance.
-This proves reproducibility within that hosted build; it does not promise
-identical output from different future hosted SDK images.
-
-Freeze the resulting archive's SHA-256 as an output of that workflow run.
-Install those exact bytes outside the source checkout on macOS 15 and 26.
-Run the applicable installed Command contract, Numerical profile fixtures,
-Spill, cleanup, signal and both corpus input modes before accepting it.
-The release uses this archive directly instead of rebuilding it after testing.
-
-The Release workflow also requires Linux's existing committed qualified
-checksums and package checks. Only after both platforms pass does it attest
-the archives and Linux packages and prepare a draft release. Download the
-draft's macOS archive on both native versions, verify its release-workflow
-attestation and frozen hash, and repeat the installed checks. A failed delivery
-check leaves an unpublished draft for investigation. The maintainer publishes
-only after the complete workflow succeeds and the draft is reviewed.
-
-Keep public download links and release metadata tied to
-`site/release-version.txt`, which names the published release. Candidate source
-versions and platform documentation can advance without pointing users at
-unavailable downloads. Update that file and published platform claims only
-when the corresponding release is available.
-
-## Considered options
-
-- Committing a future macOS executable hash would require rebuilding on a
-  later hosted SDK image and assuming those bytes can be recreated. Reusing
-  the tested archive avoids that assumption. Linux retains its controlled
-  container build and committed qualification manifest.
-- Rebuilding the macOS archive for upload would break the binding between
-  native installation evidence and delivered bytes.
-- Treating a CI artifact as published support would give users a download
-  promise the latest release cannot yet meet.
-
-Intel macOS, earlier macOS, native Windows and Apple notarization remain
-outside this platform scope. Hosted GNU comparisons retain their measured
-conditions; Linux performance claims do not become macOS claims.
+Later decisions replace parts of the original procedure: [0012](0012-release-delivery-and-performance.md)
+separates performance acceptance and enables automatic publication,
+[0013](0013-reuse-tested-release-artifacts.md) removes duplicate installation
+checks and tag-stored Linux manifests, [0015](0015-stable-release-toolchain.md)
+selects stable Rust, and [0016](0016-release-plz.md) defines download-version
+authority. The current procedure is in the
+[release guide](https://github.com/pederbe/fastmash/blob/main/RELEASING.md).

@@ -5,10 +5,10 @@ builds and maintains it.
 
 The project started from a practical question: can a tool people use every day
 in data pipelines be made substantially faster, without asking them to change
-their commands, and without giving up correctness? Fastmash answers it with
-careful engineering: a Rust implementation of the whole GNU datamash command
-language, arithmetic that gives identical results on every machine, and
-performance claims backed by published measurements.
+their commands, and without giving up correctness? Fastmash combines familiar
+GNU datamash commands with Rust software arithmetic and published performance
+measurements. Numerical results repeat across supported machines for the same
+input, settings and Fastmash version.
 
 ## Acknowledgements
 

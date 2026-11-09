@@ -2,9 +2,8 @@
 
 Fastmash runs GNU datamash commands with portable results, and extends that
 workflow with quoted CSV, weighted means, record selection, table health and
-dataset comparison. Other good tools cover much more ground. This page
-says honestly where each one fits. Facts about the other tools come from their
-own documentation (checked September 2026); tell us if something has changed.
+dataset comparison. The tools below serve different data-processing needs.
+Facts about other tools come from their documentation, checked September 2026.
 
 ## At a glance
 
@@ -16,7 +15,8 @@ own documentation (checked September 2026); tell us if something has changed.
 | Input | Delimited text and explicit quoted CSV | Tab or single-byte delimited text | CSV (RFC 4180), TSV, JSON and more | CSV, TSV, Excel, Parquet and more | CSV and TSV |
 | Quoted CSV fields | Yes, in supported calculation, selection and comparison modes | No | Yes | Yes | Yes |
 | Grouped statistics | Yes | Yes | Yes (`stats1 -g`) | Through `pivotp` or `sqlp` | Yes (`summary -g`) |
-| Joins, filters, reshaping | No | No | Yes | Yes | Yes |
+| Joins and expression filters | No | No | Yes | Yes | Yes |
+| Table reshaping | Transpose and crosstab | Transpose and crosstab | Yes | Yes | Yes |
 | Platforms | Linux, WSL2, macOS 15+ | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
 
 ## GNU datamash
@@ -28,12 +28,12 @@ Homebrew.
 **Choose Fastmash when** you run datamash commands on Linux and want them
 faster (up to 4 times on the published Linux 0.1.0 [benchmarks](benchmarks/index.md)),
 want the same digits on every machine, or want clear errors where datamash
-1.9 aborts or reads past its data. Your commands don't change; the
+1.9 aborts or reads past its data. Most commands transfer directly. The
 [differences](guide/differences.md) are listed on one page.
 
 **Stay with GNU datamash when** you need Intel macOS, native Windows or
 a platform outside Fastmash's supported targets, or when you need a GNU-maintained tool. Some disk-spilling jobs still
-favor GNU on native Linux; the [benchmarks](benchmarks/index.md) show the
+favor GNU on native Linux. The [benchmarks](benchmarks/index.md) show the
 costs and measurement conditions.
 
 ## Miller
@@ -48,7 +48,7 @@ sorting the input first.
 **Choose Miller when** your data is JSON, or the job needs more
 than statistics: filtering, joining or transforming records.
 **Choose Fastmash when** the job is a datamash-style summary of delimited
-text and speed or exact datamash output matters.
+text and you want familiar commands with portable numerical results.
 
 ## qsv
 
@@ -61,7 +61,7 @@ databases, and whole-column statistics. Grouped aggregation goes through
 exploring, querying and converting them.
 **Choose Fastmash when** you want datamash's operations and syntax, for
 example sample and population standard deviations, skewness and kurtosis,
-mode, collapse or crosstab per group, with datamash-identical output.
+mode, collapse or crosstab per group, with a documented compatibility contract.
 
 ## csvtk
 
@@ -73,8 +73,8 @@ printing two decimals by default.
 
 **Choose csvtk when** you want a single, familiar toolkit for everyday table
 work, including quoted CSV and compressed files.
-**Choose Fastmash when** you need datamash's full set of statistics and exact
-datamash output, or its speed on large inputs.
+**Choose Fastmash when** you need datamash-style statistics and commands,
+portable numerical results, or its measured speed on large inputs.
 
 ## Using them together
 

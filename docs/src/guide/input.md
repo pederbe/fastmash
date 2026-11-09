@@ -35,7 +35,7 @@ ascending, and a range cannot be combined with pairs.
 | --- | --- |
 | *(default)* | Fields are separated by a tab |
 | `-t X`, `--field-separator=X` | Fields are separated by the single byte `X` |
-| `-W`, `--whitespace` | Fields are separated by runs of spaces and tabs; leading whitespace is skipped |
+| `-W`, `--whitespace` | Fields are separated by runs of spaces and tabs. Leading whitespace is skipped |
 | `--output-delimiter=X` | Results are separated by `X` |
 
 The output separator follows the input separator unless `--output-delimiter`
@@ -43,30 +43,37 @@ is given. With `-W`, the output separator is a tab.
 
 ```console
 $ printf 'a;1\nb;2\n' | fastmash -t ';' sum 2
-3
+Summary
+────────────────────────────────
+  sum(field-2)
+             3
+✔ Completed
 ```
 
 `-t,` does not understand CSV quoting: a comma inside a quoted field still
 splits it. Use `--csv-in` to read quoted CSV, or `--csv` for both input and
 output. Format switches do not imply headers. CSV input conflicts with `-t`,
-`-W` and `-C`; either CSV direction conflicts with `-z` and `--vnlog`.
+`-W` and `-C`. Either CSV direction conflicts with `-z` and `--vnlog`.
 See [Quoted CSV and result names](csv-and-result-names.md).
 
 ## Headers
 
 | Option | Effect |
 | --- | --- |
-| `--header-in` | The first record names the fields; it is not treated as data |
+| `--header-in` | The first record names the fields. It is not treated as data |
 | `--header-out` | Print a header line naming each result |
 | `-H`, `--headers` | Both of the above |
 
 With an input header, selectors can use field names. Names are exact and
-case-sensitive; if two fields share a name, the first one is used.
+case-sensitive. If two fields share a name, the first one is used.
 
 ```console
 $ printf 'price\tunits\n3\t2\n5\t4\n' | fastmash -H sum units mean price
-sum(units)	mean(price)
-6	4
+Summary
+────────────────────────────────
+  sum(units)  mean(price)
+           6            4
+✔ Completed
 ```
 
 ## NUL-terminated records
@@ -92,15 +99,21 @@ case, for every operation:
 
 ```console
 $ printf '1\nNA\n3\n' | fastmash --narm sum 1 count 1
-4	2
+Summary
+────────────────────────────────
+  sum(field-1)  count(field-1)
+             4               2
+✔ Completed
 ```
 
 Only these exact words count as missing. An empty field is not missing: a
 numerical operation reports it as an invalid value. A record that lacks the
 selected field is an error.
 
-For paired operations, each side skips its missing values independently, so
-the remaining values may pair up across different records.
+For paired statistics such as covariance, each side skips missing values
+independently, so remaining values may pair across different records.
+[Weighted mean](weighted-mean.md#missing-pairs-and-failures) instead omits the
+whole value/weight pair after validating supplied partners.
 
 ## Other options
 

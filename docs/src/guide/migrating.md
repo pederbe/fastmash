@@ -30,7 +30,7 @@ switching is a matter of replacing `datamash` with `fastmash`.
 - All options except `--sort-cmd`, including short-option clusters (`-sg1`),
   abbreviated long options (`--whitesp`), options after operands, and `--`
 - `POSIXLY_CORRECT` handling
-- Output layout, header names and the `--full` output
+- Data output to files and pipelines, header names and the `--full` output
 - Exit statuses 0 and 1 for success and ordinary errors
 
 ## What to check

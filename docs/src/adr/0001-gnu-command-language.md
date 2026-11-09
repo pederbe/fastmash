@@ -2,15 +2,12 @@
 
 Status: accepted.
 
-GNU datamash's command language is widely used in scripts and documentation.
-Fastmash adopts it (operations, options, selectors, output layout and exit
-statuses 0 and 1) so that existing workflows move over with few or no changes,
-and aims to match GNU datamash 1.9's observable results.
+Fastmash adopts GNU datamash 1.9's operations, options, selectors and data output
+so that existing scripts can move over with few or no changes. Intentional
+differences are [documented](../guide/differences.md).
 
-Fastmash is an independent implementation. It contains no GNU code, so it can
-be licensed under MIT OR Apache-2.0. Behavior is matched by studying GNU
-datamash's documentation, source code and observed output, and every
-intentional difference is published.
+Fastmash is an independent implementation under MIT OR Apache-2.0 and contains
+no GNU code.
 
-**Considered:** a new, cleaner command language. Rejected, because
+**Alternative:** a new command language. Rejected because
 compatibility is the main reason an existing datamash user would try Fastmash.

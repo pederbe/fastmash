@@ -1,12 +1,7 @@
 # Numbers, output and locales
 
-Calculation results sent to files or other programs contain plain data, even
-when color is forced. Eligible terminals show labeled, aligned results with
-color and completion marks. `--no-color` selects the plain format on a terminal.
-Use [quoted CSV](csv-and-result-names.md) to encode complete output
-fields, and `--result-name=INDEX:NAME` with an output header to replace generated
-result labels. [Terminal presentation](terminal-color.md) describes styled
-results, help, health reports and failure prefixes.
+Use [quoted CSV](csv-and-result-names.md) to encode complete output fields,
+and `--result-name=INDEX:NAME` with an output header to replace generated labels.
 
 ## Reading numbers
 
@@ -22,7 +17,11 @@ By default, results are printed with up to 14 significant digits, like
 
 ```console
 $ printf '1\n2\n' | fastmash mean 1 geomean 1
-1.5	1.4142135623731
+Summary
+────────────────────────────────
+  mean(field-1)  geomean(field-1)
+            1.5   1.4142135623731
+✔ Completed
 ```
 
 Two options change how results are printed. Neither changes how they are computed.
@@ -34,9 +33,17 @@ Two options change how results are printed. Neither changes how they are compute
 
 ```console
 $ printf '1\n2\n' | fastmash -R 3 mean 1
-1.500
+Summary
+────────────────────────────────
+  mean(field-1)
+          1.500
+✔ Completed
 $ printf '1234567\n' | fastmash --format "%'.2f" sum 1
-1234567.00
+Summary
+────────────────────────────────
+  sum(field-1)
+    1234567.00
+✔ Completed
 ```
 
 The `'` flag groups digits with the locale's thousands separator and grouping:
@@ -74,9 +81,9 @@ output says so in its changelog.
 
 The current profile is `portable-binary80-v4`. It retains v3 arithmetic,
 conversion and random-number generation, and uses ICU4X 2.4's Unicode 18 and
-CLDR 49 collation. Changed Group ordering can assign the shared seeded random
-draws to different Groups, so `rand` may select another number even with the
-same seed. For example, with four values `1` through `4` in each of the Groups
+CLDR 49 collation. Changed group ordering can assign the shared seeded random
+draws to different groups, so `rand` may select another number even with the
+same seed. For example, with four values `1` through `4` in each of the groups
 U+10EFB and U+10EC9, `LC_ALL=en_US.UTF-8 fastmash -S0 -sg1 rand 2` selected `3`
 for U+10EFB and `4` for U+10EC9 under v3. V4 puts U+10EC9 first and selects `3`
 for it and `4` for U+10EFB.
@@ -92,7 +99,7 @@ provides (such as `en_US.UTF-8`, `fr_FR.UTF-8`, `nb_NO.UTF-8` or
 `hi_IN.UTF-8`), numbers are read and printed with that locale's decimal
 separator, and the `'` format flag uses its thousands separator and grouping.
 An `@` modifier glibc has a locale for, such as `sr_RS@latin` or `de_DE@euro`,
-uses that locale's rules, which can differ from its base's; glibc drops any
+uses that locale's rules, which can differ from its base's. Glibc drops any
 other modifier, and so does Fastmash. A character set other than UTF-8 (a
 `.ISO-8859-1` codeset, or a name such as `de_DE` whose default is Latin-1)
 keeps the locale's rules where its separators are ASCII, and refuses numbers
@@ -115,7 +122,7 @@ alphabet (its standard and auxiliary letters in the Unicode CLDR data, alone,
 in pairs and in each case, and digits) matches GNU `sort` under glibc exactly. `fastmash --help` lists the
 languages. Punctuation, symbols and spaces were checked the same way in every
 one of them and order as in GNU `sort`, except next to digits in some keys
-(`12-A` and `1-2A`) and for vulgar fractions such as `¼`; see
+(`12-A` and `1-2A`) and for vulgar fractions such as `¼`. See
 [Differences](differences.md).
 
 Fastmash reads `LC_NUMERIC` (for numbers), `LC_COLLATE` (for sorting) and
@@ -148,3 +155,8 @@ locale data instead:
 For scripts, setting `LC_ALL=C.UTF-8` gives the same results everywhere.
 
 Diagnostics are always in English.
+
+## Further reference
+
+[Terminal presentation](terminal-color.md) covers the terminal display and its
+controls.

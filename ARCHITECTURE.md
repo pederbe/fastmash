@@ -10,16 +10,16 @@ It is written for contributors and for anyone evaluating the project. The
 | | |
 | --- | --- |
 | Language | Rust (edition 2024), five product crates |
-| Platform | Linux with glibc; Windows through WSL2; native macOS 15+ |
+| Platform | Linux with glibc, Windows through WSL2. Native macOS 15+ |
 | Interface | GNU datamash 1.9 command language, with explicit CSV, health, selection, weighted mean and comparison extensions |
 | Numbers | 80-bit extended precision, implemented in software |
 | Sorting | Built-in stable sorting with disk spill |
-| Runtime dependencies | glibc on Linux; system libraries on macOS |
+| Runtime dependencies | glibc on Linux. System libraries on macOS |
 | Network access | None |
 
 ## Design principles
 
-Linux and macOS use built-in sorting and private anonymous Spill storage.
+Linux and macOS use built-in sorting and private anonymous spill storage.
 [ADR 0014: Native sorting in one executable](https://fastmash.io/adr/0014-native-sorting-everywhere.html)
 retires the external Sort route.
 [ADR 0010: Native macOS](https://fastmash.io/adr/0010-native-apple-silicon.html)
@@ -36,7 +36,7 @@ These choices shape the whole codebase. Each is recorded as a decision in
    explicit, recorded justification.
 2. **The datamash command language is the interface.** Existing commands,
    options and field selectors work unchanged. Fastmash reimplements the
-   *behavior*; it contains no GNU code.
+   *behavior*. It contains no GNU code.
 3. **Portable results.** One Fastmash version gives identical results on every
    supported machine for the same input and explicit settings. Arithmetic does not depend on the CPU's
    floating-point unit or on the C math library, so a result computed on a
@@ -77,29 +77,18 @@ graph TD
 | `fastmash-numeric-contract` | `crates/numeric-contract` | The 80-bit extended-precision value type and its classification. `no_std`, no `unsafe` code, no dependencies |
 | `fastmash-sort-process` | `crates/sort-process` | Private native Spill storage, thread policy and Linux signal support. It builds no executable |
 
-The unpublished `fastmash-corpus-driver` crate in `crates/corpus-driver/` is a
-development tool outside the product dependency graph. Its `fastmash-corpus`
-executable verifies frozen Command cases against a selected executable, including
-directory input, closed output pipes, calibrated real full-output failures and
-early commands with stdin held open. It also observes live processes and actual
-output prefixes before EOF through regular files, pipes and raw terminals.
-It also exercises real late input EIO after an acknowledged output prefix,
-using owned controlling-terminal job control. Safe process-group and resource-limit
-APIs bound each invocation. It records exact results and every case disposition.
-CI and native archive installation checks use this same driver, as described in
-the [testing guide](https://fastmash.io/contributing/testing.html).
+### Development tools
 
-The unpublished `fastmash-locale-tools` crate in `crates/locale-tools/` is also a
-development tool outside the product dependency graph. It owns native numeric
-locale queries, JSON and Rust table generation, collation-table projection,
-numeric comparison plans, fixed collation word lists and collation reports.
-Its Unix numeric and punctuation comparison executors run bounded external
-commands and retain their exact streams and statuses in a private evidence
-directory. Punctuation comparison selects the retained verification's nonempty
-final tags, sends the fixed word list through pipes and preserves native failures
-and order differences in the existing report format. Rust tools generate and
-check the numeric and collation tables with identified native references and
-pinned independent Unicode data.
+The unpublished `fastmash-corpus-driver` crate verifies frozen commands and
+transport failures against a selected executable. Source checks and archive
+installation checks use the same driver. The
+[testing guide](https://fastmash.io/contributing/testing.html) describes its
+fixtures, launchers and native fault mechanisms.
+
+The unpublished `fastmash-locale-tools` crate generates and verifies numeric and
+collation tables against identified native references and independent Unicode
+data. Its reports retain the reference inputs and observed differences. See
+[locale tooling](https://fastmash.io/contributing/testing.html#locale-tools).
 
 The separately built `tools/icu-exemplars/` development tool queries the installed
 ICU 78 reference through safe resource APIs. Its native headers and libclang
@@ -147,7 +136,7 @@ Some points worth knowing when reading the code:
   sorting eligibility in their required order, then returns one prepared request
   for the selected mode. Private payloads keep runners from receiving an
   unprepared request. Input headers, numerical admission and resource checks still
-  happen at their existing execution points; preparation does not open inputs.
+  happen at their existing execution points. Preparation does not open inputs.
 - **Operations share work.** When several operations read the same field, the
   conversion, running sums and retained samples are shared. `median`, `q1` and
   `q3` on one field sort one sample set, and the moment statistics share one
@@ -168,7 +157,7 @@ Some points worth knowing when reading the code:
   is why the exit status must always be checked.
 - **Formats keep field boundaries.** Ordinary text uses its separator rules.
   Explicit CSV decodes logical records and retains complete fields and original
-  logical-record/physical-line locations; output encodes each field separately.
+  logical-record/physical-line locations. Output encodes each field separately.
   Record views let calculations borrow shared storage, while retained full rows
   and admitted selection candidates own what must outlive that view.
 - **Comparison and health finish before reporting.** Dataset comparison keeps
@@ -200,13 +189,15 @@ flowchart TD
 ```
 <!-- description: With -s and grouping keys, eligible jobs group by hash first: each group's records are collected apart and only the groups are sorted. Where that is not exact or pays too little, the input is read again and sorted in memory by projected keys. Other jobs sort in memory directly. A full chunk that memory does not allow to hold the rest of the input is spilled as a sorted run to anonymous files in TMPDIR, and the runs are merged. Every route feeds grouping inside Fastmash. -->
 
+### Hash grouping and replay
+
 - **Hash grouping** comes first, before sorting individual records, when
   standard input is a regular file
   (`projected_hash.rs`). GNU datamash sorts
   with a stable `sort -s`, so each of its groups is exactly the records with
   one key tuple, in input order. Hash grouping collects each tuple's records into that
   group's own operation state as they arrive, keeping every group's state in
-  one flat array (the operation set's plans are shared; each group has only
+  one flat array (the operation set's plans are shared. Each group has only
   its running values, plus a separate store for operations that keep values),
   then sorts only the tuples, in the sort's order, and writes the groups
   through the same writer. It gives up before writing anything when the
@@ -223,7 +214,7 @@ flowchart TD
   again only if it was kept: in a language locale, whose sort holds whole
   records anyway, a replay reader holds what hash grouping reads in 1 MiB
   blocks charged to the same memory budget, and the native sort reads them
-  back, releasing each, and then the rest of the pipe; its chunk leaves room
+  back, releasing each, and then the rest of the pipe. Its chunk leaves room
   for what is still held. A pipe has no length, so the rest of it is taken to
   be as long as what was read. In the `C` locales piped input sorts, because
   the held input would take several times the memory of a sort that keeps
@@ -233,6 +224,8 @@ flowchart TD
   them, and hash grouping gives up where two keys differ only in the blanks,
   or where a `-z` record holds a newline. `--vnlog` and `rand` (one generator
   across all groups) always sort.
+### Native sorting
+
 - The **native route** sorts in process. It covers every sorted calculation
   and sorted `rmdup` in every supported locale. Language locales' text
   ordering comes from pinned Unicode ICU data built into the program rather
@@ -246,6 +239,8 @@ flowchart TD
   the weighted characters between them, each after the count of letters
   without a fourth-level weight (Han, letters a locale adds) skipped before
   it, with runs of weighted characters written as counts.
+### Memory and temporary storage
+
 - A **chunk** holds the records being sorted in one arena (each record's
   grouping keys, then the fields its operations use, or the whole record with
   `--full`, in the language locales, or for numbers when the field separator
@@ -254,7 +249,7 @@ flowchart TD
   16-byte entry per record: the first key's eight-byte prefix, the key length
   and the arena offset. A stable radix sort orders the entries by prefix.
   Records whose prefixes tie on longer keys are sorted the same way by their
-  next eight key bytes, round by round; complete keys are compared only in
+  next eight key bytes, round by round. Complete keys are compared only in
   small groups and after 64 bytes of a key. Ties keep input order. In the
   language locales, collation keys are computed in batches on several
   threads. Selected-field projections for other means, higher moments,
@@ -276,7 +271,7 @@ flowchart TD
   a sort started beside others that have grown spills rather than overrunning
   their limit. A fact that cannot be read keeps the chunk at 64 MiB.
   `FASTMASH_SORT_MEMORY_BYTES` fixes the target instead.
-  The last chunk is read in place, without copying records; earlier chunks
+  The last chunk is read in place, without copying records. Earlier chunks
   are spilled and merged with it.
 - **Spill** writes sorted runs to anonymous temporary files (`O_TMPFILE`, or
   where the filesystem lacks it a private file unlinked as soon as it is open),
@@ -295,13 +290,15 @@ flowchart TD
   condition variable. Batch storage uses checked allocation. Long records
   span batches. Records whose numbers
   read on across a separator, and other platforms, use the serial path.
+### CSV and duplicate removal
+
 - **Quoted CSV sorting** uses its own complete decoded-record route, without
   hash replay or a text-format fallback. Record bytes, field ends, original
   locations and required language comparison segments are packed into shared
   chunks. Calculations borrow each chunk through group completion, and selection
   owns records only when they enter its candidates. Actual capacities and reusable
   decoder/key scratch count against the ordinary sort-memory policy. Checked
-  private spill framing preserves complete ragged fields and locations; bounded
+  private spill framing preserves complete ragged fields and locations. Bounded
   merge heads remain owned. An oversized record and merge heads can exceed the
   chunk target, and statistical samples retain their separate in-memory policy.
 - Every sorted calculation takes the **native route**, including mixed
@@ -310,7 +307,7 @@ flowchart TD
   storage where possible, with the same calculation collector and random state.
 - Sorted **duplicate removal** retains complete records, in stable key order,
   and compares duplicate keys exactly. Case folding changes sort order, not
-  duplicate-key equality. It shares the native sorter and Spill storage.
+  duplicate-key equality. It shares the native sorter and spill storage.
   A later record whose sort key bytes repeat an earlier record's can never be
   printed, so it is dropped before sorting. Tracking stops adding keys once
   they would take a quarter of the sort's memory target, held alongside the
@@ -350,7 +347,7 @@ Numerical behavior is where Fastmash differs most from a straightforward port.
 | 0 | Success | |
 | 1 | Error in the command or its input | Unknown option, non-numeric value, missing field, write failure |
 | 77 | Refusal | Unsupported feature or locale, checked allocation failure, numerical capacity reached |
-| 70 | Internal failure | A violated numerical invariant or a failed numerical table identity check; please report it |
+| 70 | Internal failure | A violated numerical invariant or a failed numerical table identity check. Please report it |
 
 Diagnostics are written to standard error as `fastmash: message`, with a colored
 `✗` prefix on eligible terminals, sometimes
@@ -359,12 +356,12 @@ followed by a `hint:` line suggesting a fix. When one failure follows another
 status wins: 70 over 77 over 1 (`failure::combine`). A diagnostic that cannot
 be written makes the status 1. Other internal failures are reported with
 status 77 (for example an internal conversion failure) or, since panics abort,
-end the process with `SIGABRT`; all of them are bugs.
+end the process with `SIGABRT`. All of them are bugs.
 
 ## Safety
 
 - **`unsafe` code** is limited to operating-system interfaces (Linux system
-  calls for standard streams, process supervision and temporary files),
+  calls for standard streams, signals and temporary files),
   and a glibc `mallopt` call at startup that caps malloc arenas under an
   address-space limit. Sort run files use checked buffer access. Record arena
   cache hints use a safe dependency API on x86-64. The
@@ -380,7 +377,7 @@ end the process with `SIGABRT`; all of them are bugs.
   fallback when an internal table seed is unavailable.
 - **No network, shell or child processes.** Fastmash performs calculations and
   sorting inside its single executable.
-- **Dependencies** are few and pinned. See [`Cargo.toml`](https://github.com/pederbe/fastmash/blob/main/crates/cli/Cargo.toml).
+- **Dependencies** use committed lockfiles. See [`Cargo.toml`](https://github.com/pederbe/fastmash/blob/main/crates/cli/Cargo.toml).
 
 ## Dependencies
 
@@ -402,9 +399,9 @@ end the process with `SIGABRT`; all of them are bugs.
 | The overall flow | `crates/cli/src/main.rs` |
 | Option parsing | `crates/cli/src/options.rs` |
 | The operations: names, spellings, what each needs and shares | `crates/cli/src/operation.rs` |
-| Command syntax: operations, selectors and modes | `crates/cli/src/grammar.rs` |
+| command syntax: operations, selectors and modes | `crates/cli/src/grammar.rs` |
 | Planning and shared work of a command's operations | `crates/cli/src/operation_set.rs` |
-| Binding named fields and grouping keys to the Input header | `crates/cli/src/binding.rs` |
+| Binding named fields and grouping keys to the input header | `crates/cli/src/binding.rs` |
 | Reading records: comments, vnlog, the input header, read errors | `crates/cli/src/intake.rs` |
 | Records and field splitting | `crates/cli/src/records.rs` |
 | The sort route | `crates/cli/src/sort_route.rs` |
@@ -412,7 +409,7 @@ end the process with `SIGABRT`; all of them are bugs.
 | Sorting and spill | `crates/cli/src/projected_sort.rs`, `projected_spill.rs` |
 | A statistic, for example quantiles | `crates/cli/src/ordered_statistics.rs` |
 | Output and exit status | `crates/cli/src/command_output.rs`, `buffered_stdout.rs`, `failure.rs` |
-| Number parsing and printing | `crates/conversion/src/`; numeric fields: `crates/cli/src/decimal.rs` |
+| Number parsing and printing | `crates/conversion/src/`. Numeric fields: `crates/cli/src/decimal.rs` |
 | Arithmetic | `crates/portable-numerics/src/lib.rs`, `crates/cli/src/numerics.rs` |
 | `log` and `exp` | `crates/cli/src/mean_math.rs`, `guarded_log.rs`, `boundary_exp.rs` |
 

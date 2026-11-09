@@ -8,7 +8,7 @@ Most Linux systems from 2018 onward need nothing beyond the
 | Requirement | Why |
 | --- | --- |
 | Linux, glibc 2.28 or later (RHEL 8, Debian 10, Ubuntu 20.04 and newer) | Supported platform for the prebuilt binaries |
-| Linux with glibc (`x86_64-unknown-linux-gnu`) | Building Linux source; musl and other Linux targets are refused at compile time |
+| Linux with glibc (`x86_64-unknown-linux-gnu`) | Building Linux source. Musl and other Linux targets are refused at compile time |
 | macOS 15 or later (`aarch64-apple-darwin`) | Supported platform for the native archive, checked on macOS 15 and 26 |
 | `/proc` mounted on Linux | Supplies memory and terminal information. Without it, Fastmash uses conservative sort memory and writes output in 8 KiB blocks, even to a terminal |
 | A writable `TMPDIR` (default `/tmp`) | Temporary data for large sorted jobs |
@@ -19,18 +19,15 @@ on macOS 15 and 26. Intel macOS, older macOS versions and native Windows are
 outside the scope. See [Homebrew](install.md#homebrew) or the
 [native archive instructions](install.md#macos-archive).
 
-Linux and macOS use Fastmash's built-in sorting with Spill. Sorting needs no
-system `sort`, helper executable, pidfds or `close_range`. A writable temporary
-directory is required when a sorted job spills. The same built-in locale
-rules and Numerical profile apply; native GNU results do not redefine Portable
-results. Missing Linux memory information does not impose a record limit.
+Sorting runs inside Fastmash and needs no other program. `TMPDIR` must be
+writable when a job spills to disk.
 
 Under an address-space limit (`ulimit -v`, as some batch schedulers set),
-Fastmash reduces the address space that its memory allocator reserves; see
+Fastmash reduces the address space that its memory allocator reserves. See
 [Address-space limits](guide/errors.md#address-space-limits).
 
-Every sorted calculation and sorted `rmdup` uses this same native storage and
-resource policy. See [Grouping and sorting](guide/grouping.md#large-inputs).
+See [Grouping and sorting](guide/grouping.md#large-inputs) for memory use and
+temporary storage.
 
 ## Locales
 
@@ -47,13 +44,13 @@ workflow built it, download the archive from the
 Linux:
 
 ```sh
-gh attestation verify fastmash-v0.2.0-x86_64-unknown-linux-gnu.tar.gz --repo pederbe/fastmash
+gh attestation verify fastmash-v@VERSION@-x86_64-unknown-linux-gnu.tar.gz --repo pederbe/fastmash
 ```
 
 macOS:
 
 ```sh
-gh attestation verify fastmash-v0.2.0-aarch64-apple-darwin.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
+gh attestation verify fastmash-v@VERSION@-aarch64-apple-darwin.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
 ```
 
 The macOS archive is not Apple-notarized.
