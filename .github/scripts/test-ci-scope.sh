@@ -8,7 +8,7 @@ cd "$fixture"
 git init -q
 git config user.email fixture@example.invalid
 git config user.name fixture
-mkdir -p crates/app/src crates/helper/src .github/workflows release/publication-test-server/tests scripts packaging/homebrew
+mkdir -p crates/app/src crates/helper/src .github/workflows release/publication-test-server/tests scripts/demo site packaging/homebrew
 printf '[workspace]\nmembers = ["crates/app", "crates/helper"]\n' > Cargo.toml
 printf '[package]\nname = "fastmash"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\n' > crates/app/Cargo.toml
 printf '[package]\nname = "helper"\nversion = "1.0.0"\n[dependencies]\ncommon = "1"\ndevlib = "1"\n' > crates/helper/Cargo.toml
@@ -33,6 +33,8 @@ version = "1.0.0"
 name = "devlib"
 version = "1.0.0"
 LOCK
+touch scripts/demo/demo.html scripts/demo/record.mjs scripts/demo/og.html
+touch site/demo.gif site/demo.mp4 site/demo.webm site/demo-poster.png site/og.png
 printf '# repository fixture\n' > release/package-repository.sh
 git add .
 git commit -qm fixture
@@ -87,6 +89,18 @@ expect application=false configuration=false packages=
 printf '# release configuration change\n' > release-plz.toml
 printf '// application change\n' > crates/app/src/lib.rs
 expect application=true configuration=true packages=fastmash
+# Demo source and generated assets never suppress accompanying application changes.
+for path in scripts/demo/demo.html scripts/demo/record.mjs scripts/demo/og.html \
+    site/demo.gif site/demo.mp4 site/demo.webm site/demo-poster.png site/og.png; do
+  printf 'demo change\n' > "$path"
+  expect application=false configuration=false packages=
+done
+printf 'demo change\n' > scripts/demo/demo.html
+printf '// application change\n' > crates/app/src/lib.rs
+expect application=true configuration=false packages=fastmash
+printf 'demo change\n' > site/demo.webm
+printf '# workflow change\n' > .github/workflows/ci.yml
+expect application=false configuration=true packages=
 printf '# documentation\n' > README.md
 expect application=false packages=
 rm README.md

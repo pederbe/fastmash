@@ -34,6 +34,7 @@ jobs:
       locale: ${{ steps.paths.outputs.locale }}
       packages_repository: ${{ steps.paths.outputs.packages_repository }}
       binstall: ${{ steps.paths.outputs.binstall }}
+      demo: ${{ steps.paths.outputs.demo }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,6 +54,18 @@ jobs:
         id: paths
         with:
           filters: |
+            demo:
+              - 'scripts/demo/**'
+              - 'site/demo.gif'
+              - 'site/demo.mp4'
+              - 'site/demo.webm'
+              - 'site/demo-poster.png'
+              - 'site/og.png'
+              - 'docs/src/benchmarks/core-jobs.tsv'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/docs.yml'
             release_inputs:
               - 'release/**'
               - '.github/workflows/macos*.yml'
@@ -305,7 +318,10 @@ jobs:
       tag: ${{ needs.changes.outputs.tag }}
 
   documentation:
+    needs: changes
     uses: ./.github/workflows/docs.yml
+    with:
+      demo: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.demo != 'false' }}
 
   homebrew:
     needs: changes

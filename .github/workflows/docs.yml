@@ -8,6 +8,11 @@ name: Documentation
 on:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      demo:
+        description: Check website interactions and demo rendering
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,6 +34,17 @@ jobs:
       # The deploy build: pinned mdBook, committed diagram renders (a missing
       # or unused render fails), landing page and install.sh at the root.
       - run: bash scripts/build_site.sh --cloudflare
+      - name: Check website and demo rendering
+        if: inputs.demo || github.event_name == 'workflow_dispatch'
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          BROWSER_PATH=$(command -v google-chrome)
+          export BROWSER_PATH
+          npm run test:landing
+          npm run test:docs
+          node scripts/demo/record.mjs --preview --og
+          git diff --exit-code -- site/
       - name: Check links
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
         with:
