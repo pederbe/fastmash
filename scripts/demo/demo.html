@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- Install and help instructions followed by a replay of the measured RefGene job.
+<!-- Installation, terminal results and health, followed by the measured RefGene job.
      record.mjs supplies the benchmark data and renders deterministic frames. -->
 <html lang="en">
 <head>
@@ -35,8 +35,17 @@ pre { font: 500 23px/1.6 var(--mono); padding: 22px; white-space: pre; tab-size:
 .prompt { color: var(--amber); }
 .prog { color: var(--fg); font-weight: 700; }
 .out { color: var(--fg); }
-.cli-heading { font-weight: 700; }
-.cli-token { color: #67e8f9; }
+.cli-heading { color: #bd93f9; font-weight: 700; }
+.cli-token { color: #5cb8ff; }
+.cli-value { color: #5cb8ff; font-weight: 700; }
+.cli-success { color: #5af78e; font-weight: 700; }
+.cli-advisory { color: #f39c12; font-weight: 700; }
+.cli-failure { color: #ff5c57; font-weight: 700; }
+.cli-muted { color: #70788c; }
+.results-pane { height: 355px; }
+.results-pane pre { font-size: 19px; line-height: 1.45; padding: 18px; }
+.health-pane { margin-top: 24px; height: 393px; }
+.health-pane pre { font-size: 18px; line-height: 1.25; padding: 12px 22px 0; }
 .help-pane { margin-top: 24px; height: 330px; }
 .help-pane pre { font-size: 24px; line-height: 1.5; padding-top: 18px; }
 .dim { color: var(--muted); }
@@ -72,7 +81,7 @@ footer { position: absolute; left: 48px; right: 48px; bottom: 31px; padding-top:
 </section>
 <section class="scene hidden" id="help-scene" aria-label="Colored help excerpt">
   <h1>Readable help. Clean data.</h1>
-  <div class="sub">Bold headings and cyan syntax. Calculation results stay plain.</div>
+  <div class="sub">Purple headings and blue syntax help you find an operation.</div>
   <div class="pane help-pane">
     <div class="bar"><span class="name">Fastmash help excerpt</span></div>
     <pre><span class="prompt">$</span> <span class="prog">fastmash</span> --help
@@ -81,6 +90,57 @@ footer { position: absolute; left: 48px; right: 48px; bottom: 31px; padding-top:
   <span class="cli-token">sum</span>       Sum the selected field
   <span class="cli-token">mean</span>      Arithmetic mean of the selected field
   <span class="cli-token">wmean</span>     Weighted mean of a VALUE:WEIGHT field pair</pre>
+  </div>
+</section>
+<section class="scene hidden" id="results-scene" aria-label="Styled calculation results">
+  <h1>Results you can scan.</h1>
+  <div class="sub">Colors and labels in your terminal. Plain data in files and pipes.</div>
+  <div class="panes">
+    <div class="pane results-pane">
+      <div class="bar"><span class="name">A quick summary</span></div>
+      <pre><span class="prompt">$</span> printf '1\n2\n3\n' | \
+    fastmash sum 1 mean 1
+
+<span class="cli-heading">Summary</span>
+<span class="cli-muted">────────────────────────────────</span>
+  <span class="cli-heading">sum(field-1)  mean(field-1)</span>
+             <span class="cli-value">6</span>              <span class="cli-value">2</span>
+<span class="cli-success">✔</span><span class="cli-muted"> Completed</span></pre>
+    </div>
+    <div class="pane results-pane">
+      <div class="bar"><span class="name">Group team scores</span></div>
+      <pre><span class="prompt">$</span> fastmash -s -H -g team \
+    sum points mean points &lt; scores.tsv
+
+<span class="cli-heading">Grouped summary</span>
+<span class="cli-muted">────────────────────────────────</span>
+  <span class="cli-heading">team  sum(points)  mean(points)</span>
+  Blue           <span class="cli-value">30</span>            <span class="cli-value">15</span>
+   Red            <span class="cli-value">8</span>             <span class="cli-value">8</span>
+<span class="cli-success">✔</span><span class="cli-muted"> Completed</span></pre>
+    </div>
+  </div>
+  <div class="caption">scores.tsv has a team/points header, then Blue 12, Red 8 and Blue 18.</div>
+</section>
+<section class="scene hidden" id="health-scene" aria-label="Styled health report excerpt">
+  <h1>See what needs attention.</h1>
+  <div class="sub">readings.tsv has a reading header, then 10, 12 and oops.</div>
+  <div class="pane health-pane">
+    <div class="bar"><span class="name">Health report excerpt</span></div>
+    <pre><span class="prompt">$</span> fastmash --header-in health examples 0 type reading number validate &lt; readings.tsv
+<span class="cli-heading">Table health report</span>
+<span class="cli-failure">✗ Validation failed · supplied expectations violated</span>
+<span class="cli-muted">…</span>
+<span class="cli-heading">Findings (counts may overlap):</span>
+
+<span class="cli-advisory">⚠ mixed_types [observation, advisory]</span>
+  1 fields; field 1, name "reading"
+  examples retained 0, omitted 3
+
+<span class="cli-failure">✗ type_mismatch [declared, violation]</span>
+  1 cells; expected number; field 1, name "reading"
+  examples retained 0, omitted 1
+<span class="cli-muted">…</span></pre>
   </div>
 </section>
 <section class="scene hidden" id="compare-scene" aria-label="Measured timing comparison">
@@ -99,7 +159,7 @@ footer { position: absolute; left: 48px; right: 48px; bottom: 31px; padding-top:
   </div>
   </div>
   <div class="verdict hidden" id="verdict">Same answer. <span class="x" id="speedup"></span> as fast.</div>
-  <div class="caption">Timing replay · slowed 20×</div>
+  <div class="caption">Timing replay · plain captured output · slowed 20×</div>
 </section>
 <footer><span class="url">fastmash.io</span><span class="footer-label" id="footer-label">Install · Try · Compare</span></footer>
 <script>
@@ -112,11 +172,13 @@ const OUTPUT = '4\t8\t14\t10';
 const INSTALL = 'curl -fsSL https://fastmash.io/install.sh | sh';
 const ARGS = ' q1 9 median 9 \\\n    q3 9 iqr 9 < genes.tsv';
 const HELP_START = 5.5;
-const COMPARE_START = 12.5;
+const RESULTS_START = 11.5;
+const HEALTH_START = 21.5;
+const COMPARE_START = 32.5;
 const TYPE_START = COMPARE_START + 0.8, TYPE_SPEED = 25;
 const RUN_START = TYPE_START + ('fastmash' + ARGS).length / TYPE_SPEED + 0.6;
 const RUN_END = RUN_START + Math.max(...Object.values(TIMINGS)) * PLAYBACK_SCALE;
-const DURATION = 28;
+const DURATION = 48;
 if (RUN_END + 5 > DURATION) throw new Error('Timing replay no longer fits; revise the storyboard');
 document.getElementById('speedup').textContent = (DATA.gnu_ms / DATA.fastmash_ms).toFixed(1) + '×';
 
@@ -142,7 +204,9 @@ function pane(program, t) {
 window.render = function (t) {
   const compare = t >= COMPARE_START;
   document.getElementById('install-scene').classList.toggle('hidden', t >= HELP_START);
-  document.getElementById('help-scene').classList.toggle('hidden', t < HELP_START || compare);
+  document.getElementById('help-scene').classList.toggle('hidden', t < HELP_START || t >= RESULTS_START);
+  document.getElementById('results-scene').classList.toggle('hidden', t < RESULTS_START || t >= HEALTH_START);
+  document.getElementById('health-scene').classList.toggle('hidden', t < HEALTH_START || compare);
   document.getElementById('compare-scene').classList.toggle('hidden', !compare);
   const typed = Math.max(0, Math.min(INSTALL.length, Math.floor((t - 0.8) * 24)));
   document.getElementById('install-command').innerHTML = '<span class="prompt">$</span> '
@@ -159,7 +223,7 @@ window.render = function (t) {
   document.getElementById('footer-label').textContent = compare ? 'Try it on your data.' : 'Install · Try · Compare';
 };
 window.DURATION = DURATION;
-window.DEMO = { width: 1280, height: 720, helpStart: HELP_START, compareStart: COMPARE_START,
+window.DEMO = { width: 1280, height: 720, helpStart: HELP_START, resultsStart: RESULTS_START, healthStart: HEALTH_START, compareStart: COMPARE_START,
   runStart: RUN_START, runEnd: RUN_END, timings: TIMINGS, output: OUTPUT,
   install: INSTALL, args: ARGS, playbackScale: PLAYBACK_SCALE };
 window.play = function () {

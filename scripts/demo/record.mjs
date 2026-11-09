@@ -51,7 +51,9 @@ try {
   writeFileSync(join(frames, 'timing.json'), JSON.stringify(demo, null, 2) + '\n');
   for (const [name, time] of [
     ['install', demo.helpStart - 1],
-    ['help', demo.compareStart - 1],
+    ['help', demo.resultsStart - 1],
+    ['results', demo.healthStart - 1],
+    ['health', demo.compareStart - 1],
     ['running', demo.runStart + demo.timings.fastmash * demo.playbackScale + 0.25],
     ['result', demo.duration - 1],
   ]) {
@@ -98,7 +100,7 @@ if (!flags.has('--preview')) {
     copyFileSync(join(frames, name), join(root, 'site', name));
     console.log(`site/${name}`);
   }
-  copyFileSync(join(frames, 'result.png'), join(root, 'site/demo-poster.png'));
+  copyFileSync(join(frames, 'results.png'), join(root, 'site/demo-poster.png'));
 }
 if (flags.has('--og')) {
   copyFileSync(join(frames, 'og.png'), join(root, 'site/og.png'));

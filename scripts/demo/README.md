@@ -1,8 +1,9 @@
 # Terminal demo
 
-The 28-second demo shows the install command and a colored help excerpt,
-then replays the same RefGene quartile job in GNU datamash and Fastmash. It is a silent animation with no
-external player or network requests.
+The 48-second demo shows installation, colored help, regular terminal results
+and a health report excerpt, then replays the same RefGene quartile job in GNU
+datamash and Fastmash. It is a silent animation with no external player or
+network requests.
 
 `demo.html` is the editable layout. `record.mjs` reads the Intel laptop
 `refgene-quantiles` row from
@@ -13,10 +14,17 @@ The clocks display the published rounded times. The job's matching output is
 difference is visible, as labeled in the animation. The
 [benchmark method](../../docs/src/benchmarks/method.md) provides the full context.
 
-The opening scene teaches the installation command. The help scene uses
-the release CLI's bold headings and cyan syntax; calculation output remains
-plain. It does not simulate a successful download or installation. The timing scene replays recorded
-measurements; rendering does not execute or remeasure either program.
+The opening scene teaches the installation command without simulating a
+successful download or installation. The help and result scenes use the CLI's
+purple headings, blue syntax and result values, green completion marks and gray
+secondary text. Results show a quick sum and mean, followed by grouped team scores.
+Files and pipes retain their plain data format.
+
+The health excerpt shows mixed-type advisories in amber and a declared numerical
+type violation in red. Ellipses mark omitted report sections. The displayed
+results and report text match actual terminal captures. The timing scene replays
+recorded measurements and their captured plain output. Rendering does not execute
+or remeasure either program.
 
 ## Render
 
@@ -31,7 +39,7 @@ node scripts/demo/record.mjs --preview
 node scripts/demo/record.mjs
 ```
 
-`--preview` saves an animated HTML preview and four milestone PNGs in a
+`--preview` saves an animated HTML preview and six milestone PNGs in a
 temporary directory, without replacing the demo assets. A full render writes:
 
 | Asset | Format | Use |
@@ -39,7 +47,7 @@ temporary directory, without replacing the demo assets. A full render writes:
 | `site/demo.mp4` | H.264, 1280x720, 24 fps | Social upload copy |
 | `site/demo.webm` | AV1, 1280x720, 24 fps | Compact web video and compatible uploaders |
 | `site/demo.gif` | 1280x720, 12 fps, looping | Markdown and image-only embeds |
-| `site/demo-poster.png` | 1280x720 | Static result frame |
+| `site/demo-poster.png` | 1280x720 | Styled calculation frame |
 
 The MP4 uses 512 kbit/s constant bitrate, above LinkedIn's documented
 192 kbit/s minimum. The WebM uses constant-quality AV1 encoding. Each export
@@ -81,7 +89,7 @@ bitrate range; use the MP4 there. No platform upload is part of rendering.
 ## Description for posts
 
 Fastmash terminal demo. Install with one command, read a colored help
-excerpt, then calculate quartiles from 81,407 RefGene records using the same command in both tools. Both return
+excerpt, view styled results and health findings, then calculate quartiles from 81,407 RefGene records using the same command in both tools. Both return
 4, 8, 14 and 10. GNU datamash takes 112.8 ms; Fastmash takes 26.6 ms, or
 4.2 times as fast on this job on the Intel laptop running native Linux.
 The animation replays the measured times at 20 times slower speed. fastmash.io.
