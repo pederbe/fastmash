@@ -24,8 +24,8 @@ the report.
 
 Output sent to a file or another program keeps its existing plain format,
 including readable health reports. It gains no headings, padding, symbols or
-color codes, even with `--color=always`. Documentation examples show this plain
-data format unless they explicitly illustrate terminal presentation.
+color codes, even with `--color=always`. Examples that write a report file show
+its data format.
 
 Explicit CSV output, NUL-terminated output, an explicit output delimiter, vnlog,
 crosstab, dataset comparison, field and table transformations, health TSV and

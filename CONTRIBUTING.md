@@ -21,14 +21,14 @@ welcome, and some of the most valuable ones involve no code at all.
   approach before you invest a lot of time.
 
 Please report security problems privately, as described in
-[SECURITY.md](SECURITY.md), not in a public issue.
+[SECURITY.md](https://github.com/pederbe/fastmash/blob/main/SECURITY.md), not in a public issue.
 
 ## Development setup
 
 To develop Fastmash, use Linux (or WSL2), or macOS 15 or
 later, with the latest stable Rust. Website checks also need Python 3.10 or later.
 Native macOS development is verified by the
-[native checks](TESTING.md#native-macos-development-gate).
+[native checks](https://fastmash.io/contributing/testing.html#native-macos-development-gate).
 
 ```sh
 git clone https://github.com/pederbe/fastmash
@@ -50,7 +50,7 @@ changes. For planned work, agree on the scope and acceptance criteria in a
 public issue before implementing it.
 
 The maintainer creates a `contrib/` branch in this repository. Other contributors
-create a branch in their fork. Follow [Testing](TESTING.md#quick-start) for
+create a branch in their fork. Follow [Testing](https://fastmash.io/contributing/testing.html#quick-start) for
 focused local checks and final CI validation. Open the pull request against
 `main` once the local implementation and checks are settled, and link the issue
 when there is one.
@@ -68,53 +68,18 @@ also needs application or platform execution.
 Before closing an implementation ticket, update its acceptance checklist and
 check whether its parent issue is complete.
 
-Renovate prepares one combined daily dependency update, including stable major
-releases. GitHub automatically merges the batch after the required CI result
-passes, covering every applicable platform, documentation and package check.
-The daily self-hosted run updates Cargo, npm, Actions, container digests and the
-custom tools in `.github/dependency-pins.json`. The synchronization helper keeps
-tool download hashes together before pushing the PR. Release builders resolve
-the current stable Rust toolchain and record its actual version in each archive.
-The independent Unicode 15 reference crates in `crates/locale-tools` stay
-fixed. Reconsider those pins when the retained reference contract changes.
-Urgent security fixes may produce separate pull requests outside the daily batch.
-Existing Dependabot security alerts and updates remain enabled.
-The macOS 15 archive builder remains the operating-system compatibility
-baseline. The same archive must run unchanged on macOS 15 and 26. Release
-identities and qualification evidence change through the release process,
-not dependency updates.
-
-Use current stable dependencies with compatible version ranges and commit the
-lockfiles. The remaining exact external pins, `unicode-case-mapping` 0.5.0,
-`icu_properties` 1.3.2 and its data crate at 1.3.4, reproduce the independent
-Unicode 15 producer. New casing changes mixed strings containing U+019B or
-U+0264, and newer properties assign previously unassigned characters such as
-U+1C89. Reconsider these pins when an upgrade preserves the reference behavior
-or the reference is deliberately migrated.
-
-Review `icu_collator` and `icu_collator_data` updates against the locale-order
-verification in [TESTING.md](TESTING.md). The engine and data determine production
-sort keys, and the ordinary corpus covers only part of the supported alphabets.
-
-The npm KaTeX and lodash-es overrides select patched releases that the diagram
-tool's dependency ranges exclude. Keep compatible ranges on these overrides and
-remove them when the upstream tree resolves patched versions without them.
-Action commit hashes and checksummed build tools identify reproducible inputs.
-Exact versions between published Fastmash crates keep their release contracts
-aligned.
-
 ## Before you open a pull request
 
-1. Read [ARCHITECTURE.md](ARCHITECTURE.md) for how the code fits together, and
-   [GLOSSARY.md](GLOSSARY.md) for the project's vocabulary. Use its terms in code,
+1. Read [ARCHITECTURE.md](https://fastmash.io/contributing/architecture.html) for how the code fits together, and
+   [GLOSSARY.md](https://fastmash.io/contributing/glossary.html) for the project's vocabulary. Use its terms in code,
    comments, issues and commit messages.
 2. Keep each pull request to one change. Separate refactoring from behavior changes.
 3. Add tests. Bug fixes need a test that fails without the fix. Behavior
-   changes need regression cases. See [TESTING.md](TESTING.md).
-4. Select checks for what changed, following [Testing](TESTING.md#quick-start).
+   changes need regression cases. See [TESTING.md](https://fastmash.io/contributing/testing.html).
+4. Select checks for what changed, following [Testing](https://fastmash.io/contributing/testing.html#quick-start).
    Documentation uses the
-   [website checks](TESTING.md#website-checks), application code uses the
-   [application checks](TESTING.md#quick-start), and build or CI tooling needs
+   [website checks](https://fastmash.io/contributing/testing.html#website-checks), application code uses the
+   [application checks](https://fastmash.io/contributing/testing.html#quick-start), and build or CI tooling needs
    checks of the affected tooling and workflow filters.
 
 5. Update the user guide under `docs/` and `--help` text when user-visible
@@ -126,7 +91,7 @@ Runtime, dependency and build-recipe changes that can affect performance need
 comparison with the previous accepted build during change review. New speed
 claims need dated measurements identifying the actual executable and conditions.
 Weekly releases do not start a whole-release benchmark campaign. See
-[ADR 0012](docs/src/adr/0012-release-delivery-and-performance.md) for the
+[ADR 0012](https://fastmash.io/adr/0012-release-delivery-and-performance.html) for the
 separation between performance acceptance and release delivery.
 
 - **Numerical output.** Anything that can change a printed number, however
@@ -155,23 +120,56 @@ when that is not obvious. Reference public issues as `#123` in commits and
 discussions. Use full public issue links in source comments so their repository
 is explicit. CI checks tracked files for private references.
 
-## Tools
+## Dependency updates
 
-For local performance diagnosis, use [the profiling workflow](PROFILING.md).
+Renovate prepares one combined daily dependency update, including stable major
+releases. GitHub automatically merges the batch after the required CI result
+passes, covering every applicable platform, documentation and package check.
+The daily self-hosted run updates Cargo, npm, Actions, container digests and the
+custom tools in `.github/dependency-pins.json`. The synchronization helper keeps
+tool download hashes together before pushing the PR. Release builders resolve
+the current stable Rust toolchain and record its actual version in each archive.
+The independent Unicode 15 reference crates in `crates/locale-tools` stay
+fixed. Reconsider those pins when the retained reference contract changes.
+Urgent security fixes may produce separate pull requests outside the daily batch.
+Existing Dependabot security alerts and updates remain enabled.
+The macOS 15 archive builder remains the operating-system compatibility
+baseline. The same archive must run unchanged on macOS 15 and 26. Release
+identities and qualification evidence change through the release process,
+not dependency updates.
 
-[AGENTS.md](AGENTS.md) summarizes the project's rules in the form coding tools
-read. Whatever tools you use, you are responsible for every line you submit:
-review it, test it and be able to explain it.
+Use current stable dependencies with compatible version ranges and commit the
+lockfiles. The remaining exact external pins, `unicode-case-mapping` 0.5.0,
+`icu_properties` 1.3.2 and its data crate at 1.3.4, reproduce the independent
+Unicode 15 producer. New casing changes mixed strings containing U+019B or
+U+0264, and newer properties assign previously unassigned characters such as
+U+1C89. Reconsider these pins when an upgrade preserves the reference behavior
+or the reference is deliberately migrated.
+
+Review `icu_collator` and `icu_collator_data` updates against the locale-order
+verification in [TESTING.md](https://fastmash.io/contributing/testing.html). The engine and data determine production
+sort keys, and the ordinary corpus covers only part of the supported alphabets.
+
+The npm KaTeX and lodash-es overrides select patched releases that the diagram
+tool's dependency ranges exclude. Keep compatible ranges on these overrides and
+remove them when the upstream tree resolves patched versions without them.
+Action commit hashes and checksummed build tools identify reproducible inputs.
+Exact versions between published Fastmash crates keep their release contracts
+aligned.
+
+## Profiling
+
+For local performance diagnosis, use [the profiling workflow](https://github.com/pederbe/fastmash/blob/main/PROFILING.md).
 
 ## Releases
 
-Release-plz generates dated entries in [CHANGELOG.md](CHANGELOG.md) from merged
+Release-plz generates dated entries in [CHANGELOG.md](https://github.com/pederbe/fastmash/blob/main/CHANGELOG.md) from merged
 pull request titles. Keep `[Unreleased]` empty for future changes. Review the
 title as the sentence users will read about capabilities, fixes, installation
 or changes to command-line behavior. Explain compatibility consequences and
 required user action in the pull request description. Numerical-output changes
 name their new Numerical profile. Keep performance claims tied to measured
-workloads. See [RELEASING.md](RELEASING.md) for weekly publication.
+workloads. See [RELEASING.md](https://github.com/pederbe/fastmash/blob/main/RELEASING.md) for weekly publication.
 
 Use `!` in the title for a breaking change, such as `feat!: Rename an option`,
 and put a `BREAKING CHANGE:` paragraph with the full upgrade instructions at
@@ -182,10 +180,10 @@ deprecations so they have their own changelog sections.
 ## Code of conduct
 
 Everyone taking part in the project is expected to follow the
-[code of conduct](CODE_OF_CONDUCT.md).
+[code of conduct](https://github.com/pederbe/fastmash/blob/main/CODE_OF_CONDUCT.md).
 
 ## License
 
 By contributing, you agree that your contributions are dual licensed under
-[MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at the user's option,
+[MIT](https://github.com/pederbe/fastmash/blob/main/LICENSE-MIT) or [Apache-2.0](https://github.com/pederbe/fastmash/blob/main/LICENSE-APACHE), at the user's option,
 without any additional terms or conditions.

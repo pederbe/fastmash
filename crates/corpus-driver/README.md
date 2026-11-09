@@ -22,9 +22,19 @@ and [blocked-signal mask](https://docs.kernel.org/filesystems/proc.html)
 documentation define the Linux observation.
 
 ```sh
-cargo build --release -p fastmash-corpus-driver --bin fastmash-corpus
-target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --evidence-dir /tmp/ordinary-pipe
-target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --stdin-file --evidence-dir /tmp/ordinary-file
+cargo build --release -p fastmash -p fastmash-corpus-driver --bins
+```
+
+Use the candidate's package version and fresh directories for the two input modes:
+
+```bash
+bash -c '
+set -eu
+version=$(cargo pkgid -p fastmash)
+version=${version##*@}
+target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --evidence-dir /var/tmp/ordinary-pipe
+target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --stdin-file --evidence-dir /var/tmp/ordinary-file
+'
 ```
 
 The default run executes all 3,137 frozen cases: 2,857 ordinary cases, 22 directory-input
@@ -90,7 +100,7 @@ It sets an alarm and a selected signal mask, creates a real broken output pipe
 when requested, then replaces itself with the actual executable. It preserves
 raw argument and environment bytes, PID, descriptors and final signal status.
 Private setup variables are removed from the candidate environment. Ordinary
-execution uses `Command::exec`; the inherited-ignored-SIGPIPE control uses safe
+execution uses `Command::exec`. The inherited-ignored-SIGPIPE control uses safe
 POSIX `execve` to retain Rust's ignored disposition, calibrated by an actual
 failed pipe write. The launcher and migrated stream suite forbid unsafe code.
 

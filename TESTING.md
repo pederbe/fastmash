@@ -25,8 +25,18 @@ cargo clippy --workspace --all-targets -- -D warnings   # lints
 cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 cargo test --release --workspace         # unit and integration tests
 cargo build --release --workspace        # the binaries the corpus runs
-target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0
-target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --stdin-file
+```
+
+Then run both corpus input modes with the version from the current package:
+
+```bash
+bash -c '
+set -eu
+version=$(cargo pkgid -p fastmash)
+version=${version##*@}
+target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version"
+target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --stdin-file
+'
 ```
 
 Run the full suite with `--release`: memory-limit tests exercise the optimized
@@ -35,7 +45,7 @@ The frozen corpus sets `NO_COLOR=1` to compare the plain data contract, includin
 raw-terminal buffering. The color integration tests cover styled presentation.
 Installer tests exercise both Linux and macOS archive layouts, so Linux test
 environments also need `shasum` on `PATH`. On Arch-based systems, it is supplied
-at `/usr/bin/core_perl/shasum`; add that directory to the test environment's
+at `/usr/bin/core_perl/shasum`. Add that directory to the test environment's
 `PATH` if needed.
 
 Build the private release tools before the workspace tests. Installed-release
@@ -85,6 +95,179 @@ archive builder prepares its checker in temporary storage and runs it against
 the built executable and actual `xcrun vtool` metadata. Release mode also
 compares the two clean executable builds with this checker.
 
+### Integration tests
+
+`crates/cli/tests/` runs the compiled `fastmash` binary as a user would:
+arguments, standard input, standard output, standard error and exit status.
+Each file covers one area, such as grouping, selectors, quantiles, record
+separators or pipeline failures (closed pipes, unreadable input, full disks).
+
+For a focused `native_streams` or `grouping` run, or
+`text_summaries`, `quantiles`, `dispersion`, `extrema`, `sum_mean`,
+`presentation`, `selectors` or `invocation` on macOS, first build the child-only launcher with
+`cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-test-process`.
+The `weighted_mean`, `csv_input` and `selection` resource fixtures also need this launcher on
+both platforms.
+Workspace tests build it automatically. Set `FASTMASH_TEST_PROCESS` to use a
+prepared launcher elsewhere. It sets alarms and selected signal masks in a fresh
+process, creates broken pipes without shared readers, then replaces itself with
+the tested executable. The tests retain its PID and actual signal status.
+
+The native sorting, duplicate-removal, release-installation and ignored Cargo
+installation fixtures also need that launcher to copy
+standalone executables in a separate process. Parallel launches cannot inherit
+the copy's writable descriptor and make Linux refuse to execute it with
+"Text file busy". The Linux regression
+`standalone_executable_copy_does_not_race_concurrent_launches` stages fresh copies
+while other threads launch commands. It fails on the first unexpected exit,
+without retrying the command.
+
+The publication-check fixtures use their own single-threaded command to copy
+executables before launching them. Their Linux regression
+`copied_release_fixture_starts_during_parallel_launches` checks 1,000 fresh copies
+under concurrent process launches.
+
+The macOS full-output checks in these suites own a calibrated full destination
+until the tested child has been reaped and its parent-side handles are closed.
+They then verify cleanup. Failed cleanup retains the private image and evidence.
+The weighted-mean, CSV and selection zero-file-size fixtures use child-only POSIX shell
+setup to ignore SIGXFSZ before the Rust launcher applies the actual limit. A native
+control raises the unblocked signal across exec and verifies the limit and PID.
+The quantile suite retains a 60-second bound for ordinary Commands and a
+30-second bound for full-output checks on macOS.
+Grouping's resource fixtures apply file-size and Linux address-space limits in
+the fresh child. The file-size check uses native spawn attributes to restore
+SIGXFSZ only in that child, with real output pipes and signal status. The paused
+memory check retains the tested process's PID across exec.
+
+For focused `record_separators` tests, prepare both launchers with
+`cargo build --release --locked -p fastmash-corpus-driver --bins`.
+Set `FASTMASH_TEST_CORPUS` to use a prepared copy elsewhere. Ordinary-output
+read-error fixtures observe the exact input queued in a raw terminal before
+releasing the executable. They wait for that queue to drain while the child is
+alive, observe the child stopped,
+then reclaim the foreground and resume it to produce real `EIO`. This is an input
+drain observation, not proof of parsed records or an output acknowledgement.
+The existing corpus cases still require their visible output acknowledgement.
+Commands that reject input earlier retain their actual error output and status,
+with no claim that a later read encountered `EIO`.
+Combined read-error/full-output fixtures borrow the calibrated full destination
+through the same coordinator and retain it until both processes are reaped. They
+keep candidate stderr separate from the cancellation channel. Calibration checks
+the selected executable's path and hash, including the named GNU 1.9 reference.
+Native qualification sets `FASTMASH_RECORD_FAULT_EVIDENCE` to a prepared private
+directory. Completed combined cases retain input observations, selected-sink
+calibration and native detach receipts there after child and sink cleanup.
+The record suite forbids unsafe code. Its Linux memory-refusal fixtures apply the
+same 32 MiB address-space limit through the fresh process launcher.
+
+A child can become unsignalable on macOS just before its terminal status is
+observable. Stop selection keeps its PID owned and waits within the existing
+execution deadline for a successful stop or a fresh terminal observation. The
+regression control repeats a post-read parse failure during descriptor teardown. An earlier exit never counts as observed late EIO.
+
+Native tests use the same command boundary. `native_descriptors.rs` covers closed
+and incorrectly opened standard streams. `native_streams.rs` covers inherited
+signals, terminal buffering and output faults. `native_sort.rs`
+covers stable sorting, quoted CSV, complete records, selection, weighted
+calculations, hash restart, piped replay, supported locales and forced spill.
+Its interruption checks wait until a private run has been opened and unlinked
+before sending a signal, then check temporary-storage cleanup. The ordinary CLI
+suites still cover all operation families and the table-health, CSV, selection,
+comparison and presentation extensions.
+
+When you fix a bug, add an integration test that reproduces it.
+
+### Regression corpus
+
+The regression corpus is a set of more than 3,000 commands, each with its
+exact expected standard output, standard error and exit status. Expected
+results for compatible behavior were observed from GNU datamash 1.9, running
+each case twice, on the reference hosts. Cases where Fastmash intentionally
+differs record Fastmash's documented behavior instead. The
+[differences page](https://fastmash.io/guide/differences.html) gives the
+reasons.
+
+```sh
+cargo build --release --workspace   # candidate and corpus driver
+target/release/fastmash-corpus --help
+```
+
+To continue after mismatches, add `--keep-going` to either corpus command in
+the [quick start](#quick-start).
+
+A run stops at the first mismatch and prints the case, the expected bytes and
+the actual bytes. The cases give their input through a pipe. `--stdin-file` runs
+those with ordinary input again with standard input as a regular file, against the same
+expectations. Both modes need coverage: hash grouping applies to eligible files
+and to eligible piped input in language locales, with different replay paths.
+The frozen fixture and its provenance record stay byte-identical across platforms.
+The unpublished Rust driver in `crates/corpus-driver/` executes the 2,857 ordinary
+cases in both modes. Its default run also executes 22 directory-input and 51
+closed-output-pipe cases, 72 full-output cases and 65 early commands with stdin
+held open, plus 67 held-output observations and three acknowledged late-input
+errors. Regular-file mode records why each other case belongs to the default
+Rust run. Its `--keep-going` and `--evidence-dir` options retain every case's
+disposition and outcome. CI runs this same driver on Linux, native macOS 15 and
+26, and the executable installed from the native archive.
+Pass the current package version with `--expected-version`, as shown above.
+On macOS, the corpus driver uses a private full
+filesystem for output faults and controlling-terminal job control for input
+faults. The separate Rust command tests retain the native fault helpers below. `--evidence-dir` retains the executable and fixture hashes, per-case
+dispositions, native observations and mismatches. Regular-file mode records the
+transport cases it leaves to the piped run, instead of silently excluding them.
+
+### Compatibility cases
+
+A change that affects observable behavior (output, a diagnostic, an exit
+status) needs a matching expectation. For behavior that should match GNU
+datamash, compare against a real `datamash` 1.9 and record what it does. For
+an intended difference, update
+[Differences from GNU datamash](https://fastmash.io/guide/differences.html)
+in the same pull request.
+
+### Numerical checks
+
+Fastmash promises identical numerical results across machines, so
+arithmetic changes get extra scrutiny:
+
+- Arithmetic primitives are tested against independently computed,
+  high-precision reference values.
+- `log` and `exp` results are checked against an independent
+  arbitrary-precision library (MPFR), with emphasis on inputs whose results lie
+  close to a rounding boundary.
+- Numerical rules are versioned together. A change to any numerical output
+  is deliberate, reviewed and listed in the changelog, never silent.
+
+The native release workspace run includes every retained `v3` primitive and
+exact-helper row in `crates/portable-numerics/testdata/`, the exact conversion
+tests, and the independent MPFR logarithm/exponential challenge and range-boundary
+fixtures in the CLI. `record_separators::reproducibility` executes representative
+portable expectations through the command itself, including extreme exponents,
+ordered numerical calculations and fixed random vectors. The installed command
+run repeats those CLI expectations. No host GNU result replaces a fixture or
+changes the `portable-binary80-v4` profile. V4 retains these v3 arithmetic
+fixtures unchanged and advances locale collation to ICU4X 2.4. The seeded
+Group-order regression separately checks the resulting numerical selection.
+Generating new MPFR reference data and
+running optional reference-host measurements are separate from consuming these
+already retained independent fixtures.
+
+### Benchmarks
+
+Performance claims come from **representative jobs**: real and synthetic
+datasets with the commands people run on them, grouped into **job families**
+such as decimal sums, quantiles and grouped text. Each job is timed for GNU
+datamash 1.9, the previous Fastmash build and the candidate, on the same host,
+alternating runs to reduce noise.
+
+A performance change is accepted when it is faster on its target jobs and no
+existing job becomes materially slower (the **predecessor guards**). See the
+[benchmark method](https://fastmash.io/benchmarks/method.html) for datasets,
+margins and hardware.
+
+## Locale tools
+
 For locale tooling checks, run:
 
 ```sh
@@ -102,9 +285,6 @@ also exercises the numeric generator with the installed POSIX locale and an
 invalid locale. Numeric generation and comparison use the Rust tools. The
 collation generation and comparison commands below use independent native
 references and pinned Unicode data.
-The numeric emitter's header names its actual
-`fastmash-generate-numeric-locales` command. This provenance-only difference from
-legacy emission leaves the table body and data unchanged.
 
 Build the compiled locale tree with the reference's `localedef --no-archive`, using its
 `SUPPORTED` list. Include each UTF-8 entry without a modifier under its listed
@@ -274,184 +454,13 @@ completed report. Successful stderr is retained without rejecting the result.
 This command covers fixed punctuation only. Use the verifier above for letters,
 digits and script blocks.
 
-### Integration tests
-
-`crates/cli/tests/` runs the compiled `fastmash` binary as a user would:
-arguments, standard input, standard output, standard error and exit status.
-Each file covers one area, such as grouping, selectors, quantiles, record
-separators or pipeline failures (closed pipes, unreadable input, full disks).
-
-For a focused `native_streams` or `grouping` run, or
-`text_summaries`, `quantiles`, `dispersion`, `extrema`, `sum_mean`,
-`presentation`, `selectors` or `invocation` on macOS, first build the child-only launcher with
-`cargo build --release --locked -p fastmash-corpus-driver --bin fastmash-test-process`.
-The `weighted_mean`, `csv_input` and `selection` resource fixtures also need this launcher on
-both platforms.
-Workspace tests build it automatically. Set `FASTMASH_TEST_PROCESS` to use a
-prepared launcher elsewhere. It sets alarms and selected signal masks in a fresh
-process, creates broken pipes without shared readers, then replaces itself with
-the tested executable. The tests retain its PID and actual signal status.
-
-The native sorting, duplicate-removal, release-installation and ignored Cargo
-installation fixtures also need that launcher to copy
-standalone executables in a separate process. Parallel launches cannot inherit
-the copy's writable descriptor and make Linux refuse to execute it with
-"Text file busy". The Linux regression
-`standalone_executable_copy_does_not_race_concurrent_launches` stages fresh copies
-while other threads launch commands. It fails on the first unexpected exit,
-without retrying the command.
-
-The publication-check fixtures use their own single-threaded command to copy
-executables before launching them. Their Linux regression
-`copied_release_fixture_starts_during_parallel_launches` checks 1,000 fresh copies
-under concurrent process launches.
-
-The macOS full-output checks in these suites own a calibrated full destination
-until the tested child has been reaped and its parent-side handles are closed.
-They then verify cleanup. Failed cleanup retains the private image and evidence.
-The weighted-mean, CSV and selection zero-file-size fixtures use child-only POSIX shell
-setup to ignore SIGXFSZ before the Rust launcher applies the actual limit. A native
-control raises the unblocked signal across exec and verifies the limit and PID.
-The quantile suite retains a 60-second bound for ordinary Commands and a
-30-second bound for full-output checks on macOS.
-Grouping's resource fixtures apply file-size and Linux address-space limits in
-the fresh child. The file-size check uses native spawn attributes to restore
-SIGXFSZ only in that child, with real output pipes and signal status. The paused
-memory check retains the tested process's PID across exec.
-
-For focused `record_separators` tests, prepare both launchers with
-`cargo build --release --locked -p fastmash-corpus-driver --bins`.
-Set `FASTMASH_TEST_CORPUS` to use a prepared copy elsewhere. Ordinary-output
-read-error fixtures observe the exact input queued in a raw terminal before
-releasing the executable. They wait for that queue to drain while the child is
-alive, observe the child stopped,
-then reclaim the foreground and resume it to produce real `EIO`. This is an input
-drain observation, not proof of parsed records or an output acknowledgement.
-The existing corpus cases still require their visible output acknowledgement.
-Commands that reject input earlier retain their actual error output and status,
-with no claim that a later read encountered `EIO`.
-Combined read-error/full-output fixtures borrow the calibrated full destination
-through the same coordinator and retain it until both processes are reaped. They
-keep candidate stderr separate from the cancellation channel. Calibration checks
-the selected executable's path and hash, including the named GNU 1.9 reference.
-Native qualification sets `FASTMASH_RECORD_FAULT_EVIDENCE` to a prepared private
-directory. Completed combined cases retain input observations, selected-sink
-calibration and native detach receipts there after child and sink cleanup.
-The record suite forbids unsafe code. Its Linux memory-refusal fixtures apply the
-same 32 MiB address-space limit through the fresh process launcher.
-
-A child can become unsignalable on macOS just before its terminal status is
-observable. Stop selection keeps its PID owned and waits within the existing
-execution deadline for a successful stop or a fresh terminal observation. The
-regression control repeats a post-read parse failure during descriptor teardown;
-an earlier exit never counts as observed late EIO.
-
-Native tests use the same command boundary. `native_descriptors.rs` covers closed
-and incorrectly opened standard streams. `native_streams.rs` covers inherited
-signals, terminal buffering and output faults; `native_sort.rs`
-covers stable sorting, quoted CSV, complete records, selection, weighted
-calculations, hash restart, piped replay, supported locales and forced spill.
-Its interruption checks wait until a private run has been opened and unlinked
-before sending a signal, then check temporary-storage cleanup. The ordinary CLI
-suites still cover all operation families and the table-health, CSV, selection,
-comparison and presentation extensions.
-
-When you fix a bug, add an integration test that reproduces it.
-
-### Regression corpus
-
-The regression corpus is a set of more than 3,000 commands, each with its
-exact expected standard output, standard error and exit status. Expected
-results for compatible behavior were observed from GNU datamash 1.9, running
-each case twice, on the reference hosts. Cases where Fastmash intentionally
-differs record Fastmash's documented behavior instead; the
-[differences page](https://fastmash.io/guide/differences.html) gives the
-reasons.
-
-```sh
-cargo build --release --workspace   # candidate and corpus driver
-target/release/fastmash-corpus --binary target/release/fastmash --expected-version 0.2.0 --keep-going
-target/release/fastmash-corpus --help
-```
-
-A run stops at the first mismatch and prints the case, the expected bytes and
-the actual bytes. The cases give their input through a pipe; `--stdin-file` runs
-those with ordinary input again with standard input as a regular file, against the same
-expectations. Both modes need coverage: hash grouping applies to eligible files
-and to eligible piped input in language locales, with different replay paths.
-The frozen fixture and its provenance record stay byte-identical across platforms.
-The unpublished Rust driver in `crates/corpus-driver/` executes the 2,857 ordinary
-cases in both modes. Its default run also executes 22 directory-input and 51
-closed-output-pipe cases, 72 full-output cases and 65 early commands with stdin
-held open, plus 67 held-output observations and three acknowledged late-input
-errors. Regular-file mode records why each other case belongs to the default
-Rust run. Its `--keep-going` and `--evidence-dir` options retain every case's
-disposition and outcome. CI runs this same driver on Linux, native macOS 15 and
-26, and the executable installed from the native archive.
-For a development version, pass `--expected-version VERSION`, using the version
-in `crates/cli/Cargo.toml`.
-On macOS, the corpus driver uses a private full
-filesystem for output faults and controlling-terminal job control for input
-faults. The separate Rust command tests retain the native fault helpers below. `--evidence-dir` retains the executable and fixture hashes, per-case
-dispositions, native observations and mismatches. Regular-file mode records the
-transport cases it leaves to the piped run, instead of silently excluding them.
-
-### Compatibility cases
-
-A change that affects observable behavior (output, a diagnostic, an exit
-status) needs a matching expectation. For behavior that should match GNU
-datamash, compare against a real `datamash` 1.9 and record what it does. For
-an intended difference, update
-[Differences from GNU datamash](https://fastmash.io/guide/differences.html)
-in the same pull request.
-
-### Numerical checks
-
-Fastmash promises identical numerical results across machines, so
-arithmetic changes get extra scrutiny:
-
-- Arithmetic primitives are tested against independently computed,
-  high-precision reference values.
-- `log` and `exp` results are checked against an independent
-  arbitrary-precision library (MPFR), with emphasis on inputs whose results lie
-  close to a rounding boundary.
-- Numerical rules are versioned together. A change to any numerical output
-  is deliberate, reviewed and listed in the changelog, never silent.
-
-The native release workspace run includes every retained `v3` primitive and
-exact-helper row in `crates/portable-numerics/testdata/`, the exact conversion
-tests, and the independent MPFR logarithm/exponential challenge and range-boundary
-fixtures in the CLI. `record_separators::reproducibility` executes representative
-portable expectations through the command itself, including extreme exponents,
-ordered numerical calculations and fixed random vectors. The installed command
-run repeats those CLI expectations. No host GNU result replaces a fixture or
-changes the `portable-binary80-v4` profile. V4 retains these v3 arithmetic
-fixtures unchanged and advances locale collation to ICU4X 2.4. The seeded
-Group-order regression separately checks the resulting numerical selection.
-Generating new MPFR reference data and
-running optional reference-host measurements are separate from consuming these
-already retained independent fixtures.
-
-### Benchmarks
-
-Performance claims come from **representative jobs**: real and synthetic
-datasets with the commands people run on them, grouped into **job families**
-such as decimal sums, quantiles and grouped text. Each job is timed for GNU
-datamash 1.9, the previous Fastmash build and the candidate, on the same host,
-alternating runs to reduce noise.
-
-A performance change is accepted when it is faster on its target jobs and no
-existing job becomes materially slower (the **predecessor guards**). See the
-[benchmark method](https://fastmash.io/benchmarks/method.html) for datasets,
-margins and hardware.
-
 ## Supported test environment
 
 | | |
 | --- | --- |
 | OS | Linux with glibc, or WSL2 |
 | Kernel | A supported Linux kernel with native signals and temporary-file support |
-| Tools | Latest stable Rust; Python 3.10 or later for website checks |
+| Tools | Latest stable Rust, Python 3.10 or later for website checks |
 | Temporary storage | A writable disk-backed `TMPDIR`, such as ext4 |
 
 Under WSL, keep the checkout and `TMPDIR` on the Linux filesystem rather than a
@@ -472,8 +481,7 @@ tests. Pull requests run all 3,137 frozen cases with piped input plus the
 ordinary-input cases with regular-file input against the installed archive on
 both systems. Manual and release qualification also run both corpus modes
 against the source-built executable, as do calls with installation checks
-disabled. Successful version actions use the explicit development version;
-their error and transport expectations stay frozen.
+disabled. Successful version actions use the explicit development version. Their error and transport expectations stay frozen.
 
 The workspace builds the Rust test tools used by these gates. To run the same
 gate locally on a supported native Mac, use this Bash block:
@@ -487,7 +495,8 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 cargo test --release --workspace --locked
 cargo build --release --workspace --locked
-version=$(sed -n '\''s/^version = "\([^"]*\)"$/\1/p'\'' crates/cli/Cargo.toml | head -n 1)
+version=$(cargo pkgid -p fastmash)
+version=${version##*@}
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version"
 target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --stdin-file
 '
@@ -500,7 +509,7 @@ These named dispositions adapt observation or diagnostics only:
 | --- | --- |
 | Rust full-stream tests and all 72 `io=full` corpus cases | Shared Rust test support uses a private 8 MiB HFS+ image filled to real `ENOSPC`. Actual executable controls calibrate selected and unselected streams, with empty-sink checks before and after each case. Tests verify destination facts and owned-image cleanup. Corpus evidence retains these receipts. Linux uses `/dev/full`. |
 | `grouping-next:read-error`, `grouping-next:read-error-header`, `paired-private:grouped-read-error-after-result` | The corpus driver observes the frozen visible completed-group acknowledgement, stops the candidate, reclaims the controlling terminal foreground and resumes it. The next read produces real `EIO` without wake bytes on both platforms. Final stdout, stderr and status 1 stay frozen. |
-| `sorting/header-empty`, `sorting/header-only-comments`; command cases in `record_separators::record_intake` and `weighted_mean` | Native sorting on Linux and macOS reports exactly `fastmash: missing input header for named grouping key`, with empty stdout and status 1. It emits no full warning because the data phase has not begun. The fixture remains frozen; only these two named corpus diagnostics are adapted. |
+| `sorting/header-empty`, `sorting/header-only-comments`. Command cases in `record_separators::record_intake` and `weighted_mean` | Native sorting on Linux and macOS reports exactly `fastmash: missing input header for named grouping key`, with empty stdout and status 1. It emits no full warning because the data phase has not begun. The fixture remains frozen. Only these two named corpus diagnostics are adapted. |
 | Paired-operation composition in `weighted_mean` | Both platforms check the native Sort route and identical report bytes. |
 | `grouping-reference-r2:held-flush-pipe`, `grouping-reference-r2:held-flush-pipe-header`, `output-header-lifecycle:held-8192`, `header-writer-reference:pipe-large` | The held prefix follows the actual destination's `fstat` block size, capped at 8,192 bytes, with a zero size using 8,192. Prefix bytes are derived from the frozen output and the known pre-EOF output, rather than candidate output. The destination facts are retained. Final stdout, status, live held process and terminal line buffering remain checked. |
 | `/usr/bin/timeout` in shared direct-command helpers | A fresh Rust launcher arms a native alarm before executing the command, without a GNU utility dependency. Linux keeps its existing timeout wrapper. |
@@ -508,13 +517,13 @@ These named dispositions adapt observation or diagnostics only:
 | Spill unit tests `exhausted_merge_inputs_are_released_before_the_merge_ends`, `streaming_merge_and_truncated_runs_report_failures`, `full_fan_in_initialization_and_partial_consumer_failures_propagate` | Native `fstat` identity checks verify early descriptor release. Linux retains `/dev/full`; Darwin uses a read-only `/dev/null` descriptor and its native `EBADF` to check immediate spill-write and buffered final-flush error propagation. Native CLI tests separately check calibrated `ENOSPC`. |
 
 The following exclusions are specific to Linux mechanisms. They remain in the
-Linux gate; generic suites are not disabled wholesale on macOS:
+Linux gate. Generic suites are not disabled wholesale on macOS:
 
 | Test or component | Reason and native coverage |
 | --- | --- |
-| `grouping::native_variable_allocation_refusal_is_explicit`; `text_summaries::text_allocation_failure_is_explicit`; `record_separators::transpose::transpose_allocation_failure_is_explicit_and_has_no_output`; `record_separators::crosstab::crosstab_allocation_failure_is_explicit` | These faults depend on Linux address-space enforcement and calibrated small glibc process limits. Darwin address-space limits do not provide that fault. Checked-allocation unit fixtures, growable command tests and native spill refusal/error paths still run; these particular real allocation-failure thresholds remain Linux evidence. |
-| `grouping::eight_thread_language_sorts_use_a_fraction_of_an_address_space_limit`, including its `paused_language_sort` helper | The measurement inspects Linux `/proc/PID/status` and glibc arena reservation under `RLIMIT_AS`. macOS uses its documented conservative initial chunk target when Linux memory facts are unavailable; explicit small targets, language sorting and spill remain tested natively. |
-| `text_summaries::text_final_output_is_written_without_a_second_copy` | Its calibrated 32 MiB address-space allowance is a Linux observation. The native test still checks the full large output; it does not claim that Linux allocation threshold on Darwin. |
+| `grouping::native_variable_allocation_refusal_is_explicit`; `text_summaries::text_allocation_failure_is_explicit`; `record_separators::transpose::transpose_allocation_failure_is_explicit_and_has_no_output`; `record_separators::crosstab::crosstab_allocation_failure_is_explicit` | These faults depend on Linux address-space enforcement and calibrated small glibc process limits. Darwin address-space limits do not provide that fault. Checked-allocation unit fixtures, growable command tests and native spill refusal/error paths still run. These particular real allocation-failure thresholds remain Linux evidence. |
+| `grouping::eight_thread_language_sorts_use_a_fraction_of_an_address_space_limit`, including its `paused_language_sort` helper | The measurement inspects Linux `/proc/PID/status` and glibc arena reservation under `RLIMIT_AS`. macOS uses its documented conservative initial chunk target when Linux memory facts are unavailable. Explicit small targets, language sorting and spill remain tested natively. |
+| `text_summaries::text_final_output_is_written_without_a_second_copy` | Its calibrated 32 MiB address-space allowance is a Linux observation. The native test still checks the full large output. It does not claim that Linux allocation threshold on Darwin. |
 | Ignored `quantiles` tests `growth_and_sort_scratch_exhaustion_are_reported`, `percentile_and_trim_allocation_failures`, `robust_allocation_failures`, `dedup_allocation_failure_and_duplicate_heavy_stream` | These opt-in Linux installed-binary tests require the calibrated address-space fault. Ordinary quantiles, robust operations, sample growth and output faults remain in the native run. |
 | Other existing ignored named-reference, retained-dataset, locale-generation and timing tests | Their explicit reference, dataset or measurement prerequisites remain unchanged on both platforms. The retained workspace inventory and result log name them and their reasons. Native GNU comparisons are recorded separately, and cannot redefine portable expectations. |
 
@@ -538,7 +547,7 @@ overrides. The existing opt-in prepared quantile headers, wide sorted headers
 and migration-example tests also run because their installed-binary prerequisite
 is then available. The hosted comparison example records exact candidate and GNU
 identities, output eligibility, seven alternating samples and observed variation.
-Its GNU installation serves this comparison only; installation itself requires
+Its GNU installation serves this comparison only. Installation itself requires
 neither Rust nor GNU coreutils.
 
 Evidence lives under the runner's temporary directory and is retained as CI

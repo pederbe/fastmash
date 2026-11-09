@@ -1,7 +1,7 @@
-# Profiling complete Commands
+# Profiling complete commands
 
-Use hotpath-rs for local diagnosis of startup, decimal calculations, Grouping
-and Spill. Ordinary builds have no profiling dependency or instrumentation.
+Use hotpath-rs for local diagnosis of startup, decimal calculations, grouping
+and spill. Ordinary builds have no profiling dependency or instrumentation.
 The optional dependency uses MIT-licensed hotpath 0.31.1. Its transitive
 dependencies are checked by the repository's `cargo deny check licenses` policy.
 CPU report decoding also brings in the permissive Zlib-licensed `zlib-rs`.
@@ -11,7 +11,7 @@ The integration follows upstream [setup](https://hotpath.rs/),
 [allocation profiling](https://hotpath.rs/functions) and
 [CPU profiling](https://hotpath.rs/cpu_profiling). It uses a guard whose lifetime
 includes command parsing, execution and stream completion. Controlled errors
-and Refusals flush reports before the process exits. Forced termination and
+and refusals flush reports before the process exits. Forced termination and
 aborts cannot promise a final report.
 
 ## Build and capture
@@ -22,49 +22,49 @@ repository root on Linux or macOS 15 or later.
 
 ```sh
 cargo +stable build --profile profiling --features hotpath-alloc --bin fastmash --example profile-jobs
-measure-lock build -- cargo +stable run --profile profiling --features hotpath-alloc --example profile-jobs -- /tmp/fastmash-profiling
+cargo +stable run --profile profiling --features hotpath-alloc --example profile-jobs -- /var/tmp/fastmash-profiling
 ```
 
 Choose a fresh destination. The Rust example creates repeatable datasets and
-runs complete Commands with exact expected stdout, stderr and exit statuses.
-It covers a small sum, decimal accumulation, unsorted Grouping, forced native
-Spill, a command error and a Refusal. It retains inputs, command streams,
-statuses, binary identity and JSON reports in that destination. The Spill job
-uses a one-byte sort-memory target and verifies that private Spill runs were
+runs complete commands with exact expected stdout, stderr and exit statuses.
+It covers a small sum, decimal accumulation, unsorted grouping, forced native
+spill, a command error and a refusal. It retains inputs, command streams,
+statuses, binary identity and JSON reports in that destination. The spill job
+uses a one-byte sort-memory target and verifies that private spill runs were
 opened. This target forces a route for diagnosis, and is not a realistic
 performance comparison.
 
-The decimal job sums ten million `0.125` Records. Each value is one eighth, so
+The decimal job sums ten million `0.125` records. Each value is one eighth, so
 the independently known exact result is `1250000`. The larger workload gives
-the CPU sampler more time to attach before the Command finishes.
+the CPU sampler more time to attach before the command finishes.
 
 Use `--features hotpath` instead for timing without allocation tracking.
 For a single job, add its name after the destination, for example `decimal`
 or `spill`. The other names are `small`, `grouping`, `error` and `refusal`.
 
 The calculation jobs are `pskew`, `jarque`, `pcov` and `mixed`. Each sorts
-200,000 Records into two Groups and checks its exact output. Balanced signals
+200,000 records into two groups and checks its exact output. Balanced signals
 of -1 and +1 with factors of -2 and +2 give skewness 0, covariance 2 and RMS 1.
-At this Group size the Jarque-Bera probability rounds to 0. The mixed job also
+At this group size the Jarque-Bera probability rounds to 0. The mixed job also
 checks stable contribution order with `last`. For example:
 
 ```sh
-measure-lock build --timeout 900 -- cargo +stable run --profile profiling --features hotpath-alloc --example profile-jobs -- /var/tmp/fastmash-pskew pskew
+cargo +stable run --profile profiling --features hotpath-alloc --example profile-jobs -- /var/tmp/fastmash-pskew pskew
 ```
 
-Reports distinguish preparation and final emission from the Group's moment
+Reports distinguish preparation and final emission from the group's moment
 and paired summaries. Moment reports include the ordered mean separately.
 Use the retained input with the CPU or Callgrind commands below to attribute
 individual arithmetic primitives without instrumenting every sample.
 
 The CSV decoding jobs are `csv-short`, `csv-long`, `csv-quoted` and
-`csv-escaped`. Each counts 4,096 Records and checks the exact result. They cover
+`csv-escaped`. Each counts 4,096 records and checks the exact result. They cover
 short fields, 1,024-byte fields, quoted fields with embedded CRLF, and escaped
 quotes with empty fields. Use their retained `.input` files with the Callgrind
 command below, replacing `sum 1` with `--csv-in count 2`.
 
 The CSV copying jobs isolate decoding, retention and selection over 4,096
-Records. The first five use the same input: `a,1,"PAYLOAD"`, with 1,024 `x`
+records. The first five use the same input: `a,1,"PAYLOAD"`, with 1,024 `x`
 bytes in the quoted payload. Output uses the ordinary tab separator.
 
 | Job | Command | Expected output |
@@ -72,25 +72,25 @@ bytes in the quoted payload. Output uses the ordinary tab separator.
 | `csv-copy` | `--csv-in count 2` | `4096` |
 | `csv-copy-sort` | `--csv-in -s -g1 count 2` | `a` and `4096` |
 | `csv-copy-spill` | `--csv-in -s -g1 count 2` | `a` and `4096` |
-| `csv-copy-top` | `--csv-in top:1 2` | The first complete decoded Record |
-| `csv-copy-sort-top` | `--csv-in -s -g1 top:1 2` | The first complete decoded Record |
+| `csv-copy-top` | `--csv-in top:1 2` | The first complete decoded record |
+| `csv-copy-sort-top` | `--csv-in -s -g1 top:1 2` | The first complete decoded record |
 | `csv-copy-wide` | `--csv-in count 2` | `4096` |
 
 `csv-copy-spill` sets `FASTMASH_SORT_MEMORY_BYTES=65536` and checks that a
 private run was opened. The other jobs use the runner's 64 MiB target. This
-forced Spill isolates run encoding and merge-head allocation costs. It does
+forced spill isolates run encoding and merge-head allocation costs. It does
 not represent ordinary sort-memory selection. `csv-copy-wide` has 128 quoted
 one-byte fields followed by `1`, exposing repeated small appends and field-end
-writes. The top jobs have tied ranks, so only the first Record wins. They
+writes. The top jobs have tied ranks, so only the first record wins. They
 isolate rejecting candidates from copying accepted candidates, rather than
-measuring a workload in which every Record replaces the winner.
+measuring a workload in which every record replaces the winner.
 
 Build with `hotpath-alloc` and run a job twice in fresh destinations, once with
 the default allocation-byte metric and once with `HOTPATH_ALLOC_METRIC=count`.
 Allocation bytes include successive buffer growth. They are not a count of
 bytes copied, live memory or peak resident memory. Use the raw Callgrind call
 graph to distinguish copying inside decoding from copying into sort chunks.
-Keep per-Record helpers uninstrumented to avoid adding a measurement to every
+Keep per-record helpers uninstrumented to avoid adding a measurement to every
 append.
 
 The example configures `HOTPATH_OUTPUT_PATH`, `HOTPATH_OUTPUT_FORMAT=json`, and
@@ -105,8 +105,8 @@ Inspect `JOB.json` with a JSON viewer or `jq . JOB.json`. Function timings
 include instrumented callees, so nested totals cannot be added. Allocation
 reports attribute Rust allocations exclusively by default. They are neither
 peak resident memory nor total process memory.
-Instrumentation stays at Command, sort and Group-summary boundaries rather
-than individual Records or arithmetic primitives.
+Instrumentation stays at command, sort and group-summary boundaries rather
+than individual records or arithmetic primitives.
 
 ## CPU sampling
 
@@ -126,7 +126,7 @@ use a separate session as required by upstream. This block explicitly uses Bash.
 bash -c '
 set -euo pipefail
 cargo +stable build --profile profiling --features hotpath-cpu --bin fastmash --example profile-jobs
-measure-lock build -- setsid -w target/profiling/examples/profile-jobs /tmp/fastmash-cpu decimal
+setsid -w target/profiling/examples/profile-jobs /var/tmp/fastmash-cpu decimal
 '
 ```
 
@@ -144,9 +144,9 @@ samples to locate work, then verify the hypothesis in an ordinary build.
 
 ## Instruction counts on Linux
 
-Hotpath 0.29 can attribute executed instructions to the existing instrumented
+Hotpath can attribute executed instructions to the existing instrumented
 functions using Valgrind's Callgrind tool. This helps distinguish extra work
-from noisy elapsed times when investigating a small Command. Install Valgrind
+from noisy elapsed times when investigating a small command. Install Valgrind
 in the development environment, then use a fresh directory for each capture.
 This block explicitly uses Bash.
 
@@ -156,7 +156,7 @@ set -euo pipefail
 cargo +stable build --profile profiling --features hotpath-callgrind --bin fastmash
 capture=$(mktemp -d)
 printf "1\n2\n3\n" > "$capture/input"
-measure-lock build -- env HOTPATH_METRICS_SERVER_OFF=1 \
+env HOTPATH_METRICS_SERVER_OFF=1 \
   HOTPATH_OUTPUT_PATH="$capture/report.json" \
   HOTPATH_CALLGRIND_OUT_FILE="$capture/callgrind.%p" \
   valgrind --tool=callgrind --callgrind-out-file="$capture/callgrind.%p" \

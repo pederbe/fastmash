@@ -2,24 +2,19 @@
 
 Status: accepted.
 
-**Decision:** one Fastmash version gives identical results for the same input
-and explicit settings on every supported machine, provided that the
-implementation meets the project's accuracy and performance goals. Command
-compatibility with GNU datamash is kept, and specific numerical differences are
-assessed and documented one by one.
+One Fastmash version gives identical data results for the same input and
+explicit settings on every supported machine. Arithmetic and locale rules are
+built into the program. Differences from GNU datamash are
+[documented individually](../guide/differences.md).
 
-The alternative was to match whatever the local GNU datamash build prints.
-Different GNU builds can disagree in the last digit, so that target would be a
-moving one, while portable results give one expected answer that tests, users
-and CI can rely on. Matching the local GNU output byte for byte would ease some
-migrations; that benefit was judged smaller.
+Matching each local GNU datamash build instead would ease some migrations, but
+different builds can disagree in the last digit. Portable results provide one
+expected answer across supported platforms.
 
-**Current implementation:** software 80-bit arithmetic that preserves GNU
-datamash's precision, range and order of evaluation, with `log` and `exp`
-computed in software aiming for the correctly rounded result. The decision
-fixes the property, not this particular engine: precision, algorithms and
-dependencies may change, but any change to numerical output is versioned and
-listed in the changelog.
+Software 80-bit arithmetic preserves GNU datamash's precision, range and order
+of evaluation. Software `log` and `exp` aim for correctly rounded results. The
+engine may change, but any change to numerical output needs a new numerical
+profile and a changelog entry.
 
 **Consequences:**
 

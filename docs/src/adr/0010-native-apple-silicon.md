@@ -1,31 +1,20 @@
 # 0010: Native macOS
 
-Status: accepted for development. The published 0.1.0 platform scope remains
-[ADR 0007: Linux first](0007-linux-first.md).
+Status: accepted platform decision. The development-only release boundary was
+superseded by [ADR 0011](0011-native-release-delivery.md). Linux external sorting
+was superseded by [ADR 0014](0014-native-sorting-everywhere.md).
 
-The Linux external-supervision decision below is superseded by
-[ADR 0014: Native sorting in one executable](0014-native-sorting-everywhere.md).
+Support `aarch64-apple-darwin` on macOS 15 and later. Establish runtime support
+through native command, numerical and installed-archive checks on macOS 15 and
+26. Cross-compilation alone cannot establish those behaviors.
 
-Add native `aarch64-apple-darwin` support with macOS 15 as the minimum, verified
-on native hosted macOS 15 and 26 runners. Cross-compilation cannot establish
-runtime support, and the maintainer has no macOS hardware. Support requires
-the complete applicable Command contract and Numerical profile checks, plus
-installation and execution of the same checksummed archive on both baselines.
-Once delivered in a release, this platform scope supersedes ADR 0007.
+Use native interfaces for streams, signals, randomness and temporary storage.
+Software arithmetic and bundled locale rules preserve
+[portable results](0003-portable-results.md). Built-in stable sorting includes
+disk spill, so macOS needs no external sorter.
 
-Use the built-in Sort route, including Spill, on macOS. Keep Linux external
-supervision and its helper confined to Linux. Native OS primitives implement
-standard streams, signals, randomness, terminal detection and private temporary
-storage; software arithmetic and built-in locale rules preserve Portable
-results under [ADR 0003: Portable results](0003-portable-results.md).
-
-Build the archive once with `MACOSX_DEPLOYMENT_TARGET=15.0`, record source,
-compiler, flags and hashes, and install those bytes outside the checkout.
-The archive contains one executable with target-specific license notices.
-The installer uses macOS's checksum tool and retains an existing installation
-when a download or checksum fails. CI artifacts are development evidence;
-publishing a release remains a separate maintainer action.
-
-Intel macOS, macOS before 15, native Windows and macOS external supervision
-remain outside scope. Hosted GNU comparisons describe the tested workloads
-and runners, without carrying Linux benchmark claims over to macOS.
+The platform scope excludes Intel macOS, macOS before 15 and native Windows.
+Linux benchmark results do not become macOS performance claims. The
+[testing guide](../contributing/testing.md#native-macos-development-gate) and
+[release guide](https://github.com/pederbe/fastmash/blob/main/RELEASING.md#native-macos-release-delivery)
+describe the checks.

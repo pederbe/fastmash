@@ -1,21 +1,23 @@
 # 0016: Version releases with release-plz
 
-Release-plz prepares one weekly pull request with Cargo versions and dated
-notes from conventional pull request titles. It merges after required CI,
-then creates the binary tag and draft. All five published crates participate
-in versioning and the binary's combined changelog. A shared Cargo workspace
-version keeps all five crates and their exact dependency requirements aligned.
-An unchanged library still receives the release version, preserving same-source
-checksum comparisons during partial upload recovery.
+Status: accepted. Supersedes the download-version file in
+[0011](0011-native-release-delivery.md).
 
-Keep release-plz Cargo publication disabled. The existing Release workflow
-qualifies the archives and packages before publishing the GitHub release and
-uploading crates. Its checksum-aware uploader resumes partial Cargo uploads.
-Moving uploads into release-plz would publish source packages before those
-delivery checks, changing the established release boundary.
+Use release-plz for weekly version and changelog preparation. All five published
+crates share a workspace version and exact internal dependency requirements.
+Even an unchanged library receives that version, preserving same-source checksum
+comparisons when recovering a partial upload.
 
-This supersedes ADR 0011's download-version file as the deployed website's
-authority. The published `release` branch's workspace Cargo manifest supplies its
-version, so no separate version-file updater is needed. Local previews retain
-the last recorded published version as their fallback. ADRs 0012 and 0013's
-qualification and performance boundaries remain unchanged.
+Keep Cargo publication in the Release workflow, after archive and package
+checks. Enabling release-plz uploads would publish source packages before those
+checks, changing the release boundary. The existing uploader can resume partial
+uploads by comparing source checksums.
+
+The deployed website takes its download version from the published `release`
+branch's workspace manifest. This avoids a separate version-file updater.
+Local previews retain the last recorded published version as a fallback.
+[0012](0012-release-delivery-and-performance.md) and
+[0013](0013-reuse-tested-release-artifacts.md) retain their performance and
+delivery guarantees. The
+[release guide](https://github.com/pederbe/fastmash/blob/main/RELEASING.md#weekly-releases)
+describes the workflow.

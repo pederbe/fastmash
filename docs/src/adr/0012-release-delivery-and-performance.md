@@ -1,29 +1,22 @@
 # 0012: Separate release delivery from performance acceptance
 
-The Linux executable-pair references below are superseded by
-[ADR 0014: Native sorting in one executable](0014-native-sorting-everywhere.md).
-The release and performance evidence boundaries remain unchanged.
+Status: accepted performance and publication decision. Supersedes the
+performance-manifest prerequisite and manual publication step in
+[0011](0011-native-release-delivery.md). Delivery details were updated by
+[0013](0013-reuse-tested-release-artifacts.md) and [0014](0014-native-sorting-everywhere.md).
 
-Status: accepted. Supersedes the Linux performance-manifest prerequisite and
-manual publication step in [ADR 0011](0011-native-release-delivery.md). Its
-native archive reproducibility and installed-delivery guarantees remain.
+Assess performance when runtime code, dependencies or build recipes change.
+Compare affected workloads with the previous accepted build. New public speed
+claims require dated measurements identifying the executable and conditions.
+Routine versioning does not start another whole-release benchmark campaign.
 
-Performance-affecting runtime, dependency and build-recipe changes retain their
-predecessor guards during normal change review. New speed claims require dated
-measurements identifying the actual executable and conditions. Weekly versioning
-does not start a whole-release benchmark campaign.
+A package-version change can alter generated code and layout, so a later
+release does not inherit a claim that its exact bytes were measured. Published
+results remain attached to their recorded versions.
 
-Cargo package-version changes can alter generated code and layout. A new release
-therefore does not inherit a claim that its bytes were measured in an earlier
-campaign. Published results remain scoped to their recorded versions.
-
-For delivery, build each platform executable twice and require identical bytes.
-Freeze the actual Linux pair in `release/delivery.sha256` and the native macOS
-archive by its workflow SHA-256. Test those bytes before and after upload,
-verify provenance, and publish automatically only after all required checks pass.
-Historical qualified manifests and benchmark records remain unchanged.
-
-Requiring fresh controlled measurements of every exact version would require
-scheduled access to measurement hosts and their retained inputs. Keeping
-performance acceptance with the changes that can affect it supports weekly
-hosted releases without turning delivery checks into performance claims.
+Requiring a new full campaign for every version would couple scheduled releases
+to measurement-host access without identifying which changes need investigation.
+Release delivery instead establishes reproducibility, correctness, installation
+and provenance, then publishes automatically after its required checks pass.
+See the [benchmark method](../benchmarks/method.md) and
+[release guide](https://github.com/pederbe/fastmash/blob/main/RELEASING.md).

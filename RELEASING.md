@@ -75,7 +75,7 @@ The GitHub-hosted workflows perform these steps for the frozen version:
 2. Run workspace tests and both regression-corpus input modes against that
    executable. Package the same bytes into the archive,
    `.deb` and `.rpm`, then test extraction, installation, Commands and removal.
-3. Build the macOS executable twice on macOS 15 with the pinned compiler,
+3. Build the macOS executable twice on macOS 15 with current stable Rust,
    remapped paths and deployment target 15.0. Freeze one archive and its SHA-256.
 4. Attest the platform archives and Linux packages and upload a draft release.
    Verify downloaded Linux assets against the build's retained checksums and
@@ -151,7 +151,7 @@ version tag and refresh the website.
 
 Use this procedure when a report warrants a fix to a published release.
 It does not schedule a patch release. Product fixes and regression tests belong
-in this repository; the maintainer retains qualification plans, logs, source
+in this repository. The maintainer retains qualification plans, logs, source
 bindings and measurements in the private measurement repository. Published
 claims keep their supporting results here.
 
@@ -203,7 +203,7 @@ license/advisory and documentation checks on that source. Retain the
 independent primitive, exact conversion and MPFR challenge checks. Then run the
 command tests and both corpus input modes against the candidate executable.
 The command tests include the
-independent numerical CLI fixtures and affected-feature tests; they must execute
+independent numerical CLI fixtures and affected-feature tests. They must execute
 the candidate rather than a separately built executable.
 
 For an already built Linux candidate, this Bash block runs the maintained
@@ -225,7 +225,7 @@ target/release/fastmash-corpus --binary "$FASTMASH_TEST_BINARY" --expected-versi
 
 Run any affected feature's opt-in tests whose prerequisites are available, and
 record the remaining exclusions with their reasons. The independent numerical
-library tests still execute the test build; the CLI fixtures and corpus exercise
+library tests still execute the test build. The CLI fixtures and corpus exercise
 the candidate. A source, dependency, toolchain, flag or executable change
 invalidates the affected build and correctness evidence and needs fresh checks. Retain the
 previous release and its records unchanged.
@@ -250,7 +250,7 @@ version, published crate versions, notes and executable version agree, and that
 internal dependency requirements resolve to that version.
 
 The Release workflow checks those hashes, runs the workspace and candidate
-Command checks plus both corpus modes, and produces a draft with the archive,
+command checks plus both corpus modes, and produces a draft with the archive,
 Debian and RPM packages, checksums and provenance. Its archive and installed
 package checks use:
 
@@ -293,9 +293,9 @@ gh workflow run macos.yml --ref contrib/macos-release-delivery -f release-archiv
 ```
 
 Use the actual candidate branch in place of that example. Record the source
-revision and successful workflow run. The pinned compiler builds twice into
+revision and successful workflow run. Current stable Rust builds twice into
 separate empty target trees with `MACOSX_DEPLOYMENT_TARGET=15.0` and remapped
-paths; the native builder refuses differing executable bytes. It packages one
+paths. The native builder refuses differing executable bytes. It packages one
 executable, target-specific notices, `binary.sha256` and build provenance.
 The candidate uses the final `fastmash-vX.Y.Z-aarch64-apple-darwin.tar.gz` name,
 with `artifact_kind=release-candidate` recorded in its provenance.
@@ -324,8 +324,7 @@ leaves the draft unpublished. Branch CI retains the candidate-installation round
 because it has no draft release to download.
 
 The macOS checksum is frozen per workflow run rather than stored in the Linux
-manifest. Two clean builds establish within-run executable reproducibility;
-hosted SDK updates do not imply that a later run can rebuild the same bytes.
+manifest. Two clean builds establish within-run executable reproducibility. Hosted SDK updates do not imply that a later run can rebuild the same bytes.
 The archive's checksum, embedded executable manifest, source/compiler/build
 provenance and GitHub attestation bind the tested bytes to their delivery.
 Never substitute a development CI archive or rewrite 0.1.0 evidence.

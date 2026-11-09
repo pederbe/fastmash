@@ -16,10 +16,6 @@ and applies the requested **operations**. It writes results to standard output
 and diagnostics to standard error, and reports success or failure through its
 [exit status](errors.md).
 
-On a terminal, calculations and Top-N selection use colored headings, aligned
-fields and completion marks. Files and pipes keep the plain data format shown
-in this guide's examples. Use `--no-color` for that format on a terminal too.
-
 | Page | Covers |
 | --- | --- |
 | [Fields and input](input.md) | Field selectors, separators, headers, record terminators, comments, missing values |
@@ -32,7 +28,6 @@ in this guide's examples. Use `--no-color` for that format on a terminal too.
 | [Table health reports](table-health.md) | Inspection, supplied validation rules and versioned TSV output |
 | [Per-row operations and modes](modes.md) | Rounding, binning, checksums, paths, `cut`, `transpose`, `check`, `rmdup` |
 | [Numbers, output and locales](output.md) | Number formats, `--format`, `--round`, locales, portable results |
-| [Terminal presentation](terminal-color.md) | Styled results, health reports, detection and suppression |
 | [Errors, exit statuses and resources](errors.md) | What can fail, how it is reported, memory and disk use |
 | [Differences from GNU datamash](differences.md) | Every intentional difference |
 

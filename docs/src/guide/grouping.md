@@ -8,9 +8,13 @@ Output rows start with the key values, followed by the results:
 
 ```console
 $ printf 'A\tx\t1\nA\tx\t2\nA\ty\t5\nB\ty\t4\n' | fastmash -g 1,2 sum 3
-A	x	3
-A	y	5
-B	y	4
+Grouped summary
+────────────────────────────────
+  field-1  field-2  sum(field-3)
+        A        x             3
+        A        y             5
+        B        y             4
+✔ Completed
 ```
 
 A group is a run of **adjacent** records with equal keys. When the key changes,
@@ -21,9 +25,13 @@ If equal keys are not adjacent, the same key appears in more than one group:
 
 ```console
 $ printf 'b\t2\na\t1\nb\t3\n' | fastmash -g 1 sum 2
-b	2
-a	1
-b	3
+Grouped summary
+────────────────────────────────
+  field-1  sum(field-2)
+        b             2
+        a             1
+        b             3
+✔ Completed
 ```
 
 ## Sorting first: `-s`
@@ -32,8 +40,12 @@ b	3
 
 ```console
 $ printf 'b\t2\na\t1\nb\t3\n' | fastmash -s -g 1 sum 2
-a	1
-b	5
+Grouped summary
+────────────────────────────────
+  field-1  sum(field-2)
+        a             1
+        b             5
+✔ Completed
 ```
 
 The sort is stable: records with equal keys keep their input order, so
@@ -50,86 +62,56 @@ the job is faster.
 
 ### Large inputs
 
-When standard input is a file (`fastmash -s -g 1 sum 2 < data.tsv`) and its
-keys repeat, Fastmash does not sort the records at all: it collects each
-group's records as they arrive and sorts only the groups, which is faster and
-needs memory only for the groups (hash grouping). The result is the same as
-sorting's. Where it could differ, for example when a record lacks a key field
-or a value is invalid, or where the groups turn out to be too many, Fastmash
-reads the file again and sorts it, so the output and any error are exactly
-what the sort gives.
+Fastmash sorts inside its own executable. It holds a sort buffer in memory and
+writes sorted runs to temporary files when needed. `TMPDIR` selects their
+directory, with `/tmp` as the default. The operating system removes the files
+when Fastmash exits, including after interruption.
 
-Input from a pipe (`cut -f 1,3 data.tsv | fastmash -s -g 1 sum 2`) is grouped
-the same way in a language locale such as `en_US.UTF-8`: Fastmash keeps what
-it reads in memory, as the sort would, so that it can sort it if it has to. A
-job that gives up late, near the end of a large input, then takes somewhat
-longer than sorting would have. In `C` and `C.UTF-8`, piped input is sorted,
-which needs less memory there. `FASTMASH_PIPE_GROUPING=sort` sorts piped
-input in every locale, and `=hash` groups it in every locale where Fastmash
-sorts in process. With `-W`, input whose columns are separated by the same
-blanks for each value is grouped this way too; where the same key comes with
-different blanks before it, Fastmash sorts. `--vnlog` and `rand` always sort;
-`FASTMASH_GROUPING=sort` makes every job sort.
+For eligible input with repeated keys, hash grouping collects operation state
+per key and sorts only the groups. If this cannot preserve sorted behavior, it
+rereads the input and sorts it before writing results. Language-locale pipes
+can retain input for that replay. C-locale pipes normally sort directly.
+File and pipe input can therefore have different time and memory costs.
+A file that changes between readings contributes its second-reading contents.
 
-Otherwise Fastmash sorts in memory, and when the data is large it writes sorted chunks
-to temporary files in `TMPDIR` (default `/tmp`) and merges them. The files are
-anonymous: the operating system removes them automatically, even if Fastmash
-is interrupted.
+Sorting can spill, but the values retained by statistics such as quantiles stay
+in memory. A sort-memory target is not a total-process memory limit. See
+[memory and disk requirements](errors.md#memory).
 
-A chunk holds each record's grouping keys and the fields its operations use
-(the whole record with `--full`, in language locales, or when the field
-separator is a letter, a digit or the decimal point, which a number could run
-on into) and 32 bytes per record for sorting. A sort starts with a 16 MiB
-chunk. When it fills, Fastmash holds the whole input in memory instead, if
-that fits: within the buffer GNU `sort` would use for an input file, a quarter
-of the available memory, half of what is free under any cgroup memory limit,
-a share of what is free under that limit or on the host (one per running
-Fastmash), and with less than half the swap in use. For piped input it asks
-for 64 MiB, then twice its memory each time it fills, within the same bounds.
-If doubling does not fit, it tries a 50% chunk increase before spilling.
-Otherwise the first chunk takes 64 MiB unless a cgroup memory limit lacks
-room for it, and then the sort spills. In language locales, and for other
-means, higher moments, normality tests and paired statistics grouped by one
-key, records are prepared for sorting on several threads, whose batches take
-a sixteenth of the 64 MiB.
+### Resource controls
 
-`FASTMASH_SORT_MEMORY_BYTES` fixes the chunk's memory target instead, and
+`FASTMASH_SORT_MEMORY_BYTES` sets the sort-buffer memory target, and
 `FASTMASH_SORT_TRACE` (set to anything) reports each decision on standard
 error. Neither is a limit on Fastmash's total memory use.
 
-In language locales, and for those calculations in the `C` locales, records
-are prepared for sorting on up to 8 threads. On Linux, numerical calculations
+`FASTMASH_GROUPING=sort` always sorts. For piped input,
+`FASTMASH_PIPE_GROUPING=sort` selects sorting and `=hash` permits hash grouping
+in every supported locale. `--vnlog` and `rand` always sort. These controls
+change the route, not the result.
+
+When the selected calculations support parallel sorting, records are prepared
+on up to 8 threads. On Linux, numerical calculations
 can merge spilled records and calculate in parallel on two threads. Both use
 the processors available to Fastmash, or `OMP_NUM_THREADS` if it is set,
 capped by `OMP_THREAD_LIMIT`. Set `OMP_NUM_THREADS=1` to sort on one thread.
 
-Every sorted calculation uses Fastmash's own sorter in `C`, `POSIX`,
-`C.UTF-8` and their supported aliases, as well as language locales. This
-includes `rand`, `geomean`, `harmmean`, `ms`, `rms`, skewness, kurtosis,
-normality tests, paired statistics and mixed calculations. They preserve
-contribution order and seeded randomness, and need neither the system `sort`
-nor the sort supervisor.
-
-Sorted `rmdup` also uses the native sorter in every supported locale. It keeps
-complete records and stable key order, with the same anonymous Spill storage
-as sorted calculations. Case folding affects ordering, while duplicate keys
-are compared exactly. Records that repeat an earlier record's key are skipped
-as they are read, so inputs with many duplicates sort fewer records and spill
-less.
+Sorted `rmdup` keeps complete records and stable key order, with the same
+temporary-storage policy. Case folding affects ordering, while duplicate keys
+are compared exactly. The [architecture](../contributing/architecture.md#sorting)
+describes buffer sizing, parallel preparation and replay eligibility.
 
 ## Ignoring case: `-i`
 
 `-i` compares keys ignoring ASCII letter case, for grouping and sorting. The
 output shows each key as it first appeared. `-i` also affects `countunique`
 and `unique`. Under the Turkic character types (`tr_TR`, `az_AZ` and a few
-others), where glibc does not fold `i` and `I`, `-i` is refused; set
+others), where glibc does not fold `i` and `I`, `-i` is refused. Set
 `LC_CTYPE=C.UTF-8` to fold ASCII letters.
 
 ## Pivot tables: `crosstab`
 
 `crosstab KEY1,KEY2` (or `ct`) builds a two-way table with one row per value of the first
-key and one column per value of the second. By default each cell is a count;
-you can name one operation instead:
+key and one column per value of the second. By default each cell is a count. You can name one operation instead:
 
 ```console
 $ printf 'a\tx\t1\na\ty\t2\nb\tx\t3\n' | fastmash -s crosstab 1,2 sum 3
