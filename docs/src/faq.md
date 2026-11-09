@@ -62,11 +62,7 @@ with `--color=always`. Styling defaults to automatic terminal detection;
 
 ## Does sorting need another program?
 
-The development version sorts every command inside `fastmash`, on Linux and
-macOS. Published Linux releases through 0.2.0 also include
-`fastmash-sort-supervisor` for their external sorting route. Keep that helper
-beside `fastmash` when using one of those releases. See the
-[installation guide](install.md) for the selected release.
+No. Since Fastmash 0.4.0, all sorting is handled internally.
 
 ## Why exit status 77?
 

@@ -335,7 +335,7 @@ Never substitute a development CI archive or rewrite 0.1.0 evidence.
 After publication, the workflow advances the published version pointer and
 refreshes the website. New platform support still requires updating homepage
 installation text and `operatingSystem` metadata, README, installation, requirements,
-comparison, FAQ and roadmap pages, `docs/descriptions.json` and the platform
+comparison and FAQ pages, `docs/descriptions.json` and the platform
 text emitted into `llms.txt`. Remove the candidate qualifications only when the
 release is available. Keep the existing benchmark claims scoped to their
 measured Linux 0.1.0 binaries.
