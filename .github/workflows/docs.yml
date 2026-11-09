@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   workflow_call:
     inputs:
-      demo:
+      browser:
         description: Check website interactions and demo rendering
         type: boolean
         default: false
@@ -35,7 +35,7 @@ jobs:
       # or unused render fails), landing page and install.sh at the root.
       - run: bash scripts/build_site.sh --cloudflare
       - name: Check website and demo rendering
-        if: inputs.demo || github.event_name == 'workflow_dispatch'
+        if: inputs.browser || github.event_name == 'workflow_dispatch'
         env:
           TMPDIR: ${{ runner.temp }}
         run: |

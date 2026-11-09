@@ -35,6 +35,7 @@ version = "1.0.0"
 LOCK
 touch scripts/demo/demo.html scripts/demo/record.mjs scripts/demo/og.html
 touch site/demo.gif site/demo.mp4 site/demo.webm site/demo-poster.png site/og.png
+touch site/index.html site/landing.js site/landing.css site/landing-noscript.css scripts/test_landing_page.mjs
 printf '# repository fixture\n' > release/package-repository.sh
 git add .
 git commit -qm fixture
@@ -89,6 +90,15 @@ expect application=false configuration=false packages=
 printf '# release configuration change\n' > release-plz.toml
 printf '// application change\n' > crates/app/src/lib.rs
 expect application=true configuration=true packages=fastmash
+# Landing-page checks stay focused, including when the browser test itself changes.
+for path in site/index.html site/landing.js site/landing.css site/landing-noscript.css \
+    scripts/test_landing_page.mjs; do
+  printf 'landing-page change\n' > "$path"
+  expect application=false configuration=false packages=
+done
+printf 'landing-page change\n' > site/index.html
+printf '// application change\n' > crates/app/src/lib.rs
+expect application=true configuration=false packages=fastmash
 # Demo source and generated assets never suppress accompanying application changes.
 for path in scripts/demo/demo.html scripts/demo/record.mjs scripts/demo/og.html \
     site/demo.gif site/demo.mp4 site/demo.webm site/demo-poster.png site/og.png; do
