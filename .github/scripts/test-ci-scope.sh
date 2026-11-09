@@ -33,9 +33,24 @@ version = "1.0.0"
 name = "devlib"
 version = "1.0.0"
 LOCK
-touch scripts/demo/demo.html scripts/demo/record.mjs scripts/demo/og.html
-touch site/demo.gif site/demo.mp4 site/demo.webm site/demo-poster.png site/og.png
-touch site/index.html site/landing.js site/landing.css site/landing-noscript.css scripts/test_landing_page.mjs
+website_paths=(
+  ARCHITECTURE.md GLOSSARY.md TESTING.md
+  docs/book.toml docs/descriptions.json docs/theme/head.hbs docs/theme/fastmash.css
+  docs/theme/navigation.js docs/theme/footer.js docs/theme/favicon.svg
+  site/index.html site/landing.js site/landing.css site/landing-noscript.css
+  site/demo.gif site/demo.mp4 site/demo.webm site/demo-poster.png site/og.png
+  site/_headers site/release-version.txt site/diagrams/dark.json site/diagrams/rendered/example.svg
+  scripts/demo/demo.html scripts/demo/record.mjs scripts/demo/og.html
+  scripts/build_site.sh scripts/build_site.py scripts/test_build_site.py
+  scripts/check_public_references.py scripts/test_check_public_references.py
+  scripts/benchmark_chart.py scripts/test_landing_page.mjs scripts/test_docs.mjs
+  package.json package-lock.json wrangler.jsonc
+)
+for path in "${website_paths[@]}"; do
+  mkdir -p "$(dirname "$path")"
+  touch "$path"
+done
+touch scripts/application-tool.sh install.sh
 printf '# repository fixture\n' > release/package-repository.sh
 git add .
 git commit -qm fixture
@@ -90,27 +105,23 @@ expect application=false configuration=false packages=
 printf '# release configuration change\n' > release-plz.toml
 printf '// application change\n' > crates/app/src/lib.rs
 expect application=true configuration=true packages=fastmash
-# Landing-page checks stay focused, including when the browser test itself changes.
-for path in site/index.html site/landing.js site/landing.css site/landing-noscript.css \
-    scripts/test_landing_page.mjs; do
-  printf 'landing-page change\n' > "$path"
+# Website inputs share one route, without suppressing mixed application or workflow edits.
+for path in "${website_paths[@]}"; do
+  printf 'website change\n' > "$path"
   expect application=false configuration=false packages=
 done
-printf 'landing-page change\n' > site/index.html
+printf 'website change\n' > scripts/test_docs.mjs
 printf '// application change\n' > crates/app/src/lib.rs
 expect application=true configuration=false packages=fastmash
-# Demo source and generated assets never suppress accompanying application changes.
-for path in scripts/demo/demo.html scripts/demo/record.mjs scripts/demo/og.html \
-    site/demo.gif site/demo.mp4 site/demo.webm site/demo-poster.png site/og.png; do
-  printf 'demo change\n' > "$path"
-  expect application=false configuration=false packages=
-done
-printf 'demo change\n' > scripts/demo/demo.html
-printf '// application change\n' > crates/app/src/lib.rs
-expect application=true configuration=false packages=fastmash
-printf 'demo change\n' > site/demo.webm
+printf 'website change\n' > site/diagrams/dark.json
 printf '# workflow change\n' > .github/workflows/ci.yml
 expect application=false configuration=true packages=
+# Shared installation behavior and unrelated scripts still select application checks.
+printf 'website change\n' > site/index.html
+printf '# installer change\n' > install.sh
+expect application=true configuration=false packages=
+printf '# application tool change\n' > scripts/application-tool.sh
+expect application=true configuration=false packages=
 printf '# documentation\n' > README.md
 expect application=false packages=
 rm README.md

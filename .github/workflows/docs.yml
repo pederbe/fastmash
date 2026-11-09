@@ -38,11 +38,14 @@ jobs:
         if: inputs.browser || github.event_name == 'workflow_dispatch'
         env:
           TMPDIR: ${{ runner.temp }}
+          WRANGLER_SEND_METRICS: 'false'
         run: |
           BROWSER_PATH=$(command -v google-chrome)
           export BROWSER_PATH
           npm run test:landing
           npm run test:docs
+          python3 -B scripts/benchmark_chart.py svg docs/src/benchmarks/core-jobs.tsv "$TMPDIR/core-jobs.svg"
+          npx wrangler deploy --dry-run --outdir "$TMPDIR/website-dry-run"
           node scripts/demo/record.mjs --preview --og
           git diff --exit-code -- site/
       - name: Check links
