@@ -122,6 +122,10 @@ if base:
             continue
         elif path in {"scripts/build_site.sh", "scripts/build_site.py", "scripts/test_build_site.py"}:
             continue  # Website checks cover these files without rebuilding the application.
+        elif path.startswith("scripts/demo/") or path in {
+            "site/demo.gif", "site/demo.mp4", "site/demo.webm", "site/demo-poster.png", "site/og.png",
+        }:
+            continue  # Website and demo rendering checks cover these inputs.
         elif path.startswith(("tools/icu-exemplars/", "packaging/homebrew/")):
             continue  # Dedicated checks cover these inputs without application builds.
         else:

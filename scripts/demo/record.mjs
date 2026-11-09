@@ -102,7 +102,7 @@ if (!flags.has('--preview')) {
   }
   copyFileSync(join(frames, 'results.png'), join(root, 'site/demo-poster.png'));
 }
-if (flags.has('--og')) {
+if (flags.has('--og') && !flags.has('--preview')) {
   copyFileSync(join(frames, 'og.png'), join(root, 'site/og.png'));
   console.log('site/og.png');
 }
