@@ -1,7 +1,7 @@
 # Install
 
 Fastmash runs on **Linux**, **Windows through WSL2** and
-**macOS 15 and later**. The current release is @VERSION@.
+**macOS 15 and later**.
 
 ## Choose a method
 
@@ -46,7 +46,7 @@ sudo apt install fastmash
 ```
 
 Later versions arrive through `sudo apt update` and `sudo apt upgrade`.
-The key is trusted only for this repository. Earlier versions remain available.
+The key is trusted only for this repository.
 
 For Debian 10, Ubuntu 20.04 and newer. Remove it with `sudo apt remove fastmash`.
 
@@ -63,7 +63,7 @@ sudo dnf install fastmash
 dnf asks to trust the signing key on first use. Before confirming, check that
 its fingerprint is `76C1 7E23 B7D3 F8FD ED36 D31A 7BAC 7AF6 644B D290`,
 the same key used by the apt repository above. Update with
-`sudo dnf upgrade fastmash`. Earlier versions remain available.
+`sudo dnf upgrade fastmash`.
 
 For Fedora, RHEL 8 and newer. Remove it with `sudo dnf remove fastmash`.
 
@@ -91,23 +91,31 @@ Downloads the latest release archive for your system, checks its checksum and
 installs it into `~/.local/bin`. Add that directory to your `PATH` if needed.
 Run the same command again to update.
 
-Set `FASTMASH_INSTALL_DIR` to choose another installation directory, or
-`FASTMASH_VERSION` to choose a release.
+Set `FASTMASH_INSTALL_DIR` to choose another installation directory.
 
 ## Single packages and archives
 
-These downloads install one release without adding a repository. You update
-them yourself.
+These downloads install the latest release without adding a repository. You
+update them yourself.
 
 ### Debian or RPM package
 
-```sh
-curl -fLO https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash_@VERSION@_amd64.deb
-sudo apt install ./fastmash_@VERSION@_amd64.deb
-```
+Each command looks up the latest release, then downloads and installs its
+package. On Debian or Ubuntu:
 
 ```sh
-sudo dnf install https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash-@VERSION@-1.x86_64.rpm
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
+tag=${tag##*/}
+curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash_${tag#v}_amd64.deb"
+sudo apt install "./fastmash_${tag#v}_amd64.deb"
+```
+
+On Fedora, RHEL and similar:
+
+```sh
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
+tag=${tag##*/}
+sudo dnf install "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-${tag#v}-1.x86_64.rpm"
 ```
 
 ### Linux archive
@@ -118,10 +126,11 @@ Bash (enter `bash` first if using Fish):
 
 ```bash
 bash -eu <<'EOF'
-version=@VERSION@
-name=fastmash-v$version-x86_64-unknown-linux-musl
-curl -fLO https://github.com/pederbe/fastmash/releases/download/v$version/$name.tar.gz
-curl -fLO https://github.com/pederbe/fastmash/releases/download/v$version/$name.tar.gz.sha256
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
+tag=${tag##*/}
+name=fastmash-$tag-x86_64-unknown-linux-musl
+curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz
+curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz.sha256
 sha256sum -c $name.tar.gz.sha256
 tar -xzf $name.tar.gz
 mkdir -p ~/.local/bin
@@ -129,28 +138,25 @@ cp "$name/fastmash" ~/.local/bin/
 EOF
 ```
 
-Replace `@VERSION@` with the version you want. Older releases used
-`x86_64-unknown-linux-gnu` archives, which need glibc. The quick installer
-chooses the available archive automatically. Releases before 0.4.0 also need
-the helper described under [older Linux installations](#older-linux-installations).
-
 ### macOS archive
 
 The quick installer chooses the macOS archive automatically. To download
-version @VERSION@ by hand:
+the latest archive by hand, run this in an empty directory:
 
 ```sh
-curl -fLO https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash-v@VERSION@-aarch64-apple-darwin.tar.gz
-curl -fLO https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash-v@VERSION@-aarch64-apple-darwin.tar.gz.sha256
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
+tag=${tag##*/}
+curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-$tag-aarch64-apple-darwin.tar.gz"
+curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-$tag-aarch64-apple-darwin.tar.gz.sha256"
 ```
 
-Then install it in Bash (enter `bash` first if using Fish). Set
-`FASTMASH_VERSION` if you downloaded a different version:
+Then install it from the same directory in Bash (enter `bash` first if using
+Fish):
 
 ```bash
 bash -eu <<'EOF'
-version=${FASTMASH_VERSION:-@VERSION@}
-name=fastmash-v$version-aarch64-apple-darwin
+set -- fastmash-v*-aarch64-apple-darwin.tar.gz
+name=${1%.tar.gz}
 shasum -a 256 -c "$name.tar.gz.sha256"
 tar -xzf "$name.tar.gz"
 (cd "$name" && shasum -a 256 -c binary.sha256)
@@ -238,14 +244,13 @@ Fastmash keeps no configuration files, caches or background services.
 
 ## Older Linux installations
 
-Releases before 0.4.0 used a second executable, `fastmash-sort-supervisor`.
-When installing one of those archives by hand, copy its helper beside
-`fastmash` from the same release.
+Early releases installed a second executable, `fastmash-sort-supervisor`,
+which Fastmash no longer uses.
 
 The quick installer removes an old helper during an upgrade when its checksum
 matches the earlier installation's ownership receipt. An installation without
-a receipt, or with a changed helper, leaves that file in place. Current releases
-do not use it. You can remove it if it belongs to the installation you upgraded
+a receipt, or with a changed helper, leaves that file in place. You can
+remove it if it belongs to the installation you upgraded
 or uninstalled:
 
 ```sh

@@ -9,7 +9,7 @@ settings and numerical last digits, and keep `datamash` installed while you comp
 
 ## Is it always faster?
 
-Not yet. The published Linux 0.1.0 [benchmarks](benchmarks/index.md) show
+Not yet. The published Linux [benchmarks](benchmarks/index.md) show
 Fastmash faster on many common jobs and slower on some others.
 Try it on your own data, and tell us about jobs where it is slower.
 
@@ -57,7 +57,7 @@ Results written to a file or another program keep their plain data format.
 
 ## Does sorting need another program?
 
-No. Since Fastmash 0.4.0, all sorting is handled internally.
+No. Fastmash handles all sorting internally.
 
 ## Why exit status 77?
 

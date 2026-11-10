@@ -3,13 +3,12 @@
 #
 #   curl -fsSL https://fastmash.io/install.sh | sh
 #
-# Downloads the selected platform archive, checks its SHA-256 checksum,
-# and installs fastmash into ~/.local/bin. Older Linux archives also contain
-# a sort supervisor, whose ownership is recorded for a later upgrade.
+# Downloads the latest release archive for this platform, checks its SHA-256
+# checksum, and installs fastmash into ~/.local/bin. Older Linux archives also
+# contain a sort supervisor, whose ownership is recorded for a later upgrade.
 # It needs curl or wget, tar, gzip, and sha256sum (Linux) or shasum (macOS).
 #
 # Settings (environment variables):
-#   FASTMASH_VERSION      a release such as 0.1.0 (default: the latest)
 #   FASTMASH_INSTALL_DIR  where to install (default: ~/.local/bin)
 #   FASTMASH_RELEASES     release download base URL, for mirrors
 #                         (default: https://github.com/pederbe/fastmash/releases)
@@ -64,9 +63,8 @@ main() {
         fail "please install curl or wget first."
     fi
 
-    version=${FASTMASH_VERSION:-$(latest_version)}
-    version=${version#v}
-    [ -n "$version" ] || fail "could not find the latest release; set FASTMASH_VERSION, such as 0.1.0."
+    version=$(latest_version)
+    [ -n "$version" ] || fail "could not find the latest release at $releases."
     case $version in
         *[!0-9A-Za-z.-]*|.*) fail "invalid release version: $version" ;;
     esac

@@ -31,6 +31,8 @@ jobs:
         run: |
           python3 -B -m unittest discover -s scripts -p 'test_check_public_references.py'
           python3 -B scripts/check_public_references.py
+      - name: Check user documentation for release numbers
+        run: cargo test --locked -p fastmash --test documentation
       # The deploy build: pinned mdBook, committed diagram renders (a missing
       # or unused render fails), landing page and install.sh at the root.
       - run: bash scripts/build_site.sh --cloudflare
