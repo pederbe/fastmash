@@ -42,14 +42,14 @@ to download and verify its archive:
 Linux:
 
 ```sh
-gh release download --repo pederbe/fastmash --pattern 'fastmash-*-x86_64-unknown-linux-*.tar.gz' --output fastmash.tar.gz
+gh release download --repo pederbe/fastmash --pattern 'fastmash-*-x86_64-unknown-linux-*.tar.gz' --output fastmash.tar.gz --clobber
 gh attestation verify fastmash.tar.gz --repo pederbe/fastmash
 ```
 
 macOS:
 
 ```sh
-gh release download --repo pederbe/fastmash --pattern 'fastmash-*-aarch64-apple-darwin.tar.gz' --output fastmash.tar.gz
+gh release download --repo pederbe/fastmash --pattern 'fastmash-*-aarch64-apple-darwin.tar.gz' --output fastmash.tar.gz --clobber
 gh attestation verify fastmash.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
 ```
 
