@@ -89,3 +89,17 @@ commit_parsers = [
   { message = "^(chore|ci|build|test|style|refactor)(\\([^)]*\\))?:", skip = true },
   { message = ".*", group = "<!-- 6 -->Other changes" },
 ]
+
+[[changelog.postprocessors]]
+pattern = '(?m)^- Make guides and decision records easier to use (\(\[#[0-9]+\]\(https://github\.com/pederbe/fastmash/pull/218\)\))$'
+replace = '- Reorganized documentation navigation, shortened architecture decision records and updated guides and examples. ${1}'
+
+[[changelog.postprocessors]]
+pattern = '(?m)^- Clarify CLI help and current command support (\(\[#[0-9]+\]\(https://github\.com/pederbe/fastmash/pull/219\)\))$'
+replace = '- Made CLI help shorter and easier to scan, with clearer examples and accurate descriptions of supported formats and limits. ${1}'
+
+[[changelog.postprocessors]]
+pattern = '(?m)^- Clarify CLI diagnostics and recovery hints (\(\[#[0-9]+\]\(https://github\.com/pederbe/fastmash/pull/220\)\))$'
+replace = """- Clarified error messages and recovery advice for field selection, result names, CSV support, sorting and NaN ranking values. ${1}
+
+These wording changes leave calculations and exit statuses unchanged. Scripts that match the changed error text may need updating."""
