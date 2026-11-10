@@ -818,4 +818,39 @@ mod tests {
         let status = crate::child_status::reap(&mut running.child, &mut running.reaped).unwrap();
         assert_eq!(status.code(), Some(17));
     }
+
+    #[test]
+    fn a_stopped_owned_candidate_is_resumed_before_cleanup() {
+        let child = Command::new("/bin/sleep")
+            .arg("30")
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let pid = Pid::from_raw(child.id() as i32);
+        let mut running = Running {
+            child,
+            reaped: false,
+            group: true,
+            cancel: None,
+            cleanup: std::env::temp_dir().join(format!("resume-cleanup-{}", pid.as_raw())),
+        };
+        let (cancel, _peer) = UnixStream::pair().unwrap();
+        cancel.set_nonblocking(true).unwrap();
+        let started = Instant::now();
+        assert!(stop(&mut running, pid, started, cancel.as_fd()).unwrap());
+        let raw = crate::child_status::observe(
+            &running.child,
+            &mut running.reaped,
+            rustix::process::WaitIdOptions::EXITED,
+        )
+        .unwrap();
+        println!("raw exit-only observation while stopped: {raw:?}");
+        assert!(running.status().unwrap().is_none());
+        assert!(resume(&mut running, pid, started, cancel.as_fd()).unwrap());
+        assert!(!running.reaped);
+        crate::child_status::cancel_group(&running.child, &mut running.reaped).unwrap();
+        running.group = false;
+        let status = crate::child_status::reap(&mut running.child, &mut running.reaped).unwrap();
+        assert_eq!(status.signal(), Some(Signal::SIGKILL as i32));
+    }
 }
