@@ -1,96 +1,16 @@
 //! Preserve invalid inherited streams without disabling Rust's descriptor safety.
-#[cfg(target_os = "linux")]
-use super::linux;
+#![forbid(unsafe_code)]
 use super::platform;
 use std::{
     fs,
     io::{self, Read, Seek, Write},
     os::{fd::AsFd, unix::fs::MetadataExt},
-    sync::atomic::{AtomicBool, AtomicU8, Ordering},
+    sync::atomic::{AtomicBool, Ordering},
 };
 
-static CLOSED: AtomicU8 = AtomicU8::new(0);
 static STDERR_FAILED: AtomicBool = AtomicBool::new(false);
 
-// ELF executable preinitializers run before Rust's standard-fd sanitization.
-// Only raw syscalls and an atomic store are safe here; no runtime is initialized.
-#[used]
-#[cfg(target_os = "linux")]
-#[unsafe(link_section = ".preinit_array")]
-static CAPTURE: unsafe extern "C" fn() = capture;
-
-#[cfg(target_os = "linux")]
-unsafe extern "C" fn capture() {
-    let mut closed = 0;
-    for fd in 0..3 {
-        // F_GETFD identifies closed slots without reading or writing the stream.
-        // SAFETY: fcntl F_GETFD takes no pointers.
-        if unsafe { linux::syscall(72, fd, 1, 0, 0) } == -9 {
-            closed |= 1 << fd;
-            // Occupy the slot so later opens cannot alias a standard stream.
-            // Wrong access retains EBADF for children as well as this process.
-            // SAFETY: the path is a static NUL-terminated string; the slot is free.
-            let opened = unsafe {
-                linux::syscall(
-                    257,
-                    (-100isize) as usize,
-                    c"/dev/null".as_ptr() as usize,
-                    usize::from(fd == 0),
-                    0,
-                )
-            };
-            if opened != fd as isize {
-                // No allocation or diagnostic is safe during failed initialization.
-                // SAFETY: exit_group takes no pointers and ends the process.
-                unsafe { linux::syscall(231, 1, 0, 0, 0) };
-            }
-        }
-    }
-    CLOSED.store(closed, Ordering::Relaxed);
-}
-
-// dyld runs Mach-O constructors before Rust's runtime initializes and repairs
-// closed standard descriptors. libc is available here; allocation and Rust's
-// runtime are not. Native process tests verify this ordering.
-#[cfg(target_os = "macos")]
-#[used]
-#[unsafe(link_section = "__DATA,__mod_init_func,mod_init_funcs")]
-static CAPTURE: unsafe extern "C" fn() = capture;
-
-#[cfg(target_os = "macos")]
-unsafe extern "C" fn capture() {
-    let mut closed = 0;
-    for fd in 0..3 {
-        // SAFETY: fcntl F_GETFD takes no pointers and inspects an inherited fd.
-        if unsafe { libc::fcntl(fd, libc::F_GETFD) } == -1 {
-            // SAFETY: __error returns this thread's live native errno slot.
-            if unsafe { *libc::__error() } != libc::EBADF {
-                // SAFETY: _exit ends the process without runtime teardown.
-                unsafe { libc::_exit(1) };
-            }
-            closed |= 1 << fd;
-            // Hold each closed slot with the wrong access mode, preserving an
-            // EBADF result and preventing later opens from aliasing a stream.
-            let access = if fd == 0 {
-                libc::O_WRONLY
-            } else {
-                libc::O_RDONLY
-            };
-            // SAFETY: open reads a constant NUL-terminated path, no mode is
-            // needed without O_CREAT, and the expected descriptor is free.
-            let opened = unsafe { libc::open(c"/dev/null".as_ptr(), access) };
-            if opened != fd {
-                // SAFETY: no runtime or diagnostic is safe after failed capture.
-                unsafe { libc::_exit(1) };
-            }
-        }
-    }
-    CLOSED.store(closed, Ordering::Relaxed);
-}
-
-pub(super) fn originally_closed(fd: usize) -> bool {
-    CLOSED.load(Ordering::Relaxed) & (1 << fd) != 0
-}
+pub(super) use super::startup::originally_closed;
 
 pub(super) fn finish_stderr() -> bool {
     let failed = STDERR_FAILED.load(Ordering::Relaxed);

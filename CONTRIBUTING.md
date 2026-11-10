@@ -102,8 +102,12 @@ separation between performance acceptance and release delivery.
   the differences page.
 - **Performance.** Include before-and-after measurements on the affected jobs.
   A change that slows down an existing representative job needs a strong reason.
-- **`unsafe` code.** Avoid it. If it is unavoidable, keep it minimal, add a
-  `// SAFETY:` comment explaining why it is sound, and expect close review.
+- **`unsafe` code.** New first-party unsafe code is prohibited outside the
+  audited startup module. Its approved scope is pre-runtime capture of closed
+  standard streams and the Linux process entry with its initial SIGPIPE setup.
+  Keep each operation minimal and explain its soundness with a `// SAFETY:`
+  comment. Any broader exception needs a new maintainer decision. See
+  [ADR 0017](https://fastmash.io/adr/0017-audited-startup.html).
 - **New dependencies.** Explain why the dependency is needed. Fastmash keeps
   its dependency tree small and every dependency must be compatible with
   `MIT OR Apache-2.0`.

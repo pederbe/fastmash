@@ -56,4 +56,5 @@
     - [0014: Native sorting in one executable](adr/0014-native-sorting-everywhere.md)
     - [0015: Stable release toolchain](adr/0015-stable-release-toolchain.md)
     - [0016: Release-plz](adr/0016-release-plz.md)
+    - [0017: Audited startup](adr/0017-audited-startup.md)
 - [About](about.md)
