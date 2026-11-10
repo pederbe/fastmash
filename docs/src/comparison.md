@@ -26,7 +26,7 @@ everywhere and is packaged by every Linux distribution, conda-forge and
 Homebrew.
 
 **Choose Fastmash when** you run datamash commands on Linux and want them
-faster (up to 4 times on the published Linux 0.1.0 [benchmarks](benchmarks/index.md)),
+faster (up to 4 times on the published Linux [benchmarks](benchmarks/index.md)),
 want the same digits on every machine, or want clear errors where datamash
 1.9 aborts or reads past its data. Most commands transfer directly. The
 [differences](guide/differences.md) are listed on one page.

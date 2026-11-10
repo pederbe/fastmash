@@ -3,8 +3,9 @@
 #
 #   curl -fsSL https://fastmash.io/install.sh | sh
 #
-# Downloads the selected platform archive, checks its SHA-256 checksum,
-# and installs fastmash into ~/.local/bin.
+# Downloads the latest release archive for this platform, checks its SHA-256
+# checksum, and installs fastmash into ~/.local/bin. Older Linux archives also
+# contain a sort supervisor, whose ownership is recorded for a later upgrade.
 # It needs curl or wget, tar, gzip, and sha256sum (Linux) or shasum (macOS).
 #
 # Settings (environment variables):
@@ -30,11 +31,13 @@ main() {
     case "$system:$machine" in
         Linux:x86_64)
             target=x86_64-unknown-linux-musl
+            programs=fastmash
             checksum_tool=sha256sum
             checksum() { sha256sum -c "$1"; }
             ;;
         Darwin:arm64)
             target=aarch64-apple-darwin
+            programs=fastmash
             checksum_tool=shasum
             checksum() { shasum -a 256 -c "$1"; }
             has sw_vers || fail "cannot determine the macOS version."
@@ -61,9 +64,9 @@ main() {
     fi
 
     version=$(latest_version)
-    [ -n "$version" ] || fail "could not find the latest release."
+    [ -n "$version" ] || fail "could not find the latest release at $releases."
     case $version in
-        *[!0-9A-Za-z.-]*|.*) fail "could not determine the latest release." ;;
+        *[!0-9A-Za-z.-]*|.*) fail "invalid release version: $version" ;;
     esac
     dir=${FASTMASH_INSTALL_DIR:-$HOME/.local/bin}
     name=fastmash-v$version-$target
@@ -76,16 +79,16 @@ main() {
     trap 'exit 143' TERM
     say "Downloading Fastmash $version..."
     if ! fetch "$releases/download/v$version/$name.tar.gz" "$tmp/$name.tar.gz" 2>/dev/null; then
-        # The latest published release may precede static Linux delivery.
-        # Keep the same release, and never fall back after a checksum failure.
-        [ "$system" = Linux ] || fail "could not download the latest release from $releases."
+        # Older releases provided GNU archives. Never fall back after a
+        # checksum failure: the selected archive must pass its own checksum.
+        [ "$system" = Linux ] || fail "could not download release $version from $releases."
         if has ldd && ldd --version 2>&1 | grep -qi musl; then
-            fail "the latest release has no static musl archive; its GNU archive needs glibc."
+            fail "release $version has no static musl archive; its older Linux archive needs glibc."
         fi
         target=x86_64-unknown-linux-gnu
         name=fastmash-v$version-$target
         fetch "$releases/download/v$version/$name.tar.gz" "$tmp/$name.tar.gz" ||
-            fail "could not download the latest release from $releases."
+            fail "could not download release $version from $releases."
     fi
     fetch "$releases/download/v$version/$name.tar.gz.sha256" "$tmp/$name.tar.gz.sha256" ||
         fail "could not download the checksum for release $version."
@@ -93,6 +96,10 @@ main() {
         fail "the download does not match its checksum; nothing was installed."
     tar -xzf "$tmp/$name.tar.gz" -C "$tmp" ||
         fail "could not unpack the archive; nothing was installed."
+
+    if [ "$system" = Linux ] && { [ -e "$tmp/$name/fastmash-sort-supervisor" ] || [ -L "$tmp/$name/fastmash-sort-supervisor" ]; }; then
+        programs="fastmash fastmash-sort-supervisor"
+    fi
 
     fingerprint() {
         if [ "$system" = Linux ]; then
@@ -103,23 +110,39 @@ main() {
         printf '%s\n' "${sum%% *}"
     }
 
-    [ -f "$tmp/$name/fastmash" ] && [ ! -L "$tmp/$name/fastmash" ] ||
-        fail "the archive has no regular fastmash executable; nothing was installed."
+    # Validate every program before changing an existing installation.
+    for program in $programs; do
+        [ -f "$tmp/$name/$program" ] && [ ! -L "$tmp/$name/$program" ] ||
+            fail "the archive has no regular $program executable; nothing was installed."
+    done
 
     mkdir -p "$dir"
     staging=$(mktemp -d "$dir/.fastmash-install.XXXXXX")
-    cp "$tmp/$name/fastmash" "$staging/fastmash"
-    chmod 755 "$staging/fastmash"
-    # Rename, so a running copy is never overwritten in place.
-    mv -f "$staging/fastmash" "$dir/fastmash"
+    for program in $programs; do
+        cp "$tmp/$name/$program" "$staging/$program"
+        chmod 755 "$staging/$program"
+    done
     ownership=$dir/.fastmash-supervisor.sha256
-    # Remove an old helper only after the new command is in place, and only
-    # when its bytes still match an earlier installer's ownership receipt.
-    old=$dir/fastmash-sort-supervisor
-    if [ -f "$old" ] && [ ! -L "$old" ] && [ -f "$ownership" ] && [ ! -L "$ownership" ] &&
-        [ "$(fingerprint "$old")" = "$(cat "$ownership")" ]; then
-        rm "$old"
-        rm "$ownership"
+    if [ "$programs" != fastmash ]; then
+        fingerprint "$staging/fastmash-sort-supervisor" > "$staging/ownership"
+    fi
+    for program in $programs; do
+        # Rename, so a running copy is never overwritten in place.
+        mv -f "$staging/$program" "$dir/$program"
+    done
+    if [ "$programs" = fastmash ]; then
+        # Only remove a regular file whose bytes match this installer's receipt.
+        # Retire it only after the new command is in place. Older installations
+        # without a receipt and user replacements stay put.
+        old=$dir/fastmash-sort-supervisor
+        if [ -f "$old" ] && [ ! -L "$old" ] && [ -f "$ownership" ] && [ ! -L "$ownership" ] &&
+            [ "$(fingerprint "$old")" = "$(cat "$ownership")" ]; then
+            rm "$old"
+            rm "$ownership"
+        fi
+    fi
+    if [ -f "$staging/ownership" ]; then
+        mv -f "$staging/ownership" "$ownership"
     fi
 
     say "Installed Fastmash $version in $dir."

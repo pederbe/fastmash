@@ -10,7 +10,7 @@ import build_site
 
 
 class SiteBuildTests(unittest.TestCase):
-    def test_homepage_downloads_use_the_published_release(self):
+    def test_homepage_names_the_published_release(self):
         with tempfile.TemporaryDirectory() as directory:
             book = Path(directory)
             (book / 'fonts').mkdir()
@@ -19,6 +19,7 @@ class SiteBuildTests(unittest.TestCase):
             build_site.landing(book)
             page = (book / 'index.html').read_text()
             self.assertIn('"softwareVersion": "0.4.0"', page)
+            self.assertNotIn('@VERSION@', page)
 
     def test_homepage_follows_the_published_release_pointer(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -17,7 +17,7 @@ Fastmash supports Linux, Windows through WSL2 and
 **macOS 15 or later** (`aarch64-apple-darwin`), with native checks
 on macOS 15 and 26. Intel macOS, older macOS versions and native Windows are
 outside the scope. See [Homebrew](install.md#homebrew) or the
-[quick installer](install.md#quick-install).
+[native archive instructions](install.md#macos-archive).
 
 Sorting runs inside Fastmash and needs no other program. `TMPDIR` must be
 writable when a job spills to disk.
@@ -55,7 +55,7 @@ gh attestation verify fastmash.tar.gz --repo pederbe/fastmash --signer-workflow 
 
 The macOS archive is not Apple-notarized.
 
-The published [benchmarks](benchmarks/index.md) measure the qualified Linux 0.1.0 binaries. Hosted macOS checks do not extend those speed claims to macOS.
+The published [benchmarks](benchmarks/index.md) measure qualified Linux release binaries. Hosted macOS checks do not extend those speed claims to macOS.
 
 ## Building from source
 

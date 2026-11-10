@@ -543,7 +543,7 @@ actual Spill, read-failure and cancellation coverage.
 
 After both source gates pass, one macOS 15 job builds the checksummed development
 archive with a macOS 15 deployment target. Both installation jobs download those
-same bytes, execute the internal archive fixture and public installer outside the source checkout, and check
+same bytes, execute the documented method outside the source checkout, and check
 checksum/download failure preservation. They run both corpus modes and the
 ordinary CLI suites through the installed executable, with explicit executable
 overrides. The existing opt-in prepared quantile headers, wide sorted headers
@@ -563,15 +563,20 @@ not native runtime evidence, release qualification or a performance claim.
 ## Website checks
 
 Changes confined to `docs/` and Markdown files need the website build, local
-link check and public-reference check:
+link check, public-reference check and release-number check:
 
 ```sh
 python3 -B scripts/check_public_references.py
+cargo test --locked -p fastmash --test documentation
 bash scripts/build_site.sh
 lychee --offline --no-progress --fallback-extensions html --index-files index.html --root-dir docs/book docs/book
 ```
 
 Set `MDBOOK` to an installed mdBook 0.5.4 to reuse it.
+
+User documentation describes the current release, so the release-number check
+fails when the README, a user page of the book or `install.sh` names a
+Fastmash release. Reword the sentence so it stays true after the next release.
 
 The landing-page browser tests cover initial loading with a delayed script,
 installation tabs, clipboard fallback, scroll entrances, the motion pause

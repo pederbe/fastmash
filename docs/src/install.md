@@ -95,10 +95,86 @@ Set `FASTMASH_INSTALL_DIR` to choose another installation directory.
 
 ## Single packages and archives
 
-Download individual `.deb` and `.rpm` packages or a platform archive from the
-[latest release](https://github.com/pederbe/fastmash/releases/latest).
-Use the [quick installer](#quick-install) to download, verify and install the
-archive for your system automatically.
+These downloads install the latest release without adding a repository. You
+update them yourself.
+
+### Debian or RPM package
+
+Each command looks up the latest release, then downloads and installs its
+package. On Debian or Ubuntu:
+
+```sh
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
+tag=${tag##*/}
+curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash_${tag#v}_amd64.deb"
+sudo apt install "./fastmash_${tag#v}_amd64.deb"
+```
+
+On Fedora, RHEL and similar:
+
+```sh
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
+tag=${tag##*/}
+sudo dnf install "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-${tag#v}-1.x86_64.rpm"
+```
+
+### Linux archive
+
+On Linux or WSL2, download an archive from the
+[latest release](https://github.com/pederbe/fastmash/releases/latest), or run this in
+Bash (enter `bash` first if using Fish):
+
+```bash
+bash -eu <<'EOF'
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
+tag=${tag##*/}
+name=fastmash-$tag-x86_64-unknown-linux-musl
+if ! curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz; then
+  name=fastmash-$tag-x86_64-unknown-linux-gnu
+  curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz
+fi
+curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz.sha256
+sha256sum -c $name.tar.gz.sha256
+tar -xzf $name.tar.gz
+mkdir -p ~/.local/bin
+cp "$name/fastmash" ~/.local/bin/
+EOF
+```
+
+### macOS archive
+
+The quick installer chooses the macOS archive automatically. To download
+the latest archive by hand, run this in an empty directory:
+
+```sh
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
+tag=${tag##*/}
+curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-$tag-aarch64-apple-darwin.tar.gz"
+curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-$tag-aarch64-apple-darwin.tar.gz.sha256"
+```
+
+Then install it from the same directory in Bash (enter `bash` first if using
+Fish):
+
+```bash
+bash -eu <<'EOF'
+set -- fastmash-v*-aarch64-apple-darwin.tar.gz
+name=${1%.tar.gz}
+shasum -a 256 -c "$name.tar.gz.sha256"
+tar -xzf "$name.tar.gz"
+(cd "$name" && shasum -a 256 -c binary.sha256)
+cat "$name/build-provenance.txt"
+mkdir -p ~/.local/bin
+staging=$(mktemp -d "$HOME/.local/bin/.fastmash.XXXXXX")
+trap 'rm -rf "$staging"' EXIT
+cp "$name/fastmash" "$staging/fastmash"
+chmod 755 "$staging/fastmash"
+mv -f "$staging/fastmash" ~/.local/bin/fastmash
+printf '1\n2\n' | ~/.local/bin/fastmash sum 1
+EOF
+```
+
+The final command prints `3`.
 
 ## With Cargo
 
@@ -171,10 +247,13 @@ Fastmash keeps no configuration files, caches or background services.
 
 ## Older Linux installations
 
+Early releases installed a second executable, `fastmash-sort-supervisor`,
+which Fastmash no longer uses.
+
 The quick installer removes an old helper during an upgrade when its checksum
 matches the earlier installation's ownership receipt. An installation without
-a receipt, or with a changed helper, leaves that file in place. Current releases
-do not use it. You can remove it if it belongs to the installation you upgraded
+a receipt, or with a changed helper, leaves that file in place. You can
+remove it if it belongs to the installation you upgraded
 or uninstalled:
 
 ```sh

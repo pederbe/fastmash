@@ -9,7 +9,7 @@ settings and numerical last digits, and keep `datamash` installed while you comp
 
 ## Is it always faster?
 
-Not yet. The published Linux 0.1.0 [benchmarks](benchmarks/index.md) show
+Not yet. The published Linux [benchmarks](benchmarks/index.md) show
 Fastmash faster on many common jobs and slower on some others.
 Try it on your own data, and tell us about jobs where it is slower.
 
@@ -57,7 +57,7 @@ Results written to a file or another program keep their plain data format.
 
 ## Does sorting need another program?
 
-No. Since Fastmash 0.4.0, all sorting is handled internally.
+No. Fastmash handles all sorting internally.
 
 ## Why exit status 77?
 
@@ -79,7 +79,7 @@ results depend on the hardware and C library. See
 On Windows, use WSL2. Fastmash also supports macOS 15
 and later, with the published archive checked natively on macOS 15 and 26.
 Install it with [Homebrew](install.md#homebrew) or the
-[quick installer](install.md#quick-install).
+[native archive](install.md#macos-archive).
 Intel macOS and native Windows are outside the current product scope.
 
 ## How does Fastmash relate to GNU datamash?

@@ -9,8 +9,8 @@ static page in site/. This:
 - puts the landing page at the site root (replacing the index.html mdBook
   writes for its first chapter, which stays available as introduction.html),
   inlines the generated benchmark chart (docs/src/benchmarks/core-jobs.svg)
-  where the page says `<!-- chart -->`, fills the software metadata with the
-  published release version, and copies its CSS and script;
+  where the page says `<!-- chart -->`, fills `@VERSION@` with the fastmash
+  published release version (site/release-version.txt), and copies its CSS and script;
 - copies install.sh, served at https://fastmash.io/install.sh;
 - writes a Markdown copy of every docs page next to its HTML (guide/output.md
   beside guide/output.html), with mdBook includes resolved, and links it from
