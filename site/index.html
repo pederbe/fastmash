@@ -124,7 +124,7 @@
         </div>
         <div class="install-panel" role="tabpanel" id="panel-deb" aria-labelledby="tab-deb" hidden>
           <div class="install">
-            <code id="cmd-deb" tabindex="0">curl -LO https://github.com/pederbe/fastmash/releases/download/v@VERSION@/fastmash_@VERSION@_amd64.deb &amp;&amp; sudo apt install ./fastmash_@VERSION@_amd64.deb</code>
+            <code id="cmd-deb" tabindex="0">v=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest) &amp;&amp; v=${v##*/v} &amp;&amp; curl -fLO https://github.com/pederbe/fastmash/releases/download/v$v/fastmash_${v}_amd64.deb &amp;&amp; sudo apt install ./fastmash_${v}_amd64.deb</code>
             <button type="button" class="copy" data-copy="cmd-deb" aria-label="Copy the Debian/Ubuntu install command">Copy</button>
           </div>
           <p class="install-note">A single .deb package for Debian 10, Ubuntu 20.04 and newer. For updates through apt, <a href="install.html#debian-and-ubuntu">add the repository</a>.</p>
