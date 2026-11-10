@@ -26,6 +26,7 @@ gets a new record. Editorial corrections keep the existing record and URL.
 | [0014](0014-native-sorting-everywhere.md) | Native sorting in one executable |
 | [0015](0015-stable-release-toolchain.md) | Build releases with current stable Rust |
 | [0016](0016-release-plz.md) | Version releases with release-plz while retaining qualified publication |
+| [0017](0017-audited-startup.md) | Keep one audited startup module for inherited streams and Linux entry |
 
 ## Superseded decisions
 

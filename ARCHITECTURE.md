@@ -360,16 +360,20 @@ end the process with `SIGABRT`. All of them are bugs.
 
 ## Safety
 
-- **`unsafe` code** is limited to operating-system interfaces (Linux system
-  calls for standard streams, signals and temporary files),
-  and a glibc `mallopt` call at startup that caps malloc arenas under an
-  address-space limit. Sort run files use checked buffer access. Record arena
-  cache hints use a safe dependency API on x86-64. The
-  conversion, numeric-contract and portable-numerics crates forbid `unsafe` entirely.
-  Decimal parsing uses safe integer division. Every other crate
-  denies unsafe operations inside `unsafe fn` without an explicit block and
-  warns on any `unsafe` block without a `// SAFETY:` comment, which CI treats
-  as an error.
+- **Audited startup.** `startup.rs` captures originally closed standard
+  streams before Rust can repair them. It also owns the Linux process entry
+  and initial SIGPIPE setup. [ADR 0017](https://fastmash.io/adr/0017-audited-startup.html)
+  records this narrowly approved unsafe-code exception. Every unsafe operation
+  explains its soundness locally. Ordinary standard-stream I/O uses safe
+  interfaces in `standard_stream_io.rs` and `standard_io.rs`.
+- **Remaining safety migrations.** Environment reads, macOS admission,
+  later SIGPIPE restoration and allocator tuning still have first-party unsafe
+  calls. They are outside the approved startup exception and await equivalent
+  safe interfaces that preserve failure and resource behavior. This exception
+  does not authorize retaining or extending those calls. Conversion,
+  numeric-contract and portable-numerics forbid unsafe code. Sort run files
+  use checked buffer access, record arena cache hints use a safe dependency
+  API, and decimal parsing uses safe integer division.
 - **Overflow checks stay on** in release builds, and panics abort.
 - **Native entropy** uses safe dependency interfaces to `getrandom` on Linux
   and `getentropy` on macOS. Invocation seeds and private temporary names fail

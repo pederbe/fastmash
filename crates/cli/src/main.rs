@@ -1,6 +1,6 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::undocumented_unsafe_blocks)]
-// Linux uses the direct process entry below; Darwin uses Rust's runtime start.
+// Linux uses startup's direct process entry; Darwin uses Rust's runtime start.
 #![cfg_attr(all(not(test), target_os = "linux"), no_main)]
 #[cfg(not(any(
     all(
@@ -16,7 +16,7 @@
 )))]
 compile_error!("Fastmash supports Linux x86-64 and Apple Silicon macOS");
 // On Linux, arguments and standard-stream capture use glibc initializers
-// (see `main` below); other Linux C libraries would run with no arguments.
+// (see `startup`); other Linux C libraries would run with no arguments.
 #[cfg(all(target_os = "linux", not(target_env = "gnu")))]
 compile_error!("Fastmash requires glibc (target_env = \"gnu\")");
 mod annotated;
@@ -57,8 +57,6 @@ mod health_tests;
 mod help;
 mod intake;
 mod line_numeric;
-#[cfg(target_os = "linux")]
-mod linux;
 mod locale;
 mod log_cache;
 mod log_table;
@@ -97,6 +95,8 @@ mod selection_tests;
 mod sort_route;
 mod standard_io;
 mod standard_stream_io;
+#[allow(unsafe_code)]
+mod startup;
 mod table_checks;
 mod table_modes;
 mod terminal_style;
@@ -605,26 +605,8 @@ fn quiet_nan() -> numerics::Value {
     ))
 }
 
-/// Process entry, without Rust's runtime start. That start installs a
-/// stack-overflow handler whose guard lookup reads /proc/self/maps on every
-/// run, a large share of a tiny command's time. Closed standard streams are
-/// already held open by `standard_io`'s preinitializer, and arguments come from
-/// std's own glibc initializer, so only SIGPIPE needs the runtime's setting:
-/// ignored, so failed writes are reported as errors. Before any thread
-/// starts, an address-space limit caps the malloc arenas (`malloc_arenas`).
-#[cfg(all(not(test), target_os = "linux"))]
-#[unsafe(no_mangle)]
-extern "C" fn main(_argc: libc::c_int, _argv: *const *const libc::c_char) -> libc::c_int {
-    // SAFETY: the process is still single-threaded; this is the disposition
-    // Rust's runtime start sets.
-    unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
-    malloc_arenas::cap();
-    run_process();
-    0
-}
-
 /// Darwin uses Rust's normal runtime and its native argument initialization.
-/// The Mach-O constructor in standard_io captures inherited closed streams
+/// The Mach-O constructor in startup captures inherited closed streams
 /// before that runtime sanitizes descriptors 0, 1 and 2.
 #[cfg(all(not(test), target_os = "macos"))]
 fn main() {

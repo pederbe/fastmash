@@ -45,11 +45,33 @@ fn wrong_access_stream_combinations_keep_their_original_failure() {
     }
 }
 
+#[test]
+fn version_keeps_closed_output_failures_without_reading_closed_input() {
+    let version = format!("fastmash {}\n", env!("CARGO_PKG_VERSION"));
+    for mask in 1u8..8 {
+        for streams in [Streams::Closed(mask), Streams::WrongAccess(mask)] {
+            let (status, stdout, stderr): (_, &[u8], &[u8]) = if mask & 2 == 0 {
+                (0, version.as_bytes(), b"")
+            } else if mask & 4 == 0 {
+                (1, b"", b"fastmash: write error: Bad file descriptor\n")
+            } else {
+                (1, b"", b"")
+            };
+            check_command(&["--version"], streams, status, stdout, stderr);
+        }
+    }
+}
+
 fn check(streams: Streams, status: i32, stdout: &[u8], stderr: &[u8]) {
-    let directory = temp_dir::TempDir::new(&format!("native-descriptors-{streams:?}"));
+    check_command(&["count", "1"], streams, status, stdout, stderr);
+}
+
+fn check_command(arguments: &[&str], streams: Streams, status: i32, stdout: &[u8], stderr: &[u8]) {
+    let directory =
+        temp_dir::TempDir::new(&format!("native-descriptors-{}-{streams:?}", arguments[0]));
     let path = directory.0.clone();
     let observed = invoke(
-        &["count", "1"],
+        arguments,
         b"a\nb\n",
         streams,
         &path,
