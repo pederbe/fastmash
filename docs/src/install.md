@@ -1,6 +1,6 @@
 # Install
 
-Fastmash runs on **Linux** (glibc), **Windows through WSL2** and
+Fastmash runs on **Linux**, **Windows through WSL2** and
 **macOS 15 and later**. The current release is @VERSION@.
 
 ## Choose a method
@@ -119,7 +119,7 @@ Bash (enter `bash` first if using Fish):
 ```bash
 bash -eu <<'EOF'
 version=@VERSION@
-name=fastmash-v$version-x86_64-unknown-linux-gnu
+name=fastmash-v$version-x86_64-unknown-linux-musl
 curl -fLO https://github.com/pederbe/fastmash/releases/download/v$version/$name.tar.gz
 curl -fLO https://github.com/pederbe/fastmash/releases/download/v$version/$name.tar.gz.sha256
 sha256sum -c $name.tar.gz.sha256
@@ -129,8 +129,10 @@ cp "$name/fastmash" ~/.local/bin/
 EOF
 ```
 
-Replace `@VERSION@` with the version you want. For releases before 0.4.0, see
-[older Linux installations](#older-linux-installations).
+Replace `@VERSION@` with the version you want. Older releases used
+`x86_64-unknown-linux-gnu` archives, which need glibc. The quick installer
+chooses the available archive automatically. Releases before 0.4.0 also need
+the helper described under [older Linux installations](#older-linux-installations).
 
 ### macOS archive
 
@@ -191,7 +193,8 @@ To compile Fastmash from source with `cargo install`, use the latest stable
 [Rust toolchain](https://rustup.rs). On Linux or WSL2:
 
 ```sh
-cargo install --locked fastmash
+rustup target add x86_64-unknown-linux-musl
+cargo install --locked --target x86_64-unknown-linux-musl fastmash
 ```
 
 On macOS 15 or later, select its single executable:

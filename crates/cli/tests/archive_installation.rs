@@ -320,6 +320,46 @@ fn assert_previous(dir: &Path) {
 }
 
 #[test]
+fn linux_installs_static_musl_archives_on_either_libc() {
+    for native_musl in [false, true] {
+        let root = TempDir::new("archive-linux-static");
+        let path = fixture_path(&root.0, "Linux", "x86_64", "");
+        if native_musl {
+            script(&path.join("ldd"), "#!/bin/sh\nprintf 'musl libc\\n'\n");
+        }
+        let archive = fixture_archive(&root.0, "0.6.0", "x86_64-unknown-linux-musl", false);
+        let mirror = Mirror::new("0.6.0", mirrored_files(archive, false));
+        let dir = root.0.join("installed");
+        let output = install(&mirror, None, &dir, Some(&path), &root.0);
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(
+            fs::read(dir.join("fastmash")).unwrap(),
+            b"replacement fastmash"
+        );
+    }
+}
+
+#[test]
+fn a_bad_musl_checksum_does_not_fall_back_to_a_legacy_archive() {
+    let root = TempDir::new("archive-linux-static-checksum");
+    let path = fixture_path(&root.0, "Linux", "x86_64", "");
+    let mut files = mirrored_files(
+        fixture_archive(&root.0, "0.6.0", "x86_64-unknown-linux-musl", false),
+        true,
+    );
+    files.extend(mirrored_files(
+        fixture_archive(&root.0, "0.6.0", "x86_64-unknown-linux-gnu", false),
+        false,
+    ));
+    let mirror = Mirror::new("0.6.0", files);
+    let dir = root.0.join("installed");
+    previous_installation(&dir);
+    let output = install(&mirror, None, &dir, Some(&path), &root.0);
+    assert!(!output.status.success(), "{output:?}");
+    assert_previous(&dir);
+}
+
+#[test]
 fn linux_installs_the_matched_pair_and_latest_redirect() {
     let root = TempDir::new("archive-linux-pair");
     let path = fixture_path(&root.0, "Linux", "x86_64", "");

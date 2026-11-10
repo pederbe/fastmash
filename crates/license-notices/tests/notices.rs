@@ -75,6 +75,17 @@ fn render(metadata: &Value, target: Target) -> String {
 }
 
 #[test]
+fn static_linux_notices_include_the_bundled_musl_terms() {
+    let directory = Directory::new();
+    let graph = one_dependency(&directory.0, "MIT");
+    let output = render(&graph, Target::LinuxMusl);
+    assert!(output.contains("Target: `x86_64-unknown-linux-musl`"));
+    assert!(output.contains("Copyright © 2005-2020 Rich Felker"));
+    assert!(!render(&graph, Target::Linux).contains("## musl"));
+    assert!(!render(&graph, Target::Macos).contains("## musl"));
+}
+
+#[test]
 fn normal_graph_excludes_development_build_and_unrelated_packages() {
     let directory = Directory::new();
     let packages = [

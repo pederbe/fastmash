@@ -10,11 +10,11 @@ It is written for contributors and for anyone evaluating the project. The
 | | |
 | --- | --- |
 | Language | Rust (edition 2024), five product crates |
-| Platform | Linux with glibc, Windows through WSL2. Native macOS 15+ |
+| Platform | Linux, Windows through WSL2. Native macOS 15+ |
 | Interface | GNU datamash 1.9 command language, with explicit CSV, health, selection, weighted mean and comparison extensions |
 | Numbers | 80-bit extended precision, implemented in software |
 | Sorting | Built-in stable sorting with disk spill |
-| Runtime dependencies | glibc on Linux. System libraries on macOS |
+| Runtime dependencies | Static musl Linux download, or system glibc for GNU source builds. System libraries on macOS |
 | Network access | None |
 
 ## Design principles
@@ -361,8 +361,9 @@ end the process with `SIGABRT`. All of them are bugs.
 ## Safety
 
 - **Audited startup.** `startup.rs` captures originally closed standard
-  streams before Rust can repair them. It also owns the Linux process entry
-  and initial SIGPIPE setup. [ADR 0017](https://fastmash.io/adr/0017-audited-startup.html)
+  streams before Rust can repair them. GNU Linux builds also use its process
+  entry and initial SIGPIPE setup. Musl and macOS use Rust's normal runtime
+  entry and argument initialization. [ADR 0017](https://fastmash.io/adr/0017-audited-startup.html)
   records this narrowly approved unsafe-code exception. Every unsafe operation
   explains its soundness locally. Ordinary standard-stream I/O uses safe
   interfaces in `standard_stream_io.rs` and `standard_io.rs`.
@@ -370,8 +371,7 @@ end the process with `SIGABRT`. All of them are bugs.
   environment reads as other configuration. The macOS support boundary comes
   from the deployment target and native checks. Commands do not query the
   product version at startup. Normal SIGPIPE restoration uses the safe `sigpipe`
-  dependency. If restoration is denied, a failed write still follows the I/O
-  failure path. Signal-mask observation and blocked-SIGPIPE refusals remain.
+  dependency. Signal-mask observation and blocked-SIGPIPE refusals remain.
   Configuration and argument allocations use standard Rust allocation behavior.
 - **Remaining safety migration.** glibc allocator tuning still has first-party
   unsafe calls outside the approved startup exception. Its replacement must

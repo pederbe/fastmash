@@ -166,6 +166,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
+          targets: x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Prepare installed verification tools
         if: needs.changes.outputs.application != 'false' || contains(format(' {0} ', needs.changes.outputs.packages), ' fastmash ')
@@ -186,13 +187,19 @@ jobs:
               cargo test --release -p "$package" --locked
             done
           fi
-      # Exercise the complete installed command from the workspace build.
+      - name: Test static Linux target
+        if: needs.changes.outputs.application != 'false'
+        run: |
+          cargo test --release --workspace --locked --target x86_64-unknown-linux-musl
+          cargo build --release --workspace --locked --target x86_64-unknown-linux-musl
+          cargo clippy -p fastmash --all-targets --locked --target x86_64-unknown-linux-musl -- -D warnings
+      # Exercise the static delivery target with both corpus transports.
       - name: Regression corpus
         if: needs.changes.outputs.application != 'false'
         run: |
           version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)
-          target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --keep-going --evidence-dir "$RUNNER_TEMP/corpus/pipe"
-          target/release/fastmash-corpus --binary target/release/fastmash --expected-version "$version" --stdin-file --keep-going --evidence-dir "$RUNNER_TEMP/corpus/file"
+          target/release/fastmash-corpus --binary target/x86_64-unknown-linux-musl/release/fastmash --expected-version "$version" --keep-going --evidence-dir "$RUNNER_TEMP/corpus/pipe"
+          target/release/fastmash-corpus --binary target/x86_64-unknown-linux-musl/release/fastmash --expected-version "$version" --stdin-file --keep-going --evidence-dir "$RUNNER_TEMP/corpus/file"
       - name: Retain corpus evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

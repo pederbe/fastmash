@@ -8,7 +8,7 @@ use std::{
 };
 
 const USAGE: &str = "Usage: fastmash-license-notices [--target TARGET]\n\n\
-Targets: x86_64-unknown-linux-gnu (default), aarch64-apple-darwin";
+Targets: x86_64-unknown-linux-gnu (default), x86_64-unknown-linux-musl, aarch64-apple-darwin";
 
 fn arguments() -> Result<Option<Target>> {
     let mut target = Target::Linux;

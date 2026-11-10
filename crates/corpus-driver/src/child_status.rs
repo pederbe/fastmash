@@ -57,7 +57,10 @@ pub(crate) fn observe(
 }
 
 pub(crate) fn terminal(child: &Child, reaped: &mut bool) -> io::Result<Option<WaitIdStatus>> {
-    observe(child, reaped, WaitIdOptions::EXITED)
+    // An observation is terminal only when the event says so. In particular,
+    // a stop or continuation must not authorize cleanup as an exited child.
+    Ok(observe(child, reaped, WaitIdOptions::EXITED)?
+        .filter(|status| status.exited() || status.killed() || status.dumped()))
 }
 
 pub(crate) fn reap(child: &mut Child, reaped: &mut bool) -> io::Result<ExitStatus> {

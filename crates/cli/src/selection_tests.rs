@@ -470,6 +470,10 @@ fn csv_sorted_read_failure_never_flushes_an_incomplete_group() {
 #[test]
 fn csv_sorted_spill_faults_and_capacity_keep_completion_precedence() {
     use projected_sort::{RunFault, fail_run};
+    let temporary_error = format!(
+        "sort temporary I/O error: {}\n",
+        std::io::Error::from_raw_os_error(5)
+    );
     let bytes = [
         b"key,value\n".as_slice(),
         b"b,1\na,2\n".repeat(12).as_slice(),
@@ -501,10 +505,7 @@ fn csv_sorted_spill_faults_and_capacity_keep_completion_precedence() {
                 if output_error.is_some() { 77 } else { 1 },
                 "{result:?}"
             );
-            assert_eq!(
-                result.1[0],
-                b"sort temporary I/O error: Input/output error (os error 5)\n"
-            );
+            assert_eq!(result.1[0], temporary_error.as_bytes());
             if output_error.is_some() {
                 assert_eq!(result.1[1], b"unsupported output I/O error\n");
             }

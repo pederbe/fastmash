@@ -262,6 +262,36 @@ fn stop(running: &mut Running, pid: Pid, started: Instant, cancel: BorrowedFd<'_
     }
 }
 
+fn resume(
+    running: &mut Running,
+    pid: Pid,
+    started: Instant,
+    cancel: BorrowedFd<'_>,
+) -> Result<bool> {
+    if running.status()?.is_some() {
+        return Ok(false);
+    }
+    match killpg(pid, Signal::SIGCONT) {
+        Ok(()) => Ok(true),
+        Err(error) if cfg!(target_os = "macos") && matches!(error, Errno::EPERM | Errno::ESRCH) => {
+            // Darwin can exclude an exiting group before its terminal status
+            // becomes observable. Never call that a successful resume. Keep
+            // ownership and the existing deadline until exit is confirmed.
+            while running.status()?.is_none() {
+                pause(started, cancel).map_err(|waiting| {
+                    Error::message(format!(
+                        "resume owned candidate group {pid}: {error}; {waiting}"
+                    ))
+                })?;
+            }
+            Ok(false)
+        }
+        Err(error) => Err(Error::message(format!(
+            "resume owned candidate group {pid}: {error}"
+        ))),
+    }
+}
+
 pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     require_unblocked_signals()?;
     let root = root_argument(args)?;
@@ -315,7 +345,11 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
     let pid = Pid::from_raw(running.child.id() as i32);
     let native_pid = rustix::process::Pid::from_raw(pid.as_raw())
         .ok_or_else(|| Error::message("invalid late-input PID"))?;
-    rustix::termios::tcsetpgrp(input, native_pid)?;
+    rustix::termios::tcsetpgrp(input, native_pid).map_err(|error| {
+        Error::message(format!(
+            "give candidate group {pid} the foreground: {error}"
+        ))
+    })?;
     fs::write(
         root.join("started.json"),
         serde_json::to_vec(&json!({
@@ -414,7 +448,7 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
             }))?,
         )?;
     }
-    let terminal_reclaimed = !ended && stop(&mut running, pid, started, cancel)?;
+    let mut terminal_reclaimed = !ended && stop(&mut running, pid, started, cancel)?;
     if !terminal_reclaimed && output_acknowledged {
         return Err(Error::message("candidate ended before stop observation"));
     }
@@ -426,9 +460,17 @@ pub fn coordinate(args: impl Iterator<Item = OsString>) -> Result<()> {
                 "acknowledgement_before_stop":output_acknowledged,
             }))?,
         )?;
-        rustix::termios::tcsetpgrp(input, session)?;
-        killpg(pid, Signal::SIGCONT)?;
-        fs::write(root.join("resumed"), b"resumed after foreground reclaim\n")?;
+        rustix::termios::tcsetpgrp(input, session).map_err(|error| {
+            Error::message(format!(
+                "reclaim terminal foreground for {session}: {error}"
+            ))
+        })?;
+        terminal_reclaimed = resume(&mut running, pid, started, cancel)?;
+        if terminal_reclaimed {
+            fs::write(root.join("resumed"), b"resumed after foreground reclaim\n")?;
+        } else if output_acknowledged {
+            return Err(Error::message("candidate ended before late-input resume"));
+        }
     }
     loop {
         collect(&mut stream, &mut sink, &mut copied)?;
@@ -741,4 +783,74 @@ fn execute(
         stdout_hex: encode(&bounded_read(&root.join("stdout"))?),
         stderr_hex: encode(&bounded_read(&root.join("stderr"))?),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::fd::AsFd;
+
+    #[test]
+    fn an_exited_owned_candidate_is_not_reported_as_resumed() {
+        let child = Command::new("/bin/sh")
+            .args(["-c", "exit 17"])
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let pid = Pid::from_raw(child.id() as i32);
+        let mut running = Running {
+            child,
+            reaped: false,
+            group: true,
+            cancel: None,
+            cleanup: std::env::temp_dir().join(format!("resume-cleanup-{}", pid.as_raw())),
+        };
+        let (cancel, _peer) = UnixStream::pair().unwrap();
+        cancel.set_nonblocking(true).unwrap();
+        let started = Instant::now();
+        while running.status().unwrap().is_none() {
+            pause(started, cancel.as_fd()).unwrap();
+        }
+        assert!(!resume(&mut running, pid, started, cancel.as_fd()).unwrap());
+        assert!(!running.reaped);
+        crate::child_status::cancel_group(&running.child, &mut running.reaped).unwrap();
+        running.group = false;
+        let status = crate::child_status::reap(&mut running.child, &mut running.reaped).unwrap();
+        assert_eq!(status.code(), Some(17));
+    }
+
+    #[test]
+    fn a_stopped_owned_candidate_is_resumed_before_cleanup() {
+        let child = Command::new("/bin/sleep")
+            .arg("30")
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let pid = Pid::from_raw(child.id() as i32);
+        let mut running = Running {
+            child,
+            reaped: false,
+            group: true,
+            cancel: None,
+            cleanup: std::env::temp_dir().join(format!("resume-cleanup-{}", pid.as_raw())),
+        };
+        let (cancel, _peer) = UnixStream::pair().unwrap();
+        cancel.set_nonblocking(true).unwrap();
+        let started = Instant::now();
+        assert!(stop(&mut running, pid, started, cancel.as_fd()).unwrap());
+        let raw = crate::child_status::observe(
+            &running.child,
+            &mut running.reaped,
+            rustix::process::WaitIdOptions::EXITED,
+        )
+        .unwrap();
+        println!("raw exit-only observation while stopped: {raw:?}");
+        assert!(running.status().unwrap().is_none());
+        assert!(resume(&mut running, pid, started, cancel.as_fd()).unwrap());
+        assert!(!running.reaped);
+        crate::child_status::cancel_group(&running.child, &mut running.reaped).unwrap();
+        running.group = false;
+        let status = crate::child_status::reap(&mut running.child, &mut running.reaped).unwrap();
+        assert_eq!(status.signal(), Some(Signal::SIGKILL as i32));
+    }
 }
