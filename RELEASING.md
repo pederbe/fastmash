@@ -304,8 +304,8 @@ The candidate uses the final `fastmash-vX.Y.Z-aarch64-apple-darwin.tar.gz` name,
 with `artifact_kind=release-candidate` recorded in its provenance.
 
 The archive job freezes its SHA-256. Both native baselines download and verify
-that hash, install outside the checkout through the documented method and
-shell installer, check the installed executable hash and version, and run the
+that hash, install outside the checkout through the internal archive fixture and
+public installer, check the installed executable hash and version, and run the
 applicable command tests and both frozen corpus input modes. Sorting, actual
 Spill, signals and temporary-file cleanup stay covered. Representative hosted
 GNU comparisons remain scoped to those runners and workloads.
@@ -321,7 +321,7 @@ On the frozen version tag, the Release workflow calls the native source checks
 and archive build, then stages and attests that archive in a draft release.
 It skips the earlier candidate-installation round. The workflow downloads the
 draft archive on macOS 15 and 26, verifies its release-workflow attestation and
-frozen hash, and runs documented installation, installed executable checks,
+frozen hash, and runs candidate installation, installed executable checks,
 applicable command tests and both corpus modes once on each baseline. A failure
 leaves the draft unpublished. Branch CI retains the candidate-installation round
 because it has no draft release to download.

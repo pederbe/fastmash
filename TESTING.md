@@ -543,7 +543,7 @@ actual Spill, read-failure and cancellation coverage.
 
 After both source gates pass, one macOS 15 job builds the checksummed development
 archive with a macOS 15 deployment target. Both installation jobs download those
-same bytes, execute the documented method outside the source checkout, and check
+same bytes, execute the internal archive fixture and public installer outside the source checkout, and check
 checksum/download failure preservation. They run both corpus modes and the
 ordinary CLI suites through the installed executable, with explicit executable
 overrides. The existing opt-in prepared quantile headers, wide sorted headers

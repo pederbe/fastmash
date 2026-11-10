@@ -17,7 +17,7 @@ Fastmash supports Linux, Windows through WSL2 and
 **macOS 15 or later** (`aarch64-apple-darwin`), with native checks
 on macOS 15 and 26. Intel macOS, older macOS versions and native Windows are
 outside the scope. See [Homebrew](install.md#homebrew) or the
-[native archive instructions](install.md#macos-archive).
+[quick installer](install.md#quick-install).
 
 Sorting runs inside Fastmash and needs no other program. `TMPDIR` must be
 writable when a job spills to disk.
@@ -36,20 +36,21 @@ install locale data. See [Numbers, output and locales](guide/output.md#locales).
 ## Verifying a release archive
 
 The installer checks the archive's SHA-256 checksum. To verify which GitHub
-workflow built it, download the archive from the
-[releases page](https://github.com/pederbe/fastmash/releases) and use the
-[GitHub CLI](https://cli.github.com):
+workflow built the latest release, use the [GitHub CLI](https://cli.github.com)
+to download and verify its archive:
 
 Linux:
 
 ```sh
-gh attestation verify fastmash-v@VERSION@-x86_64-unknown-linux-musl.tar.gz --repo pederbe/fastmash
+gh release download --repo pederbe/fastmash --pattern 'fastmash-*-x86_64-unknown-linux-*.tar.gz' --output fastmash.tar.gz
+gh attestation verify fastmash.tar.gz --repo pederbe/fastmash
 ```
 
 macOS:
 
 ```sh
-gh attestation verify fastmash-v@VERSION@-aarch64-apple-darwin.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
+gh release download --repo pederbe/fastmash --pattern 'fastmash-*-aarch64-apple-darwin.tar.gz' --output fastmash.tar.gz
+gh attestation verify fastmash.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
 ```
 
 The macOS archive is not Apple-notarized.

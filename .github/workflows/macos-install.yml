@@ -93,7 +93,7 @@ jobs:
             printf 'MACOSX_DEPLOYMENT_TARGET=%s\nRUSTFLAGS=%s\nCARGO_ENCODED_RUSTFLAGS=%s\n' "$MACOSX_DEPLOYMENT_TARGET" "${RUSTFLAGS-}" "${CARGO_ENCODED_RUSTFLAGS-}"
           } | tee "$EVIDENCE/identity.txt"
           shasum -a 256 "$FASTMASH_ARCHIVE_DIR"/*.tar.gz | tee "$EVIDENCE/archive.sha256"
-      - name: Verify documented installation and preserve the installed executable
+      - name: Verify candidate installation and preserve the installed executable
         env:
           ARCHIVE_KIND: ${{ inputs.release-archive && 'release-candidate' || 'development-test' }}
         run: |

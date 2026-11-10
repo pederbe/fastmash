@@ -79,7 +79,7 @@ results depend on the hardware and C library. See
 On Windows, use WSL2. Fastmash also supports macOS 15
 and later, with the published archive checked natively on macOS 15 and 26.
 Install it with [Homebrew](install.md#homebrew) or the
-[native archive](install.md#macos-archive).
+[quick installer](install.md#quick-install).
 Intel macOS and native Windows are outside the current product scope.
 
 ## How does Fastmash relate to GNU datamash?
