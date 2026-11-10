@@ -20,8 +20,8 @@ GNU Linux builds retain their direct glibc process entry to avoid Rust's per-pro
 stack-guard lookup on tiny Commands. It supplies the initial ignored SIGPIPE
 disposition that Rust's runtime start would otherwise install. Musl and macOS
 use Rust's normal runtime entry and argument initialization after their
-constructors capture streams. [ADR 0018](0018-static-linux-delivery.md) records
-the musl startup decision.
+constructors capture streams. [ADR 0018](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0018-static-linux-delivery.md)
+records the musl startup decision.
 
 Capture uses no allocation or Rust I/O. Each unsafe operation explains its
 safety requirements locally. Ordinary stream reads, writes, seeking and
