@@ -37,8 +37,7 @@ trace with an empty environment apart from the test controls. The route test
 requires Linux 5.11 or later with pidfds and `close_range` permitted.
 
 After removal, confirm that both executables and `share/doc/fastmash/` are
-absent from the active profile. Nix retains older profile generations and store
-objects for rollback; removing the active package does not delete those.
+absent from the active profile.
 
 Follow Nixpkgs'
 [Rust packaging guidance](https://nixos.org/manual/nixpkgs/unstable/#compiling-rust-applications-with-cargo)

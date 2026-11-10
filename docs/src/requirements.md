@@ -36,20 +36,21 @@ install locale data. See [Numbers, output and locales](guide/output.md#locales).
 ## Verifying a release archive
 
 The installer checks the archive's SHA-256 checksum. To verify which GitHub
-workflow built it, download the archive from the
-[releases page](https://github.com/pederbe/fastmash/releases) and use the
-[GitHub CLI](https://cli.github.com):
+workflow built the latest release, use the [GitHub CLI](https://cli.github.com)
+to download and verify its archive:
 
 Linux:
 
 ```sh
-gh attestation verify fastmash-v*-x86_64-unknown-linux-musl.tar.gz --repo pederbe/fastmash
+gh release download --repo pederbe/fastmash --pattern 'fastmash-*-x86_64-unknown-linux-*.tar.gz' --output fastmash.tar.gz --clobber
+gh attestation verify fastmash.tar.gz --repo pederbe/fastmash
 ```
 
 macOS:
 
 ```sh
-gh attestation verify fastmash-v*-aarch64-apple-darwin.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
+gh release download --repo pederbe/fastmash --pattern 'fastmash-*-aarch64-apple-darwin.tar.gz' --output fastmash.tar.gz --clobber
+gh attestation verify fastmash.tar.gz --repo pederbe/fastmash --signer-workflow pederbe/fastmash/.github/workflows/release.yml
 ```
 
 The macOS archive is not Apple-notarized.

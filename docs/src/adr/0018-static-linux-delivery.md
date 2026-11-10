@@ -35,9 +35,10 @@ call memx's safe API. No custom allocator is needed.
 
 Keep glibc source builds working with their existing allocator controls.
 Supporting musl delivery does not establish that those controls can be removed
-from glibc builds. The quick installer tries the static archive first and can
-install older glibc archives on glibc systems. A checksum failure never selects
-another archive.
+from glibc builds. The quick installer installs the latest release. It tries
+the static archive first and can use that same release's GNU archive on glibc
+systems if static delivery is not yet available. A checksum failure never
+selects another archive.
 
 The alternative was to retain glibc delivery and use the shared Rust
 improvements for faster sorting. Static deployment across distributions and

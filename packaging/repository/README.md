@@ -2,8 +2,7 @@
 
 This directory prepares the release `.deb` and `.rpm` packages for the signed
 apt repository (Debian, Ubuntu) and a signed dnf repository (RHEL, AlmaLinux,
-Fedora) at `packages.fastmash.io`. Published versions remain available when a
-new release is added.
+Fedora) at `packages.fastmash.io`. Retained package files keep in-progress updates working when a new release is added.
 Public-domain installation, upgrade and removal are verified on Debian 12,
 Ubuntu 24.04 and AlmaLinux 8 with signature checks enabled and installed programs
 matching each release's delivery checksums. Users who add it receive new
@@ -15,8 +14,8 @@ publishes it after a release is published. It downloads that release's
 packages, checks their SHA-256 files and their build attestations from
 `release.yml`, and never rebuilds the programs. Then it:
 
-1. syncs the current repository from R2, so every earlier version stays
-   available, and checks every `.deb` already there against its release's
+1. syncs the current repository from R2 to preserve in-progress updates,
+   and checks every `.deb` already there against its release's
    SHA-256 file (storage credentials alone cannot add a package);
 2. runs `release/package-repository.sh`, which publishes the `.deb` unchanged,
    adds a header signature to the `.rpm` (checking that its header and payload
@@ -112,23 +111,23 @@ as part of publication.
 
 4. **First publication.** First verify that clients cannot receive mismatched
    indexes and signatures during an interrupted publication. Then run the
-   workflow for `v0.1.0`, followed by each later release in order, so the
-   newest version is published last. Verify installation, upgrade and removal
+   workflow for the latest published release. Verify installation, upgrade and removal
    through the public domain with signature checks enabled before publishing
    the user instructions.
 
 ## Checking locally
 
 With Rust, Docker, curl, the GitHub CLI, a throwaway key in `GNUPGHOME` and its
-public key in a file, this example checks version 0.2.0. Its expected documents
-come from the same version's verified Linux release archive.
+public key in a file, this example checks the latest published release. Its expected documents
+come from that release's verified Linux archive.
 
 ```sh
-bash -c '
-set -euo pipefail
-version=0.2.0
-tag="v$version"
-name="fastmash-${tag}-x86_64-unknown-linux-gnu"
+bash -euo pipefail <<'EOF'
+tag=$(gh release view --repo pederbe/fastmash --json tagName --jq .tagName)
+version=${tag#v}
+name=$(gh release view "$tag" --repo pederbe/fastmash --json assets --jq \
+  '.assets[].name | select(test("-x86_64-unknown-linux-(musl|gnu)\\.tar\\.gz$"))')
+name=${name%.tar.gz}
 assets=$(mktemp -d)
 trap "rm -rf -- \"$assets\"" EXIT
 for file in "$name.tar.gz" "$name.tar.gz.sha256"; do
@@ -144,12 +143,10 @@ tar -xzf "$assets/$name.tar.gz" --no-same-owner -C "$assets" \
 cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
 GPG_PASSPHRASE=... bash release/package-repository.sh /tmp/repository test-key.asc \
   "fastmash_${version}_amd64.deb" "fastmash-${version}-1.x86_64.rpm"
-manifest=release/delivery.sha256
-git cat-file -e "$tag:$manifest" 2>/dev/null || manifest=release/qualified.sha256
-git show "$tag:$manifest" > "$assets/delivery.sha256"
+tar -xOf "$assets/$name.tar.gz" "$name/binary.sha256" > "$assets/delivery.sha256"
 bash release/test-package-repository.sh /tmp/repository "$version" "$assets/delivery.sha256" \
   --expected-docs "$assets/$name"
-'
+EOF
 ```
 
 `--expected-docs` compares all five installed documents with those independent

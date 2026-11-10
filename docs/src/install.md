@@ -121,7 +121,7 @@ sudo dnf install "https://github.com/pederbe/fastmash/releases/download/$tag/fas
 ### Linux archive
 
 On Linux or WSL2, download an archive from the
-[releases page](https://github.com/pederbe/fastmash/releases), or run this in
+[latest release](https://github.com/pederbe/fastmash/releases/latest), or run this in
 Bash (enter `bash` first if using Fish):
 
 ```bash
@@ -129,7 +129,14 @@ bash -eu <<'EOF'
 tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
 tag=${tag##*/}
 name=fastmash-$tag-x86_64-unknown-linux-musl
-curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz
+if ! curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz; then
+  if command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl; then
+    printf '%s\n' 'The latest release has no static Linux archive.' >&2
+    exit 1
+  fi
+  name=fastmash-$tag-x86_64-unknown-linux-gnu
+  curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz
+fi
 curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz.sha256
 sha256sum -c $name.tar.gz.sha256
 tar -xzf $name.tar.gz
