@@ -19,10 +19,8 @@ flags=(
 CARGO_ENCODED_RUSTFLAGS=$(IFS=$'\x1f'; printf '%s' "${flags[*]}")
 export CARGO_ENCODED_RUSTFLAGS
 cargo build --locked --release --target x86_64-unknown-linux-musl -p fastmash --bins
-for binary in fastmash; do
-  path="$CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/$binary"
-  if readelf -d "$path" | grep -q '(NEEDED)' || readelf -l "$path" | grep -q INTERP; then
-    echo "$binary must be statically linked without a shared-library interpreter" >&2
-    exit 1
-  fi
-done
+path="$CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/fastmash"
+if readelf -d "$path" | grep -q '(NEEDED)' || readelf -l "$path" | grep -q INTERP; then
+  echo "fastmash must be statically linked without a shared-library interpreter" >&2
+  exit 1
+fi
