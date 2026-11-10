@@ -1,4 +1,5 @@
 //! One terminal palette and destination policy for human-readable output.
+#![forbid(unsafe_code)]
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) enum ColorMode {
@@ -22,7 +23,6 @@ pub(super) struct Detection {
 }
 
 impl Detection {
-    #[forbid(unsafe_code)]
     pub(super) fn from_env() -> Self {
         Self {
             stdout_terminal: nix::unistd::isatty(rustix::stdio::stdout()).unwrap_or(false),
@@ -45,16 +45,8 @@ impl Detection {
 }
 
 fn environment_suppresses() -> bool {
-    // Read immediately and retain no borrowed environment pointers. The Command
-    // never mutates its environment, including on its allocation-failure path.
-    // SAFETY: both names are NUL-terminated; getenv returns null or a live
-    // NUL-terminated value, and the process environment is not being mutated.
-    unsafe {
-        let term = libc::getenv(c"TERM".as_ptr());
-        let no_color = libc::getenv(c"NO_COLOR".as_ptr());
-        (!term.is_null() && std::ffi::CStr::from_ptr(term).to_bytes() == b"dumb")
-            || (!no_color.is_null() && *no_color != 0)
-    }
+    std::env::var_os("TERM").is_some_and(|term| term == "dumb")
+        || std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty())
 }
 
 #[derive(Clone, Copy, Debug)]

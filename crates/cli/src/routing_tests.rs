@@ -407,28 +407,6 @@ fn grouped_partial_row_and_completed_rows_survive_later_failure() {
 }
 
 #[test]
-fn signal_failures_preserve_diagnostics_and_stop_before_restoration() {
-    for (mask, message) in [
-        (Err(()), "unable to inspect runtime signal mask\n"),
-        (Ok(1 << 12), "blocked SIGPIPE is unsupported\n"),
-    ] {
-        let error = setup_sigpipe_with(|| mask, || panic!("must not restore"))
-            .err()
-            .unwrap();
-        assert_eq!(
-            (error.status, error.message),
-            (77, message.as_bytes().to_vec())
-        );
-    }
-    let error = setup_sigpipe_with(|| Ok(0), || Err(())).err().unwrap();
-    assert_eq!(error.status, 77);
-    assert_eq!(
-        error.message,
-        b"unable to restore runtime SIGPIPE disposition\n"
-    );
-}
-
-#[test]
 fn command_setup_precedes_numerics_and_entropy() {
     let operations = requests(&options(&["sum", "1", "rand", "1"]));
     for cause in [

@@ -16,6 +16,7 @@ const ADDRESS_SPACE: &str = "FASTMASH_TEST_PROCESS_ADDRESS_SPACE";
 const STACK: &str = "FASTMASH_TEST_PROCESS_STACK";
 const CLOSE_RANGE: &str = "FASTMASH_TEST_PROCESS_CLOSE_RANGE_ERRNO";
 const DENY_MASK_QUERY: &str = "FASTMASH_TEST_PROCESS_DENY_MASK_QUERY";
+const DENY_PIPE_RESTORE: &str = "FASTMASH_TEST_PROCESS_DENY_PIPE_RESTORE";
 
 fn limit(name: &str, resource: Resource) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(value) = std::env::var_os(name) {
@@ -81,8 +82,10 @@ fn close_range_filter() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-fn mask_query_filter() -> Result<(), Box<dyn std::error::Error>> {
-    if !selected(DENY_MASK_QUERY)? {
+fn signal_filter() -> Result<(), Box<dyn std::error::Error>> {
+    let deny_query = selected(DENY_MASK_QUERY)?;
+    let deny_restore = selected(DENY_PIPE_RESTORE)?;
+    if !deny_query && !deny_restore {
         return Ok(());
     }
     #[cfg(target_os = "linux")]
@@ -91,16 +94,31 @@ fn mask_query_filter() -> Result<(), Box<dyn std::error::Error>> {
             BpfProgram, SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition,
             SeccompFilter, SeccompRule,
         };
-        // A null new-set pointer selects observation. Keep mask changes and
-        // exec's signal setup available, denying only the actual kernel query.
-        let query = SeccompRule::new(vec![SeccompCondition::new(
-            1,
-            SeccompCmpArgLen::Qword,
-            SeccompCmpOp::Eq,
-            0,
-        )?])?;
+        let mut rules = std::collections::BTreeMap::new();
+        if deny_query {
+            // A null new-set pointer selects observation, leaving mask changes
+            // and exec's signal setup available.
+            let query = SeccompRule::new(vec![SeccompCondition::new(
+                1,
+                SeccompCmpArgLen::Qword,
+                SeccompCmpOp::Eq,
+                0,
+            )?])?;
+            rules.insert(nix::libc::SYS_rt_sigprocmask, vec![query]);
+        }
+        if deny_restore {
+            // Only SIGPIPE disposition calls fail. The ignored-disposition
+            // launcher route execs directly without resetting signals first.
+            let pipe = SeccompRule::new(vec![SeccompCondition::new(
+                0,
+                SeccompCmpArgLen::Dword,
+                SeccompCmpOp::Eq,
+                nix::libc::SIGPIPE as u64,
+            )?])?;
+            rules.insert(nix::libc::SYS_rt_sigaction, vec![pipe]);
+        }
         let filter = SeccompFilter::new(
-            [(nix::libc::SYS_rt_sigprocmask, vec![query])].into(),
+            rules,
             SeccompAction::Allow,
             SeccompAction::Errno(nix::libc::EPERM as u32),
             std::env::consts::ARCH.try_into()?,
@@ -111,7 +129,7 @@ fn mask_query_filter() -> Result<(), Box<dyn std::error::Error>> {
     }
     #[cfg(not(target_os = "linux"))]
     {
-        Err("test-process denied mask-query fixture requires Linux".into())
+        Err("test-process signal-denial fixture requires Linux".into())
     }
 }
 
@@ -166,7 +184,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     stack_limit()?;
     close_range_filter()?;
-    mask_query_filter()?;
+    signal_filter()?;
     alarm::set(seconds);
     if broken {
         // This fresh process owns both endpoints. No other test can retain a
@@ -198,6 +216,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 STACK,
                 CLOSE_RANGE,
                 DENY_MASK_QUERY,
+                DENY_PIPE_RESTORE,
             ]
             .iter()
             .any(|name| key == *name)
@@ -223,6 +242,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .env_remove(STACK)
         .env_remove(CLOSE_RANGE)
         .env_remove(DENY_MASK_QUERY)
+        .env_remove(DENY_PIPE_RESTORE)
         .exec();
     Err(error.into())
 }

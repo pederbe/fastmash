@@ -201,6 +201,29 @@ fn automatic_help_uses_its_destination_and_environment() {
 }
 
 #[test]
+fn automatic_color_preserves_byte_environment_values_and_long_preferences() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let long_preference = vec![b'x'; 8192];
+    for (name, value, suppressed) in [
+        ("NO_COLOR", b"\xff".as_slice(), true),
+        ("NO_COLOR", long_preference.as_slice(), true),
+        ("TERM", b"dumb\xff".as_slice(), false),
+    ] {
+        let mut command = PROGRAM.command(&["--help"], &[]);
+        command.env(name, OsStr::from_bytes(value));
+        let output = terminal::output(&mut command, b"", true, false);
+        assert!(output.status.success(), "{name}: {output:?}");
+        assert_eq!(output.stdout.contains(&0x1b), !suppressed, "{name}");
+        assert_eq!(
+            terminal::strip_styles(&output.stdout),
+            include_bytes!("../src/help.txt")
+        );
+    }
+}
+
+#[test]
 fn color_scanning_keeps_existing_stop_points_and_exact_spelling() {
     for (args, colored) in [
         (vec!["--color", "always", "--help"], true),

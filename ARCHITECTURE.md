@@ -46,8 +46,8 @@ These choices shape the whole codebase. Each is recorded as a decision in
    numerical result it cannot produce within its fixed rules), it stops with a clear
    message and exit status 77 instead of printing something plausible.
 5. **Grow as needed, and check.** There are no fixed caps on record length,
-   operation count or sample count. Storage grows with the job, every
-   allocation is checked, and sorting spills to disk. The few remaining fixed
+   operation count or sample count. Data storage grows with checked
+   allocations, and sorting spills to disk. The few remaining fixed
    limits (such as the 99-byte `--format` string) are documented.
 
 ## Crates
@@ -67,7 +67,7 @@ graph TD
     conv --> nc
     pn --> nc
 ```
-<!-- description: The fastmash program depends on four library crates: fastmash-conversion, fastmash-portable-numerics, fastmash-numeric-contract and fastmash-sort-process. The conversion and portable-numerics crates build on fastmash-numeric-contract. The sort-process library supplies private native Spill storage, thread policy and Linux signal support. -->
+<!-- description: The fastmash program depends on four library crates: fastmash-conversion, fastmash-portable-numerics, fastmash-numeric-contract and fastmash-sort-process. The conversion and portable-numerics crates build on fastmash-numeric-contract. The sort-process library supplies private native Spill storage and thread policy. -->
 
 | Crate | Path | Responsibility |
 | --- | --- | --- |
@@ -75,7 +75,7 @@ graph TD
 | `fastmash-conversion` | `crates/conversion` | Reading numbers from bytes and printing them, missing-value detection, locale number conventions. No `unsafe` code |
 | `fastmash-portable-numerics` | `crates/portable-numerics` | Software 80-bit arithmetic for the numerical rules, including fallback `log` and `exp`. No `unsafe` code |
 | `fastmash-numeric-contract` | `crates/numeric-contract` | The 80-bit extended-precision value type and its classification. `no_std`, no `unsafe` code, no dependencies |
-| `fastmash-sort-process` | `crates/sort-process` | Private native Spill storage, thread policy and Linux signal support. It builds no executable |
+| `fastmash-sort-process` | `crates/sort-process` | Private native Spill storage and thread policy. It builds no executable and forbids unsafe code |
 
 ### Development tools
 
@@ -366,14 +366,19 @@ end the process with `SIGABRT`. All of them are bugs.
   records this narrowly approved unsafe-code exception. Every unsafe operation
   explains its soundness locally. Ordinary standard-stream I/O uses safe
   interfaces in `standard_stream_io.rs` and `standard_io.rs`.
-- **Remaining safety migrations.** Environment reads, macOS admission,
-  later SIGPIPE restoration and allocator tuning still have first-party unsafe
-  calls. They are outside the approved startup exception and await equivalent
-  safe interfaces that preserve failure and resource behavior. This exception
-  does not authorize retaining or extending those calls. Conversion,
-  numeric-contract and portable-numerics forbid unsafe code. Sort run files
-  use checked buffer access, record arena cache hints use a safe dependency
-  API, and decimal parsing uses safe integer division.
+- **Safe runtime interfaces.** Color preferences use the same safe standard
+  environment reads as other configuration. The macOS support boundary comes
+  from the deployment target and native checks. Commands do not query the
+  product version at startup. Normal SIGPIPE restoration uses the safe `sigpipe`
+  dependency. If restoration is denied, a failed write still follows the I/O
+  failure path. Signal-mask observation and blocked-SIGPIPE refusals remain.
+  Configuration and argument allocations use standard Rust allocation behavior.
+- **Remaining safety migration.** glibc allocator tuning still has first-party
+  unsafe calls outside the approved startup exception. Its replacement must
+  preserve the existing memory behavior. Conversion, numeric-contract,
+  portable-numerics and sort-process forbid unsafe code. Sort run files use
+  checked buffer access, record arena cache hints use a safe dependency API,
+  and decimal parsing uses safe integer division.
 - **Overflow checks stay on** in release builds, and panics abort.
 - **Native entropy** uses safe dependency interfaces to `getrandom` on Linux
   and `getentropy` on macOS. Invocation seeds and private temporary names fail
@@ -395,6 +400,7 @@ end the process with `SIGABRT`. All of them are bugs.
 | `num-bigint`, `num-integer`, `num-traits` | Exact decimal conversion |
 | `base64`, `md-5`, `sha1`, `sha2` | The `base64` and checksum operations |
 | `libc` | The C entry point and signal setup |
+| `sigpipe` | Safe restoration of normal Unix broken-pipe handling, using the existing libc dependency |
 
 ## Where to start reading
 
