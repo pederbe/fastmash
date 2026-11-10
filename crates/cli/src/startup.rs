@@ -4,7 +4,7 @@
 //! can inspect them. No safe interface observes their original state. Capture
 //! it before the runtime, then occupy closed slots with the wrong access mode
 //! so later opens cannot turn an invalid inherited stream into successful I/O.
-//! Linux also keeps its direct glibc entry to avoid Rust's stack-guard lookup
+//! GNU Linux builds keep their direct entry to avoid Rust's stack-guard lookup
 //! on every tiny Command, with the SIGPIPE setup that runtime start supplies.
 //! No allocation, Rust I/O or runtime initialization belongs in capture.
 
@@ -18,7 +18,8 @@ static CLOSED: AtomicU8 = AtomicU8::new(0);
 // native syscalls and statically initialized atomics before Rust can repair fds.
 #[used]
 #[cfg(target_os = "linux")]
-#[unsafe(link_section = ".preinit_array")]
+#[cfg_attr(target_env = "gnu", unsafe(link_section = ".preinit_array"))]
+#[cfg_attr(target_env = "musl", unsafe(link_section = ".init_array"))]
 static CAPTURE: unsafe extern "C" fn() = capture;
 
 #[cfg(target_os = "linux")]
@@ -117,7 +118,7 @@ unsafe fn syscall(number: usize, a: usize, b: usize, c: usize, d: usize) -> isiz
 
 /// glibc initializes std's arguments before this entry. Preserve the SIGPIPE
 /// disposition supplied by Rust's runtime without its stack-guard lookup.
-#[cfg(all(not(test), target_os = "linux"))]
+#[cfg(all(not(test), target_os = "linux", target_env = "gnu"))]
 // SAFETY: this is the unique C main symbol with glibc's entry ABI. It does not
 // dereference argv, unwind across the ABI or return to uninitialized Rust code.
 #[unsafe(no_mangle)]

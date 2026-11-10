@@ -81,6 +81,7 @@ struct Part {
 }
 
 pub(super) struct Batch {
+    pool: Option<rayon::ThreadPool>,
     bytes: Vec<u8>,
     ends: Vec<usize>,
     threads: usize,
@@ -98,6 +99,7 @@ impl Batch {
     pub(super) fn new(threads: usize, target: usize) -> Self {
         let threads = threads.max(1);
         Self {
+            pool: None,
             bytes: Vec::new(),
             ends: Vec::new(),
             threads,
@@ -199,7 +201,34 @@ impl Batch {
         let size = count.div_ceil(self.threads.min(worth).min(count).max(1));
         // Recounted from the size, so that no part starts past the end.
         let parts = count.div_ceil(size.max(1)).max(1);
-        let results = if parts == 1 {
+        let pooled = if parts > 1 {
+            if self.pool.is_none() {
+                self.pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(self.threads)
+                    .build()
+                    .ok();
+            }
+            if let Some(pool) = &self.pool {
+                let mut results = Vec::new();
+                results.try_reserve_exact(parts).map_err(|_| allocation())?;
+                results.resize_with(parts, Part::default);
+                pool.scope(|scope| {
+                    for (p, result) in results.iter_mut().enumerate() {
+                        let (from, to) = (p * size, ((p + 1) * size).min(count));
+                        let part = &part;
+                        scope.spawn(move |_| *result = part(from, to));
+                    }
+                });
+                Some(results)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let results = if let Some(results) = pooled {
+            results
+        } else if parts == 1 {
             vec![part(0, count)]
         } else {
             std::thread::scope(|scope| {
@@ -356,7 +385,7 @@ mod tests {
     }
 
     #[test]
-    fn batches_of_long_records_are_projected_on_several_threads() {
+    fn batches_of_long_records_use_projection_workers() {
         use std::{collections::HashSet, sync::Mutex};
         let threads = Mutex::new(HashSet::new());
         let tracked = |bytes: &[u8], scratch: &mut Scratch, out: &mut Vec<u8>| {
@@ -370,7 +399,9 @@ mod tests {
         }
         batch.finish(&tracked, |_| Ok(())).ok().unwrap();
         let threads = threads.into_inner().unwrap();
-        assert_eq!(threads.len(), 2);
+        // Rayon may schedule both short tasks on one worker. Byte count
+        // should select the worker path without fixing a scheduling outcome.
+        assert!(!threads.is_empty());
         assert!(!threads.contains(&std::thread::current().id()));
     }
 

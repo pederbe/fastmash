@@ -53,7 +53,7 @@ impl SortKeys {
         };
         let (cached, key) = slot;
         // An empty slot holds no key: every sort key has at least one byte.
-        if !key.is_empty() && cached == text.as_bytes() {
+        if !key.is_empty() && crate::text_order::equal_bytes(cached, text.as_bytes()) {
             out.try_reserve(key.len()).map_err(|_| allocation())?;
             out.extend_from_slice(key);
             return Ok(());
@@ -91,7 +91,7 @@ pub(super) trait Keys {
     fn compare_keys(&self, other: &Self) -> Ordering {
         let (a, b) = (self.key_count(), other.key_count());
         for at in 0..a.min(b) {
-            let order = self.segment(at).cmp(other.segment(at));
+            let order = crate::text_order::compare(self.segment(at), other.segment(at), false);
             if order != Ordering::Equal {
                 return order;
             }

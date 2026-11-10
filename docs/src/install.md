@@ -1,6 +1,6 @@
 # Install
 
-Fastmash runs on **Linux** (glibc), **Windows through WSL2** and
+Fastmash runs on **Linux**, **Windows through WSL2** and
 **macOS 15 and later**.
 
 ## Choose a method
@@ -128,7 +128,7 @@ Bash (enter `bash` first if using Fish):
 bash -eu <<'EOF'
 tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
 tag=${tag##*/}
-name=fastmash-$tag-x86_64-unknown-linux-gnu
+name=fastmash-$tag-x86_64-unknown-linux-musl
 curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz
 curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz.sha256
 sha256sum -c $name.tar.gz.sha256
@@ -199,7 +199,8 @@ To compile Fastmash from source with `cargo install`, use the latest stable
 [Rust toolchain](https://rustup.rs). On Linux or WSL2:
 
 ```sh
-cargo install --locked fastmash
+rustup target add x86_64-unknown-linux-musl
+cargo install --locked --target x86_64-unknown-linux-musl fastmash
 ```
 
 On macOS 15 or later, select its single executable:

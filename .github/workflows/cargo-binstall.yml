@@ -80,6 +80,12 @@ jobs:
         run: |
           set -euo pipefail
           name="fastmash-v$VERSION-$TARGET"
+          if [[ "$TARGET" == x86_64-unknown-linux-gnu ]] &&
+             gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' |
+               grep -Fxq "fastmash-v$VERSION-x86_64-unknown-linux-musl.tar.gz"; then
+            TARGET=x86_64-unknown-linux-musl
+            name="fastmash-v$VERSION-$TARGET"
+          fi
           archive="$RUNNER_TEMP/archive"
           mkdir "$archive"
           gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --dir "$archive" --pattern "$name.tar.gz" --pattern "$name.tar.gz.sha256"

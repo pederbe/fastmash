@@ -30,13 +30,10 @@ main() {
     machine=$(uname -m)
     case "$system:$machine" in
         Linux:x86_64)
-            target=x86_64-unknown-linux-gnu
+            target=x86_64-unknown-linux-musl
             programs=fastmash
             checksum_tool=sha256sum
             checksum() { sha256sum -c "$1"; }
-            if has ldd && ldd --version 2>&1 | grep -qi musl; then
-                fail "the Linux prebuilt binaries need glibc; this system uses musl. See https://fastmash.io/requirements.html"
-            fi
             ;;
         Darwin:arm64)
             target=aarch64-apple-darwin
@@ -51,7 +48,7 @@ main() {
             esac
             [ "$major" -ge 15 ] || fail "the macOS archive needs macOS 15 or later."
             ;;
-        *) fail "no archive for $system $machine; supported targets are Linux x86-64 with glibc and Apple Silicon macOS 15 or later. See https://fastmash.io/requirements.html" ;;
+        *) fail "no archive for $system $machine; supported targets are Linux x86-64 and Apple Silicon macOS 15 or later. See https://fastmash.io/requirements.html" ;;
     esac
     for tool in tar gzip "$checksum_tool"; do
         has "$tool" || fail "please install $tool first."
@@ -81,8 +78,18 @@ main() {
     trap 'exit 130' INT
     trap 'exit 143' TERM
     say "Downloading Fastmash $version..."
-    fetch "$releases/download/v$version/$name.tar.gz" "$tmp/$name.tar.gz" ||
-        fail "could not download release $version from $releases."
+    if ! fetch "$releases/download/v$version/$name.tar.gz" "$tmp/$name.tar.gz" 2>/dev/null; then
+        # Older releases provided GNU archives. Never fall back after a
+        # checksum failure: the selected archive must pass its own checksum.
+        [ "$system" = Linux ] || fail "could not download release $version from $releases."
+        if has ldd && ldd --version 2>&1 | grep -qi musl; then
+            fail "release $version has no static musl archive; its older Linux archive needs glibc."
+        fi
+        target=x86_64-unknown-linux-gnu
+        name=fastmash-v$version-$target
+        fetch "$releases/download/v$version/$name.tar.gz" "$tmp/$name.tar.gz" ||
+            fail "could not download release $version from $releases."
+    fi
     fetch "$releases/download/v$version/$name.tar.gz.sha256" "$tmp/$name.tar.gz.sha256" ||
         fail "could not download the checksum for release $version."
     (cd "$tmp" && checksum "$name.tar.gz.sha256") ||

@@ -167,11 +167,8 @@ Fastmash reports the read error with status 1. And `--help` or `--version` into 
 77 rather than by `SIGPIPE`. Scripts should rely on exit statuses, not the
 exact text of error messages.
 
-Ordinary commands use normal Unix broken-pipe handling. If the operating
-system prevents its setup, a failed output write
-follows the existing I/O failure path. Fastmash no longer refuses solely because
-that restoration failed. Blocked SIGPIPE and failed signal-mask queries retain
-their existing refusals.
+Ordinary commands use normal Unix broken-pipe handling. Blocked SIGPIPE and
+failed signal-mask queries cause a refusal.
 
 With native sorting on Linux and macOS, a command with a named grouping key
 or sorted `rmdup` key and no input header

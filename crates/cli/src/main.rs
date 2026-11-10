@@ -1,7 +1,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::undocumented_unsafe_blocks)]
-// Linux uses startup's direct process entry; Darwin uses Rust's runtime start.
-#![cfg_attr(all(not(test), target_os = "linux"), no_main)]
+// GNU Linux builds use startup's direct entry; musl and Darwin use Rust startup.
+#![cfg_attr(all(not(test), target_os = "linux", target_env = "gnu"), no_main)]
 #[cfg(not(any(
     all(
         target_arch = "x86_64",
@@ -15,10 +15,8 @@
     )
 )))]
 compile_error!("Fastmash supports Linux x86-64 and Apple Silicon macOS");
-// On Linux, arguments and standard-stream capture use glibc initializers
-// (see `startup`); other Linux C libraries would run with no arguments.
-#[cfg(all(target_os = "linux", not(target_env = "gnu")))]
-compile_error!("Fastmash requires glibc (target_env = \"gnu\")");
+#[cfg(all(target_os = "linux", not(any(target_env = "gnu", target_env = "musl"))))]
+compile_error!("Fastmash requires glibc or musl");
 mod annotated;
 mod base64_fields;
 mod binding;
@@ -598,10 +596,8 @@ fn quiet_nan() -> numerics::Value {
     ))
 }
 
-/// Darwin uses Rust's normal runtime and its native argument initialization.
-/// The Mach-O constructor in startup captures inherited closed streams
-/// before that runtime sanitizes descriptors 0, 1 and 2.
-#[cfg(all(not(test), target_os = "macos"))]
+/// Musl and Darwin use Rust's runtime and argument initialization.
+#[cfg(all(not(test), any(target_env = "musl", target_os = "macos")))]
 fn main() {
     run_process();
 }

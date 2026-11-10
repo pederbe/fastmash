@@ -38,11 +38,11 @@ jobs:
         run: |
           bash release/prepare-linux.sh
           mkdir -p out/target/release
-          cp "$RUNNER_TEMP/weekly-linux/out/first/release/fastmash" \
+          cp "$RUNNER_TEMP/weekly-linux/out/first/x86_64-unknown-linux-musl/release/fastmash" \
              out/target/release/
           docker run --rm -v "$PWD:/source:ro" -v "$PWD/out:/out" \
             -e CARGO_TARGET_DIR=/out/notices fastmash-weekly-builder bash -c \
-            'CARGO_HOME=/tmp/cargo cargo run --locked --release -p fastmash-license-notices --manifest-path /source/Cargo.toml > /out/THIRD-PARTY-LICENSES.md'
+            'CARGO_HOME=/tmp/cargo cargo run --locked --release -p fastmash-license-notices --manifest-path /source/Cargo.toml -- --target x86_64-unknown-linux-musl > /out/THIRD-PARTY-LICENSES.md'
       # This run's manifest binds the tested and uploaded bytes.
       - name: Check the frozen delivery checksums
         run: |
@@ -61,7 +61,7 @@ jobs:
           FASTMASH_TEST_BINARY="$PWD/out/target/release/fastmash" cargo test --release --workspace --locked
       - name: Package
         run: |
-          name="fastmash-${RELEASE_TAG}-x86_64-unknown-linux-gnu"
+          name="fastmash-${RELEASE_TAG}-x86_64-unknown-linux-musl"
           mkdir "$name"
           cp out/target/release/fastmash \
              out/THIRD-PARTY-LICENSES.md README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$name/"
@@ -72,7 +72,7 @@ jobs:
       - name: Test the archive
         run: |
           version="${RELEASE_TAG#v}"
-          name="fastmash-${RELEASE_TAG}-x86_64-unknown-linux-gnu"
+          name="fastmash-${RELEASE_TAG}-x86_64-unknown-linux-musl"
           installed="$RUNNER_TEMP/archive-installed"
           mkdir "$installed"
           tar -xzf "$name.tar.gz" -C "$installed"
@@ -80,9 +80,9 @@ jobs:
       # .deb and .rpm of the same bytes; release/package.sh checks that.
       - name: Linux packages
         run: |
-          sudo apt-get install -y --no-install-recommends rpm
+          sudo apt-get install -y --no-install-recommends rpm cpio
           version="${RELEASE_TAG#v}"
-          name="fastmash-${RELEASE_TAG}-x86_64-unknown-linux-gnu"
+          name="fastmash-${RELEASE_TAG}-x86_64-unknown-linux-musl"
           SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
             bash release/package.sh "$version" out/target/release "$name" packages
           for package in packages/*; do
@@ -92,7 +92,7 @@ jobs:
       - name: Test the packages
         run: |
           version="${RELEASE_TAG#v}"
-          name="fastmash-${RELEASE_TAG}-x86_64-unknown-linux-gnu"
+          name="fastmash-${RELEASE_TAG}-x86_64-unknown-linux-musl"
           target/debug/fastmash-test-package-installation packages packages "$version" release/delivery.sha256 \
             --expected-docs "$name"
       - name: Retain tested Linux assets and notes

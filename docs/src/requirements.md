@@ -1,14 +1,14 @@
 # System requirements
 
-Most Linux systems from 2018 onward need nothing beyond the
-[install](install.md) steps. This page lists the details.
+The Linux download is statically linked and runs on both glibc and musl
+distributions, including Alpine. Follow the [install](install.md) steps.
 
 ## Platform
 
 | Requirement | Why |
 | --- | --- |
-| Linux, glibc 2.28 or later (RHEL 8, Debian 10, Ubuntu 20.04 and newer) | Supported platform for the prebuilt binaries |
-| Linux with glibc (`x86_64-unknown-linux-gnu`) | Building Linux source. Musl and other Linux targets are refused at compile time |
+| Linux (`x86_64-unknown-linux-musl`) | Static prebuilt binaries, with no glibc version requirement |
+| Linux (`x86_64-unknown-linux-gnu`) | Also supported for source builds using the system glibc |
 | macOS 15 or later (`aarch64-apple-darwin`) | Supported platform for the native archive, checked on macOS 15 and 26 |
 | `/proc` mounted on Linux | Supplies memory and terminal information. Without it, Fastmash uses conservative sort memory and writes output in 8 KiB blocks, even to a terminal |
 | A writable `TMPDIR` (default `/tmp`) | Temporary data for large sorted jobs |
@@ -22,8 +22,7 @@ outside the scope. See [Homebrew](install.md#homebrew) or the
 Sorting runs inside Fastmash and needs no other program. `TMPDIR` must be
 writable when a job spills to disk.
 
-Under an address-space limit (`ulimit -v`, as some batch schedulers set),
-Fastmash reduces the address space that its memory allocator reserves. See
+For commands under an address-space limit (`ulimit -v`, as some batch schedulers set), see
 [Address-space limits](guide/errors.md#address-space-limits).
 
 See [Grouping and sorting](guide/grouping.md#large-inputs) for memory use and
@@ -44,7 +43,7 @@ workflow built it, download the archive from the
 Linux:
 
 ```sh
-gh attestation verify fastmash-v*-x86_64-unknown-linux-gnu.tar.gz --repo pederbe/fastmash
+gh attestation verify fastmash-v*-x86_64-unknown-linux-musl.tar.gz --repo pederbe/fastmash
 ```
 
 macOS:
@@ -59,13 +58,14 @@ The published [benchmarks](benchmarks/index.md) measure qualified Linux release 
 
 ## Building from source
 
-Use the latest stable Rust.
+Use the latest stable Rust and a C compiler (`cc`, or set `CC`).
 
 ```sh
 git clone https://github.com/pederbe/fastmash
 cd fastmash
-cargo build --release --locked
-# the program is target/release/fastmash
+rustup target add x86_64-unknown-linux-musl
+cargo build --release --locked --target x86_64-unknown-linux-musl
+# the program is target/x86_64-unknown-linux-musl/release/fastmash
 ```
 
 To build on macOS 15 or later, run this command in Bash:
@@ -75,7 +75,8 @@ MACOSX_DEPLOYMENT_TARGET=15.0 cargo build --release --locked --bin fastmash --ta
 # the program is target/aarch64-apple-darwin/release/fastmash
 ```
 
-The macOS build also needs Apple's Command Line Tools.
+The ordinary Linux `cargo build --release --locked` command still builds
+against the system glibc. The macOS build needs Apple's Command Line Tools.
 Installing the archive needs no Rust compiler or Command Line Tools.
 
 `cargo install` and source builds use your own compiler and settings. They

@@ -138,7 +138,7 @@ The quantile suite retains a 60-second bound for ordinary Commands and a
 Grouping's resource fixtures apply file-size and Linux address-space limits in
 the fresh child. The file-size check uses native spawn attributes to restore
 SIGXFSZ only in that child, with real output pipes and signal status. The paused
-memory check retains the tested process's PID across exec.
+memory check verifies correct completion under a Linux address-space budget.
 
 For focused `record_separators` tests, prepare both launchers with
 `cargo build --release --locked -p fastmash-corpus-driver --bins`.
@@ -165,6 +165,9 @@ A child can become unsignalable on macOS just before its terminal status is
 observable. Stop selection keeps its PID owned and waits within the existing
 execution deadline for a successful stop or a fresh terminal observation. The
 regression control repeats a post-read parse failure during descriptor teardown. An earlier exit never counts as observed late EIO.
+Resume selection also preserves an observed early exit without recording a
+resume or an EIO transition. Its native control retains the child PID through
+group cleanup and verifies the original exit status.
 
 Native tests use the same command boundary. `native_descriptors.rs` covers closed
 and incorrectly opened standard streams. `native_streams.rs` covers inherited
@@ -522,7 +525,7 @@ Linux gate. Generic suites are not disabled wholesale on macOS:
 | Test or component | Reason and native coverage |
 | --- | --- |
 | `grouping::native_variable_allocation_refusal_is_explicit`; `text_summaries::text_allocation_failure_is_explicit`; `record_separators::transpose::transpose_allocation_failure_is_explicit_and_has_no_output`; `record_separators::crosstab::crosstab_allocation_failure_is_explicit` | These faults depend on Linux address-space enforcement and calibrated small glibc process limits. Darwin address-space limits do not provide that fault. Checked-allocation unit fixtures, growable command tests and native spill refusal/error paths still run. These particular real allocation-failure thresholds remain Linux evidence. |
-| `grouping::eight_thread_language_sorts_use_a_fraction_of_an_address_space_limit`, including its `paused_language_sort` helper | The measurement inspects Linux `/proc/PID/status` and glibc arena reservation under `RLIMIT_AS`. macOS uses its documented conservative initial chunk target when Linux memory facts are unavailable. Explicit small targets, language sorting and spill remain tested natively. |
+| `grouping::language_sort_completes_under_an_address_space_limit` | The workload verifies correct completion under Linux `RLIMIT_AS`. macOS uses its documented conservative initial chunk target when Linux memory facts are unavailable. Explicit small targets, language sorting and spill remain tested natively. |
 | `text_summaries::text_final_output_is_written_without_a_second_copy` | Its calibrated 32 MiB address-space allowance is a Linux observation. The native test still checks the full large output. It does not claim that Linux allocation threshold on Darwin. |
 | Ignored `quantiles` tests `growth_and_sort_scratch_exhaustion_are_reported`, `percentile_and_trim_allocation_failures`, `robust_allocation_failures`, `dedup_allocation_failure_and_duplicate_heavy_stream` | These opt-in Linux installed-binary tests require the calibrated address-space fault. Ordinary quantiles, robust operations, sample growth and output faults remain in the native run. |
 | Other existing ignored named-reference, retained-dataset, locale-generation and timing tests | Their explicit reference, dataset or measurement prerequisites remain unchanged on both platforms. The retained workspace inventory and result log name them and their reasons. Native GNU comparisons are recorded separately, and cannot redefine portable expectations. |

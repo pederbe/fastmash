@@ -49,9 +49,15 @@ sha1 = { version = "0.11.0", default-features = false }
 sha2 = { version = "0.11.1", default-features = false }
 # Align terminal fields by displayed Unicode columns, not UTF-8 byte counts.
 unicode-width = { version = "0.2.3", default-features = false }
+# Reuse projection workers across batches instead of starting each batch anew.
+rayon = "1.12.0"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 mem_prefetch = { version = "0.1.1", default-features = false }
+
+[target.'cfg(target_env = "musl")'.dependencies]
+# Safe byte comparisons avoid musl's slower scalar comparison routines.
+memx = "0.2.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1.1.6", default-features = false, features = ["std", "rand", "stdio", "fs"] }
