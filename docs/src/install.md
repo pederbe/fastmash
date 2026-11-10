@@ -130,6 +130,10 @@ tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/
 tag=${tag##*/}
 name=fastmash-$tag-x86_64-unknown-linux-musl
 if ! curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz; then
+  if command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl; then
+    printf '%s\n' 'The latest release has no static Linux archive.' >&2
+    exit 1
+  fi
   name=fastmash-$tag-x86_64-unknown-linux-gnu
   curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz
 fi
