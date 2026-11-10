@@ -2,7 +2,7 @@
 
 ## Weekly releases
 
-Every Monday at 06:17 UTC, [release-plz](https://release-plz.dev) opens or updates
+Every Tuesday at 06:17 UTC, [release-plz](https://release-plz.dev) opens or updates
 one release pull request when there are unreleased user-facing changes. Required
 CI checks must pass before it merges automatically. Pushes to `main` refresh an
 already-open release pull request, without opening a new one on every merge.
