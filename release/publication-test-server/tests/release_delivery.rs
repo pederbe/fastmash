@@ -192,7 +192,9 @@ done
     let verified = Command::new("sha256sum")
         .arg("-c")
         .arg(&manifest)
-        .current_dir(root.join("reproducible/weekly-linux/out/first/x86_64-unknown-linux-musl/release"))
+        .current_dir(
+            root.join("reproducible/weekly-linux/out/first/x86_64-unknown-linux-musl/release"),
+        )
         .output()
         .unwrap();
     assert!(

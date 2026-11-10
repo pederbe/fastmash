@@ -15,29 +15,63 @@ fn workflow() -> String {
 #[cfg(unix)]
 #[test]
 fn package_repository_backfills_legacy_and_static_linux_releases() {
-    let workflow = fs::read_to_string(root().join(".github/workflows/package-repository.yml")).unwrap();
-    let step = workflow.split_once("      - name: Check the release\n").unwrap().1
-        .split_once("      - name:").unwrap().0;
-    let script = step.split_once("        run: |\n").unwrap().1.lines()
-        .map(|line| line.strip_prefix("          ").unwrap()).collect::<Vec<_>>().join("\n");
+    let workflow =
+        fs::read_to_string(root().join(".github/workflows/package-repository.yml")).unwrap();
+    let step = workflow
+        .split_once("      - name: Check the release\n")
+        .unwrap()
+        .1
+        .split_once("      - name:")
+        .unwrap()
+        .0;
+    let script = step
+        .split_once("        run: |\n")
+        .unwrap()
+        .1
+        .lines()
+        .map(|line| line.strip_prefix("          ").unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
     let script = format!("gh() {{ printf '%s' \"$RELEASE_FIXTURE\"; }}\ngit() {{ :; }}\n{script}");
-    let directory = std::env::temp_dir().join(format!("fastmash-release-target-{}", std::process::id()));
+    let directory =
+        std::env::temp_dir().join(format!("fastmash-release-target-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
     for (assets, expected) in [
         ("\"fastmash-v0.5.0-x86_64-unknown-linux-gnu.tar.gz\"", "gnu"),
-        ("\"fastmash-v0.5.0-x86_64-unknown-linux-musl.tar.gz\"", "musl"),
-        ("\"fastmash-v0.5.0-x86_64-unknown-linux-gnu.tar.gz\",\"fastmash-v0.5.0-x86_64-unknown-linux-musl.tar.gz\"", "musl"),
+        (
+            "\"fastmash-v0.5.0-x86_64-unknown-linux-musl.tar.gz\"",
+            "musl",
+        ),
+        (
+            "\"fastmash-v0.5.0-x86_64-unknown-linux-gnu.tar.gz\",\"fastmash-v0.5.0-x86_64-unknown-linux-musl.tar.gz\"",
+            "musl",
+        ),
     ] {
-        let assets = assets.split(',').map(|name| format!("{{\"name\":{name}}}")).collect::<Vec<_>>().join(",");
+        let assets = assets
+            .split(',')
+            .map(|name| format!("{{\"name\":{name}}}"))
+            .collect::<Vec<_>>()
+            .join(",");
         let env_file = directory.join("environment");
         fs::write(&env_file, "").unwrap();
-        let output = std::process::Command::new("bash").args(["-e", "-o", "pipefail", "-c", &script])
-            .current_dir(root()).env("TAG", "v0.5.0").env("GITHUB_REPOSITORY", "pederbe/fastmash")
-            .env("RUNNER_TEMP", &directory).env("GITHUB_ENV", &env_file)
-            .env("RELEASE_FIXTURE", format!("{{\"draft\":false,\"prerelease\":false,\"assets\":[{assets}]}}"))
-            .output().unwrap();
+        let output = std::process::Command::new("bash")
+            .args(["-e", "-o", "pipefail", "-c", &script])
+            .current_dir(root())
+            .env("TAG", "v0.5.0")
+            .env("GITHUB_REPOSITORY", "pederbe/fastmash")
+            .env("RUNNER_TEMP", &directory)
+            .env("GITHUB_ENV", &env_file)
+            .env(
+                "RELEASE_FIXTURE",
+                format!("{{\"draft\":false,\"prerelease\":false,\"assets\":[{assets}]}}"),
+            )
+            .output()
+            .unwrap();
         assert!(output.status.success(), "{output:?}");
-        assert_eq!(fs::read_to_string(&env_file).unwrap(), format!("LINUX_TARGET=x86_64-unknown-linux-{expected}\n"));
+        assert_eq!(
+            fs::read_to_string(&env_file).unwrap(),
+            format!("LINUX_TARGET=x86_64-unknown-linux-{expected}\n")
+        );
     }
     fs::remove_dir_all(directory).unwrap();
 }

@@ -11,7 +11,7 @@ without improving the installation checks. Reproducibility still compares two
 clean builds within the same run. Different future compiler or SDK versions may
 produce different bytes.
 
-The glibc baseline is superseded by [ADR 0018](0018-static-linux-delivery.md).
+The glibc baseline is superseded by [ADR 0018](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0018-static-linux-delivery.md).
 Keep the CPU target, artifact checksums, installed checks and
 reuse of the tested artifacts. Historical qualification manifests identify past
 measurements, not the compiler for a new release. The
