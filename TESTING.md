@@ -165,6 +165,9 @@ A child can become unsignalable on macOS just before its terminal status is
 observable. Stop selection keeps its PID owned and waits within the existing
 execution deadline for a successful stop or a fresh terminal observation. The
 regression control repeats a post-read parse failure during descriptor teardown. An earlier exit never counts as observed late EIO.
+Resume selection also preserves an observed early exit without recording a
+resume or an EIO transition. Its native control retains the child PID through
+group cleanup and verifies the original exit status.
 
 Native tests use the same command boundary. `native_descriptors.rs` covers closed
 and incorrectly opened standard streams. `native_streams.rs` covers inherited
