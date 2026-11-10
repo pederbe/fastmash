@@ -33,6 +33,8 @@ fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.5.0"
 fastmash-sort-process = { path = "../sort-process", version = "=0.5.0" }
 rustc_apfloat = "0.2.3"
 libc = "0.2.191"
+# Safe SIGPIPE restoration through the existing libc dependency.
+sigpipe = "0.1.3"
 # Safe descriptor observations, closure, resource-limit and signal-mask queries.
 nix = { version = "0.31.3", default-features = false, features = ["fs", "resource", "signal"] }
 memchr = "2.8.3"

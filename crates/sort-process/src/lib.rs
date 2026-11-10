@@ -1,6 +1,4 @@
-//! Private native Spill storage, thread policy and SIGPIPE support.
-#![deny(unsafe_op_in_unsafe_fn)]
-#![warn(clippy::undocumented_unsafe_blocks)]
+//! Private native Spill storage and thread policy.
 #[cfg(target_os = "linux")]
 #[doc(hidden)]
 pub mod linux;

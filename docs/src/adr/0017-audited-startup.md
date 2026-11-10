@@ -1,6 +1,7 @@
 # 0017: Keep one audited startup module
 
-Status: accepted. Records the maintainer decision of 24 October 2026.
+Status: accepted. Records the maintainer decision of 24 October 2026 and its
+runtime-configuration clarification of 10 November 2026.
 
 Keep pre-runtime capture of closed standard streams and the Linux process
 entry with its initial SIGPIPE disposition in `crates/cli/src/startup.rs`.
@@ -24,5 +25,22 @@ Capture uses no allocation or Rust I/O. Each unsafe operation explains its
 safety requirements locally. Ordinary stream reads, writes, seeking and
 descriptor completion stay outside this module and use safe interfaces.
 The exception does not cover allocator tuning, environment reads, platform
-admission or later signal-policy changes. Remaining migrations must preserve
-their failure and resource behavior rather than expanding this exception.
+admission or later signal-policy changes.
+
+Runtime configuration uses ordinary safe Rust interfaces. Color preferences
+use standard environment reads, as locale and other settings already do.
+Requiring allocation-free color reads would add machinery for one startup
+failure case while other configuration reads still allocate. Checked data
+storage retains its separate allocation-failure behavior.
+
+The macOS deployment target and native archive tests define the supported
+platform. A runtime product-version query adds an early refusal on older or
+uninspectable systems without selecting a different calculation path, so it is
+removed. Unsupported systems have no guaranteed startup diagnostic.
+
+Normal SIGPIPE restoration uses the small MIT-licensed `sigpipe` dependency,
+which reuses libc and does not report restoration errors. If restoration is
+denied, a failed write still causes an I/O failure. This replaces the dedicated
+restoration refusal. Signal-mask observation and blocked-SIGPIPE refusals remain.
+Preserving ordinary pipeline behavior does not require a new native wrapper or
+a broader unsafe-code exception. Allocator tuning remains a separate migration.

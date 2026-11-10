@@ -128,20 +128,13 @@ use std::{
 };
 
 fn setup_sigpipe() -> Result<(), Failure> {
-    setup_sigpipe_with(
-        || platform::sigpipe_mask().map_err(|_| ()),
-        || platform::default_sigpipe().map_err(|_| ()),
-    )
-}
-fn setup_sigpipe_with(
-    inspect: impl FnOnce() -> Result<u64, ()>,
-    restore: impl FnOnce() -> Result<(), ()>,
-) -> Result<(), Failure> {
-    let mask = inspect().map_err(|_| unsupported("unable to inspect runtime signal mask"))?;
+    let mask = platform::sigpipe_mask()
+        .map_err(|_| unsupported("unable to inspect runtime signal mask"))?;
     if mask & (1 << 12) != 0 {
         return Err(unsupported("blocked SIGPIPE is unsupported"));
     }
-    restore().map_err(|_| unsupported("unable to restore runtime SIGPIPE disposition"))
+    sigpipe::reset();
+    Ok(())
 }
 
 /// The diagnostic for field `field` of line `line`, which has `fields` fields.
@@ -610,21 +603,6 @@ fn quiet_nan() -> numerics::Value {
 /// before that runtime sanitizes descriptors 0, 1 and 2.
 #[cfg(all(not(test), target_os = "macos"))]
 fn main() {
-    if let Err(error) = platform::admit() {
-        let mut stderr = standard_io::Stderr;
-        let reported = failure::write(
-            &mut stderr,
-            b"fastmash",
-            &error,
-            terminal_style::Style::default(),
-        )
-        .is_ok();
-        std::process::exit(if reported && standard_io::finish_stderr() {
-            error.status
-        } else {
-            1
-        });
-    }
     run_process();
 }
 

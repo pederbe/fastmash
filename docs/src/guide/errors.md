@@ -12,8 +12,8 @@
 When one failure follows another, such as a failure to write the output after
 an error, the status is the more serious one: 70 over 77 over 1. If a
 diagnostic itself cannot be written, the status is 1. A message containing
-"internal", or a process killed by `SIGABRT`, also indicates a bug: please
-report it.
+"internal" indicates a bug: please report it. `SIGABRT` can indicate a bug or
+an allocation failure that the process could not report as a refusal.
 
 Diagnostics go to standard error, in the form:
 
@@ -62,11 +62,12 @@ A refusal is not a claim that GNU datamash would reject the same input.
 Fastmash has no fixed limits on record length, field count, number of
 operations or number of values. (The few fixed limits that remain are GNU
 datamash's own, on `--format` strings, names in a command and, in one narrow
-case, numeric fields; see [Numbers](output.md#limits).) Storage grows with the job and every
-allocation is checked; if memory runs out, Fastmash refuses with status 77
-where it can. The operating system may still stop a process that exhausts
-memory before Fastmash can report it. In that case, the shell or job runner
-reports the operating system's termination status.
+case, numeric fields; see [Numbers](output.md#limits).) Data storage grows with
+checked allocations. If memory runs out, Fastmash refuses with status 77 where
+it can. Process initialization, including arguments and configuration, uses
+standard Rust allocation behavior and can terminate before reporting a refusal.
+The operating system may also stop a process that exhausts memory. In those
+cases, the shell or job runner reports the process's termination status.
 
 What grows with the input:
 
