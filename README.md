@@ -51,7 +51,7 @@ Grouped summary
 
 ## Install
 
-Fastmash runs on **Linux** (glibc), **Windows through WSL2** and
+Fastmash runs on **Linux**, **Windows through WSL2** and
 **macOS 15 and later**.
 
 Install prebuilt programs with your package manager. On Debian or Ubuntu,

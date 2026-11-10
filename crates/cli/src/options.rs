@@ -166,7 +166,7 @@ const fn descriptor(
     }
 }
 
-fn copy_argument(bytes: &[u8]) -> Result<OsString, Failure> {
+pub(super) fn copy_argument(bytes: &[u8]) -> Result<OsString, Failure> {
     let mut copy = Vec::new();
     reserve(&mut copy, bytes.len())?;
     copy.extend_from_slice(bytes);
@@ -180,10 +180,11 @@ fn push_operand(operands: &mut Vec<OsString>, arg: &OsString) -> Result<(), Fail
 }
 
 pub(super) fn collect_args(
-    args: impl IntoIterator<Item = OsString>,
+    args: impl IntoIterator<Item = Result<OsString, Failure>>,
 ) -> Result<Vec<OsString>, Failure> {
     let mut collected = Vec::new();
     for arg in args {
+        let arg = arg?;
         reserve(&mut collected, 1)?;
         collected.push(arg);
     }
@@ -1450,7 +1451,13 @@ mod tests {
             assert_eq!(error.message, b"command memory allocation failed\n");
         }
         FAIL_RESERVATION.with(|slot| slot.set(Some(0)));
-        assert_eq!(collect_args(args(&["cmd"])).err().unwrap().status, 77);
+        assert_eq!(
+            collect_args(args(&["cmd"]).into_iter().map(Ok))
+                .err()
+                .unwrap()
+                .status,
+            77
+        );
         assert!(parse(&input, b"cmd", false).is_ok());
     }
 }

@@ -144,7 +144,7 @@ if [ -z "$build" ]; then
   printf 'rustc: fixture stable\ncargo: fixture stable\n'
   exit 0
 fi
-out="$RUNNER_TEMP/weekly-linux/out/$build/release"
+out="$RUNNER_TEMP/weekly-linux/out/$build/x86_64-unknown-linux-musl/release"
 mkdir -p "$out"
 for binary in fastmash; do
   if [ "$FIXTURE_MODE" = mismatch ] && [ "$build" = second ]; then
@@ -192,7 +192,7 @@ done
     let verified = Command::new("sha256sum")
         .arg("-c")
         .arg(&manifest)
-        .current_dir(root.join("reproducible/weekly-linux/out/first/release"))
+        .current_dir(root.join("reproducible/weekly-linux/out/first/x86_64-unknown-linux-musl/release"))
         .output()
         .unwrap();
     assert!(

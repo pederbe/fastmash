@@ -9,7 +9,7 @@
 # each package are byte-identical to BIN_DIR's. Prepare the Rust tools with
 # cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins.
 # FASTMASH_PACKAGE_BYTES_CHECKER can select another prepared checker. Needs
-# dpkg-deb, and rpmbuild and rpm2cpio for the .rpm (the rpm package on Debian
+# dpkg-deb, and rpmbuild, rpm2cpio and cpio for the .rpm (the rpm package on Debian
 # and Ubuntu).
 set -euo pipefail
 
@@ -52,7 +52,6 @@ Package: fastmash
 Version: $version
 Architecture: amd64
 Maintainer: Peder Bergan <https://github.com/pederbe/fastmash/issues>
-Depends: libc6 (>= 2.28)
 Section: utils
 Priority: optional
 Installed-Size: $(du -sk --exclude=DEBIAN "$deb" | cut -f1)
@@ -89,7 +88,6 @@ License:        MIT OR Apache-2.0
 URL:            $homepage
 BuildArch:      x86_64
 AutoReqProv:    no
-Requires:       glibc >= 2.28
 
 %description
 Fastmash summarizes, groups and reshapes tab-separated or delimited text

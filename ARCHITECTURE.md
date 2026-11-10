@@ -10,11 +10,11 @@ It is written for contributors and for anyone evaluating the project. The
 | | |
 | --- | --- |
 | Language | Rust (edition 2024), five product crates |
-| Platform | Linux with glibc, Windows through WSL2. Native macOS 15+ |
+| Platform | Linux, Windows through WSL2. Native macOS 15+ |
 | Interface | GNU datamash 1.9 command language, with explicit CSV, health, selection, weighted mean and comparison extensions |
 | Numbers | 80-bit extended precision, implemented in software |
 | Sorting | Built-in stable sorting with disk spill |
-| Runtime dependencies | glibc on Linux. System libraries on macOS |
+| Runtime dependencies | Static musl Linux download, or system glibc for GNU source builds. System libraries on macOS |
 | Network access | None |
 
 ## Design principles

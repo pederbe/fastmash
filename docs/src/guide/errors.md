@@ -87,7 +87,11 @@ What grows with the input:
 
 Some systems limit a process's address space rather than its memory, for
 example `ulimit -v` or a batch scheduler's virtual-memory limit such as
-`h_vmem`. The C library's memory allocator (glibc `malloc`) gives each thread
+`h_vmem`. The static Linux download uses musl and needs no glibc allocator
+settings. If a sorted job refuses under the limit, try `OMP_NUM_THREADS=1`
+to reduce worker memory (see [Large inputs](grouping.md#large-inputs)).
+
+For glibc source builds, the C library's memory allocator gives each thread
 that allocates an arena of its own, which reserves 64 MiB of address space,
 more as it grows, and sorts in language locales, like the heavier
 calculations in the C locales, run on up to eight threads.

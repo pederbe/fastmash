@@ -72,6 +72,9 @@ The GitHub-hosted workflows perform these steps for the frozen version:
    `release/delivery.sha256` and package one of those builds directly. Include
    the manifest as `binary.sha256` inside the archive. Historical manifests
    remain unchanged.
+   The target is `x86_64-unknown-linux-musl`. Reject a shared-library dependency
+   or ELF interpreter, and include musl's copyright with the Cargo notices.
+   The Debian and RPM packages have no glibc runtime dependency.
 2. Run workspace tests and both regression-corpus input modes against that
    executable. Package the same bytes into the archive,
    `.deb` and `.rpm`, then test extraction, installation, Commands and removal.

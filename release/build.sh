@@ -12,18 +12,17 @@ flags=(
   -Cpanic=abort
   -Coverflow-checks=yes
   -Cllvm-args=-x86-branches-within-32B-boundaries
-  -L/opt/fastmash-link
   --remap-path-prefix=/source=/fastmash
   --remap-path-prefix=/source/crates/vendor=/deps
   --remap-path-prefix=/tmp/cargo/registry/src/index.crates.io-1949cf8c6b5b557f=/deps
 )
 CARGO_ENCODED_RUSTFLAGS=$(IFS=$'\x1f'; printf '%s' "${flags[*]}")
 export CARGO_ENCODED_RUSTFLAGS
-test -f /opt/fastmash-link/libgcc_s.a
-cargo build --locked --release -p fastmash --bins
+cargo build --locked --release --target x86_64-unknown-linux-musl -p fastmash --bins
 for binary in fastmash; do
-  if readelf -d "$CARGO_TARGET_DIR/release/$binary" | grep -q libgcc_s; then
-    echo "$binary still needs libgcc_s: the release link shim did not apply" >&2
+  path="$CARGO_TARGET_DIR/x86_64-unknown-linux-musl/release/$binary"
+  if readelf -d "$path" | grep -q '(NEEDED)' || readelf -l "$path" | grep -q INTERP; then
+    echo "$binary must be statically linked without a shared-library interpreter" >&2
     exit 1
   fi
 done

@@ -15,10 +15,8 @@
     )
 )))]
 compile_error!("Fastmash supports Linux x86-64 and Apple Silicon macOS");
-// On Linux, arguments and standard-stream capture use glibc initializers
-// (see `startup`); other Linux C libraries would run with no arguments.
-#[cfg(all(target_os = "linux", not(target_env = "gnu")))]
-compile_error!("Fastmash requires glibc (target_env = \"gnu\")");
+#[cfg(all(target_os = "linux", not(any(target_env = "gnu", target_env = "musl"))))]
+compile_error!("Fastmash requires glibc or musl");
 mod annotated;
 mod base64_fields;
 mod binding;
@@ -598,12 +596,10 @@ fn quiet_nan() -> numerics::Value {
     ))
 }
 
-/// Darwin uses Rust's normal runtime and its native argument initialization.
-/// The Mach-O constructor in startup captures inherited closed streams
-/// before that runtime sanitizes descriptors 0, 1 and 2.
+/// Darwin uses Rust's normal runtime and native argument initialization.
 #[cfg(all(not(test), target_os = "macos"))]
 fn main() {
-    run_process();
+    run_process(std::env::args_os().map(Ok));
 }
 
 /// The buffer standard input is read through: large reads keep system calls
@@ -611,7 +607,7 @@ fn main() {
 const INPUT_BUFFER: usize = 128 << 10;
 
 #[cfg_attr(test, allow(dead_code))]
-fn run_process() {
+fn run_process(arguments: impl IntoIterator<Item = Result<std::ffi::OsString, Failure>>) {
     #[cfg(feature = "hotpath")]
     let profiling = match profiling::start() {
         Ok(guard) => guard,
@@ -625,7 +621,7 @@ fn run_process() {
         }
     };
     let terminal = terminal_style::Detection::from_env();
-    let args = match options::collect_args(std::env::args_os()) {
+    let args = match options::collect_args(arguments) {
         Ok(args) => args,
         Err(error) => {
             let mut stderr = standard_io::Stderr;

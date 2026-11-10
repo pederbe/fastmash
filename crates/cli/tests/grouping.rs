@@ -869,14 +869,14 @@ fn a_restart_reads_standard_input_from_where_the_command_began() {
     fs::remove_file(path).unwrap();
 }
 
-/// The address space, in bytes, of an eight-thread language sort of 300,000
-/// rows under an address-space limit of `limit` bytes, paused after two
-/// thirds of its input, with the `environment` added; the sort is checked to
-/// complete with the right output.
+/// A moderate language-sort workload completes with the correct group counts
+/// under an address-space budget.
+#[test]
 #[cfg(target_os = "linux")]
-fn paused_language_sort(limit: u64, environment: &[(&str, &str)]) -> u64 {
+fn language_sort_completes_under_an_address_space_limit() {
     use std::io::Write;
-    let rows: Vec<u8> = (0..300_000u32)
+    const LIMIT: u64 = 350_000 << 10;
+    let records: Vec<u8> = (0..300_000u32)
         .flat_map(|n| format!("k{:05}\t{}\n", n * 7919 % 20_000, n % 1000).into_bytes())
         .collect();
     let mut command = process::native(candidate(), 60);
@@ -887,44 +887,16 @@ fn paused_language_sort(limit: u64, environment: &[(&str, &str)]) -> u64 {
         .env("LC_ALL", "en_US.UTF-8")
         .env("OMP_NUM_THREADS", "8")
         .env("TMPDIR", std::env::temp_dir())
-        .envs(environment.iter().copied())
-        .env("FASTMASH_TEST_PROCESS_ADDRESS_SPACE", limit.to_string())
+        .env("FASTMASH_TEST_PROCESS_ADDRESS_SPACE", LIMIT.to_string())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = command.spawn().unwrap();
     let mut input = child.stdin.take().unwrap();
-    // Once the sort has read most of two thirds of the rows, it has
-    // projected several batches of them on eight threads.
-    let (first, rest) = rows.split_at(rows.len() / 3 * 2);
-    let _ = input.write_all(first);
-    let status = fs::read_to_string(format!("/proc/{}/status", child.id())).unwrap_or_default();
-    let _ = input.write_all(rest);
+    let _ = input.write_all(&records);
     drop(input);
     let output = child.wait_with_output().unwrap();
-    assert!(output.status.success(), "{environment:?}: {output:?}");
+    assert!(output.status.success(), "{output:?}");
     let expected: String = (0..20_000).map(|key| format!("k{key:05}\t15\n")).collect();
     assert!(output.stdout == expected.as_bytes());
-    let size: u64 = status
-        .lines()
-        .find_map(|line| line.strip_prefix("VmSize:"))
-        .and_then(|size| size.trim().strip_suffix(" kB"))
-        .and_then(|size| size.trim().parse().ok())
-        .unwrap_or_else(|| panic!("no address-space size in {status:?}"));
-    size << 10
-}
-
-/// Under an address-space limit, a language sort that projects on eight
-/// threads completes within a fraction of the limit: the malloc arenas are
-/// capped (one below 1 GiB). With the arena count that the environment sets,
-/// or without the cap, each thread's arena reserves 64 MiB, and the paused
-/// sort takes most of the limit (about 480 MiB of 512 where measured).
-#[test]
-#[cfg(target_os = "linux")]
-fn eight_thread_language_sorts_use_a_fraction_of_an_address_space_limit() {
-    const LIMIT: u64 = 512 << 20;
-    let capped = paused_language_sort(LIMIT, &[]);
-    assert!(capped < LIMIT / 2, "{capped} bytes of address space");
-    let eight = paused_language_sort(LIMIT, &[("MALLOC_ARENA_MAX", "8")]);
-    assert!(eight > LIMIT / 2, "{eight} bytes with eight arenas");
 }

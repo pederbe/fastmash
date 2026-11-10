@@ -39,6 +39,12 @@ cargo test --release --workspace
 ./target/debug/fastmash --help
 ```
 
+Linux release downloads use the static musl target. To build that target,
+install it with `rustup target add x86_64-unknown-linux-musl`, then run
+`cargo build --release --locked --target x86_64-unknown-linux-musl`.
+It needs a C compiler for the bundled musl copy routines. Ordinary Linux
+development builds continue to use the system glibc.
+
 Having GNU datamash 1.9 installed (`apt install datamash`, `pacman -S datamash`)
 makes it easy to compare behavior. Check `datamash --version`, because
 distributions ship different versions.

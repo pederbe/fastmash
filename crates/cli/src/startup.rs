@@ -18,7 +18,8 @@ static CLOSED: AtomicU8 = AtomicU8::new(0);
 // native syscalls and statically initialized atomics before Rust can repair fds.
 #[used]
 #[cfg(target_os = "linux")]
-#[unsafe(link_section = ".preinit_array")]
+#[cfg_attr(target_env = "gnu", unsafe(link_section = ".preinit_array"))]
+#[cfg_attr(target_env = "musl", unsafe(link_section = ".init_array"))]
 static CAPTURE: unsafe extern "C" fn() = capture;
 
 #[cfg(target_os = "linux")]
@@ -115,17 +116,30 @@ unsafe fn syscall(number: usize, a: usize, b: usize, c: usize, d: usize) -> isiz
     result
 }
 
-/// glibc initializes std's arguments before this entry. Preserve the SIGPIPE
-/// disposition supplied by Rust's runtime without its stack-guard lookup.
+/// The Linux C entry supplies SIGPIPE setup without Rust's stack-guard lookup.
+/// glibc has initialized std's arguments. Musl passes its native arguments here.
 #[cfg(all(not(test), target_os = "linux"))]
-// SAFETY: this is the unique C main symbol with glibc's entry ABI. It does not
-// dereference argv, unwind across the ABI or return to uninitialized Rust code.
+// SAFETY: this is the unique main symbol with the Linux C entry ABI. Native
+// arguments remain live throughout the call. No panic unwinds across this ABI.
 #[unsafe(no_mangle)]
 extern "C" fn main(_argc: libc::c_int, _argv: *const *const libc::c_char) -> libc::c_int {
     // SAFETY: the process is still single-threaded. SIGPIPE is a valid signal,
     // and SIG_IGN is the disposition Rust's runtime start would install.
     unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
-    super::malloc_arenas::cap();
-    super::run_process();
+    #[cfg(target_env = "gnu")]
+    {
+        super::malloc_arenas::cap();
+        super::run_process(std::env::args_os().map(Ok));
+    }
+    #[cfg(target_env = "musl")]
+    {
+        let arguments = (0.._argc).map(|index| {
+            // SAFETY: the C entry receives argc valid argument pointers. The
+            // index is below argc and every argument is NUL terminated.
+            let argument = unsafe { std::ffi::CStr::from_ptr(*_argv.add(index as usize)) };
+            super::options::copy_argument(argument.to_bytes())
+        });
+        super::run_process(arguments);
+    }
     0
 }

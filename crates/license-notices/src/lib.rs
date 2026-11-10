@@ -32,6 +32,7 @@ linked into the binaries under the MIT and Apache-2.0 licenses:\n\
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
     Linux,
+    LinuxMusl,
     Macos,
 }
 
@@ -39,6 +40,7 @@ impl Target {
     pub fn parse(value: &str) -> Result<Self> {
         match value {
             "x86_64-unknown-linux-gnu" => Ok(Self::Linux),
+            "x86_64-unknown-linux-musl" => Ok(Self::LinuxMusl),
             "aarch64-apple-darwin" => Ok(Self::Macos),
             _ => Err(format!("unsupported target: {value}").into()),
         }
@@ -47,6 +49,7 @@ impl Target {
     pub const fn triple(self) -> &'static str {
         match self {
             Self::Linux => "x86_64-unknown-linux-gnu",
+            Self::LinuxMusl => "x86_64-unknown-linux-musl",
             Self::Macos => "aarch64-apple-darwin",
         }
     }
@@ -116,6 +119,15 @@ pub fn write_notices(metadata: &Value, target: Target, out: &mut impl Write) -> 
         "# Third-party licenses\n\nThe fastmash executable includes the following third-party code.\n\n{RUST_STD}\n"
     )?;
     write!(out, "Target: `{}`.\n\n", target.triple())?;
+    if target == Target::LinuxMusl {
+        write!(
+            out,
+            "## musl 1.2.6 copy routines and statically linked musl runtime\n\n\
+Source: <https://musl.libc.org/>. The bundled portable copy routines come from\n\
+musl 1.2.6. Rust's musl target also links the musl runtime.\n\n```text\n{}\n```\n\n",
+            include_str!("../../cli/vendor/musl/COPYRIGHT").trim()
+        )?;
+    }
     for package in linked_packages(metadata)? {
         let name = text(package, "name")?;
         let license = package["license"].as_str().unwrap_or("None");

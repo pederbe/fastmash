@@ -1,7 +1,7 @@
 # cargo-deny policy for the published crates (https://embarkstudios.github.io/cargo-deny/).
 
 [graph]
-targets = ["x86_64-unknown-linux-gnu"]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "aarch64-apple-darwin"]
 all-features = true
 
 [licenses]

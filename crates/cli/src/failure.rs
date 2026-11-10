@@ -313,7 +313,7 @@ mod tests {
         }
         crate::command_memory::FAIL_RESERVATION.with(|at| at.set(Some(0)));
         MESSAGE_FAILS.with(|fails| fails.set(true));
-        crate::run_process();
+        crate::run_process(std::env::args_os().map(Ok));
         panic!("argument collection failure must exit");
     }
 
