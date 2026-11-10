@@ -4,7 +4,7 @@
 //! can inspect them. No safe interface observes their original state. Capture
 //! it before the runtime, then occupy closed slots with the wrong access mode
 //! so later opens cannot turn an invalid inherited stream into successful I/O.
-//! Linux also keeps its direct glibc entry to avoid Rust's stack-guard lookup
+//! GNU Linux builds keep their direct entry to avoid Rust's stack-guard lookup
 //! on every tiny Command, with the SIGPIPE setup that runtime start supplies.
 //! No allocation, Rust I/O or runtime initialization belongs in capture.
 
@@ -116,30 +116,17 @@ unsafe fn syscall(number: usize, a: usize, b: usize, c: usize, d: usize) -> isiz
     result
 }
 
-/// The Linux C entry supplies SIGPIPE setup without Rust's stack-guard lookup.
-/// glibc has initialized std's arguments. Musl passes its native arguments here.
-#[cfg(all(not(test), target_os = "linux"))]
-// SAFETY: this is the unique main symbol with the Linux C entry ABI. Native
-// arguments remain live throughout the call. No panic unwinds across this ABI.
+/// glibc initializes std's arguments before this entry. Preserve the SIGPIPE
+/// disposition supplied by Rust's runtime without its stack-guard lookup.
+#[cfg(all(not(test), target_os = "linux", target_env = "gnu"))]
+// SAFETY: this is the unique C main symbol with glibc's entry ABI. It does not
+// dereference argv, unwind across the ABI or return to uninitialized Rust code.
 #[unsafe(no_mangle)]
 extern "C" fn main(_argc: libc::c_int, _argv: *const *const libc::c_char) -> libc::c_int {
     // SAFETY: the process is still single-threaded. SIGPIPE is a valid signal,
     // and SIG_IGN is the disposition Rust's runtime start would install.
     unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
-    #[cfg(target_env = "gnu")]
-    {
-        super::malloc_arenas::cap();
-        super::run_process(std::env::args_os().map(Ok));
-    }
-    #[cfg(target_env = "musl")]
-    {
-        let arguments = (0.._argc).map(|index| {
-            // SAFETY: the C entry receives argc valid argument pointers. The
-            // index is below argc and every argument is NUL terminated.
-            let argument = unsafe { std::ffi::CStr::from_ptr(*_argv.add(index as usize)) };
-            super::options::copy_argument(argument.to_bytes())
-        });
-        super::run_process(arguments);
-    }
+    super::malloc_arenas::cap();
+    super::run_process();
     0
 }

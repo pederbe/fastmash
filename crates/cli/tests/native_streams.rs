@@ -101,32 +101,6 @@ fn denied_signal_mask_query_refuses() {
     );
 }
 
-#[cfg(target_os = "linux")]
-#[test]
-fn denied_sigpipe_restoration_keeps_ordinary_output_and_failed_writes() {
-    for broken in [false, true] {
-        let mut command = command(&["count", "1"]);
-        command
-            .env("FASTMASH_TEST_PROCESS_IGNORE_PIPE", "1")
-            .env("FASTMASH_TEST_PROCESS_DENY_PIPE_RESTORE", "1");
-        if broken {
-            command.env("FASTMASH_TEST_PROCESS_BROKEN_OUTPUT", "1");
-        }
-        let mut child = command.spawn().unwrap();
-        let _ = child.stdin.take().unwrap().write_all(b"a\nb\n");
-        let output = child.wait_with_output().unwrap();
-        if broken {
-            assert_eq!(output.status.code(), Some(77), "{output:?}");
-            assert!(output.stdout.is_empty(), "{output:?}");
-            assert_eq!(output.stderr, b"fastmash: unsupported output I/O error\n");
-        } else {
-            assert!(output.status.success(), "{output:?}");
-            assert_eq!(output.stdout, b"2\n");
-            assert!(output.stderr.is_empty(), "{output:?}");
-        }
-    }
-}
-
 #[test]
 fn ordinary_broken_pipes_restore_sigpipe_even_when_inherited_ignored() {
     for ignored in [false, true] {

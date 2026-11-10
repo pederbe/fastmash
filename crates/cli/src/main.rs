@@ -1,7 +1,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::undocumented_unsafe_blocks)]
-// Linux uses startup's direct process entry; Darwin uses Rust's runtime start.
-#![cfg_attr(all(not(test), target_os = "linux"), no_main)]
+// GNU Linux builds use startup's direct entry; musl and Darwin use Rust startup.
+#![cfg_attr(all(not(test), target_os = "linux", target_env = "gnu"), no_main)]
 #[cfg(not(any(
     all(
         target_arch = "x86_64",
@@ -596,10 +596,10 @@ fn quiet_nan() -> numerics::Value {
     ))
 }
 
-/// Darwin uses Rust's normal runtime and native argument initialization.
-#[cfg(all(not(test), target_os = "macos"))]
+/// Musl and Darwin use Rust's runtime and argument initialization.
+#[cfg(all(not(test), any(target_env = "musl", target_os = "macos")))]
 fn main() {
-    run_process(std::env::args_os().map(Ok));
+    run_process();
 }
 
 /// The buffer standard input is read through: large reads keep system calls
@@ -607,7 +607,7 @@ fn main() {
 const INPUT_BUFFER: usize = 128 << 10;
 
 #[cfg_attr(test, allow(dead_code))]
-fn run_process(arguments: impl IntoIterator<Item = Result<std::ffi::OsString, Failure>>) {
+fn run_process() {
     #[cfg(feature = "hotpath")]
     let profiling = match profiling::start() {
         Ok(guard) => guard,
@@ -621,7 +621,7 @@ fn run_process(arguments: impl IntoIterator<Item = Result<std::ffi::OsString, Fa
         }
     };
     let terminal = terminal_style::Detection::from_env();
-    let args = match options::collect_args(arguments) {
+    let args = match options::collect_args(std::env::args_os()) {
         Ok(args) => args,
         Err(error) => {
             let mut stderr = standard_io::Stderr;

@@ -1,14 +1,24 @@
 # 0018: Deliver static Linux binaries with musl
 
 Status: accepted for Linux delivery. Supersedes the glibc 2.28 build baseline
-in ADRs 0011 and 0015. The startup adaptation remains subject to the audited
-boundary in ADR 0017.
+in ADRs 0011 and 0015. Uses the audited stream capture from ADR 0017 without
+extending its unsafe-code exception.
 
 Publish the Linux executable as `x86_64-unknown-linux-musl`, statically linked.
 The same bytes go into the archive and Debian and RPM packages. They run on
 both glibc and musl distributions without a system glibc requirement. Keep
 current stable Rust, the baseline x86-64 CPU target, two-build reproducibility,
 installed checks and reuse of tested artifacts.
+
+Use Rust's normal runtime entry and safe argument initialization for musl.
+Retaining the custom glibc entry would require new unsafe argument-pointer
+handling. Its survival when a sandbox denies initial SIGPIPE setup has no
+identified deployment need. Preserving that incidental behavior does not justify
+extending the startup exception. The existing closed-stream capture remains
+separate and runs before Rust initializes its standard streams.
+
+Ordinary Rust startup may cost more for tiny Commands. Reconsider custom startup
+when representative measurements establish a benefit that justifies an exception.
 
 Musl's initial grouping and sorting costs were material. Reusing Rayon workers,
 using safe memx comparison interfaces and selecting musl's portable copy

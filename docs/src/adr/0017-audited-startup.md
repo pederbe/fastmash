@@ -3,7 +3,7 @@
 Status: accepted. Records the maintainer decision of 24 October 2026 and its
 runtime-configuration clarification of 10 November 2026.
 
-Keep pre-runtime capture of closed standard streams and the Linux process
+Keep pre-runtime capture of closed standard streams and the GNU Linux process
 entry with its initial SIGPIPE disposition in `crates/cli/src/startup.rs`.
 These are the only approved exceptions to the first-party unsafe-code
 prohibition. Any extension requires a new maintainer decision.
@@ -16,10 +16,12 @@ cannot take a standard descriptor's place, and the Command still reports an
 invalid input or output when it uses that stream. Replacing a closed input
 with a successful empty input would violate GNU compatibility.
 
-Linux retains its direct glibc process entry to avoid Rust's per-process
+GNU Linux builds retain their direct glibc process entry to avoid Rust's per-process
 stack-guard lookup on tiny Commands. It supplies the initial ignored SIGPIPE
-disposition that Rust's runtime start would otherwise install. macOS keeps
-Rust's normal runtime entry, after the Mach-O constructor captures streams.
+disposition that Rust's runtime start would otherwise install. Musl and macOS
+use Rust's normal runtime entry and argument initialization after their
+constructors capture streams. [ADR 0018](0018-static-linux-delivery.md) records
+the musl startup decision.
 
 Capture uses no allocation or Rust I/O. Each unsafe operation explains its
 safety requirements locally. Ordinary stream reads, writes, seeking and
@@ -39,8 +41,7 @@ uninspectable systems without selecting a different calculation path, so it is
 removed. Unsupported systems have no guaranteed startup diagnostic.
 
 Normal SIGPIPE restoration uses the small MIT-licensed `sigpipe` dependency,
-which reuses libc and does not report restoration errors. If restoration is
-denied, a failed write still causes an I/O failure. This replaces the dedicated
-restoration refusal. Signal-mask observation and blocked-SIGPIPE refusals remain.
+which reuses libc and does not report restoration errors. Signal-mask observation
+and blocked-SIGPIPE refusals remain.
 Preserving ordinary pipeline behavior does not require a new native wrapper or
 a broader unsafe-code exception. Allocator tuning remains a separate migration.
