@@ -189,18 +189,17 @@ same prebuilt executables as the release archives, without compiling.
 On Linux or WSL2, run:
 
 ```sh
-cargo binstall fastmash
+cargo binstall fastmash --strategies crate-meta-data
 ```
 
 On macOS 15 or later, select its single executable:
 
 ```sh
-cargo binstall fastmash --bin fastmash
+cargo binstall fastmash --strategies crate-meta-data --bin fastmash
 ```
 
-Other platforms have no prebuilt Fastmash executable. If the download is not
-available, cargo-binstall offers to compile instead. Add
-`--strategies crate-meta-data` to stop with an error instead.
+These commands install the published binaries and stop with an error if the
+download is unavailable. Other platforms have no prebuilt Fastmash executable.
 
 To compile Fastmash from source with `cargo install`, use the latest stable
 [Rust toolchain](https://rustup.rs). On Linux or WSL2:

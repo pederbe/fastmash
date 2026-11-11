@@ -10,10 +10,9 @@
 #
 # Settings (environment variables):
 #   FASTMASH_INSTALL_DIR  where to install (default: ~/.local/bin)
-#   FASTMASH_RELEASES     release download base URL, for mirrors
-#                         (default: https://github.com/pederbe/fastmash/releases)
 set -eu
 
+# Internal test input for serving candidate archives from local fixture servers.
 releases=${FASTMASH_RELEASES:-https://github.com/pederbe/fastmash/releases}
 # HTTPS only, unless a custom FASTMASH_RELEASES says otherwise.
 case $releases in
