@@ -171,16 +171,32 @@ fn reproducible_build_freezes_delivery_hashes_and_rejects_mismatch() {
         r#"#!/bin/bash
 set -euo pipefail
 if [ "$1" != run ]; then exit 0; fi
+printf '%s\n' "$*" >> "$RUNNER_TEMP/engine-calls"
+if [[ "$*" = *'/source/release/train-pgo.sh'* ]]; then
+  if [ "$FIXTURE_MODE" = training-failure ]; then exit 19; fi
+  pgo="$RUNNER_TEMP/weekly-linux/out/pgo"
+  mkdir -p "$pgo/training"
+  printf compiler-profile > "$pgo/merged.profdata"
+  printf checked-training > "$pgo/training/manifest.tsv"
+  exit 0
+fi
 build=
 for arg in "$@"; do
   case "$arg" in CARGO_TARGET_DIR=/out/*) build=${arg##*/};; esac
 done
 if [ -z "$build" ]; then
-  printf 'rustc: fixture stable\ncargo: fixture stable\n'
+  printf 'rustc: fixture stable\ncargo: fixture stable\nllvm-profdata: fixture matching LLVM\n'
   exit 0
 fi
 out="$RUNNER_TEMP/weekly-linux/out/$build/x86_64-unknown-linux-musl/release"
 mkdir -p "$out"
+printf '%s\n' "$*" > "$RUNNER_TEMP/weekly-linux/out/$build/build-flags.txt"
+if [ "$build" = first ] || [ "$build" = second ]; then
+  test -s "$RUNNER_TEMP/weekly-linux/out/pgo/merged.profdata"
+  [[ "$*" = *'FASTMASH_RELEASE_PGO=use'* ]]
+else
+  [[ "$*" = *'FASTMASH_RELEASE_PGO=generate'* ]]
+fi
 for binary in fastmash; do
   if [ "$FIXTURE_MODE" = mismatch ] && [ "$build" = second ]; then
     printf different > "$out/$binary"
@@ -220,6 +236,16 @@ done
             .unwrap();
     assert!(provenance.starts_with("source_revision="));
     assert!(provenance.contains("rustc: fixture stable"));
+    assert!(provenance.contains("llvm-profdata: fixture matching LLVM"));
+    assert!(provenance.contains("pgo/merged.profdata"));
+    assert!(provenance.contains("pgo/training/manifest.tsv"));
+    let calls = fs::read_to_string(root.join("reproducible/engine-calls")).unwrap();
+    assert_eq!(calls.matches("FASTMASH_RELEASE_PGO=generate").count(), 1);
+    assert_eq!(calls.matches("FASTMASH_RELEASE_PGO=use").count(), 2);
+    assert!(
+        calls.find("/source/release/train-pgo.sh").unwrap()
+            < calls.find("FASTMASH_RELEASE_PGO=use").unwrap()
+    );
     let text = fs::read_to_string(&manifest).unwrap();
     assert_eq!(text.lines().count(), 1);
     assert!(text.contains("  fastmash\n"));
@@ -241,7 +267,16 @@ done
         fs::read_to_string(root.join("release/qualified.sha256")).unwrap(),
         historical
     );
+    let stale = run("reproducible", "same");
+    assert!(
+        !stale.status.success(),
+        "stale compiler profile was accepted"
+    );
     fs::remove_file(&manifest).unwrap();
+    let training_failure = run("bad-training", "training-failure");
+    assert!(!training_failure.status.success());
+    assert!(!manifest.exists());
+    assert!(!root.join("bad-training/weekly-linux/out/first").exists());
     let different = run("nonreproducible", "mismatch");
     assert!(!different.status.success());
     assert!(!manifest.exists());

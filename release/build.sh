@@ -16,6 +16,17 @@ flags=(
   --remap-path-prefix=/source/crates/vendor=/deps
   --remap-path-prefix=/tmp/cargo/registry/src/index.crates.io-1949cf8c6b5b557f=/deps
 )
+case "${FASTMASH_RELEASE_PGO:-off}" in
+  off) ;;
+  generate) flags+=(-Cprofile-generate=/out/pgo/raw) ;;
+  use)
+    test -s /out/pgo/merged.profdata
+    flags+=(-Cprofile-use=/out/pgo/merged.profdata -Cllvm-args=-pgo-warn-missing-function)
+    ;;
+  *) echo 'FASTMASH_RELEASE_PGO must be off, generate or use' >&2; exit 1 ;;
+esac
+mkdir -p "$CARGO_TARGET_DIR"
+printf '%s\n' "${flags[@]}" > "$CARGO_TARGET_DIR/build-flags.txt"
 CARGO_ENCODED_RUSTFLAGS=$(IFS=$'\x1f'; printf '%s' "${flags[*]}")
 export CARGO_ENCODED_RUSTFLAGS
 cargo build --locked --release --target x86_64-unknown-linux-musl -p fastmash --bins
