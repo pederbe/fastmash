@@ -98,6 +98,12 @@ Set `FASTMASH_INSTALL_DIR` to choose another installation directory.
 These downloads install the latest release without adding a repository. You
 update them yourself.
 
+### Arch Linux package
+
+Use the [Arch package recipe](https://github.com/pederbe/fastmash/blob/main/packaging/aur/README.md)
+to install the prebuilt executable through makepkg and pacman. No Rust compiler
+is needed. To update, rebuild the package from the current recipe.
+
 ### Debian or RPM package
 
 Each command looks up the latest release, then downloads and installs its
