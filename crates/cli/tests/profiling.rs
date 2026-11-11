@@ -52,7 +52,7 @@ fn static_reports_preserve_success_error_and_refusal_streams() {
             vec!["sum", "0"],
             1,
             b"",
-            b"fastmash: invalid field '0' for operation 'sum'\n",
+            b"fastmash: invalid field '0' for operation 'sum'\nhint: field numbers start at 1. Named fields need an input header and --header-in or -H\n",
         ),
         (
             2,

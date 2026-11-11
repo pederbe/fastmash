@@ -24,6 +24,10 @@ disabled-strategies = ["quick-install", "compile"]
 name = "fastmash"
 path = "src/main.rs"
 
+[[example]]
+name = "profile-jobs"
+test = true
+
 [dependencies]
 # Optional diagnostics only. Ordinary builds do not compile or link hotpath.
 hotpath = { version = "0.31.2", optional = true, default-features = false }

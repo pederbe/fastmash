@@ -60,7 +60,7 @@ fn jobs() -> Vec<Job> {
             args: &["sum", "0"],
             input: Vec::new(),
             stdout: Vec::new(),
-            stderr: b"fastmash: invalid field '0' for operation 'sum'\n",
+            stderr: b"fastmash: invalid field '0' for operation 'sum'\nhint: field numbers start at 1. Named fields need an input header and --header-in or -H\n",
             status: 1,
         },
         Job {
@@ -269,10 +269,27 @@ fn capture(root: &Path, binary: &Path, job: Job) -> Result<(), Box<dyn Error>> {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = std::env::args_os().skip(1);
+    run(std::env::args_os().skip(1))
+}
+
+fn run(mut args: impl Iterator<Item = std::ffi::OsString>) -> Result<(), Box<dyn Error>> {
     let destination = args
         .next()
         .ok_or("usage: profile-jobs NEW-DIRECTORY [JOB]")?;
+    if destination == "--help" || destination == "-h" {
+        println!(
+            "Capture complete Fastmash commands with exact streams, statuses and static reports.\n\n\
+Usage: profile-jobs NEW-DIRECTORY [JOB]\n\n\
+Build fastmash and this example in the same Cargo profile with profiling enabled.\n\
+Choose a new directory. Omit JOB to run every diagnostic workload.\n\n\
+Example:\n\
+  cargo run --profile profiling --features hotpath-alloc --example profile-jobs -- \\\n    /var/tmp/fastmash-profiling small\n\n\
+The directory retains inputs, command output, statuses, binary identity and JSON\n\
+reports. Successful captures are diagnostics, not performance qualification.\n\
+Jobs and report interpretation: https://github.com/pederbe/fastmash/blob/main/PROFILING.md"
+        );
+        return Ok(());
+    }
     let selected = args.next();
     if args.next().is_some() {
         return Err("usage: profile-jobs NEW-DIRECTORY [JOB]".into());
@@ -309,4 +326,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         capture(&root, &binary, job)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn help_precedes_capture_and_job_selection() {
+        for flag in ["--help", "-h"] {
+            super::run([flag, "unknown-job"].into_iter().map(Into::into)).unwrap();
+        }
+    }
 }
