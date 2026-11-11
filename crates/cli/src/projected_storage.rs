@@ -4,31 +4,47 @@ use crate::locale;
 use std::{cmp::Ordering, ops::Range};
 
 /// Recent collation sort keys by key text. Grouping keys usually repeat, and a
-/// sort key depends only on its text, so reuse is exact. Fixed size: 256 slots
-/// of keys up to 64 bytes, allocated on first use. A miss adds a hash, a
-/// comparison and a copy into the slot's reused buffers; a slot whose buffers
-/// cannot grow is left empty.
-#[derive(Default)]
+/// sort key depends only on its text, so reuse is exact. At most 256 slots of
+/// keys up to 256 bytes, within a caller's byte budget. Admission is optional:
+/// a cache that cannot grow still computes the same key directly.
 pub(super) struct SortKeys {
     slots: Vec<(Vec<u8>, Vec<u8>)>,
+    bytes: usize,
+    budget: usize,
+}
+
+impl Default for SortKeys {
+    fn default() -> Self {
+        Self::with_budget(Self::MAX_BYTES)
+    }
 }
 
 impl SortKeys {
     const SLOTS: usize = 256;
-    const LONGEST: usize = 64;
+    const LONGEST: usize = 256;
+    pub(super) const MAX_BYTES: usize = 128 << 10;
+
+    /// A budget too small for the slot table does not allocate a cache.
+    pub(super) fn budget(available: usize) -> usize {
+        let budget = available.min(Self::MAX_BYTES);
+        if budget < Self::SLOTS * std::mem::size_of::<(Vec<u8>, Vec<u8>)>() {
+            0
+        } else {
+            budget
+        }
+    }
+
+    pub(super) fn with_budget(available: usize) -> Self {
+        Self {
+            slots: Vec::new(),
+            bytes: 0,
+            budget: Self::budget(available),
+        }
+    }
 
     /// Actual cache allocations, including unused slot capacity.
     pub(super) fn retained_bytes(&self) -> Option<usize> {
-        self.slots.iter().try_fold(
-            self.slots
-                .capacity()
-                .checked_mul(std::mem::size_of::<(Vec<u8>, Vec<u8>)>())?,
-            |bytes, (text, key)| {
-                bytes
-                    .checked_add(text.capacity())?
-                    .checked_add(key.capacity())
-            },
-        )
+        Some(self.bytes)
     }
 
     /// Append the sort key of `text` to `out`.
@@ -38,20 +54,26 @@ impl SortKeys {
         text: &str,
         out: &mut Vec<u8>,
     ) -> Result<(), Failure> {
-        if text.len() > Self::LONGEST {
+        if self.budget == 0 || text.len() > Self::LONGEST {
             return sort_key(collator, text, out);
         }
-        if self.slots.is_empty() && self.slots.try_reserve_exact(Self::SLOTS).is_ok() {
+        if self.slots.is_empty() {
+            if self.slots.try_reserve_exact(Self::SLOTS).is_err() {
+                return sort_key(collator, text, out);
+            }
+            let bytes = self
+                .slots
+                .capacity()
+                .checked_mul(std::mem::size_of::<(Vec<u8>, Vec<u8>)>());
+            let Some(bytes) = bytes.filter(|&bytes| bytes <= self.budget) else {
+                self.slots = Vec::new();
+                return sort_key(collator, text, out);
+            };
+            self.bytes = bytes;
             self.slots.resize_with(Self::SLOTS, Default::default);
         }
-        // FNV-1a picks the slot; any hash is correct, since hits compare bytes.
-        let hash = text.bytes().fold(0xcbf2_9ce4_8422_2325u64, |hash, byte| {
-            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
-        });
-        let Some(slot) = self.slots.get_mut(hash as usize % Self::SLOTS) else {
-            return sort_key(collator, text, out);
-        };
-        let (cached, key) = slot;
+        let at = Self::hash(text.as_bytes()) as usize % Self::SLOTS;
+        let (cached, key) = &self.slots[at];
         // An empty slot holds no key: every sort key has at least one byte.
         if !key.is_empty() && crate::text_order::equal_bytes(cached, text.as_bytes()) {
             out.try_reserve(key.len()).map_err(|_| allocation())?;
@@ -60,17 +82,53 @@ impl SortKeys {
         }
         let start = out.len();
         sort_key(collator, text, out)?;
-        let computed = &out[start..];
+        self.remember(at, text, &out[start..]);
+        Ok(())
+    }
+
+    fn hash(bytes: &[u8]) -> u64 {
+        let fold = |hash: u64, bytes: &[u8]| {
+            bytes.iter().fold(hash, |hash, &byte| {
+                (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+            })
+        };
+        let initial = 0xcbf2_9ce4_8422_2325;
+        if bytes.len() <= 64 {
+            fold(initial, bytes)
+        } else {
+            // Bound work on misses. A hit still compares the complete text,
+            // including the unsampled middle and its length.
+            fold(fold(initial, &bytes[..32]), &bytes[bytes.len() - 32..]) ^ bytes.len() as u64
+        }
+    }
+
+    fn remember(&mut self, at: usize, text: &str, computed: &[u8]) {
+        let (mut cached, mut key) = std::mem::take(&mut self.slots[at]);
+        // These capacities were admitted together within budget.
+        let previous = cached.capacity() + key.capacity();
+        self.bytes -= previous;
+        let available = self.budget - self.bytes;
+        let needed = cached
+            .capacity()
+            .max(text.len())
+            .checked_add(key.capacity().max(computed.len()));
+        if needed.is_none_or(|needed| needed > available) {
+            self.slots[at] = (cached, key);
+            self.bytes += previous;
+            return;
+        }
         cached.clear();
         key.clear();
-        if cached.try_reserve(text.len()).is_ok() && key.try_reserve(computed.len()).is_ok() {
+        if cached.try_reserve_exact(text.len()).is_ok()
+            && key.try_reserve_exact(computed.len()).is_ok()
+            && let Some(bytes) = cached.capacity().checked_add(key.capacity())
+            && bytes <= available
+        {
             cached.extend_from_slice(text.as_bytes());
             key.extend_from_slice(computed);
-        } else {
-            cached.clear();
-            key.clear();
+            self.bytes += bytes;
+            self.slots[at] = (cached, key);
         }
-        Ok(())
     }
 }
 
@@ -746,6 +804,8 @@ mod tests {
             &long,
         ];
         texts.extend(extra.map(String::from));
+        texts.extend([64, 65, 256, 257].map(|len| "x".repeat(len)));
+        texts.push("\u{fdfa}".repeat(64));
         for collation in [
             crate::locale::Collation::Language("en-US"),
             crate::locale::Collation::Language("de-DE"),
@@ -762,6 +822,77 @@ mod tests {
                     cache.write(&collator, text, &mut cached).ok().unwrap();
                     assert_eq!(&cached[6..], direct, "{text:?} round {round}");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn repeated_long_sort_keys_do_not_recompute_collation() {
+        let mut policy = crate::locale::Policy::default();
+        policy.collation = crate::locale::Collation::Language("en-US");
+        let collator = policy.collator().ok().unwrap().unwrap();
+        let text = "école".repeat(32);
+        let mut cache = SortKeys::default();
+        let mut first = Vec::new();
+        cache.write(&collator, &text, &mut first).ok().unwrap();
+        crate::locale::KEY_WRITES_BEFORE_FAILURE.with(|count| count.set(Some(0)));
+        let mut second = b"prefix".to_vec();
+        let result = cache.write(&collator, &text, &mut second);
+        crate::locale::KEY_WRITES_BEFORE_FAILURE.with(|count| count.set(None));
+        assert!(result.is_ok(), "a cached key must not call the collator");
+        assert_eq!(&second[6..], first);
+    }
+
+    #[test]
+    fn sampled_hash_collisions_compare_the_unsampled_middle() {
+        let mut policy = crate::locale::Policy::default();
+        policy.collation = crate::locale::Collation::Language("en-US");
+        let collator = policy.collator().ok().unwrap().unwrap();
+        let a = format!("{}a{}", "x".repeat(80), "é".repeat(40));
+        let b = format!("{}b{}", "x".repeat(80), "é".repeat(40));
+        assert_eq!(SortKeys::hash(a.as_bytes()), SortKeys::hash(b.as_bytes()));
+        let mut cache = SortKeys::default();
+        let mut keys = Vec::new();
+        for text in [&a, &b, &b, &a, &a] {
+            let mut direct = Vec::new();
+            collator.write_key(text, &mut direct).ok().unwrap();
+            let mut cached = Vec::new();
+            cache.write(&collator, text, &mut cached).ok().unwrap();
+            assert_eq!(cached, direct);
+            keys.push(cached);
+        }
+        assert_ne!(keys[0], keys[1]);
+    }
+
+    #[test]
+    fn cache_capacity_stays_within_its_budget_and_never_limits_a_key() {
+        let mut policy = crate::locale::Policy::default();
+        policy.collation = crate::locale::Collation::Language("en-US");
+        let collator = policy.collator().ok().unwrap().unwrap();
+        let metadata = SortKeys::SLOTS * std::mem::size_of::<(Vec<u8>, Vec<u8>)>();
+        for budget in [
+            0,
+            metadata - 1,
+            metadata,
+            metadata + 128,
+            SortKeys::MAX_BYTES,
+        ] {
+            let mut cache = SortKeys::with_budget(budget);
+            for at in 0..768 {
+                let text = format!("{at:03}{}", "\u{fdfa}".repeat(at % 86));
+                let mut direct = Vec::new();
+                collator.write_key(&text, &mut direct).ok().unwrap();
+                let mut cached = Vec::new();
+                cache.write(&collator, &text, &mut cached).ok().unwrap();
+                assert_eq!(cached, direct, "budget {budget}, key {at}");
+                let actual = cache.slots.capacity() * std::mem::size_of::<(Vec<u8>, Vec<u8>)>()
+                    + cache
+                        .slots
+                        .iter()
+                        .map(|(text, key)| text.capacity() + key.capacity())
+                        .sum::<usize>();
+                assert_eq!(cache.retained_bytes(), Some(actual));
+                assert!(actual <= budget, "budget {budget}, retained {actual}");
             }
         }
     }

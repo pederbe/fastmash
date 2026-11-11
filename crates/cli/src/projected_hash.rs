@@ -863,7 +863,13 @@ fn sorted(
         });
         return Ok(order);
     };
-    let mut sort_keys = storage::SortKeys::default();
+    // One-field groups already have distinct keys. Multi-field tuples can
+    // still share individual field texts and benefit from the cache.
+    let mut sort_keys = storage::SortKeys::with_budget(if count == 1 {
+        0
+    } else {
+        storage::SortKeys::MAX_BYTES
+    });
     let mut text = storage::KeyText::default();
     let mut segments = Vec::new();
     segments

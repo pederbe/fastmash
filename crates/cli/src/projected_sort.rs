@@ -680,7 +680,7 @@ fn admitted_records(
         ),
         None => (spill::Shape::original(keys.len())?, 1),
     };
-    let mut sorter = sorter::<Original>(target, threads);
+    let mut sorter = sorter::<Original>(target, threads, collator.is_some());
     if let Some(collator) = collator.as_ref() {
         let project = |raw: &[u8], scratch: &mut batch::Scratch, out: &mut Vec<u8>| {
             language_body(
@@ -695,7 +695,7 @@ fn admitted_records(
                 out,
             )
         };
-        let mut batch = batch::Batch::new(threads, target.bytes);
+        let mut batch = batch::Batch::language(threads, target.bytes);
         let mut accept = |record: batch::Projected<'_>| sorter.push_body(record, shape);
         while let Some(record) = intake.next(reader, &mut bytes)? {
             visit(record.data(), intake.line(), RecordPhase::ObserveSource)?;
@@ -1147,8 +1147,18 @@ pub(super) fn run(
 
 /// The sorter of a sort of memory target `target` on `threads` projection
 /// threads, whose chunk grows as its memory target allows.
-fn sorter<S: spill::Codec>(target: memory::Target, threads: usize) -> spill::Sorter<S> {
-    spill::Sorter::with_target(target, batch::share(threads, target.bytes))
+fn sorter<S: spill::Codec>(
+    target: memory::Target,
+    threads: usize,
+    language: bool,
+) -> spill::Sorter<S> {
+    let share = batch::share(threads, target.bytes);
+    let reserved = if language {
+        share + batch::cache_share(threads, target.bytes)
+    } else {
+        share
+    };
+    spill::Sorter::with_target(target, reserved)
 }
 
 /// Whether a sort keeps only the selected fields (Packed storage): not with
@@ -1269,7 +1279,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
     } else {
         1
     };
-    let mut sorter = sorter::<S>(target, threads);
+    let mut sorter = sorter::<S>(target, threads, collator.is_some());
     sorter.leave_room(unread);
     let mut crossings = Crossings::default();
     #[cfg(target_os = "linux")]
@@ -1440,7 +1450,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
                     out,
                 )
             };
-            let mut batch = batch::Batch::new(threads, target.bytes);
+            let mut batch = batch::Batch::language(threads, target.bytes);
             let mut accept = |record: batch::Projected<'_>| sorter.push_body(record, shape);
             // Skipped Records never reach key projection.
             while let Some(record) = intake.next(reader, &mut bytes)? {

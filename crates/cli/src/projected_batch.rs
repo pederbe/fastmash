@@ -35,6 +35,16 @@ pub(super) fn share(threads: usize, target: usize) -> usize {
     }
 }
 
+/// Language caches reserve memory beside the raw and projected batch share.
+/// The sorter removes both allowances from its sort chunk's target.
+pub(super) fn cache_share(threads: usize, target: usize) -> usize {
+    if threads <= 1 {
+        storage::SortKeys::budget(target / 16)
+    } else {
+        (target / 64).min(storage::SortKeys::MAX_BYTES.saturating_mul(threads))
+    }
+}
+
 /// Per-thread scratch space for projection.
 #[derive(Default)]
 pub(super) struct Scratch {
@@ -91,12 +101,21 @@ pub(super) struct Batch {
     next_sequence: u64,
     scratch: Scratch,
     single: Vec<u8>,
+    cache_share: usize,
 }
 
 impl Batch {
     /// A batch projecting on up to `threads` threads (at least one), for a
     /// sort whose memory target is `target`.
     pub(super) fn new(threads: usize, target: usize) -> Self {
+        Self::with_cache(threads, target, 0)
+    }
+
+    pub(super) fn language(threads: usize, target: usize) -> Self {
+        Self::with_cache(threads, target, cache_share(threads, target))
+    }
+
+    fn with_cache(threads: usize, target: usize, cache_share: usize) -> Self {
         let threads = threads.max(1);
         Self {
             pool: None,
@@ -106,8 +125,12 @@ impl Batch {
             limit: (share(threads, target) / RAW_SHARE).max(1),
             per_record: PER_RECORD,
             next_sequence: 0,
-            scratch: Scratch::default(),
+            scratch: Scratch {
+                sort_keys: storage::SortKeys::with_budget(cache_share),
+                ..Scratch::default()
+            },
             single: Vec::new(),
+            cache_share,
         }
     }
 
@@ -173,13 +196,20 @@ impl Batch {
         let first = self.next_sequence;
         let next = first.checked_add(count as u64).ok_or_else(allocation)?;
         let (bytes, ends) = (&self.bytes, &self.ends);
+        let worth = (count / MIN_PART).max(bytes.len() / MIN_PART_BYTES);
+        let size = count.div_ceil(self.threads.min(worth).min(count).max(1));
+        // Recounted from the size, so that no part starts past the end.
+        let parts = count.div_ceil(size.max(1)).max(1);
         let record = |at: usize| -> &[u8] {
             let start = if at == 0 { 0 } else { ends[at - 1] };
             &bytes[start..ends[at]]
         };
         // Stops at the first failure: later records in the part are never used.
         let part = |from: usize, to: usize| -> Part {
-            let mut scratch = Scratch::default();
+            let mut scratch = Scratch {
+                sort_keys: storage::SortKeys::with_budget(self.cache_share / parts),
+                ..Scratch::default()
+            };
             let mut out = Part::default();
             if out.records.try_reserve_exact(to - from).is_err() {
                 out.failure = Some(allocation());
@@ -197,10 +227,6 @@ impl Batch {
             }
             out
         };
-        let worth = (count / MIN_PART).max(bytes.len() / MIN_PART_BYTES);
-        let size = count.div_ceil(self.threads.min(worth).min(count).max(1));
-        // Recounted from the size, so that no part starts past the end.
-        let parts = count.div_ceil(size.max(1)).max(1);
         let pooled = if parts > 1 {
             if self.pool.is_none() {
                 self.pool = rayon::ThreadPoolBuilder::new()
@@ -282,6 +308,39 @@ impl Batch {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn language_cache_allocations_fit_the_reserved_share() {
+        let mut policy = crate::locale::Policy::default();
+        policy.collation = crate::locale::Collation::Language("en-US");
+        let collator = policy.collator().ok().unwrap().unwrap();
+        for target in [1, 64 << 10, 4 << 20, 64 << 20, usize::MAX] {
+            for threads in [1, 8] {
+                let allocations = std::sync::Mutex::new(std::collections::HashMap::new());
+                let project = |_: &[u8], scratch: &mut Scratch, out: &mut Vec<u8>| {
+                    scratch
+                        .sort_keys
+                        .write(&collator, &"école".repeat(32), out)?;
+                    allocations.lock().unwrap().insert(
+                        std::thread::current().id(),
+                        scratch.sort_keys.retained_bytes().unwrap(),
+                    );
+                    Ok((0, 0))
+                };
+                let mut batch = Batch::language(threads, target);
+                for _ in 0..4 {
+                    batch.push(b"record", &project, |_| Ok(())).ok().unwrap();
+                }
+                batch.finish(&project, |_| Ok(())).ok().unwrap();
+                let allocated: usize = allocations.lock().unwrap().values().sum();
+                assert!(
+                    allocated <= cache_share(threads, target),
+                    "{threads}, {target}: {allocated}"
+                );
+                assert_eq!(batch.limit, Batch::new(threads, target).limit);
+            }
+        }
+    }
 
     fn numbers(batch: &mut Batch, rows: &[&[u8]]) -> Result<Vec<(u64, Vec<u8>)>, Failure> {
         let mut seen = Vec::new();
