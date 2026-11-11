@@ -1,25 +1,26 @@
+Summarize, group and transform fields from standard input, or compare two files.
+
 Usage: fastmash [OPTIONS] OPERATION FIELDS [OPERATION FIELDS ...]
        fastmash [OPTIONS] top:N FIELD | bottom:N FIELD
        fastmash [OPTIONS] compare BEFORE AFTER [RANKING] OPERATION FIELDS [...]
        fastmash [OPTIONS] health [CONTROLS]
        fastmash [OPTIONS] MODE [FIELDS]
 
-Summarize, group and transform fields from standard input, or compare two files.
 Fastmash supports Linux, Windows through WSL2 and macOS 15 or later.
 
 Examples:
-  printf '1\t2\n3\t4\n' | LC_ALL=C fastmash sum 1 mean 2
+  Sum the first field (prints 60):
+  printf '10\n20\n30\n' | fastmash sum 1
+  Combine scattered groups and sum the second field (prints a<TAB>1, b<TAB>5):
   printf 'b\t2\na\t1\nb\t3\n' | LC_ALL=C fastmash -s -g 1 sum 2
-  fastmash --csv -H -s -g region --result-name=1:total sum revenue < sales.csv
-  fastmash -H wmean price:units < sales.tsv
-  fastmash --csv -H top:5 revenue < sales.csv
-  fastmash -H -g region compare before.tsv after.tsv sum revenue
 
 Fields and grouping:
   Fields are numbered from 1. Use lists (1,3), ranges (2-4), or input-header
   names with --header-in or -H. Names are exact and case-sensitive.
   Backslash escapes one byte in a name. The first duplicate name wins.
   Paired operations use LEFT:RIGHT, such as pcov 1:2 or wmean price:units.
+  Weighted mean example (prints 7):
+    printf '10\t2\n5\t3\n' | fastmash wmean 1:2
   Lists of pairs are allowed, but ranges cannot be combined with pairs.
   Operations and results follow request order. Operation names ignore case.
   -g FIELDS summarizes adjacent records with equal keys.
@@ -63,7 +64,12 @@ Options:
 Input and output:
   Input defaults to tab-separated fields and newline-terminated records.
   Use -t, for literal comma splitting, or --csv-in for quoted CSV.
+  Separators take one literal byte. Backslash escapes such as '\t' are not
+  expanded. Omit -t for tab-separated input.
   --csv reads and writes CSV. These switches do not infer headers.
+  Example with a header and a named field (prints sum(revenue), then 35):
+    printf 'region,revenue\nwest,20\neast,15\n' | fastmash --csv -H sum revenue
+  To name that result total, add --result-name=1:total.
   CSV supports calculations, Top-N selection and comparison, including their
   supported grouped workflows. Table health and other modes use ordinary text.
   CSV input conflicts with -t, -W and -C. Either CSV direction conflicts with
@@ -73,6 +79,9 @@ Input and output:
   Result names require --header-out or -H. INDEX counts expanded results,
   excluding keys and --full copies. Selection copies fields without result names.
   --format and --round change displayed numbers, not calculations.
+  Sum first, then display two decimal places (prints 3.60):
+    printf '1.2\n2.4\n' | LC_ALL=C fastmash --round=2 sum 1
+  Use --format=%.0f to display no decimal places.
   --narm does not trim spaces or supply missing fields. For wmean it omits a
   whole pair after validating its nonmissing partners. Other paired statistics
   remove missing values independently on each side.
@@ -129,6 +138,9 @@ Types: n (digits), i (signed integer), h (hex), o (octal), p (digits/dot,
 default), d (signed digits/dot). No match or failed conversion gives zero.
 round, floor, ceil, trunc and frac FIELD transform each selected number.
 round uses nearest integer with ties away from zero. frac keeps the sign.
+Round each value to an integer (prints 1, then 2):
+  printf '1.2\n2.4\n' | LC_ALL=C fastmash round 1
+Use --round=2 sum 1 instead to sum first and display two decimal places.
 
 Binning: bin[:WIDTH] FIELD returns the lower bucket boundary (default 100).
 strbin[:COUNT] FIELD assigns field bytes to buckets 0..COUNT-1 (default 10).
@@ -165,6 +177,8 @@ With -g, each adjacent group has its own cutoff. Add -s for scattered keys.
 --narm omits records with whole-field NA/N/A/NaN ranking values.
 Other NaNs are errors. --header-out or -H requests a copied-field header.
 At most N candidates are kept per group or dataset. N limits records, not bytes.
+Example (prints 30, then 20):
+  printf '10\n30\n20\n' | fastmash top:2 1
 Details: https://fastmash.io/guide/top-n-records
 
 Dataset comparison: compare BEFORE AFTER applies numerical aggregates to two
@@ -177,6 +191,9 @@ Before operations, rank RESULT [absolute|percent] orders keys by change magnitud
 RESULT is a 1-based expanded result index. The default measure is absolute.
 Optional limit N keeps at most N ranked keys. Unrankable keys still appear.
 Both input scans and all calculations finish before report output.
+For two files whose headers include region and revenue, rank the five largest
+percentage changes in each region's total revenue:
+  fastmash -H -g region compare before.tsv after.tsv rank 1 percent limit 5 sum revenue
 Details: https://fastmash.io/guide/dataset-comparison
 
 Table health: health inspects widths, headers, missing values and mixed types.
