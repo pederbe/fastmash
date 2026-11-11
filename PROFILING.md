@@ -38,6 +38,15 @@ The decimal job sums ten million `0.125` records. Each value is one eighth, so
 the independently known exact result is `1250000`. The larger workload gives
 the CPU sampler more time to attach before the command finishes.
 
+The `language-cache` job counts 8,192 records in 16 groups with repeated
+195-byte accented keys in `en_US.UTF-8`. It checks count 512 and RMS 1 for each
+group. It uses one projection thread so allocation reports include all key
+construction. Capture allocation counts with:
+
+```sh
+HOTPATH_ALLOC_METRIC=count cargo +stable run --profile profiling --features hotpath-alloc --example profile-jobs -- /var/tmp/fastmash-language-cache language-cache
+```
+
 Use `--features hotpath` instead for timing without allocation tracking.
 For a single job, add its name after the destination, for example `decimal`
 or `spill`. The other names are `small`, `grouping`, `error` and `refusal`.

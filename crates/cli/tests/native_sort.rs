@@ -35,6 +35,72 @@ const FULL_WARNING: &[u8] = b"fastmash: Using -f/--full with non-linewise operat
 
 static EXECUTABLE: Mutex<Weak<temp_dir::TempDir>> = Mutex::new(Weak::new());
 
+#[test]
+fn long_language_keys_preserve_groups_and_stable_contributions_on_every_route() {
+    let fixture = Fixture::new("long-language-cache");
+    // The first two texts have identical sampled ends and lengths. The third
+    // exceeds cache admission and must still be accepted.
+    let keys = [
+        format!("{}a{}", "x".repeat(80), "é".repeat(40)),
+        format!("{}b{}", "x".repeat(80), "é".repeat(40)),
+        "z".repeat(257),
+    ];
+    for csv in [false, true] {
+        let separator = if csv { ',' } else { '\t' };
+        let mut input = String::new();
+        for round in 0..128 {
+            for (offset, group) in [1, 0, 2].into_iter().enumerate() {
+                input.push_str(&format!(
+                    "{}{separator}same{separator}{}\n",
+                    keys[group],
+                    3 * round + offset
+                ));
+            }
+        }
+        for groups in ["1", "1,2"] {
+            let expected: String = keys
+                .iter()
+                .zip([1, 0, 2])
+                .map(|(key, first)| {
+                    let second = if groups == "1" { "" } else { "\tsame" };
+                    format!("{key}{second}\t128\t{first}\t{}\n", 381 + first)
+                })
+                .collect();
+            for memory in [None, Some("1"), Some("67108864")] {
+                for grouping in ["sort", "hash"] {
+                    for threads in ["1", "8"] {
+                        let mut args =
+                            vec!["-s", "-g", groups, "count", "3", "first", "3", "last", "3"];
+                        if csv {
+                            args.push("--csv-in");
+                        }
+                        let mut command = fixture.command(&args, "1");
+                        command
+                            .env("LC_ALL", "en_US.UTF-8")
+                            .env("FASTMASH_GROUPING", grouping)
+                            .env("OMP_NUM_THREADS", threads)
+                            .env("OMP_THREAD_LIMIT", threads);
+                        if let Some(memory) = memory {
+                            command.env("FASTMASH_SORT_MEMORY_BYTES", memory);
+                        } else {
+                            command.env_remove("FASTMASH_SORT_MEMORY_BYTES");
+                        }
+                        let output = fixture.invoke(&mut command, input.as_bytes(), true);
+                        assert!(output.status.success(), "{output:?}");
+                        assert_eq!(
+                            output.stdout,
+                            expected.as_bytes(),
+                            "csv={csv}, groups={groups}, {memory:?}, {grouping}, {threads}"
+                        );
+                        assert!(output.stderr.is_empty(), "{output:?}");
+                    }
+                }
+            }
+        }
+    }
+    fixture.clean();
+}
+
 fn standalone(pool: &Mutex<Weak<temp_dir::TempDir>>) -> Arc<temp_dir::TempDir> {
     let mut owner = pool.lock().unwrap();
     if let Some(root) = owner.upgrade() {

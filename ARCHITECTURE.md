@@ -255,7 +255,13 @@ flowchart TD
   threads. Selected-field projections for other means, higher moments,
   normality tests and paired statistics grouped by one key in the C locales
   are also prepared in parallel.
-  The chunk, with the batches' share, stays within its memory target,
+  Language projection reuses exact collation keys for texts up to 256 bytes.
+  Each cache holds at most 256 entries and 128 KiB, including allocated
+  capacity. Native sorting reserves cache memory beside the batches' share
+  and divides that allowance among their active parts. CSV sorting accounts
+  actual cache capacity with its other projection scratch. A full cache or
+  a longer key falls back to computing the key directly.
+  The chunk, with the batches' and caches' shares, stays within its memory target,
   sized for 64 MiB. It takes 16 MiB first. When a chunk fills, it may grow
   instead of spilling: to hold the whole input of a regular file (an estimate
   from the bytes read so far, at most the buffer GNU `sort` would use for the

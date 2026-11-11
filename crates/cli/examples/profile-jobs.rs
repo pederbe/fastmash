@@ -72,6 +72,23 @@ fn jobs() -> Vec<Job> {
             status: 77,
         },
     ];
+    let suffix = "école".repeat(32);
+    let mut input = String::new();
+    let mut stdout = String::new();
+    for at in 0..8192 {
+        input.push_str(&format!("k{:02}{suffix}\t1\n", at % 16));
+    }
+    for group in 0..16 {
+        stdout.push_str(&format!("k{group:02}{suffix}\t512\t1\n"));
+    }
+    jobs.push(Job {
+        name: "language-cache",
+        args: &["-s", "-g1", "count", "2", "rms", "2"],
+        input: input.into_bytes(),
+        stdout: stdout.into_bytes(),
+        stderr: b"",
+        status: 0,
+    });
     // Each Group has equally many -1/+1 signals and -2/+2 factors.
     // Thus population skewness is 0, covariance is 2 and RMS is 1.
     // With 100,000 Records per Group, Jarque-Bera's p-value rounds to 0.
@@ -213,6 +230,12 @@ fn capture(root: &Path, binary: &Path, job: Job) -> Result<(), Box<dyn Error>> {
         )
         .args(job.args)
         .stdin(File::open(&input)?);
+    if job.name == "language-cache" {
+        command
+            .env("LC_ALL", "en_US.UTF-8")
+            .env("OMP_NUM_THREADS", "1")
+            .env("OMP_THREAD_LIMIT", "1");
+    }
     fs::write(
         root.join(format!("{}.command", job.name)),
         format!("{command:?}\n"),
@@ -259,7 +282,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .filter(|job| selected.as_ref().is_none_or(|name| name == job.name))
         .collect();
     if jobs.is_empty() {
-        return Err("unknown job, use small, decimal, grouping, spill, error, refusal, pskew, jarque, pcov, mixed, csv-short, csv-long, csv-quoted, csv-escaped, csv-copy, csv-copy-sort, csv-copy-spill, csv-copy-top, csv-copy-sort-top or csv-copy-wide".into());
+        return Err("unknown job, use small, decimal, grouping, spill, error, refusal, language-cache, pskew, jarque, pcov, mixed, csv-short, csv-long, csv-quoted, csv-escaped, csv-copy, csv-copy-sort, csv-copy-spill, csv-copy-top, csv-copy-sort-top or csv-copy-wide".into());
     }
     fs::create_dir(&destination)?;
     let root = fs::canonicalize(destination)?;
