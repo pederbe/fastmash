@@ -33,7 +33,7 @@ jobs:
           awk -v v="$version" 'index($0, "## [" v "]") == 1 {on = 1; next}
             on && index($0, "## [") == 1 {exit} on {print}' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           test -s "$RUNNER_TEMP/notes.md"
-      # Two clean builds establish reproducibility. Package one of those executables.
+      # Train once, then compare two clean builds using that exact compiler profile.
       - name: Build a reproducible Linux executable
         run: |
           bash release/prepare-linux.sh
@@ -43,6 +43,16 @@ jobs:
           docker run --rm -v "$PWD:/source:ro" -v "$PWD/out:/out" \
             -e CARGO_TARGET_DIR=/out/notices fastmash-weekly-builder bash -c \
             'CARGO_HOME=/tmp/cargo cargo run --locked --release -p fastmash-license-notices --manifest-path /source/Cargo.toml -- --target x86_64-unknown-linux-musl > /out/THIRD-PARTY-LICENSES.md'
+      - name: Retain checked compiler training
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-pgo-training
+          path: |
+            ${{ runner.temp }}/weekly-linux/out/pgo/training/
+            ${{ runner.temp }}/weekly-linux/out/pgo/profile-summary.txt
+          retention-days: 7
+          if-no-files-found: warn
       # This run's manifest binds the tested and uploaded bytes.
       - name: Check the frozen delivery checksums
         run: |
@@ -67,6 +77,8 @@ jobs:
              out/THIRD-PARTY-LICENSES.md README.md CHANGELOG.md LICENSE-MIT LICENSE-APACHE "$name/"
           cp release/delivery.sha256 "$name/binary.sha256"
           cp "$RUNNER_TEMP/weekly-linux/out/build-provenance.txt" "$name/build-provenance.txt"
+          cp "$RUNNER_TEMP/weekly-linux/out/pgo/merged.profdata" "$name/compiler-profile.profdata"
+          cp "$RUNNER_TEMP/weekly-linux/out/pgo/training/manifest.tsv" "$name/compiler-training.tsv"
           tar -czf "$name.tar.gz" "$name"
           sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
       - name: Test the archive

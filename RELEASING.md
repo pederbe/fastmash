@@ -66,15 +66,24 @@ builds and installation checks and separates website deployment.
 
 The GitHub-hosted workflows perform these steps for the frozen version:
 
-1. Build the tagged Linux executable twice with `release/Containerfile` and
-   `release/build.sh`, using empty target directories. Both executable builds
-   must be byte-identical. Record their hashes in the run's
+1. Build an instrumented Linux executable with `release/Containerfile` and
+   `release/build.sh`. Run the checked generated training Commands in
+   `release/train-pgo.sh` and merge fresh data with the compiler's matching
+   LLVM tools. Use this one frozen compiler profile for two clean optimized
+   builds in empty target directories. Both executable builds must be
+   byte-identical. Record their hashes in the run's
    `release/delivery.sha256` and package one of those builds directly. Include
    the manifest as `binary.sha256` inside the archive. Historical manifests
    remain unchanged.
    The target is `x86_64-unknown-linux-musl`. Reject a shared-library dependency
    or ELF interpreter, and include musl's copyright with the Cargo notices.
    The Debian and RPM packages have no glibc runtime dependency.
+   The archive retains `compiler-profile.profdata`, `compiler-training.tsv`
+   and `build-provenance.txt`, identifying the source, compiler, flags and
+   training inputs. Reproducibility uses that recorded profile as a build
+   input. Fresh training is not required to regenerate identical counts or
+   executable bytes. Every new source/compiler build trains again, and a
+   failed training Command or stale profile directory stops the build.
 2. Run workspace tests and both regression-corpus input modes against that
    executable. Package the same bytes into the archive,
    `.deb` and `.rpm`, then test extraction, installation, Commands and removal.
@@ -197,8 +206,9 @@ Prepare the patch versions, exact internal dependency requirements, lockfile and
 dated release notes with release-plz on the selected source. Record the
 full source revision, lockfile hash, builder identity, compiler and flags.
 Use the pinned `release/Containerfile` and `release/build.sh` recipe already used
-by the release workflow. Build twice from the same clean source into separate
-empty target directories and compare the executable byte for byte. Normal
+by the release workflow. On Linux, generate and check a fresh compiler profile,
+then use that same profile for both clean builds in separate empty target
+directories and compare the executable byte for byte. Normal
 Cargo output is suitable for development checks but is not the release artifact.
 
 Run formatting, warnings-denied Clippy, release workspace tests,

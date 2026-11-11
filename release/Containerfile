@@ -8,10 +8,13 @@ ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
 RUN curl --proto '=https' --tlsv1.2 -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh \
  && sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain stable --no-modify-path \
  && /opt/cargo/bin/rustup target add x86_64-unknown-linux-musl \
+ && /opt/cargo/bin/rustup component add llvm-tools-preview \
  && rm /tmp/rustup-init.sh
 ENTRYPOINT []
 ENV PATH=/opt/cargo/bin:/usr/bin:/bin LC_ALL=C TZ=UTC
 RUN mkdir /builder && rustc -vV > /builder/rustc.txt && cargo -vV > /builder/cargo.txt \
  && rustup target list --installed > /builder/targets.txt && cc --version | head -n 1 > /builder/cc.txt \
- && ld --version | head -n 1 > /builder/ld.txt
+ && ld --version | head -n 1 > /builder/ld.txt \
+ && ln -s "$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-profdata" /usr/bin/llvm-profdata \
+ && llvm-profdata --version > /builder/llvm-profdata.txt
 WORKDIR /source
