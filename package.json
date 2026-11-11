@@ -9,7 +9,7 @@
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "^12.2.0",
-    "wrangler": "^4.159.0"
+    "wrangler": "^4.160.0"
   },
   "overrides": {
     "lodash-es": "^4.18.1",
