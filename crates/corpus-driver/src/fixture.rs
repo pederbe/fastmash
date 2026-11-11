@@ -301,7 +301,7 @@ impl Case {
         let stderr = if NATIVE_SORT_DIAGNOSTICS.contains(&self.id.as_str()) {
             b"fastmash: missing input header for named grouping key\n".to_vec()
         } else {
-            decode(&self.expected.stderr_hex)?
+            diagnostic_guidance(decode(&self.expected.stderr_hex)?)
         };
         Ok(Expected {
             returncode: self.expected.returncode,
@@ -371,6 +371,38 @@ impl Case {
         }
         reasons
     }
+}
+
+/// Keep the observed reference diagnostics frozen. The documented additions
+/// are expected separately, without relaxing comparison of the original bytes.
+fn diagnostic_guidance(mut stderr: Vec<u8>) -> Vec<u8> {
+    let Some(at) = stderr.windows(2).position(|bytes| bytes == b": ") else {
+        return stderr;
+    };
+    let message = &stderr[at + 2..];
+    let hint: &[u8] = if message.starts_with(b"missing operation specifiers\n") {
+        b"choose an operation and field, for example fastmash sum 1"
+    } else if message.starts_with(b"missing field for operation ") {
+        b"supply a field number starting at 1, or use --header-in with a header name"
+    } else if message == b"invalid seed\n" {
+        b"use a nonnegative decimal integer, for example --seed=7"
+    } else if message == b"missing rounding digits value\n"
+        || message.starts_with(b"invalid rounding digits value ")
+    {
+        b"use --round=1 through --round=50. For no decimal places, use --format=%.0f"
+    } else if message == b"the delimiter must be a single character\n" {
+        b"separators take one literal byte, for example -t, for commas. Tabs are the default input separator. Escapes such as '\\t' are not expanded"
+    } else if message.starts_with(b"operation ") && message.ends_with(b" requires field pairs\n") {
+        b"write each field pair as LEFT:RIGHT, for example 1:2"
+    } else if message.starts_with(b"conflicting operation found: expecting ") {
+        b"run per-row operations and aggregate operations in separate commands. Per-row operations cannot use grouping keys"
+    } else {
+        return stderr;
+    };
+    stderr.extend_from_slice(b"hint: ");
+    stderr.extend_from_slice(hint);
+    stderr.push(b'\n');
+    stderr
 }
 
 // Python's ordinary predicate tests the truth value of observe_held. Keep its
@@ -591,7 +623,13 @@ mod tests {
                     case.expected.stdout_hex.as_ref()
                 );
             } else {
-                assert_eq!(original.stderr_hex, case.expected.stderr_hex, "{}", case.id);
+                let frozen = decode(&case.expected.stderr_hex).unwrap();
+                let guided = decode(&original.stderr_hex).unwrap();
+                assert!(guided.starts_with(&frozen), "{}", case.id);
+                if guided != frozen {
+                    assert!(guided[frozen.len()..].starts_with(b"hint: "), "{}", case.id);
+                    assert_eq!(original.returncode, 1, "{}", case.id);
+                }
             }
         }
     }

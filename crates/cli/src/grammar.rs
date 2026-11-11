@@ -1206,16 +1206,16 @@ fn selection_command(
         })
         .filter(|count| *count != 0)
         .ok_or_else(|| {
-            failure(b"Top-N selection requires a count from 1 through 18446744073709551615, written as :N\n".to_vec())
+            failure(b"Top-N selection requires top:N FIELD or bottom:N FIELD, with N from 1 through 18446744073709551615\n".to_vec())
         })?;
     scanner.position = end;
     let field = scanner.next()?;
     let ranking = scanner
         .decode_field(field)?
-        .ok_or_else(|| failure(b"Top-N selection requires one ranking Field\n".to_vec()))?;
+        .ok_or_else(|| failure(b"Top-N selection requires one ranking field\n".to_vec()))?;
     if scanner.next()?.kind != TokenKind::End {
         return Err(failure(
-            b"Top-N selection requires exactly one single-field Selector and cannot mix with other Operations or Modes\n".to_vec(),
+            b"Top-N selection takes one ranking field and cannot mix with other operations or modes\n".to_vec(),
         ));
     }
     Ok(Command {

@@ -157,8 +157,15 @@ invalid UTF-8 is therefore refused too.
 Error messages use the same wording as GNU datamash where it matters to
 scripts, but some messages differ, and they begin with the program name, `fastmash:`.
 Errors for Fastmash extensions include their own field-selection guidance,
-supported modes and examples of valid option syntax. A few
-failure paths also differ in detail: for example, a read error in input sorted
+supported modes and examples of valid option syntax.
+
+Common command errors also include a separate `hint:` line with valid syntax
+or a recovery step. The original error wording and exit status are preserved.
+Top-N selection errors use their own wording and include a ranking example.
+For byte-order recovery, `LC_ALL` must be unset before `LC_COLLATE=C` takes
+effect. Copy its value to `LC_NUMERIC` first to keep the same number format.
+
+A few failure paths also differ in detail: for example, a read error in input sorted
 with `-s` can give just "read error: Input/output error", where GNU datamash
 prints the system `sort`'s message and "read error (on close)". When standard
 input cannot be read at all (opened for writing only), GNU datamash's `-s`
