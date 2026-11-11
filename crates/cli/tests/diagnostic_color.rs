@@ -29,6 +29,105 @@ const PREFIX: &[u8] = b"\x1b[1;38;2;255;92;87m\xe2\x9c\x97 fastmash: \x1b[0m";
 
 const PROGRAM: terminal::Program = terminal::Program;
 
+#[test]
+fn command_errors_keep_the_cause_and_explain_the_next_step() {
+    for (args, cause, hint) in [
+        (
+            vec!["sum"],
+            "missing field for operation 'sum'",
+            "supply a field number starting at 1, or use --header-in with a header name",
+        ),
+        (
+            vec!["--seed=bad", "rand", "1"],
+            "invalid seed",
+            "use a nonnegative decimal integer, for example --seed=7",
+        ),
+        (
+            vec!["--round=0", "sum", "1"],
+            "invalid rounding digits value '0'",
+            "use --round=1 through --round=50. For no decimal places, use --format=%.0f",
+        ),
+        (
+            vec!["-t", "\\t", "sum", "1"],
+            "the delimiter must be a single character",
+            "separators take one literal byte, for example -t, for commas. Tabs are the default input separator. Escapes such as '\\t' are not expanded",
+        ),
+        (
+            vec!["--output-delimiter=é", "sum", "1"],
+            "the delimiter must be a single character",
+            "separators take one literal byte, for example -t, for commas. Tabs are the default input separator. Escapes such as '\\t' are not expanded",
+        ),
+        (
+            vec!["wmean", "1"],
+            "operation 'wmean' requires field pairs",
+            "write each field pair as LEFT:RIGHT, for example 1:2",
+        ),
+        (
+            vec!["sum", "1", "round", "1"],
+            "conflicting operation found: expecting groupby operations, but found line operation 'round'",
+            "run per-row operations and aggregate operations in separate commands. Per-row operations cannot use grouping keys",
+        ),
+        (
+            vec!["top:0", "1"],
+            "Top-N selection requires top:N FIELD or bottom:N FIELD, with N from 1 through 18446744073709551615",
+            "for example, top:5 2 selects up to 5 records ranked by field 2",
+        ),
+        (
+            vec!["top:5", "1,2"],
+            "Top-N selection takes one ranking field and cannot mix with other operations or modes",
+            "for example, top:5 2 selects up to 5 records ranked by field 2",
+        ),
+        (
+            vec![
+                "compare",
+                "before.tsv",
+                "after.tsv",
+                "rank",
+                "bad",
+                "sum",
+                "1",
+            ],
+            "comparison modifiers require positive unsigned decimal integers",
+            "rank selects a result and limit caps ranked keys. Both numbers start at 1. For example, rank 1 percent limit 5",
+        ),
+    ] {
+        let output = PROGRAM.invoke(&args, b"", &[], false, false);
+        assert_eq!(output.status.code(), Some(1), "{args:?}: {output:?}");
+        assert!(output.stdout.is_empty(), "{args:?}: {output:?}");
+        assert_eq!(
+            output.stderr,
+            format!("fastmash: {cause}\nhint: {hint}\n").as_bytes(),
+            "{args:?}"
+        );
+    }
+    let output = PROGRAM.invoke(&[], b"", &[], false, false);
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stderr, b"fastmash: missing operation specifiers\nTry 'fastmash --help' for more information.\nhint: choose an operation and field, for example fastmash sum 1\n");
+}
+
+#[test]
+fn suggested_command_forms_produce_useful_results() {
+    for (args, input, expected) in [
+        (
+            vec!["sum", "1"],
+            b"10\n20\n30\n".as_slice(),
+            b"60\n".as_slice(),
+        ),
+        (vec!["--seed=7", "rand", "1"], b"7\n", b"7\n"),
+        (vec!["--round=2", "sum", "1"], b"1.2\n2.4\n", b"3.60\n"),
+        (vec!["--format=%.0f", "sum", "1"], b"1.2\n2.4\n", b"4\n"),
+        (vec!["sum", "2"], b"a\t2\nb\t3\n", b"5\n"),
+        (vec!["-t,", "sum", "2"], b"a,2\nb,3\n", b"5\n"),
+        (vec!["wmean", "1:2"], b"10\t2\n5\t3\n", b"7\n"),
+        (vec!["top:5", "2"], b"a\t2\nb\t3\n", b"b\t3\na\t2\n"),
+    ] {
+        let output = PROGRAM.invoke(&args, input, &[], false, false);
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        assert_eq!(output.stdout, expected, "{args:?}");
+        assert!(output.stderr.is_empty(), "{args:?}: {output:?}");
+    }
+}
+
 fn diagnostic_text(bytes: &[u8]) -> Vec<u8> {
     let plain = terminal::strip_styles(bytes);
     plain

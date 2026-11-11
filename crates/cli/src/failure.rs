@@ -79,7 +79,46 @@ pub(super) fn write(
 ) -> io::Result<()> {
     write_prefix(writer, program, style)?;
     writer.write_all(reported(error))?;
+    if let Some(hint) = recovery_hint(reported(error)) {
+        writer.write_all(b"hint: ")?;
+        writer.write_all(hint)?;
+        writer.write_all(b"\n")?;
+    }
     writer.flush()
+}
+
+/// Recovery guidance belongs to reporting, so the original cause, quotation
+/// bytes and failure precedence stay unchanged. Static hints need no allocation.
+fn recovery_hint(message: &[u8]) -> Option<&'static [u8]> {
+    Some(if message.starts_with(b"missing operation specifiers\n") {
+        b"choose an operation and field, for example fastmash sum 1"
+    } else if message.starts_with(b"missing field for operation ") {
+        b"supply a field number starting at 1, or use --header-in with a header name"
+    } else if message == b"invalid seed\n" {
+        b"use a nonnegative decimal integer, for example --seed=7"
+    } else if message == b"missing rounding digits value\n"
+        || message.starts_with(b"invalid rounding digits value ")
+    {
+        b"use --round=1 through --round=50. For no decimal places, use --format=%.0f"
+    } else if message == b"the delimiter must be a single character\n" {
+        b"separators take one literal byte, for example -t, for commas. Tabs are the default input separator. Escapes such as '\\t' are not expanded"
+    } else if message.starts_with(b"operation ") && message.ends_with(b" requires field pairs\n") {
+        b"write each field pair as LEFT:RIGHT, for example 1:2"
+    } else if message.starts_with(b"conflicting operation found: expecting ") {
+        b"run per-row operations and aggregate operations in separate commands. Per-row operations cannot use grouping keys"
+    } else if message.starts_with(b"Top-N selection requires ")
+        || message.starts_with(b"Top-N selection takes one ranking field ")
+    {
+        b"for example, top:5 2 selects up to 5 records ranked by field 2"
+    } else if message.starts_with(b"comparison modifier")
+        || message == b"missing comparison modifier value\n"
+    {
+        b"rank selects a result and limit caps ranked keys. Both numbers start at 1. For example, rank 1 percent limit 5"
+    } else if message.starts_with(b"language sorting requires ") {
+        b"LC_ALL overrides LC_COLLATE. If LC_ALL is set, copy its value to LC_NUMERIC and unset LC_ALL before setting LC_COLLATE=C"
+    } else {
+        return None;
+    })
 }
 /// Appends `parts` to `error`'s message, where there is memory for them. A
 /// refusal that had no memory for its message first takes the cause its

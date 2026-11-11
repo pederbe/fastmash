@@ -29,6 +29,29 @@ fn assert_output(out: &Output, status: i32, stdout: &[u8]) {
 }
 
 #[test]
+fn raw_key_recovery_explains_lc_all_and_preserves_comma_numbers() {
+    let args = &["-s", "-g", "1", "sum", "2"];
+    for input in [b"\xff\t1,5\n".as_slice(), b"a\0b\t1,5\n"] {
+        let refused = run(
+            &[("LC_ALL", "de_DE.UTF-8"), ("LC_COLLATE", "C")],
+            args,
+            input,
+        );
+        assert_output(&refused, 77, b"");
+        assert!(String::from_utf8_lossy(&refused.stderr).ends_with(
+            "hint: LC_ALL overrides LC_COLLATE. If LC_ALL is set, copy its value to LC_NUMERIC and unset LC_ALL before setting LC_COLLATE=C\n"
+        ));
+        let recovered = run(
+            &[("LC_NUMERIC", "de_DE.UTF-8"), ("LC_COLLATE", "C")],
+            args,
+            input,
+        );
+        assert_output(&recovered, 0, input);
+        assert!(recovered.stderr.is_empty(), "{recovered:?}");
+    }
+}
+
+#[test]
 fn english_locales_with_en_us_number_rules_are_accepted() {
     // Each alias copies en_US's decimal point, thousands separator and grouping
     // in glibc's localedata (checked against glibc 2.43).
