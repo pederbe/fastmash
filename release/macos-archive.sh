@@ -4,6 +4,13 @@
 # Install and test the same archive bytes on macOS 15 and 26 before delivery.
 set -euo pipefail
 
+if [ "${1:-}" = --help ] || [ "${1:-}" = -h ]; then
+    printf '%s\n' 'usage: bash release/macos-archive.sh OUTPUT_DIRECTORY [development|release]' \
+        'Build a native macOS archive from a clean checkout on macOS 15 or later.' \
+        'development is the default. release compares two clean executable builds.' \
+        'The resulting archive path is written to stdout.'
+    exit 0
+fi
 if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
     echo 'usage: macos-archive.sh OUTPUT_DIRECTORY [development|release]' >&2
     exit 1
@@ -11,7 +18,7 @@ fi
 mode=${2:-development}
 case $mode in
     development|release) ;;
-    *) echo 'unknown archive mode' >&2; exit 1 ;;
+    *) echo 'archive mode must be development or release' >&2; exit 1 ;;
 esac
 
 root=$(cd "$(dirname "$0")/.." && pwd)

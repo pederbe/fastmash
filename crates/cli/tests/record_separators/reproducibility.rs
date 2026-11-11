@@ -419,7 +419,7 @@ fn cross_environment_corpus() {
         &args(&["getnum:1", "1"]),
         b"12\n",
         b"",
-        b"fastmash: getnum requires a character type parameter\n",
+        b"fastmash: getnum requires a character type parameter\nhint: getnum types are n, i, h, o, p and d. For example, getnum:i 1 extracts a signed integer\n",
         1,
         &[("LC_ALL", "C")],
         false,

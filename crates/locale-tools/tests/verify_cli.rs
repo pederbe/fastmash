@@ -809,7 +809,10 @@ fn existing_paths_help_and_argument_errors_leave_inputs_untouched() {
     fs::write(&run.output, b"keep original report").unwrap();
     let output = run.invoke(&run.arguments(&[], 0));
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("output already exists"));
+    let diagnostic = String::from_utf8_lossy(&output.stderr);
+    assert!(diagnostic.contains("output already exists"));
+    assert!(diagnostic.contains(&run.output.display().to_string()));
+    assert!(diagnostic.contains("Choose a new report path"));
     assert_eq!(fs::read(&run.output).unwrap(), b"keep original report");
     assert!(!run.evidence.exists());
     assert_eq!(run.count("candidate"), 0);
@@ -820,6 +823,7 @@ fn existing_paths_help_and_argument_errors_leave_inputs_untouched() {
     fs::write(run.evidence.join("keep"), b"untouched").unwrap();
     let output = run.invoke(&run.arguments(&[], 0));
     assert_failure(&run, &output, "cannot create verification evidence");
+    assert!(String::from_utf8_lossy(&output.stderr).contains(&run.evidence.display().to_string()));
     assert_eq!(fs::read(run.evidence.join("keep")).unwrap(), b"untouched");
     assert_eq!(fs::read_dir(&run.evidence).unwrap().count(), 1);
     assert_eq!(run.count("candidate"), 0);
@@ -828,11 +832,9 @@ fn existing_paths_help_and_argument_errors_leave_inputs_untouched() {
     let run = Run::new("arguments", MIXED);
     let output = run.invoke(&["--help".into()]);
     assert!(output.status.success());
-    assert!(
-        output
-            .stdout
-            .starts_with(b"Usage: fastmash-verify-collation-locales ")
-    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("Usage: fastmash-verify-collation-locales "));
+    assert!(text.contains("Status 0 means the report\nwas written"));
     assert!(output.stderr.is_empty());
     for args in [
         vec![OsString::from("--variant")],

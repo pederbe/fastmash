@@ -82,19 +82,19 @@ packages, release archives, cargo-binstall and compiling with Cargo.
 
 ```sh
 # Sum CSV revenue by region and name the result column
-fastmash --csv -H -s -g region --result-name=1:total sum revenue < sales.csv
+printf 'region,revenue\nwest,20\neast,12\nwest,15\n' | fastmash --csv -H -s -g region --result-name=1:total sum revenue
 
-# Weighted mean and the highest five complete records
-fastmash -H wmean price:units < sales.tsv
-fastmash --csv -H top:5 revenue < sales.csv
+# Weight prices by the number of units
+printf 'price\tunits\n10\t2\n5\t3\n' | fastmash -H wmean price:units
 
-# Check table health and compare summaries of two exports
-fastmash --header-in health type revenue number nonmissing id validate < sales.tsv
-fastmash --csv -H -g region compare before.csv after.csv sum revenue
+# Keep the two records with the highest revenue
+printf 'item,revenue\na,10\nb,30\nc,20\n' | fastmash --csv -H top:2 revenue
 ```
 
 Use `--csv` for quoted CSV and `-H` to select fields by header name.
-The [user guide](https://fastmash.io/guide/) covers all operations and options.
+The [user guide](https://fastmash.io/guide/) covers all operations and options,
+with complete examples for [table validation](https://fastmash.io/guide/table-health.html)
+and [before-and-after reports](https://fastmash.io/guide/dataset-comparison.html).
 
 ## Compatibility
 

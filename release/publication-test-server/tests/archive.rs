@@ -50,9 +50,17 @@ fn bytes_cover_empty_large_altered_truncated_missing_and_unreadable_files() {
         assert_eq!(files.check().status.code(), Some(1));
     }
     fs::remove_file(files.0.join("copy")).unwrap();
-    assert_eq!(files.check().status.code(), Some(1));
+    let missing = files.check();
+    assert_eq!(missing.status.code(), Some(1));
+    let text = String::from_utf8_lossy(&missing.stderr);
+    assert!(text.contains("cannot compare archive executables"));
+    assert!(text.contains(&files.0.join("copy").display().to_string()));
     fs::create_dir(files.0.join("copy")).unwrap();
-    assert_eq!(files.check().status.code(), Some(1));
+    let unreadable = files.check();
+    assert_eq!(unreadable.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&unreadable.stderr).contains("cannot compare archive executables")
+    );
 }
 
 #[test]

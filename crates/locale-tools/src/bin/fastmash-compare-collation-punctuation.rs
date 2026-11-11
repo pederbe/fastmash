@@ -55,7 +55,7 @@ mod cli {
                     continue;
                 }
                 if arg.as_encoded_bytes().starts_with(b"-") {
-                    return Err("unknown option".into());
+                    return Err(format!("unknown option: {}", arg.to_string_lossy()).into());
                 }
             }
             paths.push(PathBuf::from(arg));
@@ -79,13 +79,27 @@ mod cli {
     }
 
     fn compare(config: &Config) -> Result<()> {
-        let raw = fs::read(&config.verification)
-            .map_err(|error| format!("cannot read verification input: {error}"))?;
+        let raw = fs::read(&config.verification).map_err(|error| {
+            format!(
+                "cannot read verification input {}: {error}",
+                config.verification.display()
+            )
+        })?;
         let table = Table::from_verification(&raw)?;
         match fs::symlink_metadata(&config.output) {
-            Ok(_) => return Err("output already exists".into()),
+            Ok(_) => {
+                return Err(format!(
+                    "output already exists: {}. Choose a new report path",
+                    config.output.display()
+                )
+                .into());
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(format!("cannot inspect output: {error}").into()),
+            Err(error) => {
+                return Err(
+                    format!("cannot inspect output {}: {error}", config.output.display()).into(),
+                );
+            }
         }
         let report = punctuation_executor::execute(
             &table,
@@ -100,13 +114,15 @@ mod cli {
             .open(&config.output)
             .map_err(|error| {
                 format!(
-                    "cannot create report: {error} (comparison evidence: {})",
+                    "cannot create report {}: {error} (comparison evidence: {})",
+                    config.output.display(),
                     config.evidence.display()
                 )
             })?;
         output.write_all(&raw).map_err(|error| {
             format!(
-                "cannot write report: {error} (comparison evidence: {})",
+                "cannot write report {}: {error} (comparison evidence: {})",
+                config.output.display(),
                 config.evidence.display()
             )
         })?;
@@ -118,7 +134,19 @@ mod cli {
         let config = match parse(std::env::args_os().skip(1)) {
             Ok(Some(config)) => config,
             Ok(None) => {
-                println!("{USAGE}");
+                println!(
+                    "Compare a fixed set of 1,983 punctuation words against a native reference.\n\n{USAGE}\n\n\
+Use explicit candidate, reference and GNU sort executable paths with matching LOCPATH.\n\
+Repeat --locale NAME for a subset. By default, select every verification locale\n\
+with a nonempty final tag. The output report and evidence directory must be new.\n\
+Status 0 means the report was written. Ordering differences and native nonzero\n\
+statuses remain report observations. In the summary, error: N counts locales\n\
+with a failed candidate or reference command. JSON retains full displacement\n\
+counts and at most 40 example words per locale. Raw captures remain in evidence.\n\n\
+Example, replacing executable and locale paths with your reference paths:\n\
+  fastmash-compare-collation-punctuation --evidence /tmp/fastmash-punctuation-evidence \\\n    --locale en_US --locale tk_TM -- data/locales/collation-verification.json \\\n    /path/to/fastmash /path/to/reference /path/to/gnu-sort /path/to/compiled-locales \\\n    /tmp/fastmash-punctuation.json\n\n\
+Guide: https://fastmash.io/contributing/testing.html#locale-tools"
+                );
                 return ExitCode::SUCCESS;
             }
             Err(error) => {

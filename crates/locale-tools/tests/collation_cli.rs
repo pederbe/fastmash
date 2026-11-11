@@ -90,7 +90,9 @@ fn actual_cli_help_and_invalid_arguments_create_no_output() {
     {
         let output = invoke(&root, &format!("help-{index}"), &args);
         assert!(output.status.success(), "CLI evidence: {}", root.display());
-        assert_eq!(output.stdout, format!("{USAGE}\n").as_bytes());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains(USAGE));
+        assert!(text.contains("By default, INPUT_JSON is a verification report"));
         assert!(output.stderr.is_empty());
     }
     let invalid: Vec<Vec<OsString>> = vec![
@@ -290,7 +292,14 @@ fn actual_cli_failures_preserve_inputs_and_existing_outputs_and_accept_terminate
             root.display()
         );
         assert!(output.stdout.is_empty());
-        assert!(!output.stderr.is_empty());
+        let diagnostic = String::from_utf8(output.stderr).unwrap();
+        assert!(!diagnostic.is_empty());
+        if label == "missing-input" {
+            assert!(diagnostic.contains("cannot read input missing.json"));
+        }
+        if label == "missing-parent" {
+            assert!(diagnostic.contains("missing-parent/generated.rs"));
+        }
         assert_eq!(fs::read(root.join(input)).unwrap(), VERIFICATION.as_bytes());
         assert_eq!(
             fs::read(root.join(existing)).unwrap(),

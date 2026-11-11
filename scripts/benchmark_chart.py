@@ -80,7 +80,7 @@ def tables(laptop, desktop, out):
     for (_, name), path in zip(HOSTS, (laptop, desktop)):
         lines.extend([
             f'### {name}', '',
-            '| Set | Job | GNU datamash 1.9 (ms) | Fastmash 0.1.0 (ms) | GNU / Fastmash | Elapsed verdict |',
+            '| Set | Job | GNU datamash 1.9 (ms) | Fastmash (ms) | GNU / Fastmash | Elapsed verdict |',
             '| --- | --- | ---: | ---: | ---: | --- |',
         ])
         for setting, job, gnu, fastmash, verdict in gnu_rows(path):

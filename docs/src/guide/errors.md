@@ -11,8 +11,10 @@
 
 When one failure follows another, such as a failure to write the output after
 an error, the status is the more serious one: 70 over 77 over 1. If a
-diagnostic itself cannot be written, the status is 1. A message containing
-"internal" indicates a bug: please report it. `SIGABRT` can indicate a bug or
+diagnostic itself cannot be written, the status is 1. Internal numerical or
+table-identity failures indicate a bug: please report them. The legacy
+"internal error: input field too long" diagnostic instead identifies the
+[numeric field-length limit](output.md#limits). `SIGABRT` can indicate a bug or
 an allocation failure that the process could not report as a refusal.
 
 Diagnostics go to standard error, in the form:
@@ -23,6 +25,32 @@ fastmash: invalid numeric value in line 3 field 2: 'n/a'
 
 Some are followed by a `hint:` line suggesting a fix.
 
+## Find and fix the cause
+
+The diagnostic identifies the first problem encountered. Check the named field,
+record, source file or option before rerunning the command.
+
+| Message or situation | What to check |
+| --- | --- |
+| `invalid numeric value` | Confirm that the selected field contains numbers and that the field separator is correct. If the first record names the fields, add `--header-in` |
+| A requested field is missing | Field numbers start at 1. Tab is the default separator. Use `-W` for runs of spaces and tabs, `-t,` for literal commas, or `--csv` for quoted CSV |
+| A header name is not found | Names are exact and case-sensitive. Check the spelling, separator and whether the first record really is a header |
+| `invalid CSV` | Use double quotes around a complete field. Write a quote inside it as two double quotes. The reported record and physical line locate the problem |
+| A CSV option conflicts with another option | Remove text-input controls such as `-t` or `-W` when reading CSV. CSV output chooses its own comma separator, so omit `--output-delimiter` |
+| A weighted mean has no positive retained weight | At least one retained value/weight pair must have a positive weight. Check zero weights and pairs omitted by `--narm` |
+| `sort temporary I/O error` | Check that `TMPDIR`, or `/tmp` when it is unset, exists, is writable and has free space. Choose another writable directory if needed |
+| Memory allocation failed | Check available memory and process limits. Sorting can spill to disk, but retained samples and complete tables stay in memory |
+| A read or write failed | Check the input/output paths, access permissions and free disk space. A closed or incorrectly opened standard stream must be fixed by the shell or program launching Fastmash |
+
+`--narm` skips only whole-field `NA`, `N/A` and `NaN` tokens, ignoring case. It
+does not skip arbitrary text, empty fields or absent fields. `--round` and
+`--format` change display only and cannot repair a numerical-range refusal.
+
+The warning about `-f/--full` with "non-linewise operations" concerns aggregate
+operations such as `sum`. It does not stop the command or change its exit
+status. Omit `--full` if you only need the calculated results. Per-row operations
+such as `round` do not produce this warning.
+
 ## Always check the exit status
 
 Fastmash writes results progressively through a small output buffer, so a
@@ -31,11 +59,13 @@ status rather than whether output appeared, and in pipelines enable
 `set -o pipefail` so an earlier command's failure isn't hidden:
 
 ```sh
+bash -c '
 set -o pipefail
 if ! fastmash -s -g 1 sum 2 < data.tsv > totals.tsv; then
   echo "summary failed" >&2
   exit 1
 fi
+'
 ```
 
 Dataset comparison completes both input scans and all calculations before

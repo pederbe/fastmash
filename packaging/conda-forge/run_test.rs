@@ -36,6 +36,18 @@ fn check(binary: &Path, args: &[&str], input: &[u8], expected: &[u8]) -> io::Res
 
 fn run() -> io::Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.len() == 1 && matches!(args[0].to_str(), Some("--help" | "-h")) {
+        println!(
+            "Check an installed source-built Fastmash package.\n\n\
+Usage: fastmash-test-source-package BIN_DIR\n\n\
+BIN_DIR contains the installed executable. Prints its actual --version output\n\
+and checks representative arithmetic and sorted grouping results. A failed\n\
+command, unreadable executable or unexpected result exits with status 1.\n\n\
+Example, using the source recipe's installed binary directory:\n\
+  fastmash-test-source-package /path/to/installed/bin"
+        );
+        return Ok(());
+    }
     if args.len() != 1 {
         return Err(io::Error::other(
             "usage: fastmash-test-source-package BIN_DIR",
@@ -43,6 +55,18 @@ fn run() -> io::Result<()> {
     }
     let bin = Path::new(&args[0]);
     let binary = bin.join("fastmash");
+    let metadata = fs::metadata(&binary).map_err(|error| {
+        io::Error::other(format!(
+            "cannot inspect installed executable {}: {error}",
+            binary.display()
+        ))
+    })?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
+        return Err(io::Error::other(format!(
+            "installed program is not an executable file: {}",
+            binary.display()
+        )));
+    }
     let status = Command::new(&binary)
         .arg("--version")
         .env("LC_ALL", "C")
@@ -51,10 +75,6 @@ fn run() -> io::Result<()> {
         return Err(io::Error::other(format!(
             "version command failed with {status}"
         )));
-    }
-    let metadata = fs::metadata(&binary)?;
-    if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
-        return Err(io::Error::other("fastmash is not installed and executable"));
     }
     check(&binary, &["sum", "1", "mean", "1"], b"1\n2\n3\n", b"6\t2\n")?;
     check(

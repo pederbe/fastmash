@@ -180,13 +180,36 @@ mod unix {
             frozen_indexer(Path::new(&reference), &arguments)?;
             return Ok(ExitCode::SUCCESS);
         }
+        if arguments.len() == 1 && matches!(arguments[0].to_str(), Some("--help" | "-h")) {
+            println!(
+                "Check regeneration of a partially uploaded repository snapshot.\n\n\
+Usage: fastmash-test-package-fixture-repair WORK REPOSITORY_SCRIPT\n\n\
+WORK is the prepared publication-fixture directory containing new/, test-key.asc\n\
+and build/ fixture packages. REPOSITORY_SCRIPT is the local repository generator.\n\
+The check creates and removes its own partial/ directory and uses the fixture key.\n\n\
+Example, while the documented fixture setup's throwaway signing key is available:\n\
+  fastmash-test-package-fixture-repair /tmp/publication-fixtures release/package-repository.sh\n\n\
+Setup: packaging/repository/README.md"
+            );
+            return Ok(ExitCode::SUCCESS);
+        }
         if arguments.len() != 2 {
             return Err(invalid(
                 "usage: fastmash-test-package-fixture-repair WORK REPOSITORY_SCRIPT",
             ));
         }
-        let work = fs::canonicalize(&arguments[0])?;
-        let script = fs::canonicalize(&arguments[1])?;
+        let work = fs::canonicalize(&arguments[0]).map_err(|error| {
+            invalid(&format!(
+                "cannot open fixture work directory {}: {error}",
+                Path::new(&arguments[0]).display()
+            ))
+        })?;
+        let script = fs::canonicalize(&arguments[1]).map_err(|error| {
+            invalid(&format!(
+                "cannot open repository script {}: {error}",
+                Path::new(&arguments[1]).display()
+            ))
+        })?;
         repair(&work, &script)
     }
 

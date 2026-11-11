@@ -11,31 +11,43 @@ fn parser_errors_preserve_scope_and_precedence() {
         (
             &["strbin:2.5", "1"],
             1,
-            "strbin requires an integer bucket count",
+            "strbin requires an integer bucket count\nhint: use a positive integer bucket count, for example strbin:10 1",
         ),
         (
             &["strbin:2.0", "1"],
             1,
-            "strbin requires an integer bucket count",
+            "strbin requires an integer bucket count\nhint: use a positive integer bucket count, for example strbin:10 1",
         ),
         (
             &["getnum:1", "1"],
             1,
-            "getnum requires a character type parameter",
+            "getnum requires a character type parameter\nhint: getnum types are n, i, h, o, p and d. For example, getnum:i 1 extracts a signed integer",
         ),
         (
             &["getnum:1.5", "1"],
             1,
-            "getnum requires a character type parameter",
+            "getnum requires a character type parameter\nhint: getnum types are n, i, h, o, p and d. For example, getnum:i 1 extracts a signed integer",
         ),
-        (&["pcov", "1:2-3"], 1, "paired field ranges are invalid"),
+        (
+            &["pcov", "1:2-3"],
+            1,
+            "paired field ranges are invalid\nhint: write pairs as LEFT:RIGHT, for example 1:2 or 1:2,3:4. Pairs cannot contain ranges",
+        ),
         (
             &["-H", "pcov", "left:right-3"],
             1,
-            "paired field ranges are invalid",
+            "paired field ranges are invalid\nhint: write pairs as LEFT:RIGHT, for example 1:2 or 1:2,3:4. Pairs cannot contain ranges",
         ),
-        (&["dotprod", "1:2-3"], 1, "paired field ranges are invalid"),
-        (&["mean", "1:2-3"], 1, "paired field ranges are invalid"),
+        (
+            &["dotprod", "1:2-3"],
+            1,
+            "paired field ranges are invalid\nhint: write pairs as LEFT:RIGHT, for example 1:2 or 1:2,3:4. Pairs cannot contain ranges",
+        ),
+        (
+            &["mean", "1:2-3"],
+            1,
+            "paired field ranges are invalid\nhint: write pairs as LEFT:RIGHT, for example 1:2 or 1:2,3:4. Pairs cannot contain ranges",
+        ),
         (
             &["strbin:2.5:3", "1"],
             1,
@@ -49,31 +61,47 @@ fn parser_errors_preserve_scope_and_precedence() {
         (
             &["strbin:2.5", "0"],
             1,
-            "invalid field '0' for operation 'strbin'",
+            "invalid field '0' for operation 'strbin'\nhint: field numbers start at 1. Named fields need an input header and --header-in or -H",
         ),
         (
             &["getnum:1", "0"],
             1,
-            "invalid field '0' for operation 'getnum'",
+            "invalid field '0' for operation 'getnum'\nhint: field numbers start at 1. Named fields need an input header and --header-in or -H",
         ),
         (
             &["pcov", "0:2-3"],
             1,
-            "invalid field '0' for operation 'pcov'",
+            "invalid field '0' for operation 'pcov'\nhint: field numbers start at 1. Named fields need an input header and --header-in or -H",
         ),
         (
             &["pcov", "1:"],
             1,
-            "invalid field pair for operation 'pcov'",
+            "invalid field pair for operation 'pcov'\nhint: write pairs as LEFT:RIGHT, for example 1:2 or 1:2,3:4. Pairs cannot contain ranges",
         ),
-        (&["strbin:0", "1"], 1, "strbin bucket size must not be zero"),
-        (&["getnum:x", "1"], 1, "invalid getnum type 'x'"),
-        (&["--", "--help"], 1, "invalid operation '-'"),
-        (&["", "--bad"], 1, "invalid operation '-'"),
+        (
+            &["strbin:0", "1"],
+            1,
+            "strbin bucket size must not be zero\nhint: use a positive integer bucket count, for example strbin:10 1",
+        ),
+        (
+            &["getnum:x", "1"],
+            1,
+            "invalid getnum type 'x'\nhint: getnum types are n, i, h, o, p and d. For example, getnum:i 1 extracts a signed integer",
+        ),
+        (
+            &["--", "--help"],
+            1,
+            "invalid operation '-'\nhint: use fastmash --help to list operations, for example sum 1 or mean 2",
+        ),
+        (
+            &["", "--bad"],
+            1,
+            "invalid operation '-'\nhint: use fastmash --help to list operations, for example sum 1 or mean 2",
+        ),
         (
             &["perc:2.5", "1"],
             77,
-            "non-integer percentile parameters are outside the supported range",
+            "non-integer percentile parameters are outside the supported range\nhint: use an integer percentile from 1 through 100, for example perc:95 2",
         ),
         (&["rmdup", "1,2"], 77, "rmdup supports exactly one key"),
     ];

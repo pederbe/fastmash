@@ -2,6 +2,13 @@
 # Upload a prepared repository to R2. Storage credentials use the AWS environment.
 # usage: bash release/publish-package-repository.sh REPOSITORY BUCKET
 set -euo pipefail
+usage() {
+    printf '%s\n' 'usage: bash release/publish-package-repository.sh REPOSITORY BUCKET' \
+        'Upload a prepared local package repository to the supplied R2 bucket.' \
+        'Uses AWS environment credentials and preserves earlier immutable snapshots.'
+}
+if [ "${1:-}" = --help ] || [ "${1:-}" = -h ]; then usage; exit 0; fi
+if [ "$#" -ne 2 ]; then usage >&2; exit 1; fi
 cd "$1"
 bucket=$2
 # Upload immutable packages, by-hash indexes and complete dnf snapshots first.

@@ -2,10 +2,20 @@
 # Resume a dependency-ordered workspace upload without republishing immutable versions.
 # usage: bash release/publish-crates.sh VERSION (dry-run|publish)
 set -euo pipefail
-version=${1:?expected version}
-mode=${2:?expected dry-run or publish}
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-[[ "$mode" = dry-run || "$mode" = publish ]]
+usage() {
+    printf '%s\n' 'usage: bash release/publish-crates.sh VERSION (dry-run|publish)' \
+        'Check registry state and upload the workspace crates in dependency order.' \
+        'dry-run validates packages without uploading. publish uploads versions not already published.' \
+        'VERSION must be numeric MAJOR.MINOR.PATCH without a leading v.'
+}
+if [ "${1:-}" = --help ] || [ "${1:-}" = -h ]; then usage; exit 0; fi
+if [ "$#" -ne 2 ]; then usage >&2; exit 1; fi
+version=$1
+mode=$2
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    { echo 'version must be numeric MAJOR.MINOR.PATCH without a leading v' >&2; exit 1; }
+[[ "$mode" = dry-run || "$mode" = publish ]] ||
+    { echo 'mode must be dry-run or publish' >&2; exit 1; }
 work=$(mktemp -d)
 trap 'rm -r "$work"' EXIT
 remaining=()

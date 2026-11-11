@@ -35,6 +35,6 @@ image on failure. Successful execution also detaches it and removes the image.
 It retains setup, calibration, candidate and cleanup observations on macOS 15
 and 26 with the latest stable Rust.
 
-This establishes a development mechanism. Existing full-output transports remain
-in place until the retained fault cases have been ported and qualified. It does
-not change production startup or qualify a release.
+The corpus driver uses native full-output checks for the retained fault cases.
+This example checks the mechanism separately. It does not change production
+startup or qualify a release.

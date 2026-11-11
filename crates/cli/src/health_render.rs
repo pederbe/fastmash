@@ -1,7 +1,7 @@
 //! Byte-preserving readable and schema-version-1 TSV table-health reports.
 use super::{
     buffered_stdout::BufferedStdout,
-    health::{Expected, Observed, Report, SAMPLE_BYTES, Settings},
+    health::{Baseline, Category, Expected, Observed, Report, SAMPLE_BYTES, Settings},
     intake::Filter,
     options::Options,
     records::Separator,
@@ -357,25 +357,25 @@ pub(super) fn readable<W: Write>(
     output.raw(style.start(Role::Heading));
     output.raw(b"Table health report");
     output.raw(style.reset());
+    let violated = report
+        .findings
+        .iter()
+        .any(super::health::Finding::is_violation);
     if style.enabled() {
         output.raw(b"\n");
-        let violated = report
-            .findings
-            .iter()
-            .any(super::health::Finding::is_violation);
         let (role, message): (_, &[u8]) = if violated {
             (
                 Role::Failure,
                 if settings.validate {
-                    "✗ Validation failed · supplied expectations violated".as_bytes()
+                    "✗ Validation failed · supplied rules were not met".as_bytes()
                 } else {
-                    "✗ Supplied expectations violated".as_bytes()
+                    "✗ Inspection complete · supplied rules were not met".as_bytes()
                 },
             )
         } else if settings.validate {
             (
                 Role::Success,
-                "✔ Validation passed · supplied expectations met".as_bytes(),
+                "✔ Validation passed · supplied rules were met".as_bytes(),
             )
         } else if report.findings.is_empty() {
             (
@@ -389,6 +389,17 @@ pub(super) fn readable<W: Write>(
             )
         };
         output.styled(style, role, message);
+    } else {
+        output.raw(if violated {
+            b"\nInspection complete: supplied rules were not met"
+        } else if report.findings.is_empty() {
+            b"\nInspection complete: no findings"
+        } else {
+            b"\nInspection complete: advisory findings"
+        });
+    }
+    if report.data_records == 0 {
+        output.raw(b"\nNo data records were read, so there are no field values to check.");
     }
     output.raw(b"\nData records: ");
     number(output, report.data_records);
@@ -424,35 +435,36 @@ fn metadata<W: Write>(
     style: Style,
 ) {
     output.raw(style.start(Role::Muted));
-    output.raw(b"\nInput separator: ");
+    output.raw(b"\nField separator: ");
     match options.input {
+        Separator::Literal(b'\t') => output.raw(b"tab (\\t)"),
         Separator::Literal(byte) => {
             output.raw(b"literal \"");
             escaped(output, &[byte]);
             output.raw(b"\"");
         }
-        Separator::Whitespace => output.raw(b"whitespace"),
+        Separator::Whitespace => output.raw(b"runs of spaces and tabs"),
     }
-    output.raw(b"\nRecord terminator: ");
+    output.raw(b"\nRecords end with: ");
     output.raw(if options.record_end == 0 {
-        b"nul"
+        b"NUL (\\0)"
     } else {
-        b"lf"
+        b"newline (\\n)"
     });
     output.raw(b"\nNumeric decimal separator: \"");
     escaped(output, &[options.locale.numeric.radix()]);
     output.raw(b"\"");
     output.raw(b"\nInput header: ");
     output.raw(if options.header_in { b"yes" } else { b"no" });
-    output.raw(b"\nComment filter: ");
+    output.raw(b"\nComment filtering: ");
     output.raw(match Filter::of(options) {
         Filter::None => b"none",
-        Filter::Comments => b"comments",
-        Filter::Vnlog => b"vnlog",
+        Filter::Comments => b"--skip-comments",
+        Filter::Vnlog => b"vnlog comments and annotations",
     });
-    output.raw(b"\nVnlog: ");
+    output.raw(b"\nAnnotated input (--vnlog): ");
     output.raw(if options.vnlog { b"yes" } else { b"no" });
-    output.raw(b"\nRecord numbering: accepted_records_1based (including the Input header; filtered records excluded)\nExample limit: ");
+    output.raw(b"\nRecord numbers start at 1, include the input header and exclude filtered records.\nExample limit: ");
     number(output, settings.examples as u64);
     output.raw(b" per finding\nSample byte limit: ");
     number(output, SAMPLE_BYTES as u64);
@@ -464,10 +476,17 @@ fn widths<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report) {
     output.raw(b"\nBaseline width: ");
     if let Some(width) = report.baseline.width() {
         number(output, width as u64);
-        output.raw(b" fields (");
-        output.raw(report.baseline.basis().id());
-        output.raw(b", ");
-        output.raw(report.baseline.source());
+        output.raw(if width == 1 {
+            b" field ("
+        } else {
+            b" fields ("
+        });
+        output.raw(match report.baseline {
+            Baseline::Declared(_) => b"supplied width",
+            Baseline::Header(_) => b"input header",
+            Baseline::Modal(_) => b"most frequent data width",
+            Baseline::Unavailable => b"unavailable",
+        });
         output.raw(b")");
     } else {
         output.raw(b"unavailable");
@@ -475,7 +494,7 @@ fn widths<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report) {
     output.raw(b"\nMaximum data-record width: ");
     if let Some(width) = report.maximum_width {
         number(output, width as u64);
-        output.raw(b" fields");
+        output.raw(if width == 1 { b" field" } else { b" fields" });
     } else {
         output.raw(b"unavailable");
     }
@@ -502,40 +521,40 @@ fn details<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report, style:
         output.raw(if style.enabled() {
             b"\"\n    Absent "
         } else {
-            b"\": absent_values "
+            b"\": absent "
         });
         number(output, state.absent);
         output.raw(if style.enabled() {
             " · empty ".as_bytes()
         } else {
-            b"; empty_values "
+            b"; empty "
         });
         number(output, state.empty);
         output.raw(if style.enabled() {
             " · missing ".as_bytes()
         } else {
-            b"; missing_values "
+            b"; missing "
         });
         number(output, state.missing);
         output.raw(if style.enabled() {
             b"\n    Integer "
         } else {
-            b"; integer_values "
+            b"; integer "
         });
         number(output, state.integer);
         output.raw(if style.enabled() {
             " · other number ".as_bytes()
         } else {
-            b"; other_number_values "
+            b"; other number "
         });
         number(output, state.other_number);
         output.raw(if style.enabled() {
             " · text ".as_bytes()
         } else {
-            b"; text_values "
+            b"; text "
         });
         number(output, state.text);
-        output.raw(b"\n    type_expectation ");
+        output.raw(b"\n    Expected type: ");
         output.raw(state.expectation.id());
         output.raw(b" (");
         output.raw(if state.declared_type.is_some() {
@@ -546,7 +565,7 @@ fn details<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report, style:
         output.raw(b")");
         output.raw(b"\n");
         if let Some(presence) = state.presence {
-            output.raw(b"    presence_requirement ");
+            output.raw(b"    Presence rule: ");
             output.raw(presence.id());
             output.raw(b" (declared)\n");
         }
@@ -558,6 +577,7 @@ fn details<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report, style:
     output.raw(b"Findings (counts may overlap):");
     output.raw(style.reset());
     output.raw(b"\n");
+    output.raw(b"Advisory findings do not fail validation. Violations of supplied rules do.\n");
     if report.findings.is_empty() {
         output.raw(b"  none\n");
         return;
@@ -578,7 +598,7 @@ fn details<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report, style:
         } else {
             output.raw(b"  ");
         }
-        output.raw(finding.category.id());
+        output.raw(finding_title(finding.category));
         output.raw(b" [");
         output.raw(finding.basis.id());
         output.raw(b", ");
@@ -588,13 +608,13 @@ fn details<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report, style:
         output.raw(if style.enabled() { b"\n  " } else { b": " });
         number(output, finding.count);
         output.raw(b" ");
-        output.raw(finding.category.unit());
+        output.raw(readable_unit(finding.category, finding.count));
         if let Some(expected) = &finding.expected {
             output.raw(b"; expected ");
             match expected {
                 Expected::Width(width) => {
                     number(output, *width as u64);
-                    output.raw(b" fields");
+                    output.raw(if *width == 1 { b" field" } else { b" fields" });
                 }
                 Expected::Type(kind) => output.raw(kind.id()),
                 Expected::Presence(presence) => output.raw(presence.id()),
@@ -616,6 +636,9 @@ fn details<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report, style:
         output.raw(b", omitted ");
         number(output, finding.candidates - finding.examples.len() as u64);
         output.raw(b"\n");
+        output.raw(b"    ");
+        output.raw(finding_guidance(finding.category));
+        output.raw(b"\n");
         for example in &finding.examples {
             output.raw(b"    accepted record ");
             number(output, example.record);
@@ -627,8 +650,10 @@ fn details<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report, style:
             match observed_value(example.observed) {
                 ObservedValue::Width(width) => {
                     number(output, width as u64);
-                    output.raw(b" fields");
+                    output.raw(if width == 1 { b" field" } else { b" fields" });
                 }
+                ObservedValue::Label(b"other_number") => output.raw(b"other number"),
+                ObservedValue::Label(b"missing_indicator") => output.raw(b"missing indicator"),
                 ObservedValue::Label(label) => output.raw(label),
             }
             output.raw(b"; sample \"");
@@ -639,5 +664,50 @@ fn details<W: Write>(output: &mut BufferedStdout<'_, W>, report: &Report, style:
         if style.enabled() {
             output.raw(b"\n");
         }
+    }
+}
+
+fn readable_unit(category: Category, count: u64) -> &'static [u8] {
+    match (category, count == 1) {
+        (Category::HeaderWidthMismatch, true) => b"header record",
+        (Category::HeaderWidthMismatch, false) => b"header records",
+        (Category::WidthMismatch, true) => b"data record",
+        (Category::WidthMismatch, false) => b"data records",
+        (Category::BlankHeader | Category::DuplicateHeader, true) => b"header field",
+        (Category::BlankHeader | Category::DuplicateHeader, false) => b"header fields",
+        (Category::MixedTypes, true) => b"field",
+        (Category::MixedTypes, false) => b"fields",
+        (_, true) => b"cell",
+        (_, false) => b"cells",
+    }
+}
+
+fn finding_title(category: Category) -> &'static [u8] {
+    match category {
+        Category::HeaderWidthMismatch => b"Header width mismatch",
+        Category::WidthMismatch => b"Record width mismatch",
+        Category::BlankHeader => b"Blank header names",
+        Category::DuplicateHeader => b"Repeated header names",
+        Category::AbsentField => b"Absent fields",
+        Category::EmptyField => b"Empty field values",
+        Category::MissingIndicator => b"Missing value indicators",
+        Category::MixedTypes => b"Mixed value types",
+        Category::TypeMismatch => b"Type mismatch",
+        Category::PresenceMismatch => b"Presence rule not met",
+    }
+}
+
+fn finding_guidance(category: Category) -> &'static [u8] {
+    match category {
+        Category::HeaderWidthMismatch => b"Check the input header, field separator and supplied width.",
+        Category::WidthMismatch => b"Check the field separator and records with unexpected widths.",
+        Category::BlankHeader => b"Give unnamed fields a name if you want to select them by name.",
+        Category::DuplicateHeader => b"Use distinct header names when selecting fields by name.",
+        Category::AbsentField => b"Check the field separator and whether every record should contain this field.",
+        Category::EmptyField => b"Check whether empty values are allowed for this field.",
+        Category::MissingIndicator => b"Check whether these tokens mean missing data or are legitimate codes.",
+        Category::MixedTypes => b"Check whether this field should contain numbers or text, then supply a type rule if needed.",
+        Category::TypeMismatch => b"Check the affected values and the expected type.",
+        Category::PresenceMismatch => b"Check the affected values and the supplied presence rule.",
     }
 }

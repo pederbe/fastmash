@@ -1045,14 +1045,15 @@ fn tsv_input_settings_and_accepted_locations_follow_existing_filters() {
 #[test]
 fn supplied_width_overrides_the_header_and_reports_both_record_kinds() {
     let output = report(&["-H", "health", "width", "1"], b"a\tb\n1\n2\t3\n");
-    assert!(output.contains("Baseline width: 1 fields (declared, declared)\n"));
-    assert!(output.contains("header_width_mismatch [declared, violation]: 1 header_records; expected 1 fields; examples retained 1, omitted 0\n"));
-    assert!(output.contains("width_mismatch [declared, violation]: 1 data_records; expected 1 fields; examples retained 1, omitted 0\n"));
+    assert!(output.contains("Baseline width: 1 field (supplied width)\n"));
+    assert!(output.contains("Header width mismatch [declared, violation]: 1 header record; expected 1 field; examples retained 1, omitted 0\n"));
+    assert!(output.contains("Record width mismatch [declared, violation]: 1 data record; expected 1 field; examples retained 1, omitted 0\n"));
     assert!(
         output.contains("accepted record 1: observed 2 fields; sample \"a\\tb\"; truncated no\n")
     );
     assert!(
-        output.find("header_width_mismatch").unwrap() < output.find("width_mismatch [").unwrap()
+        output.find("Header width mismatch").unwrap()
+            < output.find("Record width mismatch [").unwrap()
     );
     assert!(!output.contains("[inferred, advisory]:"));
 }
@@ -1070,12 +1071,12 @@ fn nonmissing_is_one_effective_presence_rule_and_validation_preserves_the_report
         "2",
     ];
     let ordinary = report(&args, input);
-    assert!(ordinary.contains("presence_requirement nonmissing (declared)\n"));
-    assert!(ordinary.contains("presence_mismatch [declared, violation]: 3 cells; expected nonmissing; field 2, name \"\"; examples retained 2, omitted 1\n"));
-    assert_eq!(ordinary.matches("presence_mismatch [").count(), 1);
-    let presence = ordinary.split("presence_mismatch [").nth(1).unwrap();
+    assert!(ordinary.contains("Presence rule: nonmissing (declared)\n"));
+    assert!(ordinary.contains("Presence rule not met [declared, violation]: 3 cells; expected nonmissing; field 2, name \"\"; examples retained 2, omitted 1\n"));
+    assert_eq!(ordinary.matches("Presence rule not met [").count(), 1);
+    let presence = ordinary.split("Presence rule not met [").nth(1).unwrap();
     assert!(
-        presence.contains("accepted record 1, field 2: observed missing_indicator; sample \"NA\"")
+        presence.contains("accepted record 1, field 2: observed missing indicator; sample \"NA\"")
     );
     assert!(presence.contains("accepted record 2, field 2: observed empty; sample \"\""));
     assert!(!presence.contains("accepted record 3, field 2:"));
@@ -1099,12 +1100,10 @@ fn nonmissing_is_one_effective_presence_rule_and_validation_preserves_the_report
         assert_eq!(validation.stdout, ordinary.as_bytes());
     }
     let required = report(&["health", "required", "2"], input);
-    assert!(required.contains("presence_requirement required (declared)\n"));
-    assert!(
-        required.contains(
-            "presence_mismatch [declared, violation]: 2 cells; expected required; field 2"
-        )
-    );
+    assert!(required.contains("Presence rule: required (declared)\n"));
+    assert!(required.contains(
+        "Presence rule not met [declared, violation]: 2 cells; expected required; field 2"
+    ));
 }
 
 #[test]
@@ -1122,15 +1121,15 @@ fn supplied_integer_overrides_inference_and_retains_late_fraction_examples() {
             ],
             input,
         );
-        assert!(output.contains("type_expectation integer (declared)\n"));
-        assert!(output.contains("mixed_types [observation, advisory]: 1 fields; field 1"));
-        assert!(output.contains(&format!("type_mismatch [declared, violation]: 3 cells; expected integer; field 1, name \"\"; examples retained {limit}, omitted {}\n", 3 - limit)));
-        assert!(!output.contains("type_mismatch [inferred"));
-        let mismatch = output.split("type_mismatch [").nth(1).unwrap();
+        assert!(output.contains("Expected type: integer (declared)\n"));
+        assert!(output.contains("Mixed value types [observation, advisory]: 1 field; field 1"));
+        assert!(output.contains(&format!("Type mismatch [declared, violation]: 3 cells; expected integer; field 1, name \"\"; examples retained {limit}, omitted {}\n", 3 - limit)));
+        assert!(!output.contains("Type mismatch [inferred"));
+        let mismatch = output.split("Type mismatch [").nth(1).unwrap();
         for (n, record, kind, sample) in [
-            (1, 5, "other_number", "1.5"),
+            (1, 5, "other number", "1.5"),
             (2, 6, "text", "word"),
-            (3, 7, "other_number", "2e0"),
+            (3, 7, "other number", "2e0"),
         ] {
             assert_eq!(
                 mismatch.contains(&format!(
@@ -1141,11 +1140,11 @@ fn supplied_integer_overrides_inference_and_retains_late_fraction_examples() {
         }
     }
     let text = report(&["health", "type", "1", "text"], input);
-    assert!(text.contains("type_expectation text (declared)\n"));
-    assert!(!text.contains("type_mismatch"));
+    assert!(text.contains("Expected type: text (declared)\n"));
+    assert!(!text.contains("Type mismatch"));
     let number = report(&["health", "type", "1", "number"], input);
     assert!(
-        number.contains("type_mismatch [declared, violation]: 1 cells; expected number; field 1")
+        number.contains("Type mismatch [declared, violation]: 1 cell; expected number; field 1")
     );
 }
 
@@ -1174,17 +1173,13 @@ fn sparse_declarations_track_only_observed_header_and_explicit_positions() {
         1,
     );
     for (field, absent) in [(1, 0), (2, 1), (3, 2), (4, 2), (5, 3)] {
-        assert!(output.contains(&format!(
-            "field {field}, name \"\": absent_values {absent};"
-        )));
+        assert!(output.contains(&format!("field {field}, name \"\": absent {absent};")));
     }
     assert_eq!(output.matches("\n  field ").count(), 5);
     assert!(!output.contains("field 6,"));
-    assert!(
-        output.contains(
-            "presence_mismatch [declared, violation]: 3 cells; expected required; field 5"
-        )
-    );
+    assert!(output.contains(
+        "Presence rule not met [declared, violation]: 3 cells; expected required; field 5"
+    ));
     let short = validated(&["health", "required", "5"], b"a\tb\nc\td\n", 1);
     assert_eq!(short.matches("\n  field ").count(), 3);
     assert!(!short.contains("field 3,"));
@@ -1194,11 +1189,11 @@ fn sparse_declarations_track_only_observed_header_and_explicit_positions() {
     }
     let extreme = validated(&["health", "required", "9223372036854775807"], b"a\tb\n", 1);
     assert_eq!(extreme.matches("\n  field ").count(), 3);
-    assert!(extreme.contains("field 9223372036854775807, name \"\": absent_values 1;"));
+    assert!(extreme.contains("field 9223372036854775807, name \"\": absent 1;"));
     let empty = validated(&["health", "required", "5"], b"", 0);
     assert_eq!(empty.matches("\n  field ").count(), 1);
-    assert!(empty.contains("field 5, name \"\": absent_values 0;"));
-    assert!(!empty.contains("presence_mismatch"));
+    assert!(empty.contains("field 5, name \"\": absent 0;"));
+    assert!(!empty.contains("Presence rule not met"));
 }
 
 #[test]
@@ -1221,8 +1216,8 @@ fn named_declarations_use_unique_full_byte_labels_and_normalize_aliases() {
         b"a\tb\ntext\t1.5\nx\tNA\n",
         1,
     );
-    assert_eq!(output.matches("type_mismatch [").count(), 1);
-    assert_eq!(output.matches("presence_mismatch [").count(), 1);
+    assert_eq!(output.matches("Type mismatch [").count(), 1);
+    assert_eq!(output.matches("Presence rule not met [").count(), 1);
     assert!(output.contains("field 2, name \"b\""));
     for declarations in [
         ["type", "2", "integer", "type", "b", "number"],
@@ -1244,15 +1239,15 @@ fn named_declarations_use_unique_full_byte_labels_and_normalize_aliases() {
         0,
     );
     assert!(full_bytes.contains("field 1, name \"a\\0tail\""));
-    assert!(full_bytes.contains("field 2, name \"a\": absent_values 0;"));
-    assert!(full_bytes.contains("type_expectation integer (declared)"));
-    assert!(!full_bytes.contains("type_mismatch"));
+    assert!(full_bytes.contains("field 2, name \"a\": absent 0;"));
+    assert!(full_bytes.contains("Expected type: integer (declared)"));
+    assert!(!full_bytes.contains("Type mismatch"));
     let binary = validated(
         &["-H", "health", "required", "a\\-b", "type", "\\01", "text"],
         b"a-b\t01\nvalue\tNA\n",
         0,
     );
-    assert!(!binary.contains("presence_mismatch"));
+    assert!(!binary.contains("Presence rule not met"));
     let args: Vec<_> = [
         b"-H".as_slice(),
         b"health",
@@ -1312,7 +1307,7 @@ fn missing_or_ambiguous_names_are_command_errors_but_positions_remain_available(
         }
     }
     let positions = validated(&["-H", "health", "required", "2"], b"name\tname\n1\t2\n", 0);
-    assert!(positions.contains("duplicate_header"));
+    assert!(positions.contains("Repeated header names"));
     let names = validated(
         &[
             "--vnlog", "health", "type", "01", "integer", "required", "0",
@@ -1338,35 +1333,35 @@ fn missing_or_ambiguous_names_are_command_errors_but_positions_remain_available(
 #[test]
 fn declared_rules_exempt_optional_values_and_only_supplied_violations_fail_validation() {
     let optional = validated(&["health", "type", "2", "integer"], b"a\tNA\nb\t\nc\n", 0);
-    assert!(!optional.contains("type_mismatch"));
-    assert!(optional.contains("absent_field"));
-    assert!(optional.contains("empty_field"));
-    assert!(optional.contains("missing_indicator"));
+    assert!(!optional.contains("Type mismatch"));
+    assert!(optional.contains("Absent fields"));
+    assert!(optional.contains("Empty field values"));
+    assert!(optional.contains("Missing value indicators"));
     let codes = validated(
         &["health", "type", "2", "text", "required", "2"],
         b"a\tNA\nb\tN/A\nc\tNaN\n",
         0,
     );
-    assert!(!codes.contains("presence_mismatch"));
+    assert!(!codes.contains("Presence rule not met"));
     let advisory = validated(
         &["health", "type", "2", "text"],
         b"1\ta\n2\tb\n3\tc\nword\td\nshort\n",
         0,
     );
-    assert!(advisory.contains("type_mismatch [inferred, advisory]"));
-    assert!(advisory.contains("width_mismatch [inferred, advisory]"));
+    assert!(advisory.contains("Type mismatch [inferred, advisory]"));
+    assert!(advisory.contains("Record width mismatch [inferred, advisory]"));
     let whole = validated(
         &["health", "type", "1", "number"],
         b"+1\n-2\n1.5\n0x1p0\ninf\nNaN(payload)\n12kg\n",
         1,
     );
-    assert!(whole.contains("type_mismatch [declared, violation]: 1 cells"));
+    assert!(whole.contains("Type mismatch [declared, violation]: 1 cell"));
     let magnitude = validated(
         &["health", "type", "1", "number"],
         b"1e999999999999999999999999999\n",
         0,
     );
-    assert!(!magnitude.contains("type_mismatch"));
+    assert!(!magnitude.contains("Type mismatch"));
 }
 
 #[test]
@@ -1377,8 +1372,8 @@ fn zero_width_and_header_only_input_do_not_invent_data_violations() {
             input,
             if input.is_empty() { 0 } else { 1 },
         );
-        assert!(output.contains("Baseline width: 0 fields (declared, declared)"));
-        assert!(!output.contains("width_mismatch"));
+        assert!(output.contains("Baseline width: 0 fields (supplied width)"));
+        assert!(!output.contains("Record width mismatch"));
     }
     let empty_header = validated(&["-H", "health", "width", "0"], b"\n", 0);
     assert!(empty_header.contains("Data records: 0\nHeader records: 1\n"));
@@ -1389,10 +1384,10 @@ fn zero_width_and_header_only_input_do_not_invent_data_violations() {
         b"a\tb\n",
         1,
     );
-    assert!(header.contains("header_width_mismatch [declared, violation]: 1 header_records"));
-    assert!(!header.contains("\n  width_mismatch"));
-    assert!(!header.contains("presence_mismatch"));
-    assert!(!header.contains("type_mismatch"));
+    assert!(header.contains("Header width mismatch [declared, violation]: 1 header record"));
+    assert!(!header.contains("\n  Record width mismatch"));
+    assert!(!header.contains("Presence rule not met"));
+    assert!(!header.contains("Type mismatch"));
     let width_only = validated(&["health", "width", "100"], b"", 0);
     assert_eq!(width_only.matches("\n  field ").count(), 0);
 }
@@ -1522,26 +1517,26 @@ fn simultaneous_findings_keep_category_basis_and_field_order() {
         .collect();
     let categories: Vec<_> = findings
         .iter()
-        .map(|line| line.split_whitespace().next().unwrap())
+        .map(|line| line.trim_start().split_once(" [").unwrap().0)
         .collect();
     assert_eq!(
         categories,
         [
-            "header_width_mismatch",
-            "width_mismatch",
-            "absent_field",
-            "absent_field",
-            "missing_indicator",
-            "mixed_types",
-            "mixed_types",
-            "type_mismatch",
-            "type_mismatch",
-            "presence_mismatch"
+            "Header width mismatch",
+            "Record width mismatch",
+            "Absent fields",
+            "Absent fields",
+            "Missing value indicators",
+            "Mixed value types",
+            "Mixed value types",
+            "Type mismatch",
+            "Type mismatch",
+            "Presence rule not met"
         ]
     );
-    assert!(findings[0].contains("1 header_records"));
-    assert!(findings[1].contains("5 data_records"));
-    assert!(findings[7].contains("[inferred, advisory]: 1 cells; expected integer; field 2"));
+    assert!(findings[0].contains("1 header record"));
+    assert!(findings[1].contains("5 data records"));
+    assert!(findings[7].contains("[inferred, advisory]: 1 cell; expected integer; field 2"));
     assert!(findings[8].contains("[declared, violation]: 2 cells; expected integer; field 1"));
     assert!(findings[9].contains("[declared, violation]: 2 cells; expected nonmissing; field 1"));
 }
@@ -1579,9 +1574,13 @@ fn health_single_selectors_preserve_identifier_length_and_escaping_limits() {
 fn lexical_counts_partition_missingness_and_fields_appearing_late() {
     let output = report(&["health"], b"+12\n-3\n1.0\n2e0\nword\nNA\n\t9\n\n");
     assert!(output.contains("Data records: 8\n"));
-    assert!(output.contains("field 1, name \"\": absent_values 1; empty_values 1; missing_values 1; integer_values 2; other_number_values 2; text_values 1\n"));
-    assert!(output.contains("field 2, name \"\": absent_values 7; empty_values 0; missing_values 0; integer_values 1; other_number_values 0; text_values 0\n"));
-    assert!(output.contains("mixed_types [observation, advisory]: 1 fields; field 1, name \"\"; examples retained 3, omitted 2\n"));
+    assert!(output.contains(
+        "field 1, name \"\": absent 1; empty 1; missing 1; integer 2; other number 2; text 1\n"
+    ));
+    assert!(output.contains(
+        "field 2, name \"\": absent 7; empty 0; missing 0; integer 1; other number 0; text 0\n"
+    ));
+    assert!(output.contains("Mixed value types [observation, advisory]: 1 field; field 1, name \"\"; examples retained 3, omitted 2\n"));
 }
 
 #[test]
@@ -1594,60 +1593,62 @@ fn inferred_expectations_use_numeric_text_majorities_and_exclude_missing_values(
         (
             1,
             "whole",
-            "0; empty_values 0; missing_values 0; integer_values 3; other_number_values 0; text_values 1",
+            "0; empty 0; missing 0; integer 3; other number 0; text 1",
             "integer (inferred)",
         ),
         (
             2,
             "amount",
-            "0; empty_values 0; missing_values 0; integer_values 1; other_number_values 2; text_values 1",
+            "0; empty 0; missing 0; integer 1; other number 2; text 1",
             "number (inferred)",
         ),
         (
             3,
             "label",
-            "0; empty_values 0; missing_values 0; integer_values 1; other_number_values 0; text_values 3",
+            "0; empty 0; missing 0; integer 1; other number 0; text 3",
             "text (inferred)",
         ),
         (
             4,
             "tie",
-            "0; empty_values 1; missing_values 1; integer_values 1; other_number_values 0; text_values 1",
+            "0; empty 1; missing 1; integer 1; other number 0; text 1",
             "undetermined (observation)",
         ),
         (
             5,
             "missing",
-            "0; empty_values 2; missing_values 2; integer_values 0; other_number_values 0; text_values 0",
+            "0; empty 2; missing 2; integer 0; other number 0; text 0",
             "undetermined (observation)",
         ),
     ] {
-        assert!(output.contains(&format!("field {field}, name \"{name}\": absent_values {counters}\n    type_expectation {expectation}\n")), "{output}");
+        assert!(output.contains(&format!("field {field}, name \"{name}\": absent {counters}\n    Expected type: {expectation}\n")), "{output}");
     }
     let header_only = report(&["-H", "health"], b"value\n");
-    assert!(header_only.contains("integer_values 0; other_number_values 0; text_values 0\n    type_expectation undetermined (observation)\n"));
+    assert!(header_only.contains(
+        "integer 0; other number 0; text 0\n    Expected type: undetermined (observation)\n"
+    ));
     assert_eq!(
         output
-            .matches("mixed_types [observation, advisory]")
+            .matches("Mixed value types [observation, advisory]")
             .count(),
         4
     );
     assert_eq!(
-        output.matches("type_mismatch [inferred, advisory]").count(),
+        output.matches("Type mismatch [inferred, advisory]").count(),
         2
     );
     assert!(output.contains(
-        "type_mismatch [inferred, advisory]: 1 cells; expected integer; field 1, name \"whole\";"
+        "Type mismatch [inferred, advisory]: 1 cell; expected integer; field 1, name \"whole\";"
     ));
     assert!(output.contains(
-        "type_mismatch [inferred, advisory]: 1 cells; expected number; field 2, name \"amount\";"
+        "Type mismatch [inferred, advisory]: 1 cell; expected number; field 2, name \"amount\";"
     ));
     for field in [1, 2] {
         assert!(output.contains(&format!(
             "accepted record 4, field {field}: observed text; sample \"word\"; truncated no\n"
         )));
     }
-    assert!(output.rfind("mixed_types [").unwrap() < output.find("type_mismatch [").unwrap());
+    assert!(output.rfind("Mixed value types [").unwrap() < output.find("Type mismatch [").unwrap());
 }
 
 #[test]
@@ -1662,12 +1663,12 @@ fn mixed_types_reserve_both_witnesses_and_count_omitted_eligible_cells() {
             &["health", "examples", &limit.to_string()],
             b"1\n2\n3\n4\nlate\nlast\n",
         );
-        assert!(output.contains(&format!("mixed_types [observation, advisory]: 1 fields; field 1, name \"\"; examples retained {retained}, omitted {omitted}\n")), "{output}");
+        assert!(output.contains(&format!("Mixed value types [observation, advisory]: 1 field; field 1, name \"\"; examples retained {retained}, omitted {omitted}\n")), "{output}");
         let mixed = output
-            .split_once("  mixed_types ")
+            .split_once("  Mixed value types ")
             .unwrap()
             .1
-            .split("\n  type_mismatch ")
+            .split("\n  Type mismatch ")
             .next()
             .unwrap();
         assert_eq!(mixed.matches("    accepted record ").count(), retained);
@@ -1682,8 +1683,8 @@ fn mixed_types_reserve_both_witnesses_and_count_omitted_eligible_cells() {
                 "accepted record 5, field 1: observed text; sample \"late\"; truncated no"
             ));
         }
-        assert!(output.contains(&format!("type_mismatch [inferred, advisory]: 2 cells; expected integer; field 1, name \"\"; examples retained {}, omitted {}\n", limit.min(2), 2 - limit.min(2))));
-        let mismatch = output.split_once("  type_mismatch ").unwrap().1;
+        assert!(output.contains(&format!("Type mismatch [inferred, advisory]: 2 cells; expected integer; field 1, name \"\"; examples retained {}, omitted {}\n", limit.min(2), 2 - limit.min(2))));
+        let mismatch = output.split_once("  Type mismatch ").unwrap().1;
         if limit >= 1 {
             assert!(mismatch.contains(
                 "accepted record 5, field 1: observed text; sample \"late\"; truncated no"
@@ -1702,7 +1703,7 @@ fn numeric_encodings_use_the_whole_field_grammar_without_converting_values() {
     let groups: &[(&[&[u8]], &str)] = &[
         (
             &[b"1", b"-2", b"+03", b" \t\n\r\x0b\x0c-42"],
-            "integer_values 4; other_number_values 0; text_values 0",
+            "integer 4; other number 0; text 0",
         ),
         (
             &[
@@ -1719,7 +1720,7 @@ fn numeric_encodings_use_the_whole_field_grammar_without_converting_values() {
                 b"nan()",
                 b" NaN",
             ],
-            "integer_values 0; other_number_values 12; text_values 0",
+            "integer 0; other number 12; text 0",
         ),
         (
             &[
@@ -1734,7 +1735,7 @@ fn numeric_encodings_use_the_whole_field_grammar_without_converting_values() {
                 b" ",
                 b"\xff",
             ],
-            "integer_values 0; other_number_values 0; text_values 10",
+            "integer 0; other number 0; text 10",
         ),
     ];
     for &(values, counts) in groups {
@@ -1745,11 +1746,11 @@ fn numeric_encodings_use_the_whole_field_grammar_without_converting_values() {
         }
         let output = report(&["-z", "-t", "|", "health"], &input);
         assert!(output.contains(counts), "{output}");
-        assert!(!output.contains("mixed_types"));
-        assert!(!output.contains("type_mismatch"));
+        assert!(!output.contains("Mixed value types"));
+        assert!(!output.contains("Type mismatch"));
     }
     let embedded_nul = report(&["health"], b"1\0\n2\0extra\ninf\0\nnan(payload)\0\n");
-    assert!(embedded_nul.contains("integer_values 0; other_number_values 0; text_values 4\n"));
+    assert!(embedded_nul.contains("integer 0; other number 0; text 4\n"));
 }
 
 #[test]
@@ -1758,8 +1759,11 @@ fn numeric_syntax_larger_than_conversion_capacity_stays_numeric_and_samples_are_
     let hex = "a".repeat(20_000);
     let input = format!("{digits}\n1e{digits}\n{digits}.0\n0x{hex}p+0\ntext\n");
     let output = report(&["health"], input.as_bytes());
-    assert!(output.contains("integer_values 1; other_number_values 3; text_values 1\n    type_expectation number (inferred)\n"));
-    assert!(output.contains("type_mismatch [inferred, advisory]: 1 cells; expected number;"));
+    assert!(
+        output
+            .contains("integer 1; other number 3; text 1\n    Expected type: number (inferred)\n")
+    );
+    assert!(output.contains("Type mismatch [inferred, advisory]: 1 cell; expected number;"));
     assert!(output.contains(&format!(
         "accepted record 1, field 1: observed integer; sample \"{}\"; truncated yes\n",
         "9".repeat(128)
@@ -1780,14 +1784,18 @@ fn record_permutations_preserve_counts_and_inference_but_examples_follow_input_o
         ),
     ] {
         let output = report(&["health"], input);
-        assert!(output.contains("integer_values 3; other_number_values 1; text_values 1\n    type_expectation number (inferred)\n"));
-        assert!(output.contains("mixed_types [observation, advisory]: 1 fields; field 1, name \"\"; examples retained 3, omitted 2\n"));
-        assert!(output.contains("type_mismatch [inferred, advisory]: 1 cells; expected number;"));
+        assert!(
+            output.contains(
+                "integer 3; other number 1; text 1\n    Expected type: number (inferred)\n"
+            )
+        );
+        assert!(output.contains("Mixed value types [observation, advisory]: 1 field; field 1, name \"\"; examples retained 3, omitted 2\n"));
+        assert!(output.contains("Type mismatch [inferred, advisory]: 1 cell; expected number;"));
         let mixed = output
-            .split_once("  mixed_types ")
+            .split_once("  Mixed value types ")
             .unwrap()
             .1
-            .split("\n  type_mismatch ")
+            .split("\n  Type mismatch ")
             .next()
             .unwrap();
         assert!(mixed.contains(&format!("accepted record 1, field 1: {first_sample}")));
@@ -1809,8 +1817,12 @@ fn text_majorities_keep_numeric_witnesses_without_inferred_type_mismatches() {
             &["health", "examples", &limit.to_string()],
             b"first\nsecond\nthird\nfourth\n9.5\n10\n",
         );
-        assert!(output.contains("integer_values 1; other_number_values 1; text_values 4\n    type_expectation text (inferred)\n"));
-        assert!(!output.contains("type_mismatch"));
+        assert!(
+            output.contains(
+                "integer 1; other number 1; text 4\n    Expected type: text (inferred)\n"
+            )
+        );
+        assert!(!output.contains("Type mismatch"));
         let locations: Vec<_> = output
             .lines()
             .filter_map(|line| line.strip_prefix("    accepted record "))
@@ -1819,68 +1831,72 @@ fn text_majorities_keep_numeric_witnesses_without_inferred_type_mismatches() {
         assert_eq!(locations, records);
         if limit >= 2 {
             assert!(output.contains(
-                "accepted record 5, field 1: observed other_number; sample \"9.5\"; truncated no\n"
+                "accepted record 5, field 1: observed other number; sample \"9.5\"; truncated no\n"
             ));
         }
     }
     let tie = report(&["health"], b"1\nword\n");
-    assert!(tie.contains("type_expectation undetermined (observation)\n"));
-    assert!(tie.contains("mixed_types [observation, advisory]: 1 fields"));
-    assert!(!tie.contains("type_mismatch"));
+    assert!(tie.contains("Expected type: undetermined (observation)\n"));
+    assert!(tie.contains("Mixed value types [observation, advisory]: 1 field"));
+    assert!(!tie.contains("Type mismatch"));
 }
 
 fn width_examples(output: &str) -> impl Iterator<Item = &str> {
-    output
-        .lines()
-        .filter(|line| line.starts_with("    accepted record ") && line.contains(" fields; sample"))
+    output.lines().filter(|line| {
+        line.starts_with("    accepted record ")
+            && (line.contains(" field; sample") || line.contains(" fields; sample"))
+    })
 }
 
 #[test]
 fn field_observations_distinguish_empty_and_exact_candidate_missing_values() {
     let output = report(&["health"], b"a\t\tnA\nb\tN/A\tNaN\nc\t \tNA extra\n");
-    assert!(
-        output.contains("field 1, name \"\": absent_values 0; empty_values 0; missing_values 0; integer_values 0; other_number_values 0; text_values 3\n")
-    );
-    assert!(
-        output.contains("field 2, name \"\": absent_values 0; empty_values 1; missing_values 1; integer_values 0; other_number_values 0; text_values 1\n")
-    );
-    assert!(
-        output.contains("field 3, name \"\": absent_values 0; empty_values 0; missing_values 2; integer_values 0; other_number_values 0; text_values 1\n")
-    );
-    assert!(output.contains("empty_field [observation, advisory]: 1 cells; field 2, name \"\"; examples retained 1, omitted 0\n"));
-    assert!(output.contains("missing_indicator [observation, advisory]: 2 cells; field 3, name \"\"; examples retained 2, omitted 0\n"));
+    assert!(output.contains(
+        "field 1, name \"\": absent 0; empty 0; missing 0; integer 0; other number 0; text 3\n"
+    ));
+    assert!(output.contains(
+        "field 2, name \"\": absent 0; empty 1; missing 1; integer 0; other number 0; text 1\n"
+    ));
+    assert!(output.contains(
+        "field 3, name \"\": absent 0; empty 0; missing 2; integer 0; other number 0; text 1\n"
+    ));
+    assert!(output.contains("Empty field values [observation, advisory]: 1 cell; field 2, name \"\"; examples retained 1, omitted 0\n"));
+    assert!(output.contains("Missing value indicators [observation, advisory]: 2 cells; field 3, name \"\"; examples retained 2, omitted 0\n"));
     assert!(
         output.contains("accepted record 1, field 2: observed empty; sample \"\"; truncated no\n")
     );
     assert!(output.contains(
-        "accepted record 1, field 3: observed missing_indicator; sample \"nA\"; truncated no\n"
+        "accepted record 1, field 3: observed missing indicator; sample \"nA\"; truncated no\n"
     ));
-    assert!(output.find("empty_field").unwrap() < output.find("missing_indicator").unwrap());
+    assert!(
+        output.find("Empty field values").unwrap()
+            < output.find("Missing value indicators").unwrap()
+    );
 }
 
 #[test]
 fn fields_appearing_late_backfill_absences_and_earliest_example_locations() {
     let output = report(&["health"], b"x\n\na\tb\nc\td\te\nf\ng\th\ti\tj\n");
-    assert!(
-        output.contains("field 1, name \"\": absent_values 1; empty_values 0; missing_values 0; integer_values 0; other_number_values 0; text_values 5\n")
-    );
-    assert!(
-        output.contains("field 2, name \"\": absent_values 3; empty_values 0; missing_values 0; integer_values 0; other_number_values 0; text_values 3\n")
-    );
-    assert!(
-        output.contains("field 3, name \"\": absent_values 4; empty_values 0; missing_values 0; integer_values 0; other_number_values 0; text_values 2\n")
-    );
-    assert!(
-        output.contains("field 4, name \"\": absent_values 5; empty_values 0; missing_values 0; integer_values 0; other_number_values 0; text_values 1\n")
-    );
-    assert!(output.contains("absent_field [observation, advisory]: 5 cells; field 4, name \"\"; examples retained 3, omitted 2\n"));
+    assert!(output.contains(
+        "field 1, name \"\": absent 1; empty 0; missing 0; integer 0; other number 0; text 5\n"
+    ));
+    assert!(output.contains(
+        "field 2, name \"\": absent 3; empty 0; missing 0; integer 0; other number 0; text 3\n"
+    ));
+    assert!(output.contains(
+        "field 3, name \"\": absent 4; empty 0; missing 0; integer 0; other number 0; text 2\n"
+    ));
+    assert!(output.contains(
+        "field 4, name \"\": absent 5; empty 0; missing 0; integer 0; other number 0; text 1\n"
+    ));
+    assert!(output.contains("Absent fields [observation, advisory]: 5 cells; field 4, name \"\"; examples retained 3, omitted 2\n"));
     for record in [1, 2, 3] {
         assert!(output.contains(&format!(
             "accepted record {record}, field 4: observed absent; sample \"\"; truncated no\n"
         )));
     }
     assert!(!output.contains("accepted record 4, field 4:"));
-    assert!(output.find("width_mismatch").unwrap() < output.find("absent_field").unwrap());
+    assert!(output.find("Record width mismatch").unwrap() < output.find("Absent fields").unwrap());
 }
 
 #[test]
@@ -1889,17 +1905,15 @@ fn missing_candidates_are_exact_without_trimming_or_coercion() {
     for limit in [0, 1, 2, 3] {
         let output = report(&["health", "examples", &limit.to_string()], input);
         assert!(output.contains("Data records: 21\n"));
-        assert!(
-            output.contains(
-                "field 2, name \"\": absent_values 0; empty_values 1; missing_values 12; integer_values 0; other_number_values 0; text_values 8\n"
-            )
-        );
-        assert!(output.contains(&format!("missing_indicator [observation, advisory]: 12 cells; field 2, name \"\"; examples retained {limit}, omitted {}\n", 12 - limit)));
-        assert!(output.contains("empty_field [observation, advisory]: 1 cells; field 2"));
-        assert_eq!(output.matches("observed missing_indicator;").count(), limit);
+        assert!(output.contains(
+            "field 2, name \"\": absent 0; empty 1; missing 12; integer 0; other number 0; text 8\n"
+        ));
+        assert!(output.contains(&format!("Missing value indicators [observation, advisory]: 12 cells; field 2, name \"\"; examples retained {limit}, omitted {}\n", 12 - limit)));
+        assert!(output.contains("Empty field values [observation, advisory]: 1 cell; field 2"));
+        assert_eq!(output.matches("observed missing indicator;").count(), limit);
         for (record, sample) in [(1, "NA"), (2, "na"), (3, "Na")] {
             let expected = format!(
-                "accepted record {record}, field 2: observed missing_indicator; sample \"{sample}\"; truncated no\n"
+                "accepted record {record}, field 2: observed missing indicator; sample \"{sample}\"; truncated no\n"
             );
             assert_eq!(output.contains(&expected), record <= limit);
         }
@@ -1912,35 +1926,34 @@ fn headers_track_zero_observations_and_positions_missing_from_all_data() {
     for field in [1, 2, 3] {
         let name = if field == 2 { "" } else { "a" };
         assert!(header.contains(&format!(
-            "field {field}, name \"{name}\": absent_values 0; empty_values 0; missing_values 0; integer_values 0; other_number_values 0; text_values 0\n"
+            "field {field}, name \"{name}\": absent 0; empty 0; missing 0; integer 0; other number 0; text 0\n"
         )));
     }
-    assert!(!header.contains("absent_field"));
-    assert!(!header.contains("empty_field"));
-    assert!(!header.contains("missing_indicator"));
+    assert!(!header.contains("Absent fields"));
+    assert!(!header.contains("Empty field values"));
+    assert!(!header.contains("Missing value indicators"));
 
     let output = report(&["-H", "health"], b"one\ttwo\tthree\nNA\na\t\nb\n");
-    assert!(
-        output
-            .contains("field 1, name \"one\": absent_values 0; empty_values 0; missing_values 1; integer_values 0; other_number_values 0; text_values 2\n")
-    );
-    assert!(
-        output
-            .contains("field 2, name \"two\": absent_values 2; empty_values 1; missing_values 0; integer_values 0; other_number_values 0; text_values 0\n")
-    );
-    assert!(
-        output.contains(
-            "field 3, name \"three\": absent_values 3; empty_values 0; missing_values 0; integer_values 0; other_number_values 0; text_values 0\n"
-        )
-    );
+    assert!(output.contains(
+        "field 1, name \"one\": absent 0; empty 0; missing 1; integer 0; other number 0; text 2\n"
+    ));
+    assert!(output.contains(
+        "field 2, name \"two\": absent 2; empty 1; missing 0; integer 0; other number 0; text 0\n"
+    ));
+    assert!(output.contains(
+        "field 3, name \"three\": absent 3; empty 0; missing 0; integer 0; other number 0; text 0\n"
+    ));
     assert!(
         output.contains("accepted record 2, field 3: observed absent; sample \"\"; truncated no\n")
     );
     assert!(output.contains(
-        "accepted record 2, field 1: observed missing_indicator; sample \"NA\"; truncated no\n"
+        "accepted record 2, field 1: observed missing indicator; sample \"NA\"; truncated no\n"
     ));
-    assert!(output.find("absent_field").unwrap() < output.find("empty_field").unwrap());
-    assert!(output.find("empty_field").unwrap() < output.find("missing_indicator").unwrap());
+    assert!(output.find("Absent fields").unwrap() < output.find("Empty field values").unwrap());
+    assert!(
+        output.find("Empty field values").unwrap()
+            < output.find("Missing value indicators").unwrap()
+    );
 }
 
 #[test]
@@ -1948,12 +1961,10 @@ fn late_field_absence_examples_merge_widths_in_input_order_for_each_limit() {
     let input = b"a\tb\n\nc\nd\te\nf\ng\th\ni\tj\tk\tl\n";
     for limit in [0, 1, 2, 3] {
         let output = report(&["health", "examples", &limit.to_string()], input);
-        assert!(
-            output.contains(
-                "field 4, name \"\": absent_values 6; empty_values 0; missing_values 0; integer_values 0; other_number_values 0; text_values 1\n"
-            )
-        );
-        assert!(output.contains(&format!("absent_field [observation, advisory]: 6 cells; field 4, name \"\"; examples retained {limit}, omitted {}\n", 6 - limit)));
+        assert!(output.contains(
+            "field 4, name \"\": absent 6; empty 0; missing 0; integer 0; other number 0; text 1\n"
+        ));
+        assert!(output.contains(&format!("Absent fields [observation, advisory]: 6 cells; field 4, name \"\"; examples retained {limit}, omitted {}\n", 6 - limit)));
         for record in 1..=6 {
             let expected = format!(
                 "accepted record {record}, field 4: observed absent; sample \"\"; truncated no\n"
@@ -1967,15 +1978,15 @@ fn late_field_absence_examples_merge_widths_in_input_order_for_each_limit() {
 fn whole_input_modal_width_reports_first_and_late_anomalies() {
     let output = report(&["health"], b"x\ty\tz\na\tb\nc\td\nlate");
     assert!(output.contains("Data records: 4\nHeader records: 0\nAccepted records: 4\n"));
-    assert!(output.contains("Baseline width: 2 fields (inferred, modal)\n"));
+    assert!(output.contains("Baseline width: 2 fields (most frequent data width)\n"));
     assert!(output.contains("Maximum data-record width: 3 fields\n"));
-    assert!(output.contains("width_mismatch [inferred, advisory]: 2 data_records; expected 2 fields; examples retained 2, omitted 0\n"));
+    assert!(output.contains("Record width mismatch [inferred, advisory]: 2 data records; expected 2 fields; examples retained 2, omitted 0\n"));
     assert!(
         output
             .contains("accepted record 1: observed 3 fields; sample \"x\\ty\\tz\"; truncated no\n")
     );
     assert!(
-        output.contains("accepted record 4: observed 1 fields; sample \"late\"; truncated no\n")
+        output.contains("accepted record 4: observed 1 field; sample \"late\"; truncated no\n")
     );
 }
 
@@ -1983,18 +1994,22 @@ fn whole_input_modal_width_reports_first_and_late_anomalies() {
 fn header_shape_and_every_blank_or_duplicate_position_are_observations() {
     let output = report(&["-H", "health"], b"same\t\tsame\tother\na\tb\nc\td\n");
     assert!(output.contains("Data records: 2\nHeader records: 1\nAccepted records: 3\n"));
-    assert!(output.contains("Baseline width: 4 fields (inferred, header)\n"));
-    assert!(output.contains("width_mismatch [inferred, advisory]: 2 data_records"));
-    assert!(output.contains("blank_header [observation, advisory]: 1 header_fields; field 2, name \"\"; examples retained 1, omitted 0\n"));
+    assert!(output.contains("Baseline width: 4 fields (input header)\n"));
+    assert!(output.contains("Record width mismatch [inferred, advisory]: 2 data records"));
+    assert!(output.contains("Blank header names [observation, advisory]: 1 header field; field 2, name \"\"; examples retained 1, omitted 0\n"));
     for field in [1, 3] {
-        assert!(output.contains(&format!("duplicate_header [observation, advisory]: 1 header_fields; field {field}, name \"same\"; examples retained 1, omitted 0\n")));
+        assert!(output.contains(&format!("Repeated header names [observation, advisory]: 1 header field; field {field}, name \"same\"; examples retained 1, omitted 0\n")));
     }
     assert!(
         output.contains("accepted record 1, field 2: observed blank; sample \"\"; truncated no\n")
     );
     assert!(output.contains("accepted record 2: observed 2 fields"));
-    assert!(output.find("width_mismatch").unwrap() < output.find("blank_header").unwrap());
-    assert!(output.find("blank_header").unwrap() < output.find("duplicate_header").unwrap());
+    assert!(
+        output.find("Record width mismatch").unwrap() < output.find("Blank header names").unwrap()
+    );
+    assert!(
+        output.find("Blank header names").unwrap() < output.find("Repeated header names").unwrap()
+    );
 }
 
 #[test]
@@ -2038,8 +2053,8 @@ fn tied_modal_width_chooses_the_smaller_width_regardless_of_record_order() {
         b"d\te\na\tb\tc\nh\ti\tj\nf\tg\n",
     ] {
         let output = report(&["health"], input);
-        assert!(output.contains("Baseline width: 2 fields (inferred, modal)\n"));
-        assert!(output.contains("width_mismatch [inferred, advisory]: 2 data_records"));
+        assert!(output.contains("Baseline width: 2 fields (most frequent data width)\n"));
+        assert!(output.contains("Record width mismatch [inferred, advisory]: 2 data records"));
     }
 }
 
@@ -2052,25 +2067,24 @@ fn empty_blank_header_only_trailing_fields_and_unterminated_input_keep_intake_me
     );
     let blanks = report(&["health"], b"\n\n");
     assert!(blanks.contains("Data records: 2\n"));
-    assert!(blanks.contains("Baseline width: 0 fields (inferred, modal)\n"));
+    assert!(blanks.contains("Baseline width: 0 fields (most frequent data width)\n"));
     let header = report(&["--header-in", "health"], b"a\t\ta");
     assert!(header.contains("Data records: 0\nHeader records: 1\nAccepted records: 1\n"));
     assert!(header.contains(
-        "Baseline width: 3 fields (inferred, header)\nMaximum data-record width: unavailable\n"
+        "Baseline width: 3 fields (input header)\nMaximum data-record width: unavailable\n"
     ));
-    assert!(header.contains("blank_header"));
+    assert!(header.contains("Blank header names"));
     let blank_header = report(&["-H", "health"], b"\n\n");
-    assert!(blank_header.contains("Baseline width: 0 fields (inferred, header)\n"));
-    assert!(!blank_header.contains("blank_header"));
+    assert!(blank_header.contains("Baseline width: 0 fields (input header)\n"));
+    assert!(!blank_header.contains("Blank header names"));
     let trailing = report(&["health"], b"a\t\nb\t");
     assert!(trailing.contains("Data records: 2\n"));
-    assert!(trailing.contains("Baseline width: 2 fields (inferred, modal)\n"));
-    assert!(
-        trailing
-            .contains("field 2, name \"\": absent_values 0; empty_values 2; missing_values 0; integer_values 0; other_number_values 0; text_values 0\n")
-    );
-    assert!(trailing.contains("empty_field [observation, advisory]: 2 cells; field 2"));
-    assert!(!trailing.contains("width_mismatch"));
+    assert!(trailing.contains("Baseline width: 2 fields (most frequent data width)\n"));
+    assert!(trailing.contains(
+        "field 2, name \"\": absent 0; empty 2; missing 0; integer 0; other number 0; text 0\n"
+    ));
+    assert!(trailing.contains("Empty field values [observation, advisory]: 2 cells; field 2"));
+    assert!(!trailing.contains("Record width mismatch"));
 }
 
 #[test]
@@ -2080,29 +2094,26 @@ fn separators_filters_nul_and_vnlog_preserve_accepted_record_locations() {
         b"# skip\0a,b\0 ;skip\0NA,\0short\0",
     );
     assert!(filtered.contains("Data records: 2\nHeader records: 1\nAccepted records: 3\n"));
-    assert!(filtered.contains("Input separator: literal \",\"\nRecord terminator: nul\n"));
-    assert!(filtered.contains("Comment filter: comments\n"));
-    assert!(filtered.contains("accepted record 3: observed 1 fields; sample \"short\""));
+    assert!(filtered.contains("Field separator: literal \",\"\nRecords end with: NUL (\\0)\n"));
+    assert!(filtered.contains("Comment filtering: --skip-comments\n"));
+    assert!(filtered.contains("accepted record 3: observed 1 field; sample \"short\""));
+    assert!(filtered.contains(
+        "field 2, name \"b\": absent 1; empty 1; missing 0; integer 0; other number 0; text 0\n"
+    ));
     assert!(
-        filtered
-            .contains("field 2, name \"b\": absent_values 1; empty_values 1; missing_values 0; integer_values 0; other_number_values 0; text_values 0\n")
-    );
-    assert!(
-        filtered.contains("accepted record 2, field 1: observed missing_indicator; sample \"NA\"")
+        filtered.contains("accepted record 2, field 1: observed missing indicator; sample \"NA\"")
     );
     assert!(filtered.contains("accepted record 2, field 2: observed empty; sample \"\""));
     assert!(filtered.contains("accepted record 3, field 2: observed absent; sample \"\""));
     let whitespace = report(&["-W", "health"], b"a NA \nb\tN/A\nc  NaN\nshort");
-    assert!(whitespace.contains("Input separator: whitespace\n"));
-    assert!(whitespace.contains("Baseline width: 2 fields (inferred, modal)\n"));
-    assert!(
-        whitespace
-            .contains("field 2, name \"\": absent_values 1; empty_values 0; missing_values 3; integer_values 0; other_number_values 0; text_values 0\n")
-    );
-    assert!(
-        whitespace
-            .contains("field 3, name \"\": absent_values 3; empty_values 1; missing_values 0; integer_values 0; other_number_values 0; text_values 0\n")
-    );
+    assert!(whitespace.contains("Field separator: runs of spaces and tabs\n"));
+    assert!(whitespace.contains("Baseline width: 2 fields (most frequent data width)\n"));
+    assert!(whitespace.contains(
+        "field 2, name \"\": absent 1; empty 0; missing 3; integer 0; other number 0; text 0\n"
+    ));
+    assert!(whitespace.contains(
+        "field 3, name \"\": absent 3; empty 1; missing 0; integer 0; other number 0; text 0\n"
+    ));
     assert!(whitespace.contains("accepted record 1, field 3: observed empty; sample \"\""));
     assert!(whitespace.contains("accepted record 4, field 2: observed absent; sample \"\""));
     let vnlog = report(
@@ -2110,13 +2121,15 @@ fn separators_filters_nul_and_vnlog_preserve_accepted_record_locations() {
         b"## metadata\n\n#! annotation\n# a b\n1 NA # note\n# skipped\n3 # raw\n",
     );
     assert!(vnlog.contains("Data records: 2\nHeader records: 1\nAccepted records: 3\n"));
-    assert!(vnlog.contains("Comment filter: vnlog\nVnlog: yes\n"));
-    assert!(vnlog.contains("accepted record 3: observed 1 fields; sample \"3 # raw\""));
+    assert!(vnlog.contains(
+        "Comment filtering: vnlog comments and annotations\nAnnotated input (--vnlog): yes\n"
+    ));
+    assert!(vnlog.contains("accepted record 3: observed 1 field; sample \"3 # raw\""));
+    assert!(vnlog.contains(
+        "field 2, name \"b\": absent 1; empty 0; missing 1; integer 0; other number 0; text 0\n"
+    ));
     assert!(
-        vnlog.contains("field 2, name \"b\": absent_values 1; empty_values 0; missing_values 1; integer_values 0; other_number_values 0; text_values 0\n")
-    );
-    assert!(
-        vnlog.contains("accepted record 2, field 2: observed missing_indicator; sample \"NA\"")
+        vnlog.contains("accepted record 2, field 2: observed missing indicator; sample \"NA\"")
     );
     assert!(vnlog.contains("accepted record 3, field 2: observed absent; sample \"\""));
 }
@@ -2131,17 +2144,17 @@ fn observations_preserve_full_binary_header_labels_without_inventing_late_labels
     let output = report(&["--header-in", "health"], &input);
     let escaped = format!("{}\\\\\\r\\0\\xFF", "q".repeat(150));
     assert!(output.contains(&format!(
-        "field 2, name \"{escaped}\": absent_values 2; empty_values 0; missing_values 1; integer_values 0; other_number_values 0; text_values 0\n"
+        "field 2, name \"{escaped}\": absent 2; empty 0; missing 1; integer 0; other number 0; text 0\n"
     )));
     assert!(output.contains(&format!(
-        "absent_field [observation, advisory]: 2 cells; field 2, name \"{escaped}\""
+        "Absent fields [observation, advisory]: 2 cells; field 2, name \"{escaped}\""
     )));
     assert!(output.contains(&format!(
-        "missing_indicator [observation, advisory]: 1 cells; field 2, name \"{escaped}\""
+        "Missing value indicators [observation, advisory]: 1 cell; field 2, name \"{escaped}\""
     )));
-    assert!(
-        output.contains("field 3, name \"\": absent_values 2; empty_values 1; missing_values 0; integer_values 0; other_number_values 0; text_values 0\n")
-    );
+    assert!(output.contains(
+        "field 3, name \"\": absent 2; empty 1; missing 0; integer 0; other number 0; text 0\n"
+    ));
     assert!(
         output.contains("accepted record 2, field 3: observed absent; sample \"\"; truncated no\n")
     );
@@ -2286,11 +2299,16 @@ fn report_uses_the_effective_numeric_decimal_separator_without_arithmetic() {
     assert!(output.stderr.is_empty());
     let output = String::from_utf8(output.stdout).unwrap();
     assert!(output.contains("Numeric decimal separator: \",\"\n"));
-    assert!(output.contains("integer_values 1; other_number_values 2; text_values 1\n    type_expectation number (inferred)\n"));
-    assert!(output.contains("type_mismatch [inferred, advisory]: 1 cells; expected number;"));
+    assert!(
+        output
+            .contains("integer 1; other number 2; text 1\n    Expected type: number (inferred)\n")
+    );
+    assert!(output.contains("Type mismatch [inferred, advisory]: 1 cell; expected number;"));
     let c = report(&["health"], b"1,5\n0x1,8p+1\n2\n1.5\n");
-    assert!(c.contains("integer_values 1; other_number_values 1; text_values 2\n    type_expectation undetermined (observation)\n"));
-    assert!(!c.contains("type_mismatch"));
+    assert!(c.contains(
+        "integer 1; other number 1; text 2\n    Expected type: undetermined (observation)\n"
+    ));
+    assert!(!c.contains("Type mismatch"));
     let unsupported = invoke_in(&["health"], b"", false, "ps_AF.UTF-8");
     assert_eq!(unsupported.status.code(), Some(77), "{unsupported:?}");
     assert!(unsupported.stdout.is_empty());

@@ -101,6 +101,28 @@ fn json_file(path: &Path) -> Value {
 }
 
 #[test]
+fn unmatched_filter_reports_that_no_checks_ran_without_changing_status() {
+    let run = TestRun::new(&[case("known-case", "echo", b"", b"", b"", 0)]);
+    let evidence = run.evidence();
+    let output = run.run(&[
+        "--match",
+        "missing-case",
+        "--evidence-dir",
+        evidence.to_str().unwrap(),
+    ]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("No frozen cases matched --match \"missing-case\""));
+    assert!(text.contains("No checks ran"));
+    assert!(!text.contains("cases passed"));
+    let result = json_file(&evidence.join("result.json"));
+    assert_eq!(result["attempted"], 0);
+    assert_eq!(result["selected_cases"], 0);
+    assert_eq!(result["deferred_cases"], 0);
+}
+
+#[test]
 fn real_incorrect_stdout_stderr_and_status_fail_and_keep_going_retains_each() {
     let run = TestRun::new(&[
         case("wrong-output", "wrong-output", b"", b"", b"", 0),

@@ -1,6 +1,7 @@
 # User guide
 
-A Fastmash command has this shape:
+Use Fastmash to summarize fields, combine groups, transform records and inspect
+tables. Commands take these forms:
 
 ```text
 fastmash [OPTIONS] OPERATION FIELDS [OPERATION FIELDS ...]

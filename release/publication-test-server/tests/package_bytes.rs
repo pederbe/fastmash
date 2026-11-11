@@ -70,6 +70,19 @@ fn changed(output: Output, program: &str) {
     );
 }
 
+fn unreadable(output: Output, fixture: &Fixture) {
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    let text = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        text.contains("cannot compare qualified executable"),
+        "{output:?}"
+    );
+    assert!(text.contains(&fixture.bin.join("fastmash").display().to_string()));
+    assert!(text.contains(&fixture.packaged("fastmash").display().to_string()));
+    assert!(!text.contains("changed during packaging"));
+}
+
 #[test]
 fn equal_binary_files_succeed_silently_across_buffer_boundaries() {
     let fixture = Fixture::new("qualified", "package");
@@ -111,7 +124,7 @@ fn missing_qualified_or_packaged_programs_fail() {
                 fixture.packaged(program)
             };
             fs::remove_file(path).unwrap();
-            changed(fixture.run(), program);
+            unreadable(fixture.run(), &fixture);
         }
     }
 }
@@ -123,7 +136,7 @@ fn a_directory_in_place_of_a_program_is_a_read_failure() {
         let path = fixture.packaged(program);
         fs::remove_file(&path).unwrap();
         fs::create_dir(path).unwrap();
-        changed(fixture.run(), program);
+        unreadable(fixture.run(), &fixture);
     }
 }
 

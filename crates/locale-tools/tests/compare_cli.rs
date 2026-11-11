@@ -135,7 +135,9 @@ fn actual_cli_help_usage_and_unknown_flags_create_no_evidence() {
     {
         let output = invoke(&root, &format!("help-{index}"), &args);
         assert!(output.status.success(), "CLI evidence: {}", root.display());
-        assert_eq!(output.stdout, format!("{USAGE}\n").as_bytes());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains(USAGE));
+        assert!(text.contains("Status 0 means all compared pairs matched"));
         assert!(output.stderr.is_empty());
     }
     let invalid: Vec<Vec<OsString>> = vec![

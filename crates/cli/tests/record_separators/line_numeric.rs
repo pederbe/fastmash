@@ -24,7 +24,7 @@ fn line_numeric_numeric_type_parameter_is_invalid() {
         assert!(o.stdout.is_empty());
         assert_eq!(
             o.stderr,
-            b"fastmash: getnum requires a character type parameter\n"
+            b"fastmash: getnum requires a character type parameter\nhint: getnum types are n, i, h, o, p and d. For example, getnum:i 1 extracts a signed integer\n"
         );
     }
 }

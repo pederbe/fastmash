@@ -146,15 +146,24 @@ pub struct Fixture {
 
 impl Fixture {
     pub fn load(path: &Path) -> Result<Self> {
-        let path = fs::canonicalize(path)?;
+        let path = fs::canonicalize(path).map_err(|error| {
+            Error::message(format!("cannot open fixture {}: {error}", path.display()))
+        })?;
         let name = path
             .file_name()
             .and_then(|s| s.to_str())
             .ok_or_else(|| Error::message("fixture must have a UTF-8 filename"))?;
         let provenance_path = path.with_file_name(name.replace(".jsonl.gz", "-provenance.json"));
-        let provenance_bytes = fs::read(&provenance_path)?;
+        let provenance_bytes = fs::read(&provenance_path).map_err(|error| {
+            Error::message(format!(
+                "cannot read fixture provenance {}: {error}",
+                provenance_path.display()
+            ))
+        })?;
         let provenance: Provenance = serde_json::from_slice(&provenance_bytes)?;
-        let compressed = fs::read(&path)?;
+        let compressed = fs::read(&path).map_err(|error| {
+            Error::message(format!("cannot read fixture {}: {error}", path.display()))
+        })?;
         let mut content = Vec::new();
         MultiGzDecoder::new(compressed.as_slice()).read_to_end(&mut content)?;
         let fixture_sha256 = digest(&compressed);
@@ -382,8 +391,20 @@ fn diagnostic_guidance(mut stderr: Vec<u8>) -> Vec<u8> {
     let message = &stderr[at + 2..];
     let hint: &[u8] = if message.starts_with(b"missing operation specifiers\n") {
         b"choose an operation and field, for example fastmash sum 1"
+    } else if message.starts_with(b"invalid operation ") {
+        b"use fastmash --help to list operations, for example sum 1 or mean 2"
     } else if message.starts_with(b"missing field for operation ") {
         b"supply a field number starting at 1, or use --header-in with a header name"
+    } else if message.starts_with(b"invalid field range ")
+        || message.starts_with(b"field range for ")
+    {
+        b"use ascending numeric endpoints, for example 2-4. Use commas for separate fields, such as 2,4"
+    } else if message.starts_with(b"invalid field pair ")
+        || message == b"paired field ranges are invalid\n"
+    {
+        b"write pairs as LEFT:RIGHT, for example 1:2 or 1:2,3:4. Pairs cannot contain ranges"
+    } else if message.starts_with(b"invalid field '") {
+        b"field numbers start at 1. Named fields need an input header and --header-in or -H"
     } else if message == b"invalid seed\n" {
         b"use a nonnegative decimal integer, for example --seed=7"
     } else if message == b"missing rounding digits value\n"
@@ -391,9 +412,27 @@ fn diagnostic_guidance(mut stderr: Vec<u8>) -> Vec<u8> {
     {
         b"use --round=1 through --round=50. For no decimal places, use --format=%.0f"
     } else if message == b"the delimiter must be a single character\n" {
-        b"separators take one literal byte, for example -t, for commas. Tabs are the default input separator. Escapes such as '\\t' are not expanded"
+        b"use one literal byte, such as ','. Escapes such as '\\t' are not expanded. Tab is the default input separator"
     } else if message.starts_with(b"operation ") && message.ends_with(b" requires field pairs\n") {
         b"write each field pair as LEFT:RIGHT, for example 1:2"
+    } else if message.starts_with(b"operation ")
+        && message.ends_with(b" cannot use pair of fields\n")
+    {
+        b"use a single field, a list or a range, for example sum 1,2 or sum 1-3"
+    } else if message.starts_with(b"format ") || message == b"numeric format too large\n" {
+        b"use one %e, %f, %g or %a conversion, for example --format=%.2f. The format string may contain at most 99 bytes"
+    } else if message.starts_with(b"invalid percentile value ")
+        || message == b"non-integer percentile parameters are outside the supported range\n"
+    {
+        b"use an integer percentile from 1 through 100, for example perc:95 2"
+    } else if message.starts_with(b"strbin requires ")
+        || message == b"strbin bucket size must not be zero\n"
+    {
+        b"use a positive integer bucket count, for example strbin:10 1"
+    } else if message.starts_with(b"invalid getnum type ")
+        || message == b"getnum requires a character type parameter\n"
+    {
+        b"getnum types are n, i, h, o, p and d. For example, getnum:i 1 extracts a signed integer"
     } else if message.starts_with(b"conflicting operation found: expecting ") {
         b"run per-row operations and aggregate operations in separate commands. Per-row operations cannot use grouping keys"
     } else {
@@ -628,7 +667,7 @@ mod tests {
                 assert!(guided.starts_with(&frozen), "{}", case.id);
                 if guided != frozen {
                     assert!(guided[frozen.len()..].starts_with(b"hint: "), "{}", case.id);
-                    assert_eq!(original.returncode, 1, "{}", case.id);
+                    assert_eq!(original.returncode, case.expected.returncode, "{}", case.id);
                 }
             }
         }

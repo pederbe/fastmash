@@ -16,7 +16,15 @@ fn arguments() -> Result<Option<Target>> {
     while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "-h" | "--help" => {
-                println!("{USAGE}");
+                println!(
+                    "Write third-party license notices as Markdown on standard output.\n\n{USAGE}\n\n\
+Uses Cargo's locked, target-filtered normal dependency graph for this checkout.\n\
+Choose the target of the archive you are preparing. Diagnostics go to stderr.\n\
+Check the exit status before using redirected output, which may be incomplete on failure.\n\n\
+Example, writing notices for the Linux musl archive:\n\
+  fastmash-license-notices --target x86_64-unknown-linux-musl > THIRD-PARTY-LICENSES.md\n\n\
+Release guide: https://github.com/pederbe/fastmash/blob/main/RELEASING.md"
+                );
                 return Ok(None);
             }
             "--target" => {

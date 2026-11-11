@@ -25,7 +25,12 @@ fn command() -> Command {
 
 #[test]
 fn help_and_selection_errors_leave_outputs_and_captures_untouched() {
-    assert!(command().arg("--help").output().unwrap().status.success());
+    let help = command().arg("--help").output().unwrap();
+    assert!(help.status.success());
+    assert!(help.stderr.is_empty());
+    let text = String::from_utf8(help.stdout).unwrap();
+    assert!(text.contains("[--locale NAME]..."));
+    assert!(text.contains("--locale en_US --locale de_DE"));
     let root = root();
     let paths = [
         root.join("sort"),

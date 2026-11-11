@@ -50,12 +50,12 @@ fn command_errors_keep_the_cause_and_explain_the_next_step() {
         (
             vec!["-t", "\\t", "sum", "1"],
             "the delimiter must be a single character",
-            "separators take one literal byte, for example -t, for commas. Tabs are the default input separator. Escapes such as '\\t' are not expanded",
+            "use one literal byte, such as ','. Escapes such as '\\t' are not expanded. Tab is the default input separator",
         ),
         (
             vec!["--output-delimiter=é", "sum", "1"],
             "the delimiter must be a single character",
-            "separators take one literal byte, for example -t, for commas. Tabs are the default input separator. Escapes such as '\\t' are not expanded",
+            "use one literal byte, such as ','. Escapes such as '\\t' are not expanded. Tab is the default input separator",
         ),
         (
             vec!["wmean", "1"],
@@ -89,6 +89,66 @@ fn command_errors_keep_the_cause_and_explain_the_next_step() {
             ],
             "comparison modifiers require positive unsigned decimal integers",
             "rank selects a result and limit caps ranked keys. Both numbers start at 1. For example, rank 1 percent limit 5",
+        ),
+        (
+            vec!["average", "1"],
+            "invalid operation 'average'",
+            "use fastmash --help to list operations, for example sum 1 or mean 2",
+        ),
+        (
+            vec!["sum", "0"],
+            "invalid field '0' for operation 'sum'",
+            "field numbers start at 1. Named fields need an input header and --header-in or -H",
+        ),
+        (
+            vec!["sum", "3-1"],
+            "invalid field range for operation 'sum'",
+            "use ascending numeric endpoints, for example 2-4. Use commas for separate fields, such as 2,4",
+        ),
+        (
+            vec!["sum", "1:2"],
+            "operation 'sum' cannot use pair of fields",
+            "use a single field, a list or a range, for example sum 1,2 or sum 1-3",
+        ),
+        (
+            vec!["--format=%d", "sum", "1"],
+            "format '%d' has unknown/invalid type %d directive",
+            "use one %e, %f, %g or %a conversion, for example --format=%.2f. The format string may contain at most 99 bytes",
+        ),
+        (
+            vec!["perc:0", "1"],
+            "invalid percentile value 0",
+            "use an integer percentile from 1 through 100, for example perc:95 2",
+        ),
+        (
+            vec!["compare"],
+            "compare requires BEFORE AFTER and at least one operation",
+            "supply two input paths, an operation and fields, for example compare before.tsv after.tsv sum 2",
+        ),
+        (
+            vec!["compare", "-", "-", "sum", "1"],
+            "compare permits stdin on at most one side",
+            "use '-' for one input only. Save the other dataset in a file",
+        ),
+        (
+            vec!["health", "validate"],
+            "health: validate requires a type, required, nonmissing or width rule",
+            "supply a rule before validate, for example health type 1 number validate or health width 3 validate",
+        ),
+        (
+            vec!["health", "type", "1", "float"],
+            "health: type requires integer, number or text",
+            "write type FIELD TYPE, for example health type 1 number",
+        ),
+        (
+            vec!["--result-name=1:total", "sum", "1"],
+            "--result-name requires --header-out or -H",
+            "add --header-out for generated labels. Use -H only when the first input record names the fields",
+        ),
+        (
+            vec!["--csv", "-t,", "sum", "1"],
+            "CSV input conflicts with --field-separator",
+            "CSV input uses its own comma and quote rules. Remove explicit text separators and --skip-comments",
         ),
     ] {
         let output = PROGRAM.invoke(&args, b"", &[], false, false);

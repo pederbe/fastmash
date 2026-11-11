@@ -16,7 +16,16 @@ fn run() -> fastmash_locale_tools::Result<()> {
     while let Some(arg) = args.next() {
         if !positional {
             if arg == "--help" || arg == "-h" {
-                println!("{USAGE}");
+                println!(
+                    "Generate collation candidates from numeric locales, ICU exemplars and GNU sort probes.\n\n{USAGE}\n\n\
+EXEMPLARS_JSON must identify ICU 78 and the same locales as NUMERIC_JSON. GNU_SORT\n\
+and LOCPATH must belong to the identified reference environment. OUTPUT_JSON and\n\
+the evidence directory must be new. Review the candidate JSON before changing tables.\n\
+The summary's missing-ICU count refers to locales without ICU alphabet data.\n\n\
+Example, after generating /tmp/fastmash-icu-exemplars.json with the ICU tool:\n\
+  fastmash-generate-collation-candidates --evidence /tmp/fastmash-candidate-evidence -- \\\n    data/locales/glibc-lc-numeric.json /tmp/fastmash-icu-exemplars.json \\\n    /path/to/gnu-sort /path/to/compiled-locales /tmp/fastmash-candidates.json\n\n\
+Guide: https://fastmash.io/contributing/testing.html#locale-tools"
+                );
                 return Ok(());
             }
             if arg == "--" {
@@ -33,7 +42,7 @@ fn run() -> fastmash_locale_tools::Result<()> {
                 continue;
             }
             if arg.as_encoded_bytes().starts_with(b"-") {
-                return Err(format!("unknown option\n{USAGE}").into());
+                return Err(format!("unknown option: {}\n{USAGE}", arg.to_string_lossy()).into());
             }
         }
         paths.push(PathBuf::from(arg));
@@ -42,11 +51,28 @@ fn run() -> fastmash_locale_tools::Result<()> {
         .try_into()
         .map_err(|_| format!("expected five paths\n{USAGE}"))?;
     let evidence = evidence.ok_or("--evidence requires a path")?;
-    if output.try_exists()? {
-        return Err("output already exists".into());
+    if output
+        .try_exists()
+        .map_err(|error| format!("cannot inspect output {}: {error}", output.display()))?
+    {
+        return Err(format!(
+            "output already exists: {}. Choose a new output path",
+            output.display()
+        )
+        .into());
     }
-    let numeric = NumericLocales::parse(&fs::read(numeric)?)?;
-    let exemplars = Exemplars::parse(&fs::read(exemplars)?, &numeric)?;
+    let numeric = NumericLocales::parse(&fs::read(&numeric).map_err(|error| {
+        format!(
+            "cannot read numeric reference {}: {error}",
+            numeric.display()
+        )
+    })?)?;
+    let exemplars = Exemplars::parse(
+        &fs::read(&exemplars).map_err(|error| {
+            format!("cannot read ICU exemplars {}: {error}", exemplars.display())
+        })?,
+        &numeric,
+    )?;
     let candidates = fastmash_locale_tools::candidate_executor::generate(
         numeric, exemplars, &sort, &locpath, &evidence,
     )?;
@@ -59,8 +85,21 @@ fn run() -> fastmash_locale_tools::Result<()> {
     OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(output)?
-        .write_all(&raw)?;
+        .open(&output)
+        .map_err(|error| {
+            format!(
+                "cannot create candidate report {}: {error}",
+                output.display()
+            )
+        })?
+        .write_all(&raw)
+        .map_err(|error| {
+            format!(
+                "cannot write candidate report {}: {error} (evidence: {})",
+                output.display(),
+                evidence.display()
+            )
+        })?;
     let upper = candidates
         .locales
         .values()

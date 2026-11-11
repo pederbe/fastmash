@@ -4,8 +4,8 @@ Compare statistical summaries from two exports, including categories that were
 added or removed. For example, create two small sales exports:
 
 ```sh
-printf 'category,revenue\nwest,100\neast,50\n' > before.csv
-printf 'category,revenue\neast,75\nwest,80\nnorth,20\n' > after.csv
+printf 'category,revenue,weight\nwest,100,1\neast,50,2\n' > before.csv
+printf 'category,revenue,weight\neast,75,2\nwest,80,1\nnorth,20,1\n' > after.csv
 ```
 
 Compare revenue by category:
@@ -27,10 +27,17 @@ compares one summary for each whole dataset.
 
 ## Source files and supported operations
 
+The examples below also use tab-separated copies of the same exports:
+
+```sh
+printf 'category\trevenue\tweight\nwest\t100\t1\neast\t50\t2\n' > before.tsv
+printf 'category\trevenue\tweight\neast\t75\t2\nwest\t80\t1\nnorth\t20\t1\n' > after.tsv
+```
+
 BEFORE and AFTER are literal paths. A standalone `-` supplies stdin on one side:
 
-```console
-producer | fastmash compare before.tsv - sum 2
+```sh
+printf 'category\trevenue\tweight\nwest\t80\t1\n' | fastmash -H -g category compare before.tsv - sum revenue
 ```
 
 Files are opened independently, even when both paths are identical. The before
@@ -51,9 +58,9 @@ applies to both sources. Comparison does not infer a format or support different
 formats on the two sides.
 
 ```console
-fastmash --csv-in -g 1 compare before.csv after.csv sum 2
-fastmash --csv-out -g 1 compare before.tsv after.tsv sum 2
-fastmash --csv -H -g category compare before.csv after.csv rank 1 percent limit 10 sum reading
+fastmash --csv-in -H -g 1 compare before.csv after.csv sum 2
+fastmash --csv-out -H -g 1 compare before.tsv after.tsv sum 2
+fastmash --csv -H -g category compare before.csv after.csv rank 1 percent limit 10 sum revenue
 ```
 
 `--csv-in` reads strict comma-separated byte fields and retains ordinary text
@@ -87,8 +94,8 @@ Named selectors bind independently, so the same names can occupy different
 positions in the two exports:
 
 ```console
-fastmash -H -g category compare before.tsv after.tsv sum reading
-fastmash -H -g category compare before.tsv after.tsv wmean reading:weight
+fastmash -H -g category compare before.tsv after.tsv sum revenue
+fastmash -H -g category compare before.tsv after.tsv wmean revenue:weight
 ```
 
 Names use ordinary exact, case-sensitive lookup. The first duplicate label wins
@@ -111,8 +118,8 @@ stopping at NUL. This never truncates comparison-key identity or spelling.
 Result names replace L throughout one summary's complete block:
 
 ```console
-fastmash -H --result-name=1:total compare before.tsv after.tsv sum reading mean reading
-fastmash --header-out --result-name=2:total compare before.tsv after.tsv sum 2,1
+fastmash -H --result-name=1:total compare before.tsv after.tsv sum revenue mean revenue
+fastmash -H --result-name=2:total compare before.tsv after.tsv sum 2,3
 ```
 
 Indexes count expanded summary results in request order, once per result. They
@@ -154,8 +161,8 @@ independent compaction. Weighted mean validates partners and omits whole pairs.
 Use the existing `-g` selectors to identify corresponding categories:
 
 ```console
-fastmash -g 1 compare before.tsv after.tsv sum 2 mean 2
-fastmash -g 1,2 compare before.tsv after.tsv wmean 3:4
+fastmash -H -g 1 compare before.tsv after.tsv sum 2 mean 2
+fastmash -H -g 1,3 compare before.tsv after.tsv wmean 2:3
 ```
 
 Every distinct key has one summary per source, even when its records are
@@ -197,9 +204,9 @@ expanded summary result, counting list and range expansion in request order. Res
 result blocks remain in the report:
 
 ```console
-fastmash -g 1 compare before.tsv after.tsv rank 1 sum 2
-fastmash -g 1 compare before.tsv after.tsv rank 2 percent limit 10 sum 2-3
-fastmash -H -g category --result-name=1:total compare before.tsv after.tsv rank 1 percent sum reading
+fastmash -H -g 1 compare before.tsv after.tsv rank 1 sum 2
+fastmash -H -g 1 compare before.tsv after.tsv rank 2 percent limit 10 sum 2-3
+fastmash -H -g category --result-name=1:total compare before.tsv after.tsv rank 1 percent sum revenue
 ```
 
 Ranking orders matched keys by descending magnitude of the selected available
@@ -216,8 +223,8 @@ rounding cannot change winners. Ranks are consecutive plain unsigned decimal
 numbers, even with hexadecimal or other numerical formats.
 
 An optional `limit N` follows ranking and keeps at most N eligible keys, without
-padding. Eligible keys below the cutoff are omitted. Every excluded key still
-appears after the ranked portion in canonical key order, with an empty rank and
+padding. Eligible keys below the cutoff are omitted. Keys that cannot be ranked
+still appear after the ranked portion in canonical key order, with an empty rank and
 rank state `one_sided` for added/removed keys or `unavailable` otherwise. The
 selected result's change-state columns provide the exact reason. Thus N bounds
 ranked keys, and total report records can exceed N. With no limit, every

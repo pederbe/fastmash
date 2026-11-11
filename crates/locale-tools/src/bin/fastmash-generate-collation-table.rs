@@ -47,7 +47,7 @@ fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Option<Config>> {
                 continue;
             }
             if arg.as_encoded_bytes().starts_with(b"-") {
-                return Err("unknown option".into());
+                return Err(format!("unknown option: {}", arg.to_string_lossy()).into());
             }
         }
         paths.push(PathBuf::from(arg));
@@ -63,7 +63,8 @@ fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Option<Config>> {
 }
 
 fn generate(config: &Config) -> Result<()> {
-    let raw = fs::read(&config.input).map_err(|error| format!("cannot read input: {error}"))?;
+    let raw = fs::read(&config.input)
+        .map_err(|error| format!("cannot read input {}: {error}", config.input.display()))?;
     let table = match config.variant {
         Some(variant) => Table::from_candidates(&raw, variant)?,
         None => Table::from_verification(&raw)?,
@@ -73,10 +74,10 @@ fn generate(config: &Config) -> Result<()> {
         .write(true)
         .create_new(true)
         .open(&config.output)
-        .map_err(|error| format!("cannot create output: {error}"))?;
+        .map_err(|error| format!("cannot create new output {}: {error}. Choose a new output path if it already exists", config.output.display()))?;
     output
         .write_all(source.as_bytes())
-        .map_err(|error| format!("cannot write output: {error}"))?;
+        .map_err(|error| format!("cannot write output {}: {error}", config.output.display()))?;
 
     let mut stdout = std::io::stdout().lock();
     write!(stdout, "{} locales in ", table.rows().len())?;
@@ -90,7 +91,17 @@ fn main() -> ExitCode {
     let config = match parse(std::env::args_os().skip(1)) {
         Ok(Some(config)) => config,
         Ok(None) => {
-            println!("{USAGE}");
+            println!(
+                "Generate a Rust collation table from supplied verification or candidate JSON.\n\n{USAGE}\n\n\
+By default, INPUT_JSON is a verification report. With --variant N, it is candidate\n\
+JSON and N is a zero-based signed index into each locale's candidate list. Negative\n\
+indices count from the end. OUTPUT_RS must be new. No native reference is queried\n\
+and no product table is changed.\n\n\
+Examples, using committed input and new output paths:\n\
+  fastmash-generate-collation-table data/locales/collation-verification.json /tmp/fastmash-collation.rs\n\
+  fastmash-generate-collation-table --variant 0 data/locales/collation-candidates.json /tmp/fastmash-candidate.rs\n\n\
+Guide: https://fastmash.io/contributing/testing.html#locale-tools"
+            );
             return ExitCode::SUCCESS;
         }
         Err(error) => {

@@ -129,16 +129,16 @@ footer { position: absolute; left: 48px; right: 48px; bottom: 31px; padding-top:
     <div class="bar"><span class="name">Health report excerpt</span></div>
     <pre><span class="prompt">$</span> fastmash --header-in health examples 0 type reading number validate &lt; readings.tsv
 <span class="cli-heading">Table health report</span>
-<span class="cli-failure">✗ Validation failed · supplied expectations violated</span>
+<span class="cli-failure">✗ Validation failed · supplied rules were not met</span>
 <span class="cli-muted">…</span>
 <span class="cli-heading">Findings (counts may overlap):</span>
 
-<span class="cli-advisory">⚠ mixed_types [observation, advisory]</span>
-  1 fields; field 1, name "reading"
+<span class="cli-advisory">⚠ Mixed value types [observation, advisory]</span>
+  1 field; field 1, name "reading"
   examples retained 0, omitted 3
 
-<span class="cli-failure">✗ type_mismatch [declared, violation]</span>
-  1 cells; expected number; field 1, name "reading"
+<span class="cli-failure">✗ Type mismatch [declared, violation]</span>
+  1 cell; expected number; field 1, name "reading"
   examples retained 0, omitted 1
 <span class="cli-muted">…</span></pre>
   </div>

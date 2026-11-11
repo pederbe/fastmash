@@ -92,8 +92,20 @@ pub(super) fn write(
 fn recovery_hint(message: &[u8]) -> Option<&'static [u8]> {
     Some(if message.starts_with(b"missing operation specifiers\n") {
         b"choose an operation and field, for example fastmash sum 1"
+    } else if message.starts_with(b"invalid operation ") {
+        b"use fastmash --help to list operations, for example sum 1 or mean 2"
     } else if message.starts_with(b"missing field for operation ") {
         b"supply a field number starting at 1, or use --header-in with a header name"
+    } else if message.starts_with(b"invalid field range ")
+        || message.starts_with(b"field range for ")
+    {
+        b"use ascending numeric endpoints, for example 2-4. Use commas for separate fields, such as 2,4"
+    } else if message.starts_with(b"invalid field pair ")
+        || message == b"paired field ranges are invalid\n"
+    {
+        b"write pairs as LEFT:RIGHT, for example 1:2 or 1:2,3:4. Pairs cannot contain ranges"
+    } else if message.starts_with(b"invalid field '") {
+        b"field numbers start at 1. Named fields need an input header and --header-in or -H"
     } else if message == b"invalid seed\n" {
         b"use a nonnegative decimal integer, for example --seed=7"
     } else if message == b"missing rounding digits value\n"
@@ -101,9 +113,27 @@ fn recovery_hint(message: &[u8]) -> Option<&'static [u8]> {
     {
         b"use --round=1 through --round=50. For no decimal places, use --format=%.0f"
     } else if message == b"the delimiter must be a single character\n" {
-        b"separators take one literal byte, for example -t, for commas. Tabs are the default input separator. Escapes such as '\\t' are not expanded"
+        b"use one literal byte, such as ','. Escapes such as '\\t' are not expanded. Tab is the default input separator"
     } else if message.starts_with(b"operation ") && message.ends_with(b" requires field pairs\n") {
         b"write each field pair as LEFT:RIGHT, for example 1:2"
+    } else if message.starts_with(b"operation ")
+        && message.ends_with(b" cannot use pair of fields\n")
+    {
+        b"use a single field, a list or a range, for example sum 1,2 or sum 1-3"
+    } else if message.starts_with(b"format ") || message == b"numeric format too large\n" {
+        b"use one %e, %f, %g or %a conversion, for example --format=%.2f. The format string may contain at most 99 bytes"
+    } else if message.starts_with(b"invalid percentile value ")
+        || message == b"non-integer percentile parameters are outside the supported range\n"
+    {
+        b"use an integer percentile from 1 through 100, for example perc:95 2"
+    } else if message.starts_with(b"strbin requires ")
+        || message == b"strbin bucket size must not be zero\n"
+    {
+        b"use a positive integer bucket count, for example strbin:10 1"
+    } else if message.starts_with(b"invalid getnum type ")
+        || message == b"getnum requires a character type parameter\n"
+    {
+        b"getnum types are n, i, h, o, p and d. For example, getnum:i 1 extracts a signed integer"
     } else if message.starts_with(b"conflicting operation found: expecting ") {
         b"run per-row operations and aggregate operations in separate commands. Per-row operations cannot use grouping keys"
     } else if message.starts_with(b"Top-N selection requires ")
@@ -114,6 +144,33 @@ fn recovery_hint(message: &[u8]) -> Option<&'static [u8]> {
         || message == b"missing comparison modifier value\n"
     {
         b"rank selects a result and limit caps ranked keys. Both numbers start at 1. For example, rank 1 percent limit 5"
+    } else if message == b"compare requires BEFORE AFTER and at least one operation\n" {
+        b"supply two input paths, an operation and fields, for example compare before.tsv after.tsv sum 2"
+    } else if message == b"compare permits stdin on at most one side\n" {
+        b"use '-' for one input only. Save the other dataset in a file"
+    } else if message == b"compare requires numerical aggregate operations\n" {
+        b"use a numerical summary such as sum 2, mean 2 or wmean 2:3"
+    } else if message.starts_with(b"comparison rank result ") {
+        b"rank counts calculated results from 1 in request order, excluding keys and the derived report columns"
+    } else if message == b"health: validate requires a type, required, nonmissing or width rule\n" {
+        b"supply a rule before validate, for example health type 1 number validate or health width 3 validate"
+    } else if message == b"health: type requires integer, number or text\n" {
+        b"write type FIELD TYPE, for example health type 1 number"
+    } else if message == b"--result-name requires --header-out or -H\n" {
+        b"add --header-out for generated labels. Use -H only when the first input record names the fields"
+    } else if message == b"--result-name repeats a result index\n" {
+        b"give each calculated result at most one name, for example --result-name=1:total --result-name=2:average"
+    } else if message == b"--result-name contains the text output delimiter or record terminator\n"
+    {
+        b"remove separator bytes from the name, or use --csv-out to quote names containing them"
+    } else if message == b"CSV output conflicts with --output-delimiter\n" {
+        b"CSV output uses commas. Remove --output-delimiter, or omit CSV output to choose a text delimiter"
+    } else if message.starts_with(b"CSV input conflicts with --") {
+        b"CSV input uses its own comma and quote rules. Remove explicit text separators and --skip-comments"
+    } else if message == b"CSV conflicts with --zero-terminated\n" {
+        b"CSV uses newline or CRLF record endings. Remove --zero-terminated, or use ordinary text instead of CSV"
+    } else if message == b"CSV conflicts with --vnlog\n" {
+        b"choose quoted CSV or --vnlog annotated text. They cannot be used together"
     } else if message.starts_with(b"language sorting requires ") {
         b"LC_ALL overrides LC_COLLATE. If LC_ALL is set, copy its value to LC_NUMERIC and unset LC_ALL before setting LC_COLLATE=C"
     } else {

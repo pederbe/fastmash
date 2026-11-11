@@ -112,11 +112,11 @@ fn csv_options_reject_conflicts_and_exclusions_before_input_in_either_order() {
             vec![flag, "--csv-out", "count", "1"],
         ] {
             let diagnostic: &[u8] = if flag.starts_with("--output") {
-                b"CSV output conflicts with --output-delimiter\n".as_slice()
+                b"CSV output conflicts with --output-delimiter\nhint: CSV output uses commas. Remove --output-delimiter, or omit CSV output to choose a text delimiter\n".as_slice()
             } else if flag == "--vnlog" {
-                b"CSV conflicts with --vnlog\n"
+                b"CSV conflicts with --vnlog\nhint: choose quoted CSV or --vnlog annotated text. They cannot be used together\n"
             } else {
-                b"CSV conflicts with --zero-terminated\n"
+                b"CSV conflicts with --zero-terminated\nhint: CSV uses newline or CRLF record endings. Remove --zero-terminated, or use ordinary text instead of CSV\n"
             };
             before_input(&arguments, 1, diagnostic);
         }
@@ -142,9 +142,9 @@ fn csv_options_reject_conflicts_and_exclusions_before_input_in_either_order() {
     for flag in ["--csv-in", "--csv"] {
         for option in ["-z", "--vnlog"] {
             let diagnostic = if option == "-z" {
-                b"CSV conflicts with --zero-terminated\n".as_slice()
+                b"CSV conflicts with --zero-terminated\nhint: CSV uses newline or CRLF record endings. Remove --zero-terminated, or use ordinary text instead of CSV\n".as_slice()
             } else {
-                b"CSV conflicts with --vnlog\n"
+                b"CSV conflicts with --vnlog\nhint: choose quoted CSV or --vnlog annotated text. They cannot be used together\n"
             };
             before_input(&[flag, option, "count", "1"], 1, diagnostic);
             before_input(&[option, flag, "count", "1"], 1, diagnostic);
@@ -158,7 +158,9 @@ fn csv_options_reject_conflicts_and_exclusions_before_input_in_either_order() {
         } else {
             "field-separator"
         };
-        let diagnostic = format!("CSV input conflicts with --{name}\n");
+        let diagnostic = format!(
+            "CSV input conflicts with --{name}\nhint: CSV input uses its own comma and quote rules. Remove explicit text separators and --skip-comments\n"
+        );
         before_input(&["--csv-in", flag, "count", "1"], 1, diagnostic.as_bytes());
         before_input(&[flag, "--csv-in", "count", "1"], 1, diagnostic.as_bytes());
     }
@@ -209,7 +211,7 @@ fn csv_names_preserve_argument_bytes_and_retain_mapping_errors() {
         ),
         (
             &["--result-name=1:x", "--result-name=01:y"][..],
-            b"--result-name repeats a result index\n".as_slice(),
+            b"--result-name repeats a result index\nhint: give each calculated result at most one name, for example --result-name=1:total --result-name=2:average\n".as_slice(),
         ),
         (
             &["--result-name=0:x"][..],
@@ -228,7 +230,7 @@ fn csv_names_preserve_argument_bytes_and_retain_mapping_errors() {
     before_input(
         &["--csv-out", "--result-name=1:x", "sum", "1"],
         1,
-        b"--result-name requires --header-out or -H\n",
+        b"--result-name requires --header-out or -H\nhint: add --header-out for generated labels. Use -H only when the first input record names the fields\n",
     );
     let args = [
         "--csv-out".into(),
@@ -240,7 +242,7 @@ fn csv_names_preserve_argument_bytes_and_retain_mapping_errors() {
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(
         output.stderr,
-        b"fastmash: CSV output conflicts with --output-delimiter\n"
+        b"fastmash: CSV output conflicts with --output-delimiter\nhint: CSV output uses commas. Remove --output-delimiter, or omit CSV output to choose a text delimiter\n"
     );
     assert!(output.stdout.is_empty());
     reports(

@@ -109,11 +109,19 @@ fn missing_and_nonexecutable_programs_are_rejected() {
         let path = fixture.0.join("bin").join(name);
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         for recipe in ["fedora", "nix"] {
-            assert_eq!(fixture.run(recipe, "", "fixture").status.code(), Some(1));
+            let output = fixture.run(recipe, "", "fixture");
+            assert_eq!(output.status.code(), Some(1));
+            let text = String::from_utf8_lossy(&output.stderr);
+            assert!(text.contains("not an executable file"));
+            assert!(text.contains(&path.display().to_string()));
         }
         fs::remove_file(path).unwrap();
         for recipe in ["fedora", "nix"] {
-            assert_eq!(fixture.run(recipe, "", "fixture").status.code(), Some(1));
+            let output = fixture.run(recipe, "", "fixture");
+            assert_eq!(output.status.code(), Some(1));
+            let text = String::from_utf8_lossy(&output.stderr);
+            assert!(text.contains("cannot inspect installed executable"));
+            assert!(text.contains(&fixture.0.join("bin/fastmash").display().to_string()));
         }
     }
 }

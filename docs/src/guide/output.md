@@ -31,6 +31,9 @@ Two options change how results are printed. Neither changes how they are compute
 | `-R N`, `--round=N` | Print `N` digits after the decimal point (1 to 50) |
 | `--format=FMT` | Use a `printf`-style format with one `%e`, `%f`, `%g` or `%a` conversion |
 
+Use `--format=%.0f` for no decimal places. The `round` operation instead rounds
+each selected input value to an integer. It does not set a result's display format.
+
 ```console
 $ printf '1\n2\n' | fastmash -R 3 mean 1
 Summary

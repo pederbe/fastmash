@@ -71,7 +71,10 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Option<Con
                 None
             };
             if let Some(tool) = tool {
-                *tool = args.next().ok_or("a tool option requires a path")?.into();
+                *tool = args
+                    .next()
+                    .ok_or_else(|| format!("{} requires a tool path", arg.to_string_lossy()))?
+                    .into();
                 continue;
             }
             if arg.as_bytes().starts_with(b"-") {

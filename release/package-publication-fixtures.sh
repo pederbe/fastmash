@@ -2,6 +2,13 @@
 # Build two small signed repositories for publication tests, without release assets.
 # usage: bash release/package-publication-fixtures.sh DIRECTORY
 set -euo pipefail
+usage() {
+    printf '%s\n' 'usage: bash release/package-publication-fixtures.sh DIRECTORY' \
+        'Build two small signed repositories for local publication tests.' \
+        'Choose a fresh disposable directory. No release assets are downloaded or published.'
+}
+if [ "${1:-}" = --help ] || [ "${1:-}" = -h ]; then usage; exit 0; fi
+if [ "$#" -ne 1 ]; then usage >&2; exit 1; fi
 here=$(dirname "$(realpath "$0")")
 mkdir -p "$1"
 work=$(realpath "$1")

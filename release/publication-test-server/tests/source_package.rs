@@ -159,11 +159,19 @@ fn missing_and_nonexecutable_commands_are_rejected() {
         let fixture = Fixture::new();
         let supervisor = fixture.0.join("fastmash");
         if missing {
-            fs::remove_file(supervisor).unwrap();
+            fs::remove_file(&supervisor).unwrap();
         } else {
-            fs::set_permissions(supervisor, fs::Permissions::from_mode(0o644)).unwrap();
+            fs::set_permissions(&supervisor, fs::Permissions::from_mode(0o644)).unwrap();
         }
-        assert_eq!(fixture.run("").status.code(), Some(1));
+        let output = fixture.run("");
+        assert_eq!(output.status.code(), Some(1));
+        let text = String::from_utf8_lossy(&output.stderr);
+        assert!(text.contains(&supervisor.display().to_string()));
+        assert!(text.contains(if missing {
+            "cannot inspect installed executable"
+        } else {
+            "not an executable file"
+        }));
     }
 }
 

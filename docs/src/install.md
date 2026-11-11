@@ -10,9 +10,9 @@ programs and brings you later versions with your other updates.
 
 | Your system | Recommended | Updates |
 | --- | --- | --- |
-| Debian, Ubuntu | [apt repository](#debian-and-ubuntu) | `sudo apt upgrade` |
-| Fedora, RHEL and similar | [dnf repository](#fedora-rhel-and-similar) | `sudo dnf upgrade` |
-| macOS, or Linux with Homebrew | [Homebrew](#homebrew) | `brew upgrade` |
+| Debian, Ubuntu | [apt repository](#debian-and-ubuntu) | `sudo apt update`, then `sudo apt install --only-upgrade fastmash` |
+| Fedora, RHEL and similar | [dnf repository](#fedora-rhel-and-similar) | `sudo dnf upgrade fastmash` |
+| macOS, or Linux with Homebrew | [Homebrew](#homebrew) | `brew upgrade fastmash` |
 | Any supported system | [Quick install](#quick-install) | Run it again |
 
 All of these install prebuilt programs. If you prefer to compile Fastmash
@@ -88,10 +88,26 @@ curl -fsSL https://fastmash.io/install.sh | sh
 ```
 
 Downloads the latest release archive for your system, checks its checksum and
-installs it into `~/.local/bin`. Add that directory to your `PATH` if needed.
-Run the same command again to update.
+installs it into `~/.local/bin`. The installer prints a command to try when it
+finishes. If your shell cannot find `fastmash`, see [Command not found](#command-not-found).
+Run the same command again to update this installation.
 
-Set `FASTMASH_INSTALL_DIR` to choose another installation directory.
+Choose another writable directory with `FASTMASH_INSTALL_DIR`:
+
+```sh
+curl -fsSL https://fastmash.io/install.sh | env FASTMASH_INSTALL_DIR="$HOME/bin" sh
+```
+
+Use the same directory when updating. To read the installer's help without
+installing anything:
+
+```sh
+curl -fsSL https://fastmash.io/install.sh | sh -s -- --help
+```
+
+If a download or checksum check fails, your existing installation stays in
+place. Check your connection and retry. For a permission error, choose a
+directory you can write to with `FASTMASH_INSTALL_DIR`.
 
 ## Single packages and archives
 
@@ -106,22 +122,27 @@ is needed. To update, rebuild the package from the current recipe.
 
 ### Debian or RPM package
 
-Each command looks up the latest release, then downloads and installs its
-package. On Debian or Ubuntu:
+Each block looks up the latest release, then downloads and installs its
+package. Run it in Bash, entering `bash` first if you use Fish.
+On Debian or Ubuntu:
 
-```sh
+```bash
+bash -eu <<'EOF'
 tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
 tag=${tag##*/}
 curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash_${tag#v}_amd64.deb"
 sudo apt install "./fastmash_${tag#v}_amd64.deb"
+EOF
 ```
 
 On Fedora, RHEL and similar:
 
-```sh
+```bash
+bash -eu <<'EOF'
 tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
 tag=${tag##*/}
 sudo dnf install "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-${tag#v}-1.x86_64.rpm"
+EOF
 ```
 
 ### Linux archive
@@ -137,7 +158,7 @@ tag=${tag##*/}
 name=fastmash-$tag-x86_64-unknown-linux-musl
 if ! curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz; then
   if command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl; then
-    printf '%s\n' 'The latest release has no static Linux archive.' >&2
+    printf '%s\n' 'Could not download the static Linux archive. Check your connection and retry. This system cannot use the older glibc archive.' >&2
     exit 1
   fi
   name=fastmash-$tag-x86_64-unknown-linux-gnu
@@ -146,21 +167,40 @@ fi
 curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz.sha256
 sha256sum -c $name.tar.gz.sha256
 tar -xzf $name.tar.gz
+if [ ! -f "$name/fastmash" ] || [ -L "$name/fastmash" ]; then
+  printf '%s\n' 'The archive has no regular fastmash executable. No installation was changed.' >&2
+  exit 1
+fi
 mkdir -p ~/.local/bin
-cp "$name/fastmash" ~/.local/bin/
+staging=$(mktemp -d "$HOME/.local/bin/.fastmash.XXXXXX")
+trap 'rm -rf "$staging"' EXIT
+for program in fastmash fastmash-sort-supervisor; do
+  if [ -f "$name/$program" ]; then
+    cp "$name/$program" "$staging/$program"
+    chmod 755 "$staging/$program"
+    mv -f "$staging/$program" "$HOME/.local/bin/$program"
+  fi
+done
+printf '1\n2\n' | ~/.local/bin/fastmash sum 1
 EOF
 ```
+
+The final command prints `3`. The staged replacement also works when an
+older copy is running. To update, repeat these steps in an empty directory.
 
 ### macOS archive
 
 The quick installer chooses the macOS archive automatically. To download
-the latest archive by hand, run this in an empty directory:
+the latest archive by hand, run this in Bash in an empty directory. Enter
+`bash` first if using Fish:
 
 ```sh
+bash -eu <<'EOF'
 tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
 tag=${tag##*/}
 curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-$tag-aarch64-apple-darwin.tar.gz"
 curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-$tag-aarch64-apple-darwin.tar.gz.sha256"
+EOF
 ```
 
 Then install it from the same directory in Bash (enter `bash` first if using
@@ -173,7 +213,6 @@ name=${1%.tar.gz}
 shasum -a 256 -c "$name.tar.gz.sha256"
 tar -xzf "$name.tar.gz"
 (cd "$name" && shasum -a 256 -c binary.sha256)
-cat "$name/build-provenance.txt"
 mkdir -p ~/.local/bin
 staging=$(mktemp -d "$HOME/.local/bin/.fastmash.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
@@ -184,7 +223,8 @@ printf '1\n2\n' | ~/.local/bin/fastmash sum 1
 EOF
 ```
 
-The final command prints `3`.
+The final command prints `3`. To update, repeat the download and installation
+steps in an empty directory.
 
 ## With Cargo
 
@@ -230,6 +270,43 @@ printf '1\t2\n3\t4\n' | fastmash sum 1 mean 2
 The summary shows `4` for the sum and `3` for the mean. Next: the
 [quick start](quick-start.md).
 
+## Command not found
+
+For a quick installation or an archive installed in the default directory,
+try the executable directly:
+
+```sh
+~/.local/bin/fastmash --version
+```
+
+`PATH` lists the directories your shell searches for commands, in order.
+If the direct command prints the version, add `~/.local/bin` to `PATH`. In Fish:
+
+```fish
+fish_add_path "$HOME/.local/bin"
+```
+
+In Bash, add this line to `~/.bashrc`. In Zsh, add it to `~/.zshrc`, then open
+a new terminal:
+
+```text
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+If Bash starts a login shell, add the line to `~/.bash_profile` instead.
+Replace `~/.local/bin` with your chosen directory if you set
+`FASTMASH_INSTALL_DIR`.
+
+If the command runs an older copy, this shows which one your shell found:
+
+```sh
+command -v fastmash
+```
+
+Update that installation with its original method, or put your preferred
+installation directory first in `PATH`. In Fish, `fish_add_path --move`
+moves an existing directory to the front.
+
 ## On Windows
 
 Install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install), then
@@ -245,6 +322,9 @@ For the quick installer or a downloaded archive:
 ```sh
 rm ~/.local/bin/fastmash
 ```
+
+If you chose another directory with `FASTMASH_INSTALL_DIR`, remove its
+`fastmash` file instead. Removing the executable does not remove your data.
 
 If you installed with Cargo or cargo-binstall:
 

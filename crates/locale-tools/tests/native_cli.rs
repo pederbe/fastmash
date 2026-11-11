@@ -23,10 +23,9 @@ fn actual_cli_preserves_usage_error_status_and_successful_help() {
     let help = Command::new(binary).arg("--help").output().unwrap();
     assert!(help.status.success());
     assert!(help.stderr.is_empty());
-    assert_eq!(
-        help.stdout,
-        format!("{}\n", fastmash_locale_tools::native::USAGE).as_bytes()
-    );
+    let text = String::from_utf8(help.stdout).unwrap();
+    assert!(text.contains(fastmash_locale_tools::native::USAGE));
+    assert!(text.contains("OUT_JSON and OUT_RS are overwritten"));
 }
 
 fn private_root(label: &str) -> PathBuf {
