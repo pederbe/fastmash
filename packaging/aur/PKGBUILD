@@ -18,9 +18,12 @@ source=("https://github.com/pederbe/fastmash/releases/download/v${pkgver}/${_nam
 sha256sums=('a796427f78c42f6f925c4cbf1ab5b3b9a83b1f204f06b9e457c8c165a3b3b64a')
 
 check() {
+  local output
   cd "${_name}" || return
-  test "$(./fastmash --version)" = "fastmash ${pkgver}"
-  test "$(printf '1\n2\n' | ./fastmash sum 1)" = '3'
+  output=$(./fastmash --version) || return
+  test "$output" = "fastmash ${pkgver}" || return
+  output=$(printf '1\n2\n' | ./fastmash sum 1) || return
+  test "$output" = '3'
 }
 
 package() {
