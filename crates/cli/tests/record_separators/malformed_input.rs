@@ -3,7 +3,11 @@ use super::*;
 #[test]
 fn parser_errors_preserve_scope_and_precedence() {
     let cases: &[(&[&str], i32, &str)] = &[
-        (&[""], 1, "missing operation specifiers"),
+        (
+            &[""],
+            1,
+            "missing operation specifiers\nhint: choose an operation and field, for example fastmash sum 1",
+        ),
         (
             &["strbin:2.5", "1"],
             1,
