@@ -269,6 +269,12 @@ supervisor without touching unrelated files. Package construction also checks
 that packaging did not rewrite the executable. Keep these checks passing before
 accepting the draft.
 
+Set `INSTALLATION_TEST_EVIDENCE` to a new directory when running the installed
+checker locally to retain command output, exit statuses and container receipts.
+Use a different directory for each run. Publication regression tests similarly
+retain their server and stage logs when `PUBLICATION_TEST_EVIDENCE` names a new
+directory. Without that setting, their temporary logs are removed on exit.
+
 Review the draft's notes and complete asset list. Download its delivered assets,
 verify their checksum sidecars and provenance against the build records. Identical
 Linux downloads reuse the completed installation evidence. macOS installation

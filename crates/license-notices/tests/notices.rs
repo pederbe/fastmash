@@ -6,6 +6,20 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+#[test]
+fn help_describes_document_output_without_querying_cargo() {
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_fastmash-license-notices"))
+        .arg("--help")
+        .env("PATH", "")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("Markdown on standard output"));
+    assert!(text.contains("--target x86_64-unknown-linux-musl > THIRD-PARTY-LICENSES.md"));
+}
+
 struct Directory(PathBuf);
 
 impl Directory {

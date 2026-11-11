@@ -158,7 +158,11 @@ fn failed_reference_with_matching_output_wrong_output_or_diagnostic_creates_no_t
 fn invalid_reference_and_existing_output_are_preserved_before_probing() {
     let fixture = Fixture::new();
     fs::write(fixture.0.join("output.json"), "preserve").unwrap();
-    assert_eq!(fixture.run().status.code(), Some(1));
+    let existing = fixture.run();
+    assert_eq!(existing.status.code(), Some(1));
+    let text = String::from_utf8(existing.stderr).unwrap();
+    assert!(text.contains("output.json"));
+    assert!(text.contains("Choose a new output path"));
     assert_eq!(
         fs::read(fixture.0.join("output.json")).unwrap(),
         b"preserve"

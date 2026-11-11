@@ -38,7 +38,12 @@ pub fn execute(
     DirBuilder::new()
         .mode(0o700)
         .create(evidence)
-        .map_err(|error| format!("cannot create comparison evidence: {error}"))?;
+        .map_err(|error| {
+            format!(
+                "cannot create comparison evidence in new directory {}: {error}",
+                evidence.display()
+            )
+        })?;
     match execute_in(&rows, tools, evidence) {
         Ok(report) => Ok(report),
         Err(error) => {

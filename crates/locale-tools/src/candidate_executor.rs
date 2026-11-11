@@ -18,9 +18,23 @@ pub fn generate(
     locpath: &Path,
     evidence: &Path,
 ) -> Result<Candidates> {
-    let sort = fs::canonicalize(sort)?;
-    let locpath = fs::canonicalize(locpath)?;
-    fs::DirBuilder::new().mode(0o700).create(evidence)?;
+    let sort = fs::canonicalize(sort)
+        .map_err(|error| format!("cannot open GNU sort {}: {error}", sort.display()))?;
+    let locpath = fs::canonicalize(locpath).map_err(|error| {
+        format!(
+            "cannot open compiled locale directory {}: {error}",
+            locpath.display()
+        )
+    })?;
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(evidence)
+        .map_err(|error| {
+            format!(
+                "cannot create new candidate evidence directory {}: {error}",
+                evidence.display()
+            )
+        })?;
     let mut next = 0;
     exemplars.project(numeric, |name| {
         next += 1;
@@ -38,7 +52,13 @@ pub fn generate(
                 "stdout_transport": "regular-file", "stderr_transport": "regular-file",
                 "legacy_output_transport": "pipe",
             }))?,
-        )?;
+        )
+        .map_err(|error| {
+            format!(
+                "cannot record case-order probe for {name:?}: {error} (evidence: {})",
+                directory.display()
+            )
+        })?;
         let mut command = Command::new(&sort);
         command
             .env_clear()
@@ -51,7 +71,13 @@ pub fn generate(
             Some(b"a\nA\n"),
             &directory,
             Budget::comparison(Duration::from_secs(300)),
-        )?;
+        )
+        .map_err(|error| {
+            format!(
+                "cannot run case-order probe for {name:?}: {error} (evidence: {})",
+                directory.display()
+            )
+        })?;
         if !output.status.success() || !output.stderr.is_empty() {
             return Err(format!(
                 "case-order probe for {name:?} failed: {} (evidence: {})",

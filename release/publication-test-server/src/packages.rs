@@ -507,9 +507,36 @@ fn invocation(args: &[OsString]) -> io::Result<(&[OsString], Option<&Path>)> {
 }
 
 pub fn run(args: &[OsString]) -> io::Result<()> {
+    if args.len() == 1 && matches!(args[0].to_str(), Some("--help" | "-h")) {
+        println!(
+            "Check package installation, optional upgrades and removal in disposable containers.\n\n\
+Usage: fastmash-test-package-installation repository REPOSITORY VERSION QUALIFIED [PREVIOUS] [--expected-docs DOC_DIR]\n\
+       fastmash-test-package-installation packages PACKAGE_DIRECTORY VERSION QUALIFIED [--expected-docs DOC_DIR]\n\n\
+REPOSITORY is a prepared signed apt/dnf repository. PACKAGE_DIRECTORY contains\n\
+the version's .deb and .rpm files. QUALIFIED is the independent executable checksum\n\
+manifest. PREVIOUS requests a repository-only upgrade check. DOC_DIR supplies\n\
+independently verified same-version README, changelog and license document bytes.\n\
+Docker is the default CONTAINER_ENGINE. Prepare the package-manager images first.\n\
+Set INSTALLATION_TEST_EVIDENCE to a new directory to retain raw command receipts.\n\n\
+Example, replacing VERSION and paths with the candidate inputs:\n\
+  fastmash-test-package-installation repository /tmp/repository VERSION \\\n    release/delivery.sha256 --expected-docs /path/to/verified-documents\n\n\
+Setup: packaging/repository/README.md"
+        );
+        return Ok(());
+    }
     let (args, expected) = invocation(args)?;
-    let source = fs::canonicalize(&args[1])?;
-    let qualified = fs::canonicalize(&args[3])?;
+    let source = fs::canonicalize(&args[1]).map_err(|error| {
+        io::Error::other(format!(
+            "cannot open package input directory {}: {error}",
+            Path::new(&args[1]).display()
+        ))
+    })?;
+    let qualified = fs::canonicalize(&args[3]).map_err(|error| {
+        io::Error::other(format!(
+            "cannot open qualified checksum manifest {}: {error}",
+            Path::new(&args[3]).display()
+        ))
+    })?;
     if !source.is_dir() || !qualified.is_file() {
         return Err(io::Error::other(
             "package input must be a directory and qualified checksums must be a file",

@@ -32,7 +32,12 @@ pub fn execute(
     DirBuilder::new()
         .mode(0o700)
         .create(evidence)
-        .map_err(|error| format!("cannot create verification evidence: {error}"))?;
+        .map_err(|error| {
+            format!(
+                "cannot create verification evidence in new directory {}: {error}",
+                evidence.display()
+            )
+        })?;
     match execute_in(candidates, prior, variant, requested, tools, evidence) {
         Ok(report) => Ok(report),
         Err(error) => {

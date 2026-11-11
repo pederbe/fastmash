@@ -4,6 +4,69 @@ mod terminal;
 const PROGRAM: terminal::Program = terminal::Program;
 
 #[test]
+fn readable_health_explains_findings_and_empty_input_without_wire_identifiers() {
+    for terminal in [false, true] {
+        let empty = PROGRAM.invoke(&["health"], b"", &[], terminal, false);
+        assert!(empty.status.success(), "{empty:?}");
+        let text = String::from_utf8(terminal::strip_styles(&empty.stdout)).unwrap();
+        assert!(text.contains("Inspection complete"), "{text}");
+        assert!(text.contains("no findings"), "{text}");
+        assert!(
+            text.contains("No data records were read, so there are no field values to check."),
+            "{text}"
+        );
+        assert!(text.contains("Field separator: tab (\\t)"), "{text}");
+        assert!(text.contains("Records end with: newline (\\n)"), "{text}");
+        assert!(!text.contains("accepted_records_1based"), "{text}");
+
+        let advisory = PROGRAM.invoke(&["health"], b"1\nword\n", &[], terminal, false);
+        assert!(advisory.status.success(), "{advisory:?}");
+        let text = String::from_utf8(terminal::strip_styles(&advisory.stdout)).unwrap();
+        assert!(text.contains("advisory findings"), "{text}");
+        assert!(
+            text.contains("Mixed value types [observation, advisory]"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "Advisory findings do not fail validation. Violations of supplied rules do."
+            ),
+            "{text}"
+        );
+        assert!(text.contains("Expected type: undetermined"), "{text}");
+        assert!(
+            text.contains("Check whether this field should contain numbers or text"),
+            "{text}"
+        );
+        assert!(!text.contains("type_expectation"), "{text}");
+        assert!(!text.contains("absent_values"), "{text}");
+        assert!(!text.contains("mixed_types"), "{text}");
+
+        let header_only = PROGRAM.invoke(
+            &[
+                "--header-in",
+                "health",
+                "type",
+                "reading",
+                "number",
+                "validate",
+            ],
+            b"reading\n",
+            &[],
+            terminal,
+            false,
+        );
+        assert!(header_only.status.success(), "{header_only:?}");
+        let text = String::from_utf8(terminal::strip_styles(&header_only.stdout)).unwrap();
+        assert!(text.contains("No data records were read"), "{text}");
+        assert!(
+            text.contains("Baseline width: 1 field (input header)"),
+            "{text}"
+        );
+    }
+}
+
+#[test]
 fn terminal_health_preserves_findings_and_distinguishes_validation() {
     let input = b"reading\n10\n12\noops\n";
     let args = ["--header-in", "health", "type", "reading", "number"];
@@ -19,8 +82,8 @@ fn terminal_health_preserves_findings_and_distinguishes_validation() {
         "3",
         "header records: 1",
         "accepted records: 4",
-        "mixed_types [observation, advisory]\n  1 fields",
-        "type_mismatch [declared, violation]\n  1 cells; expected number",
+        "Mixed value types [observation, advisory]\n  1 field",
+        "Type mismatch [declared, violation]\n  1 cell; expected number",
         "accepted record 4, field 1: observed text; sample \"oops\"; truncated no",
         "examples retained 1, omitted 0",
         "Input and reporting",

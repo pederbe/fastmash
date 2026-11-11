@@ -35,7 +35,8 @@ processes to be reaped and the candidate to have received `SIGKILL`.
 Failed setup or observations
 leave partial captures and return a nonzero status.
 
-A successful result establishes this terminal-based late-input mechanism.
-Porting the retained fault cases and qualifying full-output faults remain
-separate work. The research workflow checks macOS 15 and 26 with the latest
-stable Rust and retains their native observations.
+A successful result checks this terminal-based late-input mechanism. The corpus
+driver uses native late-input checks for the retained fault cases. This example
+remains useful for investigating the mechanism separately and does not qualify
+a release. The native workflow checks macOS 15 and 26 with the latest stable
+Rust and retains their observations.

@@ -4,6 +4,14 @@
 # usage: bash release/test-package-repository.sh REPOSITORY VERSION QUALIFIED [PREVIOUS] [--expected-docs DOC_DIR]
 # DOC_DIR supplies independently verified same-version Linux documents.
 set -euo pipefail
+usage() {
+    printf '%s\n' 'usage: bash release/test-package-repository.sh REPOSITORY VERSION QUALIFIED [PREVIOUS] [--expected-docs DOC_DIR]' \
+        'Check installation, optional upgrade and removal in disposable package-manager containers.' \
+        'QUALIFIED is the executable checksum manifest. DOC_DIR supplies independently verified release documents.' \
+        'Set INSTALLATION_TEST_EVIDENCE to a new directory to retain receipts.'
+}
+if [ "${1:-}" = --help ] || [ "${1:-}" = -h ]; then usage; exit 0; fi
+if [ "$#" -lt 3 ]; then usage >&2; exit 1; fi
 here=$(cd "$(dirname "$0")" && pwd)
 target=${CARGO_TARGET_DIR:-$here/../target}
 checker=${FASTMASH_PACKAGE_INSTALLATION_CHECKER:-$target/debug/fastmash-test-package-installation}

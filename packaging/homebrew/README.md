@@ -7,11 +7,20 @@ release. It does not compile Fastmash or create another packaged build.
 brew install pederbe/tap/fastmash
 ```
 
-Existing installations receive updates with `brew upgrade`. Revision 1 of the
-0.4.0 recipe moves existing Homebrew-built installations to the release files.
-The next Fastmash version starts at revision zero again.
+Check the installation with:
+
+```sh
+printf '1\n2\n' | fastmash sum 1
+```
+
+The command prints `3`. Update Fastmash with `brew upgrade fastmash`, or remove
+it with `brew uninstall pederbe/tap/fastmash`.
 
 ## Maintenance
+
+Revision 1 of the
+0.4.0 recipe moves existing Homebrew-built installations to the release files.
+The next Fastmash version starts at revision zero again.
 
 `fastmash.rb` supplies the download layout and installation instructions. Its
 URLs and checksums name the current published release, so the recipe works on

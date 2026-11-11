@@ -122,7 +122,19 @@ mod cli {
         let config = match parse(std::env::args_os().skip(1)) {
             Ok(Some(config)) => config,
             Ok(None) => {
-                println!("{USAGE}");
+                println!(
+                    "Compare numeric locale behavior of candidate and reference executables.\n\n{USAGE}\n\n\
+Check 21 command pairs per selected locale, comparing stdout, normalized stderr and status.\n\
+By default, select one locale per distinct set of numeric rules. --all selects every\n\
+locale with a one-byte decimal separator. LOCPATH must match the reference environment.\n\
+Evidence is retained in a new --evidence directory, or a temporary directory printed\n\
+on stderr. Status 0 means all compared pairs matched. At most 25 mismatch details\n\
+are printed. summary.json counts every mismatch and raw captures retain every pair.\n\
+A zero-case summary means no locale checks ran.\n\n\
+Example, replacing executable and locale paths with your reference paths:\n\
+  fastmash-compare-numeric-locales --evidence /tmp/fastmash-numeric-comparison -- \\\n    /path/to/fastmash /path/to/reference /path/to/compiled-locales \\\n    data/locales/glibc-lc-numeric.json\n\n\
+Guide: https://fastmash.io/contributing/testing.html#locale-tools"
+                );
                 return ExitCode::SUCCESS;
             }
             Err(error) => {

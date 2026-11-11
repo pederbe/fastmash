@@ -165,7 +165,15 @@ dnf -q --showduplicates list fastmash
             .map_err(|error| failure(format!("cannot prepend fixture adapter to PATH: {error}")))?;
             let logs = if let Some(path) = env::var_os("PUBLICATION_TEST_EVIDENCE") {
                 let path = PathBuf::from(path);
-                fs::DirBuilder::new().mode(0o700).create(&path)?;
+                fs::DirBuilder::new()
+                    .mode(0o700)
+                    .create(&path)
+                    .map_err(|error| {
+                        failure(format!(
+                            "cannot create new publication evidence directory {}: {error}",
+                            path.display()
+                        ))
+                    })?;
                 fs::canonicalize(path)?
             } else {
                 let path = root.0.join("logs");
@@ -561,14 +569,45 @@ dnf -q --showduplicates list fastmash
 
     pub(super) fn run() -> io::Result<()> {
         let args: Vec<_> = env::args_os().skip(1).collect();
+        if args.len() == 1 && matches!(args[0].to_str(), Some("--help" | "-h")) {
+            println!(
+                "Check interrupted publication using local storage and actual apt/dnf clients.\n\n\
+Usage: fastmash-test-package-publication OLD_REPOSITORY NEW_REPOSITORY UPLOADER\n\n\
+Use two prepared signed fixture repositories and the repository upload script.\n\
+The tool replaces storage with its local adapter and uses disposable native\n\
+package-manager containers. It does not upload to the public package repository.\n\
+Docker is the default CONTAINER_ENGINE. Prepare the Debian and AlmaLinux images first.\n\
+Set PUBLICATION_TEST_EVIDENCE to a new directory to retain command logs, server\n\
+requests and completed.tsv on success or failure. Otherwise temporary logs are removed.\n\n\
+Example, after creating the documented publication fixtures:\n\
+  fastmash-test-package-publication /tmp/publication-fixtures/old \\\n    /tmp/publication-fixtures/new release/publish-package-repository.sh\n\n\
+Setup: packaging/repository/README.md"
+            );
+            return Ok(());
+        }
         if args.len() != 3 {
             return Err(failure(
                 "usage: fastmash-test-package-publication OLD_REPOSITORY NEW_REPOSITORY UPLOADER",
             ));
         }
-        let old = fs::canonicalize(&args[0])?;
-        let new = fs::canonicalize(&args[1])?;
-        let uploader = fs::canonicalize(&args[2])?;
+        let old = fs::canonicalize(&args[0]).map_err(|error| {
+            failure(format!(
+                "cannot open old repository {}: {error}",
+                Path::new(&args[0]).display()
+            ))
+        })?;
+        let new = fs::canonicalize(&args[1]).map_err(|error| {
+            failure(format!(
+                "cannot open new repository {}: {error}",
+                Path::new(&args[1]).display()
+            ))
+        })?;
+        let uploader = fs::canonicalize(&args[2]).map_err(|error| {
+            failure(format!(
+                "cannot open uploader {}: {error}",
+                Path::new(&args[2]).display()
+            ))
+        })?;
         if !old.is_dir() || !new.is_dir() || !uploader.is_file() {
             return Err(failure(
                 "old and new repositories must be directories and uploader must be a file",

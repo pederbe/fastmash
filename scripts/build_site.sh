@@ -6,9 +6,17 @@
 # renders are committed (scripts/build_site.py). Set MDBOOK to use an
 # installed mdBook instead of the pinned release binary.
 set -euo pipefail
+if [ "${1:-}" = --help ] || [ "${1:-}" = -h ]; then
+    printf '%s\n' 'usage: bash scripts/build_site.sh [local|--cloudflare]' \
+        'Build the documentation website into docs/book without deploying it.' \
+        'local is the default. --cloudflare uses published-release download links.' \
+        'Set MDBOOK to use an installed mdBook executable.'
+    exit 0
+fi
+if [ "$#" -gt 1 ]; then echo 'usage: bash scripts/build_site.sh [local|--cloudflare]' >&2; exit 2; fi
 cd "$(dirname "$0")/.."
 mode=${1:-local}
-case "$mode" in local|--cloudflare) ;; *) echo 'usage: scripts/build_site.sh [--cloudflare]' >&2; exit 2 ;; esac
+case "$mode" in local|--cloudflare) ;; *) echo 'usage: bash scripts/build_site.sh [local|--cloudflare]' >&2; exit 2 ;; esac
 
 version=0.5.4
 digest=3f28de05dafca9d0f2eab99c662116b0e37b89b1d96a08f8f430b9eeae958cd7

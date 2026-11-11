@@ -17,34 +17,36 @@ The report shows the field observations and the finding:
 Table health report
 ⚠ Inspection complete · advisory findings
 Data records: 2 · header records: 1 · accepted records: 3
-Baseline width: 2 fields (inferred, header)
+Baseline width: 2 fields (input header)
 Maximum data-record width: 2 fields
 
 Field observations (data-record cells):
   field 1, name "item"
     Absent 0 · empty 0 · missing 0
     Integer 0 · other number 0 · text 2
-    type_expectation text (inferred)
+    Expected type: text (inferred)
   field 2, name "price"
     Absent 0 · empty 0 · missing 0
     Integer 1 · other number 0 · text 1
-    type_expectation undetermined (observation)
+    Expected type: undetermined (observation)
 
 Findings (counts may overlap):
-⚠ mixed_types [observation, advisory]
-  1 fields; field 2, name "price"
+Advisory findings do not fail validation. Violations of supplied rules do.
+⚠ Mixed value types [observation, advisory]
+  1 field; field 2, name "price"
   examples retained 1, omitted 1
+    Check whether this field should contain numbers or text, then supply a type rule if needed.
     accepted record 2, field 2: observed integer; sample "10"; truncated no
 
 
 Input and reporting
-Input separator: literal "\t"
-Record terminator: lf
+Field separator: tab (\t)
+Records end with: newline (\n)
 Numeric decimal separator: "."
 Input header: yes
-Comment filter: none
-Vnlog: no
-Record numbering: accepted_records_1based (including the Input header; filtered records excluded)
+Comment filtering: none
+Annotated input (--vnlog): no
+Record numbers start at 1, include the input header and exclude filtered records.
 Example limit: 1 per finding
 Sample byte limit: 128 raw bytes
 ```
@@ -69,7 +71,9 @@ text input, not quoted CSV.
 
 The table health report states the data-record, header-record and accepted-record
 counts, effective input settings, numeric decimal separator, baseline width,
-maximum data-record width and example limits. `width N` supplies the baseline and
+maximum data-record width and example limits. Readable reports explain each
+finding and suggest what to check. Empty and header-only reports state that
+there are no data-record values to check. `width N` supplies the baseline and
 checks both data records and an existing input header. N can be zero. Width does
 not declare individual fields. Without a supplied width, an input header supplies
 labels and the baseline rather than data values. Without a header, the baseline
@@ -77,23 +81,30 @@ is the most frequent data-record width across the complete input, choosing the
 smaller width on a tie. With neither a supplied width, data nor a header, the
 baseline is unavailable.
 
-`width_mismatch` counts data records that differ from the selected baseline.
+**Record width mismatch** counts data records that differ from the selected baseline.
 For a supplied width it is a declared violation. Otherwise it is advisory.
-`header_width_mismatch` separately counts an input header disagreeing with a
+**Header width mismatch** separately counts an input header disagreeing with a
 supplied width, including when there are no data records.
-`blank_header` identifies each empty header position. `duplicate_header` identifies
-every position sharing a nonempty exact-byte label. These findings are advisory.
+Each empty header position produces a **Blank header names** finding. Each
+position sharing a nonempty exact-byte label produces a **Repeated header names**
+finding. Both findings are advisory.
 A complete report succeeds even when findings exist. Record and header-field
 counts and cell counts can overlap. Adding them does not give a count of distinct
 bad records.
+
+`observation` describes what the input contains, `inferred` marks a pattern found
+in the input, and `declared` marks a rule you supplied.
 
 ## Missing values and lexical types
 
 Every field appearing in the input header, a data record or a positional
 declaration has `absent_values`, `empty_values`, `missing_values`, `integer_values`,
 `other_number_values` and `text_values` counters, including zero counts. The six
-categories partition the data-record count for each tracked field. An absent
-field is a position beyond a record's width. An empty field is present with
+categories partition the data-record count for each tracked field.
+Readable reports use ordinary labels such as `absent` and `Expected type`.
+Readable finding titles also use ordinary words. TSV output keeps the identifiers
+documented in its schema.
+An absent field is a position beyond a record's width. An empty field is present with
 zero-length bytes. `missing_values` counts exact whole-field `NA`, `N/A` and `NaN`
 tokens in any letter case, without trimming. Whitespace-only values and tokens
 with extra characters are separate values.
@@ -114,15 +125,15 @@ numbers, it is `text`. A tie or no eligible values leaves it `undetermined`.
 The report labels these expectations as inferred and shows their counts. Undetermined is an observation. These guesses cannot establish the intended
 meaning of an identifier or distinguish a legitimate code from a missing token.
 
-Positive counters produce `absent_field`, `empty_field` and `missing_indicator`
+Positive counters produce **Absent fields**, **Empty field values** and **Missing value indicators**
 findings in that order, each counting data-record cells at its field position.
 These are observations: an NA-like token can be a legitimate code. Inspection
 does not change values or remove records. The input header is excluded from cell
 counts, and header-only input has zero observations. Fields appearing late include
 earlier absent positions. Positions outside the header have an empty label.
 
-`mixed_types` follows the missingness findings and counts one field whenever
-numeric and text encodings coexist. `type_mismatch` follows it and counts text
+**Mixed value types** follows the missingness findings and counts one field whenever
+numeric and text encodings coexist. **Type mismatch** follows it and counts text
 cells incompatible with an inferred integer or number expectation. Inferred text
 does not reject numbers, and mixed integer/fractional numbers can share a number
 expectation. Both findings remain advisory, including an inconclusive mixed-type
@@ -135,13 +146,13 @@ health expectation, replacing inference for that field. Integer and number use
 the lexical rules above. Text permits arbitrary field bytes. Type checks exempt
 absent, empty and candidate-missing values. A supplied integer rule rejects other
 numeric encodings as well as text, even when their mathematical value is integral.
-Mismatches are declared `type_mismatch` violations. The field's inferred mismatch
-is suppressed, while its counters and `mixed_types` observation remain visible.
+Mismatches are declared **Type mismatch** violations. The field's inferred mismatch
+is suppressed, while its counters and **Mixed value types** observation remain visible.
 
 `required FIELD` rejects absent and empty cells. `nonmissing FIELD` additionally
 rejects candidate-missing indicators and works without `required`. When both are
 supplied, nonmissing is the one effective presence rule. One declared
-`presence_mismatch` finding per field counts failed cells without duplicating
+**Presence rule not met** finding per field counts failed cells without duplicating
 the rules. A literal `NA` code can pass required/text checks and fail nonmissing.
 
 FIELD follows the existing single-selector spelling, without lists, ranges or
@@ -185,6 +196,8 @@ Field observations use their accepted-record ordinal and field position. Absent 
 which condition was observed. Backslash, TAB, LF, CR and NUL are escaped as
 `\\`, `\t`, `\n`, `\r` and `\0`. Other bytes outside printable ASCII use
 `\xHH` with uppercase hexadecimal digits. This keeps binary bytes visible.
+For ordinary text input, select a field shown with byte escapes by its field
+number or original header text. With `--vnlog`, use the original header name.
 
 ## Supported input and controls
 

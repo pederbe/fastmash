@@ -51,6 +51,5 @@ Text parsing or a cached disk identifier cannot establish the same current
 ownership.
 
 The native workflow runs on macOS 15 and 26 with the latest stable Rust. This
-qualifies resource ownership for a development mechanism. Existing full-output
-test transports remain in place until their retained fault cases are ported
-and qualified.
+checks resource ownership for the native full-output mechanism used by the
+corpus driver. It does not qualify a release.

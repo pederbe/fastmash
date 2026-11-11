@@ -346,7 +346,7 @@ fn comparison_rank_errors_precede_missing_files_and_late_data_errors_precede_hea
     assert!(output.stdout.is_empty());
     assert_eq!(
         output.stderr,
-        b"fastmash: comparison rank result exceeds the number of results\n"
+        b"fastmash: comparison rank result exceeds the number of results\nhint: rank counts calculated results from 1 in request order, excluding keys and the derived report columns\n"
     );
     fs::write(root.0.join("before"), b"k\tv\nA\t1\n").unwrap();
     fs::write(root.0.join("after"), b"k\tv\nA\t100\nZ\tbad\n").unwrap();

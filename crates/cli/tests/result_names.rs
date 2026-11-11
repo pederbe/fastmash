@@ -100,11 +100,11 @@ fn invalid_result_names_fail_before_emitting_any_header() {
         ),
         (
             "1:a\tb",
-            "--result-name contains the text output delimiter or record terminator\n",
+            "--result-name contains the text output delimiter or record terminator\nhint: remove separator bytes from the name, or use --csv-out to quote names containing them\n",
         ),
         (
             "1:a\nb",
-            "--result-name contains the text output delimiter or record terminator\n",
+            "--result-name contains the text output delimiter or record terminator\nhint: remove separator bytes from the name, or use --csv-out to quote names containing them\n",
         ),
     ] {
         for file in [false, true] {
@@ -138,7 +138,7 @@ fn invalid_result_names_fail_before_emitting_any_header() {
         assert!(output.stdout.is_empty());
         assert_eq!(
             output.stderr,
-            b"fastmash: --result-name requires --header-out or -H\n"
+            b"fastmash: --result-name requires --header-out or -H\nhint: add --header-out for generated labels. Use -H only when the first input record names the fields\n"
         );
     }
     for (header, input) in [
@@ -173,7 +173,7 @@ fn invalid_result_names_fail_before_emitting_any_header() {
     assert_eq!(output.status.code(), Some(1));
     assert_eq!(
         output.stderr,
-        b"fastmash: --result-name repeats a result index\n"
+        b"fastmash: --result-name repeats a result index\nhint: give each calculated result at most one name, for example --result-name=1:total --result-name=2:average\n"
     );
     assert!(output.stdout.is_empty());
 }
@@ -410,7 +410,7 @@ fn naming_uses_effective_text_delimiters_and_preserves_argument_bytes() {
         assert!(output.stdout.is_empty());
         assert_eq!(
             output.stderr,
-            b"fastmash: --result-name contains the text output delimiter or record terminator\n"
+            b"fastmash: --result-name contains the text output delimiter or record terminator\nhint: remove separator bytes from the name, or use --csv-out to quote names containing them\n"
         );
     }
 }

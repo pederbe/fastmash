@@ -410,12 +410,12 @@ fn health_allocations_refuse_without_emitting_partial_report() {
         (
             b"a\t\ta\n1\n\n2\t\tNA\n4\tNaN\t6\t\n".as_slice(),
             4,
-            "absent_values 3; empty_values 1; missing_values 0",
+            "absent 3; empty 1; missing 0",
         ),
         (
             b"a\t\ta\n1\t1.5\tword\n2\t2.5\t9\nlate\ttext\tmore\n3\t3.5\tlast\tNA\n4\n".as_slice(),
             5,
-            "absent_values 4; empty_values 0; missing_values 1",
+            "absent 4; empty 0; missing 1",
         ),
     ] {
         for limit in ["0", "2"] {
@@ -438,16 +438,16 @@ fn health_allocations_refuse_without_emitting_partial_report() {
                 if status == 0 {
                     assert!(diagnostics.is_empty());
                     assert!(output.bytes.starts_with(
-                        format!("Table health report\nData records: {records}\n").as_bytes()
+                        format!("Table health report\nInspection complete: advisory findings\nData records: {records}\n").as_bytes()
                     ));
                     let output = String::from_utf8(output.bytes).unwrap();
                     assert!(output.contains(&format!(
-                    "field 4, name \"\": {field4}; integer_values 0; other_number_values 0; text_values 0\n"
-                )));
-                    assert!(output.contains("missing_indicator"));
+                        "field 4, name \"\": {field4}; integer 0; other number 0; text 0\n"
+                    )));
+                    assert!(output.contains("Missing value indicators"));
                     if records == 5 {
-                        assert!(output.contains("mixed_types"));
-                        assert!(output.contains("type_mismatch [inferred, advisory]"));
+                        assert!(output.contains("Mixed value types"));
+                        assert!(output.contains("Type mismatch [inferred, advisory]"));
                     }
                     assert_eq!(output.contains("    accepted record "), limit != "0");
                     completed = true;
@@ -605,10 +605,10 @@ fn declared_health_allocations_are_checked_through_completion() {
             command_memory::FAIL_RESERVATION.with(|slot| slot.set(None));
             if result == (1, Vec::new()) {
                 let report = String::from_utf8(output.bytes).unwrap();
-                assert!(report.contains("header_width_mismatch [declared, violation]"));
-                assert!(report.contains("type_mismatch [declared, violation]: 1 cells"));
+                assert!(report.contains("Header width mismatch [declared, violation]"));
+                assert!(report.contains("Type mismatch [declared, violation]: 1 cell"));
                 assert!(report.contains(
-                    "presence_mismatch [declared, violation]: 6 cells; expected required; field 5"
+                    "Presence rule not met [declared, violation]: 6 cells; expected required; field 5"
                 ));
                 assert!(!report.contains("field 3,"));
                 assert!(!report.contains("field 4,"));

@@ -79,7 +79,7 @@ mod cli {
                     continue;
                 }
                 if arg.as_encoded_bytes().starts_with(b"-") {
-                    return Err("unknown option".into());
+                    return Err(format!("unknown option: {}", arg.to_string_lossy()).into());
                 }
             }
             paths.push(PathBuf::from(arg));
@@ -104,19 +104,35 @@ mod cli {
     }
 
     fn verify(config: &Config) -> Result<()> {
-        let candidates = fs::read(&config.candidates)
-            .map_err(|error| format!("cannot read candidates input: {error}"))?;
+        let candidates = fs::read(&config.candidates).map_err(|error| {
+            format!(
+                "cannot read candidates input {}: {error}",
+                config.candidates.display()
+            )
+        })?;
         let prior = config
             .prior
             .as_ref()
             .map(|path| {
-                fs::read(path).map_err(|error| format!("cannot read prior verification: {error}"))
+                fs::read(path).map_err(|error| {
+                    format!("cannot read prior verification {}: {error}", path.display())
+                })
             })
             .transpose()?;
         match fs::symlink_metadata(&config.output) {
-            Ok(_) => return Err("output already exists".into()),
+            Ok(_) => {
+                return Err(format!(
+                    "output already exists: {}. Choose a new report path",
+                    config.output.display()
+                )
+                .into());
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(format!("cannot inspect output: {error}").into()),
+            Err(error) => {
+                return Err(
+                    format!("cannot inspect output {}: {error}", config.output.display()).into(),
+                );
+            }
         }
         let report = verification_executor::execute(
             &candidates,
@@ -133,13 +149,15 @@ mod cli {
             .open(&config.output)
             .map_err(|error| {
                 format!(
-                    "cannot create report: {error} (verification evidence: {})",
+                    "cannot create report {}: {error} (verification evidence: {})",
+                    config.output.display(),
                     config.evidence.display()
                 )
             })?;
         output.write_all(&raw).map_err(|error| {
             format!(
-                "cannot write report: {error} (verification evidence: {})",
+                "cannot write report {}: {error} (verification evidence: {})",
+                config.output.display(),
                 config.evidence.display()
             )
         })?;
@@ -153,7 +171,19 @@ mod cli {
         let config = match parse(std::env::args_os().skip(1)) {
             Ok(Some(config)) => config,
             Ok(None) => {
-                println!("{USAGE}");
+                println!(
+                    "Write a collation verification report for a separately built candidate executable.\n\n{USAGE}\n\n\
+First project the chosen candidate variant and build the measurement executable\n\
+with that table. CANDIDATE, REFERENCE, SORT and LOCPATH are paths to those executables\n\
+and matching compiled reference locales. Repeat --locale NAME for a subset, or omit\n\
+it for every candidate locale. en_US is also checked as the baseline.\n\
+--prior preserves variant history. The overall total includes earlier verified variants.\n\
+The output report and evidence directory must be new. Status 0 means the report\n\
+was written. Ordering differences and native command failures remain report findings.\n\n\
+Example, after building variant 0 into /path/to/measurement-fastmash:\n\
+  fastmash-verify-collation-locales --variant 0 --evidence /tmp/fastmash-verification-captures \\\n    --prior data/locales/collation-verification.json --locale en_US -- \\\n    data/locales/collation-candidates.json /path/to/measurement-fastmash \\\n    /path/to/reference /path/to/gnu-sort /path/to/compiled-locales /tmp/fastmash-verification.json\n\n\
+Guide: https://fastmash.io/contributing/testing.html#locale-tools"
+                );
                 return ExitCode::SUCCESS;
             }
             Err(error) => {

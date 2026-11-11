@@ -105,7 +105,12 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
         return Err(Error::message("unsupported regression test platform"));
     }
     require_unblocked_signals()?;
-    let binary = fs::canonicalize(&options.binary)?;
+    let binary = fs::canonicalize(&options.binary).map_err(|error| {
+        Error::message(format!(
+            "cannot open candidate {}: {error}",
+            options.binary.display()
+        ))
+    })?;
     if !binary.is_file() {
         return Err(Error::message(format!("{} is required", binary.display())));
     }
@@ -264,13 +269,21 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
             "executable or fixture identity changed during the run",
         ));
     }
-    write!(
-        output,
-        "{} of {} cases passed",
-        result.passed, result.selected_cases
-    )?;
-    if result.attempted != result.selected_cases {
-        write!(output, "; stopped after {}", result.attempted)?;
+    if result.selected_cases == 0 && result.deferred_cases == 0 {
+        write!(
+            output,
+            "No frozen cases matched --match {:?}. No checks ran. Choose a case ID or a shorter substring",
+            options.pattern
+        )?;
+    } else {
+        write!(
+            output,
+            "{} of {} cases passed",
+            result.passed, result.selected_cases
+        )?;
+        if result.attempted != result.selected_cases {
+            write!(output, "; stopped after {}", result.attempted)?;
+        }
     }
     writeln!(output)?;
     if result.deferred_cases != 0 {
@@ -341,7 +354,22 @@ pub fn main_entry(mut args: impl Iterator<Item = OsString>) -> Result<i32> {
         match arg.to_str() {
             Some("--help" | "-h") => {
                 println!(
-                    "Run frozen Fastmash commands and supported transports.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n  --fixture PATH          compressed corpus and sibling provenance\n  --match TEXT            select case IDs containing TEXT\n  --expected-version V    successful version-action expectation\n  --stdin-file            ordinary input through a regular file\n  --keep-going            continue after mismatches\n  --evidence-dir PATH     retain one run in an empty directory\n\nHeld stdin, pre-EOF output and late-input error cases run by default alongside directory input, closed output pipes and full-output cases. Both input modes account for every frozen case."
+                    "Run frozen Fastmash commands and supported input and output transports.\n\nUsage: fastmash-corpus --binary PATH [OPTIONS]\n\n\
+Example, replacing VERSION with the selected executable's version number:\n\
+  fastmash-corpus --binary target/release/fastmash --expected-version VERSION \\\n    --evidence-dir /var/tmp/fastmash-corpus-run\n\n\
+  --fixture PATH          compressed corpus with its sibling provenance file\n\
+  --match TEXT            select case IDs containing TEXT\n\
+  --expected-version V    expected version for --version cases\n\
+  --stdin-file            ordinary input through a regular file\n\
+  --keep-going            continue after mismatches\n\
+  --evidence-dir PATH     retain one run in a new or empty directory\n\n\
+The default fixture is tests/cli/cases-v3.jsonl.gz in this checkout.\n\
+Held stdin, output before end of input and late-input error cases run by default\n\
+alongside directory input, closed output pipes and full-output cases. Both input\n\
+modes account for every selected case, including deferred transports.\n\
+No matching IDs produce a no-checks message and retain status 0. Check the selected\n\
+case count before treating a filtered run as validation.\n\n\
+Guide: https://fastmash.io/contributing/testing.html#regression-corpus"
                 );
                 return Ok(0);
             }

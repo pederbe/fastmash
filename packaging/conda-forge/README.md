@@ -16,7 +16,7 @@ release binaries. Its bytes therefore differ from the benchmarked release
 binaries; the results are the same (the arithmetic is portable), but speed
 can differ slightly.
 
-## Submitting (after the first release)
+## Submitting the recipe
 
 1. Put the release tag's tarball checksum in `meta.yaml`:
    `curl -fsSL https://github.com/pederbe/fastmash/archive/refs/tags/v0.1.0.tar.gz | sha256sum`.

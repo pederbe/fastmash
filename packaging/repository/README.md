@@ -156,6 +156,10 @@ and removal checks. If the repository also contains an earlier version, put it
 after `QUALIFIED` and before `--expected-docs` to check its upgrade to the version
 whose documents were supplied.
 
+Set `INSTALLATION_TEST_EVIDENCE` to a new directory to retain each checked
+command, its output and status, and container receipts. Without it, successful
+checks do not retain those raw receipts. Each run needs its own directory.
+
 Publication regression checks use small fixture packages and a throwaway key.
 They need the repository tools above, Rust, Docker and the Debian 12 and
 AlmaLinux 8 container images:
@@ -171,6 +175,11 @@ both package managers after every object write and publishes the next generation
 between requests from an active client. The dedicated package-repository checks
 workflow runs these tests for changes to the publication tooling, without R2
 credentials. Set `CONTAINER_ENGINE=podman` to use Podman for either test script.
+
+For publication failures, set `PUBLICATION_TEST_EVIDENCE` to a new directory
+before running the test. It retains the server log, stage output and
+`completed.tsv`, including which stages finished. Without this setting, cleanup
+removes the temporary logs when the test exits.
 
 ## For users
 

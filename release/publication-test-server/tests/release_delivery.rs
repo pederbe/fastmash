@@ -7,6 +7,41 @@ use std::{fs, path::Path, process::Command};
 fn executable(path: &Path, text: &str) {
     crate::executable_fixture::write(path, text, 0o755);
 }
+
+#[test]
+fn maintained_shell_help_runs_before_tools_or_side_effects() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for script in [
+        "release/package.sh",
+        "release/package-repository.sh",
+        "release/package-publication-fixtures.sh",
+        "release/publish-package-repository.sh",
+        "release/publish-crates.sh",
+        "release/check-crate-packages.sh",
+        "release/check-installed.sh",
+        "release/test-package-repository.sh",
+        "release/test-package-publication.sh",
+        "release/macos-archive.sh",
+        "scripts/build_site.sh",
+    ] {
+        for flag in ["--help", "-h"] {
+            let output = Command::new("/bin/bash")
+                .arg(repository.join(script))
+                .arg(flag)
+                .env_clear()
+                .env("PATH", "/nonexistent")
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{script} {flag}: {output:?}");
+            assert!(
+                output.stdout.starts_with(b"usage: "),
+                "{script}: {output:?}"
+            );
+            assert!(output.stderr.is_empty(), "{script}: {output:?}");
+        }
+    }
+}
+
 #[test]
 fn resumes_only_missing_packages_and_refuses_ambiguous_registry_state() {
     let root = std::path::PathBuf::from("/var/tmp").join(format!(

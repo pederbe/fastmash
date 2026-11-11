@@ -590,7 +590,9 @@ fn existing_report_or_evidence_is_refused_without_overwriting_inputs_or_running_
         assert_eq!(output.status.code(), Some(1));
         assert!(output.stdout.is_empty());
         assert!(run.observations().is_empty());
+        let diagnostic = String::from_utf8_lossy(&output.stderr);
         if existing == "evidence" {
+            assert!(diagnostic.contains(&run.evidence.display().to_string()));
             assert_eq!(
                 fs::read(run.evidence.join("keep")).unwrap(),
                 b"existing evidence"
@@ -598,6 +600,8 @@ fn existing_report_or_evidence_is_refused_without_overwriting_inputs_or_running_
             assert_eq!(fs::read_dir(&run.evidence).unwrap().count(), 1);
             assert!(!run.report.exists());
         } else {
+            assert!(diagnostic.contains(&run.report.display().to_string()));
+            assert!(diagnostic.contains("Choose a new report path"));
             assert!(!run.evidence.exists());
             if existing == "report" {
                 assert_eq!(fs::read(&run.report).unwrap(), b"keep existing report");
@@ -621,7 +625,11 @@ fn help_argument_and_selection_errors_have_no_native_side_effects() {
     );
     for option in ["--help", "-h"] {
         let output = run.invoke(option.trim_start_matches('-'), &[option.into()]);
-        assert_success(&output, USAGE, &run.root);
+        assert!(output.status.success(), "{output:?}");
+        assert!(output.stderr.is_empty());
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(text.contains(USAGE));
+        assert!(text.contains("Status 0 means the report was written"));
     }
     let mut invalid = vec![
         vec![],

@@ -15,6 +15,15 @@
 # apt-ftparchive, rpm, rpmsign and createrepo_c.
 set -euo pipefail
 
+usage() {
+    printf '%s\n' 'usage: bash release/package-repository.sh REPOSITORY PUBLIC_KEY PACKAGE...' \
+        'Add verified .deb/.rpm packages to a local signed apt/dnf repository.' \
+        'The matching secret signing key must be in the GnuPG keyring.' \
+        'Earlier published packages and snapshots are preserved. This command does not upload them.'
+}
+if [ "${1:-}" = --help ] || [ "${1:-}" = -h ]; then usage; exit 0; fi
+if [ "$#" -lt 3 ]; then usage >&2; exit 1; fi
+
 repository=$(realpath "$1") public_key=$(realpath "$2")
 shift 2
 test $# -gt 0 || { echo "no packages given" >&2; exit 1; }

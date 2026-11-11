@@ -15,7 +15,7 @@ fn run() -> fastmash_locale_tools::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
     use std::path::PathBuf;
 
-    const USAGE: &str = "Usage: fastmash-generate-glibc-collation --evidence PATH [--locale NAME ...] [--] GNU_SORT LOCALE_TOOL LOCPATH COMMON OUTPUT_JSON OUTPUT_RUST\n\nGenerates candidates for the sorting locales compiled into this tool. --locale limits qualification to named sorting locales. Output and capture paths must be new.";
+    const USAGE: &str = "Usage: fastmash-generate-glibc-collation --evidence PATH [--locale NAME]... [--] GNU_SORT LOCALE_TOOL LOCPATH COMMON OUTPUT_JSON OUTPUT_RUST";
     let mut args = std::env::args_os().skip(1);
     let mut evidence = None;
     let mut selected = BTreeSet::new();
@@ -24,7 +24,18 @@ fn run() -> fastmash_locale_tools::Result<()> {
     while let Some(arg) = args.next() {
         if !positional {
             if arg == "--help" || arg == "-h" {
-                println!("{USAGE}");
+                println!(
+                    "Generate JSON and Rust candidates for glibc collation character handling.\n\n{USAGE}\n\n\
+COMMON is the reference's iso14651_t1_common source. GNU_SORT, LOCALE_TOOL and\n\
+LOCPATH must match that reference. Both output files and the evidence directory\n\
+must be new. By default, probe every sorting locale compiled into this tool.\n\
+Repeat --locale NAME to select a subset. Keep subset output separate from a full table.\n\
+The report's fourth level is a collation comparison level. Review all generated\n\
+candidates before changing product tables. Raw probe captures remain in the evidence directory.\n\n\
+Example, with paths to your reference tools and source:\n\
+  fastmash-generate-glibc-collation --evidence /tmp/fastmash-glibc-captures \\\n    --locale en_US --locale de_DE -- /path/to/gnu-sort /path/to/reference/bin/locale \\\n    /path/to/compiled-locales /path/to/reference/iso14651_t1_common \\\n    /tmp/fastmash-glibc.json /tmp/fastmash-glibc.rs\n\n\
+Guide: https://fastmash.io/contributing/testing.html#locale-tools"
+                );
                 return Ok(());
             }
             if arg == "--" {
@@ -51,7 +62,7 @@ fn run() -> fastmash_locale_tools::Result<()> {
                 continue;
             }
             if arg.as_encoded_bytes().starts_with(b"-") {
-                return Err(format!("unknown option\n{USAGE}").into());
+                return Err(format!("unknown option: {}\n{USAGE}", arg.to_string_lossy()).into());
             }
         }
         paths.push(PathBuf::from(arg));
@@ -68,8 +79,15 @@ fn run() -> fastmash_locale_tools::Result<()> {
         .map_err(|_| format!("expected six paths\n{USAGE}"))?;
     let evidence = evidence.ok_or("--evidence requires a path")?;
     for output in [&output_json, &output_rust] {
-        if output.try_exists()? {
-            return Err(format!("output already exists: {}", output.display()).into());
+        if output
+            .try_exists()
+            .map_err(|error| format!("cannot inspect output {}: {error}", output.display()))?
+        {
+            return Err(format!(
+                "output already exists: {}. Choose a new output path",
+                output.display()
+            )
+            .into());
         }
     }
     if output_json == output_rust {
@@ -94,7 +112,12 @@ fn run() -> fastmash_locale_tools::Result<()> {
         .into_iter()
         .filter(|row| selected.is_empty() || selected.contains(&row.name))
         .collect();
-    let source = fs::read(&common_path)?;
+    let source = fs::read(&common_path).map_err(|error| {
+        format!(
+            "cannot read common collation source {}: {error}",
+            common_path.display()
+        )
+    })?;
     let common = Common::parse(std::str::from_utf8(&source)?)?;
     let source_name = common_path
         .file_name()
@@ -102,7 +125,15 @@ fn run() -> fastmash_locale_tools::Result<()> {
         .ok_or("common source name must be UTF-8")?;
     let decomposed = decompositions();
     let letters = letters();
-    fs::DirBuilder::new().mode(0o700).create(&evidence)?;
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&evidence)
+        .map_err(|error| {
+            format!(
+                "cannot create new probe evidence directory {}: {error}",
+                evidence.display()
+            )
+        })?;
     // Keep the exact generation inputs with the subprocess captures.
     fs::write(evidence.join("common"), &source)?;
     fs::write(
@@ -150,13 +181,41 @@ fn run() -> fastmash_locale_tools::Result<()> {
     OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(output_json)?
-        .write_all(&artifacts.json)?;
+        .open(&output_json)
+        .map_err(|error| {
+            format!(
+                "cannot create JSON output {}: {error} (evidence: {})",
+                output_json.display(),
+                evidence.display()
+            )
+        })?
+        .write_all(&artifacts.json)
+        .map_err(|error| {
+            format!(
+                "cannot write JSON output {}: {error} (evidence: {})",
+                output_json.display(),
+                evidence.display()
+            )
+        })?;
     OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(output_rust)?
-        .write_all(artifacts.rust.as_bytes())?;
+        .open(&output_rust)
+        .map_err(|error| {
+            format!(
+                "cannot create Rust output {}: {error} (evidence: {})",
+                output_rust.display(),
+                evidence.display()
+            )
+        })?
+        .write_all(artifacts.rust.as_bytes())
+        .map_err(|error| {
+            format!(
+                "cannot write Rust output {}: {error} (evidence: {})",
+                output_rust.display(),
+                evidence.display()
+            )
+        })?;
     println!("{}", artifacts.summary);
     Ok(())
 }

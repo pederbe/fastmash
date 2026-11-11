@@ -59,7 +59,11 @@ fn native_cli_identifies_or_refuses_icu_and_never_overwrites_output() {
                 .contains(&serde_json::json!("ñ"))
         );
         assert!(json["locales"]["zz_ZZ"]["alphabet"].is_null());
-        assert_eq!(fixture.invoke().status.code(), Some(1));
+        let existing = fixture.invoke();
+        assert_eq!(existing.status.code(), Some(1));
+        let text = String::from_utf8(existing.stderr).unwrap();
+        assert!(text.contains("out.json"));
+        assert!(text.contains("Choose a new output path"));
         assert_eq!(fs::read(path).unwrap(), bytes);
     } else {
         assert_eq!(output.status.code(), Some(77));
@@ -81,7 +85,9 @@ fn help_and_usage_do_not_query_resources_or_create_output() {
         .unwrap();
     assert!(help.status.success());
     assert!(help.stderr.is_empty());
-    assert!(help.stdout.starts_with(b"Usage: fastmash-icu-exemplars"));
+    let text = String::from_utf8(help.stdout).unwrap();
+    assert!(text.contains("Usage: fastmash-icu-exemplars"));
+    assert!(text.contains("OUTPUT_JSON must be new"));
     let usage = Command::new(env!("CARGO_BIN_EXE_fastmash-icu-exemplars"))
         .output()
         .unwrap();

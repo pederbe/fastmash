@@ -39,6 +39,19 @@ fn expect(output: &Output, expected: &[u8], label: &str) -> io::Result<()> {
 
 fn run() -> io::Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.len() == 1 && matches!(args[0].to_str(), Some("--help" | "-h")) {
+        println!(
+            "Check the Fastmash executable installed by a Fedora or Nix source recipe.\n\n\
+Usage: fastmash-test-linux-source fedora BIN_DIR VERSION\n\
+       fastmash-test-linux-source nix BIN_DIR VERSION DOC_DIR\n\n\
+BIN_DIR contains the installed executable. VERSION is its expected version number.\n\
+The Nix form also checks nonempty license documents in DOC_DIR. The Fedora form\n\
+keeps its recipe's executable checks. Successful checks are silent.\n\n\
+Example, replacing VERSION and installed directories with the recipe's outputs:\n\
+  fastmash-test-linux-source nix /path/to/bin VERSION /path/to/documents"
+        );
+        return Ok(());
+    }
     let (fedora, bin, version, docs) = match args.as_slice() {
         [mode, bin, version] if mode == "fedora" => (true, bin, version, None),
         [mode, bin, version, docs] if mode == "nix" => (false, bin, version, Some(docs)),
@@ -49,15 +62,28 @@ fn run() -> io::Result<()> {
         }
     };
     let bin = Path::new(bin);
-    let metadata = fs::metadata(bin.join("fastmash"))?;
+    let binary = bin.join("fastmash");
+    let metadata = fs::metadata(&binary).map_err(|error| {
+        io::Error::other(format!(
+            "cannot inspect installed executable {}: {error}",
+            binary.display()
+        ))
+    })?;
     if !metadata.is_file() || metadata.permissions().mode() & 0o111 == 0 {
-        return Err(io::Error::other(
-            "missing or nonexecutable program: fastmash",
-        ));
+        return Err(io::Error::other(format!(
+            "installed program is not an executable file: {}",
+            binary.display()
+        )));
     }
     if let Some(docs) = docs {
         for name in ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"] {
-            let metadata = fs::metadata(Path::new(docs).join(name))?;
+            let path = Path::new(docs).join(name);
+            let metadata = fs::metadata(&path).map_err(|error| {
+                io::Error::other(format!(
+                    "cannot inspect installed document {}: {error}",
+                    path.display()
+                ))
+            })?;
             if !metadata.is_file() || metadata.len() == 0 {
                 return Err(io::Error::other(format!(
                     "missing or empty document: {name}"
@@ -68,7 +94,6 @@ fn run() -> io::Result<()> {
     let version = version
         .to_str()
         .ok_or_else(|| io::Error::other("version must be UTF-8"))?;
-    let binary = bin.join("fastmash");
     expect(
         &command(&binary, &["--version"]).output()?,
         format!("fastmash {version}\n").as_bytes(),

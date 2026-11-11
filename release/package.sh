@@ -13,6 +13,15 @@
 # and Ubuntu).
 set -euo pipefail
 
+usage() {
+    printf '%s\n' 'usage: bash release/package.sh VERSION BIN_DIR DOC_DIR OUT_DIR' \
+        'Build .deb and, when RPM tools are installed, .rpm packages from qualified binaries.' \
+        'BIN_DIR contains fastmash. DOC_DIR contains the release documents and licenses.' \
+        'Packages are written to OUT_DIR and checked against the original executable bytes.'
+}
+if [ "${1:-}" = --help ] || [ "${1:-}" = -h ]; then usage; exit 0; fi
+if [ "$#" -ne 4 ]; then usage >&2; exit 1; fi
+
 here=$(cd "$(dirname "$0")" && pwd)
 target=${CARGO_TARGET_DIR:-$here/../target}
 checker=${FASTMASH_PACKAGE_BYTES_CHECKER:-$target/debug/fastmash-check-package-bytes}
