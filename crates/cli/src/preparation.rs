@@ -87,15 +87,18 @@ fn validate_csv(options: &Options, mode: super::grammar::Mode) -> Result<(), Fai
         return Ok(());
     }
     if options.csv_out && options.supplied_output {
-        return Err(failure(
-            b"CSV output conflicts with --output-delimiter\n".to_vec(),
-        ));
+        return Err(
+            failure(b"CSV output conflicts with --output-delimiter\n".to_vec())
+                .with_hint(super::failure::hints::CSV_OUTPUT),
+        );
     }
     if options.record_end == 0 {
-        return Err(failure(b"CSV conflicts with --zero-terminated\n".to_vec()));
+        return Err(failure(b"CSV conflicts with --zero-terminated\n".to_vec())
+            .with_hint(super::failure::hints::CSV_RECORD_END));
     }
     if options.vnlog {
-        return Err(failure(b"CSV conflicts with --vnlog\n".to_vec()));
+        return Err(failure(b"CSV conflicts with --vnlog\n".to_vec())
+            .with_hint(super::failure::hints::CSV_VNLOG));
     }
     if options.csv_in
         && let Some(option) = options.controls.csv_input
@@ -106,7 +109,8 @@ fn validate_csv(options: &Options, mode: super::grammar::Mode) -> Result<(), Fai
                 String::from_utf8_lossy(option)
             )
             .into_bytes(),
-        ));
+        )
+        .with_hint(super::failure::hints::CSV_INPUT));
     }
     if !matches!(
         mode,
@@ -189,9 +193,10 @@ fn validate_comparison_request(
                 Kind::First | Kind::Last | Kind::Rand | Kind::Unique | Kind::Collapse
             )
     }) {
-        return Err(unsupported(
-            "compare requires numerical aggregate operations",
-        ));
+        return Err(
+            unsupported("compare requires numerical aggregate operations")
+                .with_hint(super::failure::hints::COMPARE_OPERATIONS),
+        );
     }
     require_header(
         options,

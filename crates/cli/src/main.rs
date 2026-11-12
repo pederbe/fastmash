@@ -700,6 +700,7 @@ mod field_value_tests {
         let bare = Failure {
             status: 77,
             message: Vec::new(),
+            hint: None,
         };
         assert_eq!(reported(&bare), b"memory allocation failed\n");
     }

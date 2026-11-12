@@ -17,6 +17,7 @@ fn corrupt() -> Failure {
     Failure {
         status: 70,
         message: b"internal CSV sort run failure\n".to_vec(),
+        hint: None,
     }
 }
 fn read_error(error: io::Error) -> Failure {

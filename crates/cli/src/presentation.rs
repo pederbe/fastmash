@@ -1,4 +1,5 @@
 //! Numeric input locale and output policy owned by one invocation.
+use super::failure::hints;
 use super::{Failure, conversion_failure, failure, named_fields, unsupported};
 use fastmash_conversion::{
     format::{self, FormatId},
@@ -34,7 +35,7 @@ impl Presentation {
     pub fn format(&mut self, bytes: &[u8]) -> Result<(), Failure> {
         self.spec = Some(Spec::parse(bytes).map_err(|e| {
             if e == Invalid::TooLong {
-                return failure(b"numeric format too large\n".to_vec());
+                return failure(b"numeric format too large\n".to_vec()).with_hint(hints::FORMAT);
             }
             if e == Invalid::Capacity {
                 return unsupported("numeric presentation size exceeds addressable capacity");
@@ -53,13 +54,15 @@ impl Presentation {
                 _ => unreachable!(),
             }
             msg.push(b'\n');
-            failure(msg)
+            failure(msg).with_hint(hints::FORMAT)
         })?);
         Ok(())
     }
     pub fn round(&mut self, bytes: &[u8]) -> Result<(), Failure> {
         if bytes.is_empty() {
-            return Err(failure(b"missing rounding digits value\n".to_vec()));
+            return Err(
+                failure(b"missing rounding digits value\n".to_vec()).with_hint(hints::ROUND)
+            );
         }
         let start = bytes
             .iter()
@@ -74,6 +77,6 @@ impl Presentation {
         let mut msg = b"invalid rounding digits value ".to_vec();
         named_fields::quote_with(bytes, &mut msg, self.utf8);
         msg.push(b'\n');
-        Err(failure(msg))
+        Err(failure(msg).with_hint(hints::ROUND))
     }
 }
