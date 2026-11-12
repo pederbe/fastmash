@@ -210,7 +210,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             environment.push(CString::new(entry)?);
         }
         execve(&executable, &argv, &environment)?;
-        unreachable!();
     }
     let error = Command::new(binary)
         .arg0("fastmash")
