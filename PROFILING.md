@@ -120,7 +120,7 @@ than individual records or arithmetic primitives.
 ## CPU sampling
 
 Reuse `samply` 0.13.x, `hotpath-samply` 0.31.2 and the hotpath CLI/TUI when
-installed. If missing, upstream installation commands are
+installed. If missing, upstream installation commands are:
 
 ```sh
 cargo install samply --locked
@@ -184,7 +184,7 @@ Valgrind changes execution time. Use an ordinary build for performance claims.
 ## Validation and measurements
 
 Run the ordinary application and website checks in [TESTING.md](TESTING.md).
-Also check the profiling configuration on Linux and native macOS
+Also check the profiling configuration on Linux and native macOS:
 
 ```sh
 cargo +stable clippy -p fastmash --all-targets --features hotpath-alloc --locked -- -D warnings
