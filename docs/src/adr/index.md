@@ -1,7 +1,7 @@
 # Decision records
 
 These records explain consequential design choices and the alternatives behind
-them. Start with the [architecture](../contributing/architecture.md) for the
+them. Start with the [architecture](../../../ARCHITECTURE.md) for the
 current design, then read the relevant record before changing a decision.
 
 ## Current decisions

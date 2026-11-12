@@ -15,6 +15,6 @@ disk spill, so macOS needs no external sorter.
 
 The platform scope excludes Intel macOS, macOS before 15 and native Windows.
 Linux benchmark results do not become macOS performance claims. The
-[testing guide](../contributing/testing.md#native-macos-development-gate) and
+[testing guide](../../../TESTING.md#native-macos-development-gate) and
 [release guide](https://github.com/pederbe/fastmash/blob/main/RELEASING.md#native-macos-release-delivery)
 describe the checks.
