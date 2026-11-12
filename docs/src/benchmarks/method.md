@@ -58,7 +58,7 @@ Release delivery separately checks reproducibility, correctness, installation
 and provenance. A routine version bump is not another benchmark campaign or
 a claim that new executable bytes were measured. Results below remain scoped
 to the dated Linux 0.1.0 measurement. See
-[ADR 0012](../adr/0012-release-delivery-and-performance.md).
+[ADR 0012](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0012-release-delivery-and-performance.md).
 
 ## Hosts
 

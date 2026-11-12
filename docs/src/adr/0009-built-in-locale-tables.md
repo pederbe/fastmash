@@ -19,4 +19,4 @@ data and remaining collation differences are
 
 Adding a locale requires extending and verifying the bundled data. Regeneration
 and verification commands belong in the
-[testing guide](../contributing/testing.md#locale-tools).
+[testing guide](../../../TESTING.md#locale-tools).

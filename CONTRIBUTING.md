@@ -3,6 +3,9 @@
 Thank you for your interest in Fastmash. Contributions of every size are
 welcome, and some of the most valuable ones involve no code at all.
 
+[Design decisions](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/index.md)
+explain the reasoning behind important technical choices.
+
 ## Ways to help
 
 - **Try it on your own data.** Run Fastmash alongside `datamash` in a real
@@ -97,7 +100,7 @@ Runtime, dependency and build-recipe changes that can affect performance need
 comparison with the previous accepted build during change review. New speed
 claims need dated measurements identifying the actual executable and conditions.
 Weekly releases do not start a whole-release benchmark campaign. See
-[ADR 0012](https://fastmash.io/adr/0012-release-delivery-and-performance.html) for the
+[ADR 0012](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0012-release-delivery-and-performance.md) for the
 separation between performance acceptance and release delivery.
 
 - **Numerical output.** Anything that can change a printed number, however
@@ -113,7 +116,7 @@ separation between performance acceptance and release delivery.
   standard streams and the Linux process entry with its initial SIGPIPE setup.
   Keep each operation minimal and explain its soundness with a `// SAFETY:`
   comment. Any broader exception needs a new maintainer decision. See
-  [ADR 0017](https://fastmash.io/adr/0017-audited-startup.html).
+  [ADR 0017](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0017-audited-startup.md).
 - **New dependencies.** Explain why the dependency is needed. Fastmash keeps
   its dependency tree small and every dependency must be compatible with
   `MIT OR Apache-2.0`.

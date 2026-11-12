@@ -20,14 +20,14 @@ It is written for contributors and for anyone evaluating the project. The
 ## Design principles
 
 Linux and macOS use built-in sorting and private anonymous spill storage.
-[ADR 0014: Native sorting in one executable](https://fastmash.io/adr/0014-native-sorting-everywhere.html)
+[ADR 0014: Native sorting in one executable](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0014-native-sorting-everywhere.md)
 retires the external Sort route.
-[ADR 0010: Native macOS](https://fastmash.io/adr/0010-native-apple-silicon.html)
-sets its platform scope. [ADR 0011: Qualify and deliver the same native archive](https://fastmash.io/adr/0011-native-release-delivery.html)
+[ADR 0010: Native macOS](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0010-native-apple-silicon.md)
+sets its platform scope. [ADR 0011: Qualify and deliver the same native archive](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0011-native-release-delivery.md)
 sets its release delivery boundary.
 
 These choices shape the whole codebase. Each is recorded as a decision in
-[decision records](https://fastmash.io/adr/).
+[design decisions](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/index.md).
 
 1. **Speed is the reason to switch.** Fastmash exists because people run
    datamash in pipelines over large files. Performance work is measured on
@@ -369,7 +369,7 @@ end the process with `SIGABRT`. All of them are bugs.
 - **Audited startup.** `startup.rs` captures originally closed standard
   streams before Rust can repair them. GNU Linux builds also use its process
   entry and initial SIGPIPE setup. Musl and macOS use Rust's normal runtime
-  entry and argument initialization. [ADR 0017](https://fastmash.io/adr/0017-audited-startup.html)
+  entry and argument initialization. [ADR 0017](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0017-audited-startup.md)
   records this narrowly approved unsafe-code exception. Every unsafe operation
   explains its soundness locally. Ordinary standard-stream I/O uses safe
   interfaces in `standard_stream_io.rs` and `standard_io.rs`.
@@ -431,5 +431,5 @@ end the process with `SIGABRT`. All of them are bugs.
 
 ## Decision records
 
-Architecture decisions are recorded in [decision records](https://fastmash.io/adr/). Read them
+Architecture decisions are recorded in [design decisions](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/index.md). Read them
 before proposing a change to one of the principles above.

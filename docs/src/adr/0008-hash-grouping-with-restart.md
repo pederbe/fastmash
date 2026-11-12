@@ -23,6 +23,6 @@ does not reduce memory use when that filesystem is memory-backed.
 **Consequences:** a late restart repeats work. A regular file that changes
 between readings produces the result of the second reading. File and pipe
 routes can use different resources while preserving the same data contract.
-The [architecture](../contributing/architecture.md#sorting) describes eligibility
+The [architecture](../../../ARCHITECTURE.md#sorting) describes eligibility
 and replay. The [grouping guide](../guide/grouping.md#large-inputs) describes
 resource use and controls.

@@ -52,4 +52,7 @@ if [ "$mode" = --cloudflare ]; then
     fi
 fi
 "$MDBOOK" build docs
+# ADRs remain repository Markdown. Remove mdBook's copied source files too.
+rm -rf docs/book/adr
 FASTMASH_DIAGRAMS=committed python3 scripts/build_site.py docs/book
+cp site/_redirects docs/book/_redirects

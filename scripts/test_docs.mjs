@@ -10,7 +10,7 @@ const book = resolve(import.meta.dirname, '../docs/book');
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2' };
 const chapters = ['/introduction', '/guide/operations', '/guide/csv-and-result-names',
-  '/contributing/architecture', '/adr/0003-portable-results'];
+  '/contributing/architecture', '/contributing/'];
 let browser, server, origin;
 
 before(async () => {
@@ -107,7 +107,7 @@ test('search and native theme selection remain usable', async () => {
   } finally { await context.close(); }
 });
 
-test('mobile sidebar, decision folding and skip link support keyboard use', async () => {
+test('mobile sidebar, contributor folding and skip link support keyboard use', async () => {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   try {
@@ -123,15 +123,29 @@ test('mobile sidebar, decision folding and skip link support keyboard use', asyn
     await page.focus('#mdbook-sidebar-toggle');
     await page.keyboard.press('Enter');
     assert.ok(await page.$eval('html', html => html.classList.contains('sidebar-visible')));
-    const decisionLink = await page.$('#mdbook-sidebar a[href="adr/"]');
-    assert.ok(decisionLink);
-    const toggle = await decisionLink.evaluateHandle(link => link.nextElementSibling);
-    assert.equal(await toggle.evaluate(element => element.getAttribute('aria-expanded')), 'false');
+    const contributingLink = await page.$('#mdbook-sidebar a[href="contributing/"]');
+    assert.ok(contributingLink);
+    const toggle = await contributingLink.evaluateHandle(link => link.nextElementSibling);
+    const expanded = await toggle.evaluate(element => element.getAttribute('aria-expanded'));
     await toggle.asElement().focus();
     await page.keyboard.press('Enter');
-    assert.equal(await toggle.evaluate(element => element.getAttribute('aria-expanded')), 'true');
+    assert.equal(await toggle.evaluate(element => element.getAttribute('aria-expanded')), expanded === 'true' ? 'false' : 'true');
     await page.keyboard.press('Space');
-    assert.equal(await toggle.evaluate(element => element.getAttribute('aria-expanded')), 'false');
+    assert.equal(await toggle.evaluate(element => element.getAttribute('aria-expanded')), expanded);
+  } finally { await context.close(); }
+});
+
+test('contributors can find repository design decisions without a published ADR section', async () => {
+  const context = await browser.createBrowserContext();
+  const page = await context.newPage();
+  try {
+    await page.goto(origin + '/contributing/');
+    const decisions = await page.$$eval('main a', links => links
+      .filter(link => link.textContent === 'Design decisions').map(link => link.href));
+    assert.deepEqual(decisions, [
+      'https://github.com/pederbe/fastmash/blob/main/docs/src/adr/index.md',
+    ]);
+    assert.equal(await page.$('#mdbook-sidebar a[href^="adr/"]'), null);
   } finally { await context.close(); }
 });
 
