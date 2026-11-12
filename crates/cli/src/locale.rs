@@ -155,6 +155,7 @@ fn refusal(category: &'static str, reason: &str, hint: &str, utf8: bool) -> Fail
     Failure {
         status: 77,
         message,
+        hint: None,
     }
 }
 impl Policy {
@@ -786,10 +787,12 @@ pub(super) fn text(bytes: &[u8]) -> Result<&str, Failure> {
     if bytes.contains(&0) {
         return Err(unsupported(
             "language sorting requires NUL-free UTF-8 keys; use LC_COLLATE=C for raw bytes",
-        ));
+        )
+        .with_hint(super::failure::hints::LANGUAGE_SORT));
     }
     std::str::from_utf8(bytes).map_err(|_| {
         unsupported("language sorting requires valid UTF-8 keys; use LC_COLLATE=C for raw bytes")
+            .with_hint(super::failure::hints::LANGUAGE_SORT)
     })
 }
 

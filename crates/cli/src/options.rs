@@ -3,6 +3,7 @@
 #[cfg(test)]
 use super::command_memory::FAIL_RESERVATION;
 use super::command_memory::reserve;
+use super::failure::hints;
 use super::terminal_style::ColorMode;
 use super::{Failure, failure, records::Separator, unsupported, unsupported_hint};
 use std::{
@@ -296,11 +297,11 @@ fn seed(bytes: &[u8]) -> Result<u32, Failure> {
             .checked_mul(10)
             .and_then(|value| value.checked_add(u64::from(digit)))
             .filter(|value| *value <= i64::MAX as u64)
-            .ok_or_else(|| failure(b"invalid seed\n".to_vec()))?;
+            .ok_or_else(|| failure(b"invalid seed\n".to_vec()).with_hint(hints::SEED))?;
         at += 1;
     }
     if at == start || at != bytes.len() || (negative && value != 0) {
-        return Err(failure(b"invalid seed\n".to_vec()));
+        return Err(failure(b"invalid seed\n".to_vec()).with_hint(hints::SEED));
     }
     Ok(value as u32)
 }
@@ -566,7 +567,8 @@ fn parse_options(
                     let [delimiter] = value.unwrap() else {
                         return Err(failure(
                             b"the delimiter must be a single character\n".to_vec(),
-                        ));
+                        )
+                        .with_hint(hints::DELIMITER));
                     };
                     match option.setting {
                         Setting::Input => {
@@ -591,7 +593,9 @@ fn parse_options(
         }
     }
     if options.operands.is_empty() {
-        return Err(diagnostic(&[b"missing operation specifiers"], name));
+        return Err(
+            diagnostic(&[b"missing operation specifiers"], name).with_hint(hints::OPERATION)
+        );
     }
     options.output = explicit_output.unwrap_or(options.output);
     options.explicit_output = explicit_output.is_some();

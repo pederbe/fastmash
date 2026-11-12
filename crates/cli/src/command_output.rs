@@ -624,6 +624,7 @@ mod tests {
                 Err(Failure {
                     status: primary,
                     message: b"primary\n".to_vec(),
+                    hint: None,
                 }),
                 |sink| {
                     sink.events.borrow_mut().push("close".into());

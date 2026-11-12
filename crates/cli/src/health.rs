@@ -112,7 +112,8 @@ impl Settings {
                             _ => {
                                 return Err(failure(
                                     b"health: type requires integer, number or text\n".to_vec(),
-                                ));
+                                )
+                                .with_hint(super::failure::hints::HEALTH_TYPE));
                             }
                         }),
                         b"required" => Rule::Presence(Presence::Required),
@@ -137,7 +138,8 @@ impl Settings {
         if validate && width.is_none() && declarations.is_empty() {
             return Err(failure(
                 b"health: validate requires a type, required, nonmissing or width rule\n".to_vec(),
-            ));
+            )
+            .with_hint(super::failure::hints::HEALTH_RULE));
         }
         Ok(Self {
             examples: examples.unwrap_or(3),

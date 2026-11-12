@@ -1,5 +1,6 @@
 //! Ordered field grammar and fallible request expansion.
 
+use super::failure::hints;
 use super::{Failure, Kind, conversion_failure, failure, unsupported};
 use fastmash_conversion::{
     caller_policy::{self, ScannerRejection, TokenValue},
@@ -110,7 +111,9 @@ impl Scanner {
             script.extend_from_slice(arg.as_bytes());
         }
         if !grouped && script.is_empty() {
-            return Err(failure(b"missing operation specifiers\n".to_vec()));
+            return Err(
+                failure(b"missing operation specifiers\n".to_vec()).with_hint(hints::OPERATION)
+            );
         }
         if script.contains(&0) {
             return Err(unsupported("NUL bytes in command syntax are unsupported"));
@@ -304,17 +307,26 @@ impl Scanner {
                 message.extend_from_slice(
                     format!("' for operation {}\n", quoted(kind.name(), self.utf8)).as_bytes(),
                 );
-                Err(failure(message))
+                Err(failure(message).with_hint(hints::FIELD))
             }
-            TokenKind::Dash => Err(operation_error("invalid field range", kind, self.utf8)),
+            TokenKind::Dash => Err(operation_error("invalid field range", kind, self.utf8)
+                .with_hint(hints::FIELD_RANGE)),
             TokenKind::End if range_end => {
-                Err(operation_error("invalid field range", kind, self.utf8))
+                Err(operation_error("invalid field range", kind, self.utf8)
+                    .with_hint(hints::FIELD_RANGE))
             }
             TokenKind::Comma | TokenKind::End => {
-                Err(operation_error("missing field", kind, self.utf8))
+                Err(operation_error("missing field", kind, self.utf8)
+                    .with_hint(hints::MISSING_FIELD))
             }
-            TokenKind::Colon => Err(operation_error("invalid field pair", kind, self.utf8)),
-            _ => Err(operation_error("missing field", kind, self.utf8)),
+            TokenKind::Colon => {
+                Err(operation_error("invalid field pair", kind, self.utf8)
+                    .with_hint(hints::FIELD_PAIR))
+            }
+            _ => {
+                Err(operation_error("missing field", kind, self.utf8)
+                    .with_hint(hints::MISSING_FIELD))
+            }
         }
     }
 }
@@ -361,6 +373,7 @@ fn pair_required(kind: Kind, utf8: bool) -> Failure {
         )
         .into_bytes(),
     )
+    .with_hint(hints::PAIR_REQUIRED)
 }
 
 fn pair_forbidden(kind: Kind, utf8: bool) -> Failure {
@@ -371,6 +384,7 @@ fn pair_forbidden(kind: Kind, utf8: bool) -> Failure {
         )
         .into_bytes(),
     )
+    .with_hint(hints::PAIR_FORBIDDEN)
 }
 
 #[cfg(test)]
@@ -452,7 +466,8 @@ fn numeric_parameters(scanner: &mut Scanner, kind: Kind) -> Result<Vec<TokenKind
             TokenKind::Float(_) => {
                 return Err(unsupported(
                     "non-integer percentile parameters are outside the supported range",
-                ));
+                )
+                .with_hint(hints::PERCENTILE));
             }
             TokenKind::Space | TokenKind::End => {
                 return Err(operation_error("missing parameter", kind, scanner.utf8));
@@ -491,7 +506,8 @@ fn selector_list(scanner: &mut Scanner, kind: Kind) -> Result<Vec<SelectorSpan>,
     let mut selectors = Vec::new();
     loop {
         if kind.is_paired() && scanner.peek()?.kind == TokenKind::Colon {
-            return Err(operation_error("invalid field pair", kind, scanner.utf8));
+            return Err(operation_error("invalid field pair", kind, scanner.utf8)
+                .with_hint(hints::FIELD_PAIR));
         }
         let start = scanner.field(kind, false)?;
         reserve(&mut selectors, 1)?;
@@ -501,14 +517,17 @@ fn selector_list(scanner: &mut Scanner, kind: Kind) -> Result<Vec<SelectorSpan>,
                 scanner.peek()?.kind,
                 TokenKind::Colon | TokenKind::Comma | TokenKind::End | TokenKind::Dash
             ) {
-                return Err(operation_error("invalid field pair", kind, scanner.utf8));
+                return Err(operation_error("invalid field pair", kind, scanner.utf8)
+                    .with_hint(hints::FIELD_PAIR));
             }
             let right = scanner.field(kind, false)?;
             if scanner.peek()?.kind == TokenKind::Colon {
-                return Err(operation_error("invalid field pair", kind, scanner.utf8));
+                return Err(operation_error("invalid field pair", kind, scanner.utf8)
+                    .with_hint(hints::FIELD_PAIR));
             }
             if scanner.peek()?.kind == TokenKind::Dash {
-                return Err(failure(b"paired field ranges are invalid\n".to_vec()));
+                return Err(failure(b"paired field ranges are invalid\n".to_vec())
+                    .with_hint(hints::FIELD_PAIR));
             }
             selectors.push((Selector::Pair { left: start, right }, None));
         } else {
@@ -522,10 +541,12 @@ fn selector_list(scanner: &mut Scanner, kind: Kind) -> Result<Vec<SelectorSpan>,
                             quoted(kind.name(), scanner.utf8)
                         )
                         .into_bytes(),
-                    ));
+                    )
+                    .with_hint(hints::FIELD_RANGE));
                 };
                 if *start >= end {
-                    return Err(operation_error("invalid field range", kind, scanner.utf8));
+                    return Err(operation_error("invalid field range", kind, scanner.utf8)
+                        .with_hint(hints::FIELD_RANGE));
                 }
                 Some(end)
             } else {
@@ -558,9 +579,10 @@ fn with_parameters(
                 _ => unreachable!("percentile floats refused above"),
             };
             if !(1..=100).contains(&percent) {
-                return Err(failure(
-                    format!("invalid percentile value {percent}\n").into_bytes(),
-                ));
+                return Err(
+                    failure(format!("invalid percentile value {percent}\n").into_bytes())
+                        .with_hint(hints::PERCENTILE),
+                );
             }
             kind = Kind::Percentile(percent as u8);
         } else {
@@ -593,12 +615,14 @@ fn with_parameters(
                 (Kind::Strbin(_), TokenKind::Integer(n)) => {
                     Kind::Strbin(std::num::NonZeroU64::new(*n as u64).ok_or_else(|| {
                         failure(b"strbin bucket size must not be zero\n".to_vec())
+                            .with_hint(hints::STRBIN)
                     })?)
                 }
                 (Kind::Strbin(_), TokenKind::Float(_)) => {
-                    return Err(failure(
-                        b"strbin requires an integer bucket count\n".to_vec(),
-                    ));
+                    return Err(
+                        failure(b"strbin requires an integer bucket count\n".to_vec())
+                            .with_hint(hints::STRBIN),
+                    );
                 }
                 _ => unreachable!("numeric binning parameter"),
             };
@@ -609,15 +633,16 @@ fn with_parameters(
             return Err(operation_error("too many parameters", kind, scanner.utf8));
         }
         let Some(byte) = line_parameters[0] else {
-            return Err(failure(
-                b"getnum requires a character type parameter\n".to_vec(),
-            ));
+            return Err(
+                failure(b"getnum requires a character type parameter\n".to_vec())
+                    .with_hint(hints::GETNUM),
+            );
         };
         let Some(extraction) = super::line_numeric::Extraction::from_byte(byte) else {
             let mut message = b"invalid getnum type '".to_vec();
             message.push(byte);
             message.extend_from_slice(b"'\n");
-            return Err(failure(message));
+            return Err(failure(message).with_hint(hints::GETNUM));
         };
         kind = Kind::Getnum(extraction);
     }
@@ -713,7 +738,8 @@ fn parse_operations_for_mode(
             ));
         }
         if token.kind != TokenKind::Identifier {
-            return Err(quoted_error(b"invalid operation ", spelling, scanner.utf8));
+            return Err(quoted_error(b"invalid operation ", spelling, scanner.utf8)
+                .with_hint(hints::INVALID_OPERATION));
         }
         let Some(kind) = Kind::from_spelling(spelling) else {
             if spelling.eq_ignore_ascii_case(b"transpose") {
@@ -732,7 +758,8 @@ fn parse_operations_for_mode(
                     String::from_utf8_lossy(spelling)
                 )));
             }
-            return Err(quoted_error(b"invalid operation ", spelling, scanner.utf8));
+            return Err(quoted_error(b"invalid operation ", spelling, scanner.utf8)
+                .with_hint(hints::INVALID_OPERATION));
         };
         let expected_line = !grouped
             && requests
@@ -750,7 +777,8 @@ fn parse_operations_for_mode(
             let prefix = format!(
                 "conflicting operation found: expecting {expected} operations, but found {found} operation "
             );
-            return Err(quoted_error(prefix.as_bytes(), spelling, scanner.utf8));
+            return Err(quoted_error(prefix.as_bytes(), spelling, scanner.utf8)
+                .with_hint(hints::SEPARATE_OPERATIONS));
         }
         scanner.keep_space = true;
         let line_parameters = line_parameters(scanner, kind)?;
@@ -1072,14 +1100,17 @@ fn comparison_command(
     profile: Profile,
     utf8: bool,
 ) -> Result<Command, Failure> {
-    let missing =
-        || failure(b"compare requires BEFORE AFTER and at least one operation\n".to_vec());
+    let missing = || {
+        failure(b"compare requires BEFORE AFTER and at least one operation\n".to_vec())
+            .with_hint(hints::COMPARE_INPUTS)
+    };
     let before = args.get(1).ok_or_else(missing)?;
     let after = args.get(2).ok_or_else(missing)?;
     if before.as_bytes() == b"-" && after.as_bytes() == b"-" {
-        return Err(failure(
-            b"compare permits stdin on at most one side\n".to_vec(),
-        ));
+        return Err(
+            failure(b"compare permits stdin on at most one side\n".to_vec())
+                .with_hint(hints::COMPARE_STDIN),
+        );
     }
     let copy = |path: &OsString| -> Result<OsString, Failure> {
         use std::os::unix::ffi::OsStringExt;
@@ -1090,12 +1121,16 @@ fn comparison_command(
     };
     let unsigned = |argument: Option<&OsString>| -> Result<u64, Failure> {
         let bytes = argument
-            .ok_or_else(|| failure(b"missing comparison modifier value\n".to_vec()))?
+            .ok_or_else(|| {
+                failure(b"missing comparison modifier value\n".to_vec())
+                    .with_hint(hints::COMPARISON_MODIFIER)
+            })?
             .as_bytes();
         if bytes.is_empty() || !bytes.iter().all(u8::is_ascii_digit) {
             return Err(failure(
                 b"comparison modifiers require positive unsigned decimal integers\n".to_vec(),
-            ));
+            )
+            .with_hint(hints::COMPARISON_MODIFIER));
         }
         bytes
             .iter()
@@ -1105,6 +1140,7 @@ fn comparison_command(
             .filter(|n| *n != 0)
             .ok_or_else(|| {
                 failure(b"comparison modifier value is zero or outside u64 range\n".to_vec())
+                    .with_hint(hints::COMPARISON_MODIFIER)
             })
     };
     let mut at = 3;
@@ -1134,6 +1170,7 @@ fn comparison_command(
         Some(super::comparison::Ranking {
             result: usize::try_from(result - 1).map_err(|_| {
                 failure(b"comparison rank result is outside addressable range\n".to_vec())
+                    .with_hint(hints::COMPARISON_RANK)
             })?,
             percent,
             limit,
@@ -1156,9 +1193,10 @@ fn comparison_command(
         .as_ref()
         .is_some_and(|rank| rank.result >= operations.len())
     {
-        return Err(failure(
-            b"comparison rank result exceeds the number of results\n".to_vec(),
-        ));
+        return Err(
+            failure(b"comparison rank result exceeds the number of results\n".to_vec())
+                .with_hint(hints::COMPARISON_RANK),
+        );
     }
     let keys = if let Some(group) = group {
         let mut scanner = Scanner::from_args(std::slice::from_ref(group), true)?;
@@ -1207,16 +1245,18 @@ fn selection_command(
         .filter(|count| *count != 0)
         .ok_or_else(|| {
             failure(b"Top-N selection requires top:N FIELD or bottom:N FIELD, with N from 1 through 18446744073709551615\n".to_vec())
+                .with_hint(hints::SELECTION)
         })?;
     scanner.position = end;
     let field = scanner.next()?;
-    let ranking = scanner
-        .decode_field(field)?
-        .ok_or_else(|| failure(b"Top-N selection requires one ranking field\n".to_vec()))?;
+    let ranking = scanner.decode_field(field)?.ok_or_else(|| {
+        failure(b"Top-N selection requires one ranking field\n".to_vec())
+            .with_hint(hints::SELECTION)
+    })?;
     if scanner.next()?.kind != TokenKind::End {
         return Err(failure(
             b"Top-N selection takes one ranking field and cannot mix with other operations or modes\n".to_vec(),
-        ));
+        ).with_hint(hints::SELECTION));
     }
     Ok(Command {
         mode: Mode::Select(super::selection::Selection { direction, count }),
@@ -1256,10 +1296,12 @@ fn group_specs(scanner: &mut Scanner, mode: &str) -> Result<GroupSpecs, Failure>
                     scanner.next()?;
                     let end = scanner.next()?;
                     let TokenKind::Integer(end) = end.kind else {
-                        return Err(group_error("invalid field range", mode, scanner.utf8));
+                        return Err(group_error("invalid field range", mode, scanner.utf8)
+                            .with_hint(hints::FIELD_RANGE));
                     };
                     if end < n {
-                        return Err(group_error("invalid field range", mode, scanner.utf8));
+                        return Err(group_error("invalid field range", mode, scanner.utf8)
+                            .with_hint(hints::FIELD_RANGE));
                     }
                     if n > 2147483646 || end > 2147483646 {
                         return Err(unsupported("grouping range is outside the supported range"));
@@ -1287,7 +1329,8 @@ fn group_specs(scanner: &mut Scanner, mode: &str) -> Result<GroupSpecs, Failure>
                 }
             }
             TokenKind::Comma | TokenKind::End => {
-                return Err(group_error("missing field", mode, scanner.utf8));
+                return Err(group_error("missing field", mode, scanner.utf8)
+                    .with_hint(hints::MISSING_FIELD));
             }
             _ => {
                 let mut message = b"invalid field '".to_vec();
@@ -1295,7 +1338,7 @@ fn group_specs(scanner: &mut Scanner, mode: &str) -> Result<GroupSpecs, Failure>
                 message.extend_from_slice(
                     format!("' for operation {}\n", quoted(mode, scanner.utf8)).as_bytes(),
                 );
-                return Err(failure(message));
+                return Err(failure(message).with_hint(hints::FIELD));
             }
         };
         reserve(&mut spans, 1)?;
@@ -1304,8 +1347,14 @@ fn group_specs(scanner: &mut Scanner, mode: &str) -> Result<GroupSpecs, Failure>
             TokenKind::Comma => {
                 scanner.next()?;
             }
-            TokenKind::Dash => return Err(group_error("invalid field range", mode, scanner.utf8)),
-            TokenKind::Colon => return Err(group_error("invalid field pair", mode, scanner.utf8)),
+            TokenKind::Dash => {
+                return Err(group_error("invalid field range", mode, scanner.utf8)
+                    .with_hint(hints::FIELD_RANGE));
+            }
+            TokenKind::Colon => {
+                return Err(group_error("invalid field pair", mode, scanner.utf8)
+                    .with_hint(hints::FIELD_PAIR));
+            }
             _ => break,
         }
     }

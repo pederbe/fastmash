@@ -9,6 +9,17 @@ use std::io::{self, Write};
 pub(super) struct Failure {
     pub(super) status: i32,
     pub(super) message: Vec<u8>,
+    pub(super) hint: Option<&'static [u8]>,
+}
+impl Failure {
+    /// Select guidance where the cause is known, independently of its wording.
+    pub(super) fn with_hint(mut self, hint: &'static [u8]) -> Self {
+        // An empty message reports allocation failure instead of the original cause.
+        if !self.message.is_empty() {
+            self.hint = Some(hint);
+        }
+        self
+    }
 }
 #[cfg(test)]
 thread_local! {
@@ -30,6 +41,7 @@ pub(super) fn unsupported(reason: &str) -> Failure {
     Failure {
         status: 77,
         message,
+        hint: None,
     }
 }
 /// What a refusal that had no memory for its message reports.
@@ -79,7 +91,7 @@ pub(super) fn write(
 ) -> io::Result<()> {
     write_prefix(writer, program, style)?;
     writer.write_all(reported(error))?;
-    if let Some(hint) = recovery_hint(reported(error)) {
+    if let Some(hint) = error.hint {
         writer.write_all(b"hint: ")?;
         writer.write_all(hint)?;
         writer.write_all(b"\n")?;
@@ -87,95 +99,52 @@ pub(super) fn write(
     writer.flush()
 }
 
-/// Recovery guidance belongs to reporting, so the original cause, quotation
-/// bytes and failure precedence stay unchanged. Static hints need no allocation.
-fn recovery_hint(message: &[u8]) -> Option<&'static [u8]> {
-    Some(if message.starts_with(b"missing operation specifiers\n") {
-        b"choose an operation and field, for example fastmash sum 1"
-    } else if message.starts_with(b"invalid operation ") {
-        b"use fastmash --help to list operations, for example sum 1 or mean 2"
-    } else if message.starts_with(b"missing field for operation ") {
-        b"supply a field number starting at 1, or use --header-in with a header name"
-    } else if message.starts_with(b"invalid field range ")
-        || message.starts_with(b"field range for ")
-    {
-        b"use ascending numeric endpoints, for example 2-4. Use commas for separate fields, such as 2,4"
-    } else if message.starts_with(b"invalid field pair ")
-        || message == b"paired field ranges are invalid\n"
-    {
-        b"write pairs as LEFT:RIGHT, for example 1:2 or 1:2,3:4. Pairs cannot contain ranges"
-    } else if message.starts_with(b"invalid field '") {
-        b"field numbers start at 1. Named fields need an input header and --header-in or -H"
-    } else if message == b"invalid seed\n" {
-        b"use a nonnegative decimal integer, for example --seed=7"
-    } else if message == b"missing rounding digits value\n"
-        || message.starts_with(b"invalid rounding digits value ")
-    {
-        b"use --round=1 through --round=50. For no decimal places, use --format=%.0f"
-    } else if message == b"the delimiter must be a single character\n" {
-        b"use one literal byte, such as ','. Escapes such as '\\t' are not expanded. Tab is the default input separator"
-    } else if message.starts_with(b"operation ") && message.ends_with(b" requires field pairs\n") {
-        b"write each field pair as LEFT:RIGHT, for example 1:2"
-    } else if message.starts_with(b"operation ")
-        && message.ends_with(b" cannot use pair of fields\n")
-    {
-        b"use a single field, a list or a range, for example sum 1,2 or sum 1-3"
-    } else if message.starts_with(b"format ") || message == b"numeric format too large\n" {
-        b"use one %e, %f, %g or %a conversion, for example --format=%.2f. The format string may contain at most 99 bytes"
-    } else if message.starts_with(b"invalid percentile value ")
-        || message == b"non-integer percentile parameters are outside the supported range\n"
-    {
-        b"use an integer percentile from 1 through 100, for example perc:95 2"
-    } else if message.starts_with(b"strbin requires ")
-        || message == b"strbin bucket size must not be zero\n"
-    {
-        b"use a positive integer bucket count, for example strbin:10 1"
-    } else if message.starts_with(b"invalid getnum type ")
-        || message == b"getnum requires a character type parameter\n"
-    {
-        b"getnum types are n, i, h, o, p and d. For example, getnum:i 1 extracts a signed integer"
-    } else if message.starts_with(b"conflicting operation found: expecting ") {
-        b"run per-row operations and aggregate operations in separate commands. Per-row operations cannot use grouping keys"
-    } else if message.starts_with(b"Top-N selection requires ")
-        || message.starts_with(b"Top-N selection takes one ranking field ")
-    {
-        b"for example, top:5 2 selects up to 5 records ranked by field 2"
-    } else if message.starts_with(b"comparison modifier")
-        || message == b"missing comparison modifier value\n"
-    {
-        b"rank selects a result and limit caps ranked keys. Both numbers start at 1. For example, rank 1 percent limit 5"
-    } else if message == b"compare requires BEFORE AFTER and at least one operation\n" {
-        b"supply two input paths, an operation and fields, for example compare before.tsv after.tsv sum 2"
-    } else if message == b"compare permits stdin on at most one side\n" {
-        b"use '-' for one input only. Save the other dataset in a file"
-    } else if message == b"compare requires numerical aggregate operations\n" {
-        b"use a numerical summary such as sum 2, mean 2 or wmean 2:3"
-    } else if message.starts_with(b"comparison rank result ") {
-        b"rank counts calculated results from 1 in request order, excluding keys and the derived report columns"
-    } else if message == b"health: validate requires a type, required, nonmissing or width rule\n" {
-        b"supply a rule before validate, for example health type 1 number validate or health width 3 validate"
-    } else if message == b"health: type requires integer, number or text\n" {
-        b"write type FIELD TYPE, for example health type 1 number"
-    } else if message == b"--result-name requires --header-out or -H\n" {
-        b"add --header-out for generated labels. Use -H only when the first input record names the fields"
-    } else if message == b"--result-name repeats a result index\n" {
-        b"give each calculated result at most one name, for example --result-name=1:total --result-name=2:average"
-    } else if message == b"--result-name contains the text output delimiter or record terminator\n"
-    {
-        b"remove separator bytes from the name, or use --csv-out to quote names containing them"
-    } else if message == b"CSV output conflicts with --output-delimiter\n" {
-        b"CSV output uses commas. Remove --output-delimiter, or omit CSV output to choose a text delimiter"
-    } else if message.starts_with(b"CSV input conflicts with --") {
-        b"CSV input uses its own comma and quote rules. Remove explicit text separators and --skip-comments"
-    } else if message == b"CSV conflicts with --zero-terminated\n" {
-        b"CSV uses newline or CRLF record endings. Remove --zero-terminated, or use ordinary text instead of CSV"
-    } else if message == b"CSV conflicts with --vnlog\n" {
-        b"choose quoted CSV or --vnlog annotated text. They cannot be used together"
-    } else if message.starts_with(b"language sorting requires ") {
-        b"LC_ALL overrides LC_COLLATE. If LC_ALL is set, copy its value to LC_NUMERIC and unset LC_ALL before setting LC_COLLATE=C"
-    } else {
-        return None;
-    })
+/// Static reporting text shared by the producers that select it.
+pub(super) mod hints {
+    pub const OPERATION: &[u8] = b"choose an operation and field, for example fastmash sum 1";
+    pub const INVALID_OPERATION: &[u8] =
+        b"use fastmash --help to list operations, for example sum 1 or mean 2";
+    pub const MISSING_FIELD: &[u8] =
+        b"supply a field number starting at 1, or use --header-in with a header name";
+    pub const FIELD_RANGE: &[u8] = b"use ascending numeric endpoints, for example 2-4. Use commas for separate fields, such as 2,4";
+    pub const FIELD_PAIR: &[u8] =
+        b"write pairs as LEFT:RIGHT, for example 1:2 or 1:2,3:4. Pairs cannot contain ranges";
+    pub const FIELD: &[u8] =
+        b"field numbers start at 1. Named fields need an input header and --header-in or -H";
+    pub const SEED: &[u8] = b"use a nonnegative decimal integer, for example --seed=7";
+    pub const ROUND: &[u8] =
+        b"use --round=1 through --round=50. For no decimal places, use --format=%.0f";
+    pub const DELIMITER: &[u8] = b"use one literal byte, such as ','. Escapes such as '\\t' are not expanded. Tab is the default input separator";
+    pub const PAIR_REQUIRED: &[u8] = b"write each field pair as LEFT:RIGHT, for example 1:2";
+    pub const PAIR_FORBIDDEN: &[u8] =
+        b"use a single field, a list or a range, for example sum 1,2 or sum 1-3";
+    pub const FORMAT: &[u8] = b"use one %e, %f, %g or %a conversion, for example --format=%.2f. The format string may contain at most 99 bytes";
+    pub const PERCENTILE: &[u8] =
+        b"use an integer percentile from 1 through 100, for example perc:95 2";
+    pub const STRBIN: &[u8] = b"use a positive integer bucket count, for example strbin:10 1";
+    pub const GETNUM: &[u8] =
+        b"getnum types are n, i, h, o, p and d. For example, getnum:i 1 extracts a signed integer";
+    pub const SEPARATE_OPERATIONS: &[u8] = b"run per-row operations and aggregate operations in separate commands. Per-row operations cannot use grouping keys";
+    pub const SELECTION: &[u8] = b"for example, top:5 2 selects up to 5 records ranked by field 2";
+    pub const COMPARISON_MODIFIER: &[u8] = b"rank selects a result and limit caps ranked keys. Both numbers start at 1. For example, rank 1 percent limit 5";
+    pub const COMPARE_INPUTS: &[u8] = b"supply two input paths, an operation and fields, for example compare before.tsv after.tsv sum 2";
+    pub const COMPARE_STDIN: &[u8] =
+        b"use '-' for one input only. Save the other dataset in a file";
+    pub const COMPARE_OPERATIONS: &[u8] =
+        b"use a numerical summary such as sum 2, mean 2 or wmean 2:3";
+    pub const COMPARISON_RANK: &[u8] = b"rank counts calculated results from 1 in request order, excluding keys and the derived report columns";
+    pub const HEALTH_RULE: &[u8] = b"supply a rule before validate, for example health type 1 number validate or health width 3 validate";
+    pub const HEALTH_TYPE: &[u8] = b"write type FIELD TYPE, for example health type 1 number";
+    pub const RESULT_HEADERS: &[u8] = b"add --header-out for generated labels. Use -H only when the first input record names the fields";
+    pub const RESULT_INDEX: &[u8] = b"give each calculated result at most one name, for example --result-name=1:total --result-name=2:average";
+    pub const RESULT_SEPARATOR: &[u8] =
+        b"remove separator bytes from the name, or use --csv-out to quote names containing them";
+    pub const CSV_OUTPUT: &[u8] = b"CSV output uses commas. Remove --output-delimiter, or omit CSV output to choose a text delimiter";
+    pub const CSV_INPUT: &[u8] = b"CSV input uses its own comma and quote rules. Remove explicit text separators and --skip-comments";
+    pub const CSV_RECORD_END: &[u8] = b"CSV uses newline or CRLF record endings. Remove --zero-terminated, or use ordinary text instead of CSV";
+    pub const CSV_VNLOG: &[u8] =
+        b"choose quoted CSV or --vnlog annotated text. They cannot be used together";
+    pub const LANGUAGE_SORT: &[u8] = b"LC_ALL overrides LC_COLLATE. If LC_ALL is set, copy its value to LC_NUMERIC and unset LC_ALL before setting LC_COLLATE=C";
 }
 /// Appends `parts` to `error`'s message, where there is memory for them. A
 /// refusal that had no memory for its message first takes the cause its
@@ -203,7 +172,11 @@ pub(super) fn unsupported_hint(reason: &str, hint: &str) -> Failure {
     error
 }
 pub(super) fn failure(message: Vec<u8>) -> Failure {
-    Failure { status: 1, message }
+    Failure {
+        status: 1,
+        message,
+        hint: None,
+    }
 }
 pub(super) fn numeric_failure(error: fastmash_portable_numerics::NumericFailure) -> Failure {
     use fastmash_portable_numerics::NumericFailure;
@@ -220,6 +193,7 @@ pub(super) fn numeric_failure(error: fastmash_portable_numerics::NumericFailure)
     Failure {
         status,
         message: message.as_bytes().to_vec(),
+        hint: None,
     }
 }
 pub(super) fn conversion_failure(error: fastmash_conversion::profile::Error) -> Failure {
@@ -313,6 +287,7 @@ mod tests {
             let error = Failure {
                 status,
                 message: b"first\nsecond\0\xff\x1b[36m\nhint: use --help\n".to_vec(),
+                hint: None,
             };
             for (mode, prefix) in [
                 (
@@ -344,7 +319,8 @@ mod tests {
     #[test]
     fn failure_presentation_keeps_the_allocation_failure_fallback() {
         MESSAGE_FAILS.with(|fails| fails.set(true));
-        let refusal = unsupported("unavailable memory for this diagnostic");
+        let refusal =
+            unsupported("unavailable memory for this diagnostic").with_hint(hints::LANGUAGE_SORT);
         assert!(refusal.message.is_empty());
         let mut bytes = Vec::new();
         write(&mut bytes, b"fastmash", &refusal, style(ColorMode::Always)).unwrap();
@@ -353,6 +329,31 @@ mod tests {
             b"\x1b[1;38;2;255;92;87m\xe2\x9c\x97 fastmash: \x1b[0mmemory allocation failed\n"
         );
         assert_eq!(refusal.status, 77);
+    }
+
+    #[test]
+    fn selected_guidance_survives_cause_changes_and_follows_context() {
+        let original = crate::grammar::parse(&["sum".into()]).err().unwrap();
+        let mut error = original.clone();
+        error.message = b"changed cause with raw bytes: \0\xff\n".to_vec();
+        append(&mut error, &[b"source context\n"]);
+        for mode in [ColorMode::Never, ColorMode::Always] {
+            let mut bytes = Vec::new();
+            write(&mut bytes, b"fastmash", &error, style(mode)).unwrap();
+            let mut expected = Vec::new();
+            write_prefix(&mut expected, b"fastmash", style(mode)).unwrap();
+            expected.extend_from_slice(b"changed cause with raw bytes: \0\xff\nsource context\nhint: supply a field number starting at 1, or use --header-in with a header name\n");
+            assert_eq!(bytes, expected);
+            assert_eq!(error.status, 1);
+        }
+    }
+
+    #[test]
+    fn reporting_does_not_infer_guidance_from_cause_text() {
+        let error = failure(b"invalid seed\n".to_vec());
+        let mut bytes = Vec::new();
+        write(&mut bytes, b"fastmash", &error, style(ColorMode::Never)).unwrap();
+        assert_eq!(bytes, b"fastmash: invalid seed\n");
     }
 
     #[test]
@@ -415,47 +416,51 @@ mod tests {
 
     #[test]
     fn failure_presentation_preserves_short_zero_write_and_flush_failures() {
-        let error = numeric_failure(fastmash_portable_numerics::NumericFailure::Invariant);
-        for mode in [ColorMode::Never, ColorMode::Always] {
-            let mut expected = Vec::new();
-            write(&mut expected, b"fastmash", &error, style(mode)).unwrap();
-            for fail_at in 0..expected.len() {
+        for error in [
+            numeric_failure(fastmash_portable_numerics::NumericFailure::Invariant),
+            crate::grammar::parse(&["sum".into()]).err().unwrap(),
+        ] {
+            for mode in [ColorMode::Never, ColorMode::Always] {
+                let mut expected = Vec::new();
+                write(&mut expected, b"fastmash", &error, style(mode)).unwrap();
+                for fail_at in 0..expected.len() {
+                    let mut sink = Sink {
+                        bytes: Vec::new(),
+                        fail_at: Some(fail_at),
+                        zero: false,
+                        fail_flush: false,
+                    };
+                    assert_eq!(
+                        write(&mut sink, b"fastmash", &error, style(mode))
+                            .unwrap_err()
+                            .raw_os_error(),
+                        Some(28)
+                    );
+                    assert_eq!(sink.bytes, expected[..fail_at]);
+                }
                 let mut sink = Sink {
                     bytes: Vec::new(),
-                    fail_at: Some(fail_at),
-                    zero: false,
+                    fail_at: None,
+                    zero: true,
                     fail_flush: false,
                 };
+                assert_eq!(
+                    write(&mut sink, b"fastmash", &error, style(mode))
+                        .unwrap_err()
+                        .kind(),
+                    io::ErrorKind::WriteZero
+                );
+                assert!(sink.bytes.is_empty());
+                sink.zero = false;
+                sink.fail_flush = true;
                 assert_eq!(
                     write(&mut sink, b"fastmash", &error, style(mode))
                         .unwrap_err()
                         .raw_os_error(),
                     Some(28)
                 );
-                assert_eq!(sink.bytes, expected[..fail_at]);
+                assert_eq!(sink.bytes, expected);
             }
-            let mut sink = Sink {
-                bytes: Vec::new(),
-                fail_at: None,
-                zero: true,
-                fail_flush: false,
-            };
-            assert_eq!(
-                write(&mut sink, b"fastmash", &error, style(mode))
-                    .unwrap_err()
-                    .kind(),
-                io::ErrorKind::WriteZero
-            );
-            assert!(sink.bytes.is_empty());
-            sink.zero = false;
-            sink.fail_flush = true;
-            assert_eq!(
-                write(&mut sink, b"fastmash", &error, style(mode))
-                    .unwrap_err()
-                    .raw_os_error(),
-                Some(28)
-            );
-            assert_eq!(sink.bytes, expected);
         }
     }
 
@@ -524,6 +529,7 @@ mod tests {
                 let refusal = Failure {
                     status: 77,
                     message: Vec::new(),
+                    hint: None,
                 };
                 let body = reported(&refusal);
                 let result = startup_sink.write_all(body);

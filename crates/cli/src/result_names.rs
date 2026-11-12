@@ -1,5 +1,6 @@
 //! Supplied labels for selected Operation-produced output columns.
 
+use super::failure::hints;
 use super::{Failure, command_memory::reserve, failure, grammar::Mode, unsupported};
 
 #[derive(Default)]
@@ -34,7 +35,8 @@ impl ResultNames {
             .entries
             .binary_search_by_key(&index, |&(index, _)| index)
             .map_or_else(Ok, |_| {
-                Err(failure(b"--result-name repeats a result index\n".to_vec()))
+                Err(failure(b"--result-name repeats a result index\n".to_vec())
+                    .with_hint(hints::RESULT_INDEX))
             })?;
         let mut bytes = Vec::new();
         reserve(&mut bytes, name.len())?;
@@ -69,9 +71,10 @@ impl ResultNames {
             ));
         }
         if !explicit_header_out {
-            return Err(failure(
-                b"--result-name requires --header-out or -H\n".to_vec(),
-            ));
+            return Err(
+                failure(b"--result-name requires --header-out or -H\n".to_vec())
+                    .with_hint(hints::RESULT_HEADERS),
+            );
         }
         if self
             .entries
@@ -90,7 +93,8 @@ impl ResultNames {
         {
             return Err(failure(
                 b"--result-name contains the text output delimiter or record terminator\n".to_vec(),
-            ));
+            )
+            .with_hint(hints::RESULT_SEPARATOR));
         }
         Ok(())
     }
