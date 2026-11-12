@@ -5,43 +5,29 @@ body:
   - type: markdown
     attributes:
       value: |
-        Slow real-world jobs are what we optimize next, so thank you. The [benchmark kit](https://github.com/pederbe/fastmash/tree/main/bench) can time your command with both programs: `python3 fastmash-bench.py --custom 'ARGS' --input FILE`.
+        The [benchmark kit](https://github.com/pederbe/fastmash/tree/main/bench) can help compare your command with GNU datamash.
   - type: textarea
-    id: command
+    id: problem
     attributes:
-      label: Command
-      description: The exact arguments, run the same way for both programs, and the locale (`LC_ALL`).
-      placeholder: LC_ALL=C fastmash -s -g 1 median 2 < data.tsv
-      render: shell
+      label: Problem
+      description: Which job is slow, and how does that affect your task?
     validations:
       required: true
   - type: textarea
-    id: data
+    id: outcome
     attributes:
-      label: Data
-      description: Size, number of rows and fields, number of groups, and what the values look like. A link to public data or a small generator script is ideal.
+      label: Desired outcome
+      description: What would make this job useful? Give a timing goal if you have one.
     validations:
       required: true
   - type: textarea
-    id: timings
+    id: evidence
     attributes:
-      label: Timings
-      description: Elapsed time for both programs, repeated a few times (or the benchmark kit's table).
-      render: text
-    validations:
-      required: true
-  - type: input
-    id: versions
-    attributes:
-      label: Versions
-      description: Output of `fastmash --version` and `datamash --version | head -1`
-    validations:
-      required: true
-  - type: input
-    id: environment
-    attributes:
-      label: Machine
-      description: CPU, memory, distribution, native Linux or WSL2, and the file system of the input and of TMPDIR
-      placeholder: 8-core x86-64, 16 GB, Fedora, native Linux, ext4
+      label: Evidence
+      description: |
+        Include the command, input or data description, observed timings, versions,
+        locale and relevant machine details where available. For a comparison,
+        run both programs with the same input and settings. An observation without
+        a repeatable benchmark is welcome, and you can say what remains unknown.
     validations:
       required: true

@@ -5,17 +5,19 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: What are you trying to do?
-      description: Describe the task and the data, not only the solution you have in mind.
+      label: Problem
+      description: What task is difficult or unsupported, and why does it matter?
     validations:
       required: true
   - type: textarea
-    id: proposal
+    id: outcome
     attributes:
-      label: Proposal
-      description: How you would like Fastmash to help.
+      label: Desired outcome
+      description: What would Fastmash let you do? Describe the result, without needing to design the solution.
+    validations:
+      required: true
   - type: textarea
-    id: alternatives
+    id: evidence
     attributes:
-      label: Alternatives
-      description: What you do today instead.
+      label: Evidence
+      description: Examples, current workarounds or relevant links, if available.

@@ -15,7 +15,7 @@ printf '[package]\nname = "helper"\nversion = "1.0.0"\n[dependencies]\ncommon = 
 touch crates/app/src/lib.rs crates/helper/src/lib.rs .github/workflows/ci.yml release/publication-test-server/tests/release_delivery.rs scripts/build_site.py
 touch packaging/homebrew/fastmash.rb release/publication-test-server/Cargo.toml
 touch .github/workflows/homebrew.yml .github/workflows/macos.yml
-touch release-plz.toml .github/workflows/release-plz.yml
+touch release-plz.toml renovate.json release/changelog.sh .github/workflows/release-plz.yml
 cat > Cargo.lock <<'LOCK'
 version = 4
 [[package]]
@@ -34,6 +34,7 @@ name = "devlib"
 version = "1.0.0"
 LOCK
 website_paths=(
+  .github/ISSUE_TEMPLATE/bug_report.yml .github/ISSUE_TEMPLATE/config.yml
   ARCHITECTURE.md GLOSSARY.md TESTING.md
   docs/book.toml docs/descriptions.json docs/theme/head.hbs docs/theme/fastmash.css
   docs/theme/navigation.js docs/theme/footer.js docs/theme/favicon.svg
@@ -91,6 +92,10 @@ expect application=false configuration=true packages=
 printf '// release tooling change\n' > release/publication-test-server/tests/release_delivery.rs
 expect application=false configuration=true packages=
 printf '# release configuration change\n' > release-plz.toml
+expect application=false configuration=true packages=
+printf '# changelog formatter change\n' > release/changelog.sh
+expect application=false configuration=true packages=
+printf '{}\n' > renovate.json
 expect application=false configuration=true packages=
 printf '# release workflow change\n' > .github/workflows/release-plz.yml
 expect application=false configuration=true packages=

@@ -7,41 +7,27 @@ body:
       value: |
         Thanks for reporting. For a difference from GNU datamash, use the **Compatibility difference** form instead.
   - type: textarea
-    id: command
+    id: problem
     attributes:
-      label: Command and input
-      description: A minimal command and input that reproduce the problem. Paste text, not a screenshot.
-      placeholder: |
-        printf '1\t2\n3\t4\n' | fastmash sum 1
-      render: shell
+      label: Problem
+      description: What happened, and how does it affect your task?
     validations:
       required: true
   - type: textarea
-    id: actual
+    id: outcome
     attributes:
-      label: What happened
-      description: Output, error message and exit status (`echo $?`).
-      render: text
+      label: Desired outcome
+      description: What should happen instead? You do not need to propose a fix.
     validations:
       required: true
   - type: textarea
-    id: expected
+    id: evidence
     attributes:
-      label: What you expected
-    validations:
-      required: true
-  - type: input
-    id: version
-    attributes:
-      label: Fastmash version
-      description: Output of `fastmash --version`
-    validations:
-      required: true
-  - type: input
-    id: environment
-    attributes:
-      label: Environment
-      description: Distribution, kernel (`uname -r`), WSL or native, and locale (`locale`)
-      placeholder: Ubuntu 24.04, 6.8.0, native, LANG=C.UTF-8
+      label: Evidence
+      description: |
+        Include the command, minimal input, output or error, exit status,
+        `fastmash --version`, and relevant operating system and locale settings
+        where available. Describe your observations even if you cannot reproduce
+        the problem yet, and say which details are unknown.
     validations:
       required: true

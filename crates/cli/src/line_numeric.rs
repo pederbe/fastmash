@@ -143,7 +143,7 @@ pub(super) fn rounding(value: numerics::Value, kind: Rounding) -> Result<numeric
 pub(super) fn strbin(bytes: &[u8], buckets: std::num::NonZeroU64) -> u64 {
     bytes.iter().fold(0u64, |hash, byte| {
         hash.rotate_left(9).wrapping_add(u64::from(*byte))
-    }) % buckets.get()
+    }) % buckets
 }
 
 pub(super) fn bin(

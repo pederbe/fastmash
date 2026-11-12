@@ -32,13 +32,7 @@ pub(super) fn failing_input_with(
     let launcher = std::env::var_os("FASTMASH_TEST_CORPUS")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
-            std::env::current_exe()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join("fastmash-corpus")
+            std::path::Path::new(env!("CARGO_BIN_EXE_fastmash")).with_file_name("fastmash-corpus")
         });
     let full_root = directory.0.with_extension("full-output");
     let mut owner = full.then(|| {

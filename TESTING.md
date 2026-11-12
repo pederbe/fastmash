@@ -82,7 +82,11 @@ cargo test -p fastmash-portable-numerics   # one crate
 cargo test -p fastmash grammar             # tests whose names match "grammar"
 ```
 
-For changes to the private installation and publication tools, also run:
+For changes to the private installation and publication tools, also run the
+following checks. On Linux, install the `git-cliff` version pinned in the
+[release workflow](https://github.com/pederbe/fastmash/blob/main/.github/workflows/release-plz.yml)
+first. The workflow tests use it to check release notes from a local Git fixture
+without contacting GitHub.
 
 ```sh
 cargo fmt --manifest-path release/publication-test-server/Cargo.toml --check

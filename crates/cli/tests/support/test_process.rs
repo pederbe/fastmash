@@ -29,13 +29,7 @@ pub fn bounded(binary: impl AsRef<OsStr>, seconds: u32) -> Command {
     let launcher = std::env::var_os("FASTMASH_TEST_PROCESS")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            std::env::current_exe()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join("fastmash-test-process")
+            Path::new(env!("CARGO_BIN_EXE_fastmash")).with_file_name("fastmash-test-process")
         });
     assert!(
         launcher.is_file(),
