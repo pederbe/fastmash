@@ -12,16 +12,17 @@ recurring preparation. Manual dispatch prepares an additionally authorized relea
 The release pull request updates Cargo versions, exact dependency requirements,
 the lockfile and a dated [CHANGELOG.md](CHANGELOG.md) section from conventional
 pull request titles. All five published crates participate in versioning, and
-library commits appear in the binary's combined notes. A version group propagates
+notes include changes across the repository. A version group propagates
 library features and breaking changes to the binary. A shared Cargo workspace
 version keeps all five crates synchronized. Before 1.0, new features and breaking changes
 raise the minor version.
 
 Notes reach `main` before tagging and stay under their dated heading. Keep
 `[Unreleased]` empty for future changes. Existing pending notes from the previous
-release machinery are retained for the first release-plz release. Describe
-compatibility consequences and required actions in the pull request description.
-Use an actual `BREAKING CHANGE:` paragraph at the end for upgrade instructions.
+release machinery are retained for the first release-plz release. New entries
+are short descriptions with PR links. Mark breaking changes with `!` in the
+conventional PR title. Keep compatibility consequences and upgrade instructions
+in the PR's Solution section, rather than copying them into release notes.
 A numerical-output change still needs its new Numerical profile and independent
 verification. Use `fix(security):` for security notes and `feat(remove)!:` or
 `feat(deprecate):` for removals and deprecations.
@@ -36,9 +37,11 @@ See [ADR 0016](docs/src/adr/0016-release-plz.md).
 
 The repository needs auto-merge enabled and the required `CI` check on `main`.
 `RELEASE_PLZ_TOKEN` is a repository-scoped token with Contents and Pull requests
-write access, allowing release pull requests to run CI. Squash defaults must use
-the pull request title and body so conventional titles and upgrade instructions
-survive merging. Release-plz uses the built-in workflow token for tags and drafts.
+write access, allowing release pull requests to run CI. Squash commits use
+the conventional pull request title. The title supplies the short entry and breaking
+marker, and its PR number supplies the link. No release-note footer or separate
+merge message is needed. Release-plz uses the built-in workflow token for tags
+and drafts.
 
 ## Performance acceptance
 

@@ -107,15 +107,16 @@ if base:
             application |= {k: v for k, v in shared_features(old).items() if v} != {
                 k: v for k, v in shared_features(new).items() if v}
     for path in filter(None, paths):
-        if path.endswith(".md") or path.startswith("docs/") or path == "Cargo.lock":
+        if path.endswith(".md") or path.startswith(("docs/", ".github/ISSUE_TEMPLATE/")) or path == "Cargo.lock":
             continue
         if path == ".github/workflows/homebrew.yml":
             continue  # Dedicated workflows check these inputs without application builds.
         if path.startswith((".github/workflows/", ".github/scripts/", "release/publication-test-server/tests/")) or path in {
             "release/prepare-linux.sh", "release/check-crate-packages.sh", "release/publish-crates.sh",
+            "release/changelog.sh",
             "release/package-repository.sh",  # Dedicated package workflow verifies signing/installation.
             "release/publication-test-server/Cargo.toml",
-            "release-plz.toml",
+            "release-plz.toml", "renovate.json",
         }:
             configuration = True
         elif any(path.startswith(str(pathlib.PurePosixPath(m).parent) + "/") for m in after):

@@ -74,6 +74,29 @@ also needs application or platform execution.
 Before closing an implementation ticket, update its acceptance checklist and
 check whether its parent issue is complete.
 
+### Public issues and pull requests
+
+Issue descriptions use **Problem**, **Desired outcome** and **Evidence**.
+Describe the task and its impact, the result that would resolve it, and available
+reproduction details or examples. Incomplete observations are welcome.
+Pull requests use **Problem**, **Solution** and **Validation**. Explain the
+reason for the change, its behavior and compatibility effects, and meaningful
+checks. Put migration or upgrade instructions in Solution. Keep small changes
+brief and links and examples within these sections.
+
+Public descriptions and comments cover software behavior, technical rationale
+and evidence. Keep private discussions, authorization exchanges, personal
+decision history and handoffs out of them. State technical outcomes directly
+and attribute checks accurately. Comments are for technical questions, findings
+and review discussion.
+
+Edit descriptions only to keep technical facts, scope, evidence and acceptance
+criteria accurate within the work at hand. Preserve the reporter's observations
+and human-written wording unless a rewrite is requested. Leave merged PR
+descriptions alone unless a correction is requested. Track progress with
+checklists, linked issues and labels. These rules also apply to API updates.
+Check these limits before posting or editing.
+
 ## Before you open a pull request
 
 1. Read [ARCHITECTURE.md](https://fastmash.io/contributing/architecture.html) for how the code fits together, and
@@ -175,17 +198,17 @@ For local performance diagnosis, use [the profiling workflow](https://github.com
 
 Release-plz generates dated entries in [CHANGELOG.md](https://github.com/pederbe/fastmash/blob/main/CHANGELOG.md) from merged
 pull request titles. Keep `[Unreleased]` empty for future changes. Review the
-title as the sentence users will read about capabilities, fixes, installation
-or changes to command-line behavior. Explain compatibility consequences and
-required user action in the pull request description. Numerical-output changes
+title as the short sentence users will read about the change. Each entry links
+to its pull request. Explain compatibility consequences and required user action
+in the pull request's Solution section. Numerical-output changes
 name their new Numerical profile. Keep performance claims tied to measured
 workloads. See [RELEASING.md](https://github.com/pederbe/fastmash/blob/main/RELEASING.md) for weekly publication.
 
 Use `!` in the title for a breaking change, such as `feat!: Rename an option`,
-and put a `BREAKING CHANGE:` paragraph with the full upgrade instructions at
-the end of the description, after all other sections. Release notes retain that
-paragraph. Use `feat(remove)!:` for removals and `feat(deprecate):` for
-deprecations so they have their own changelog sections.
+so the short entry gets a breaking marker. Release notes do not copy migration
+paragraphs from the description, and no release-note footer is required.
+Use `feat(remove)!:` for removals and `feat(deprecate):` for deprecations so they
+have their own changelog sections.
 
 ## Code of conduct
 

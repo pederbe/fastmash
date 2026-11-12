@@ -3,7 +3,8 @@
 All notable changes to Fastmash are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Fastmash uses
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version (0.x)
-may include incompatible changes; they are always listed under **Changed**.
+may include incompatible changes. New entries mark these **Breaking** and link
+to the pull request for details.
 
 A change to any numerical output is always listed, together with the
 numerical profile version that introduced it.

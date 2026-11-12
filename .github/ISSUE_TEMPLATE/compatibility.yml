@@ -7,45 +7,27 @@ body:
       value: |
         Please check [Differences from GNU datamash](https://fastmash.io/guide/differences.html) first: some differences are intentional.
   - type: textarea
-    id: command
+    id: problem
     attributes:
-      label: Command and input
-      description: Minimal input and the command, run the same way for both programs.
-      render: shell
+      label: Problem
+      description: How do Fastmash and GNU datamash differ, and how does that affect your task?
     validations:
       required: true
   - type: textarea
-    id: datamash
+    id: outcome
     attributes:
-      label: GNU datamash result
-      description: Output, error message and exit status.
-      render: text
+      label: Desired outcome
+      description: Which behavior do you expect, and why?
     validations:
       required: true
   - type: textarea
-    id: fastmash
+    id: evidence
     attributes:
-      label: Fastmash result
-      description: Output, error message and exit status.
-      render: text
+      label: Evidence
+      description: |
+        Include the same command and input for both programs, their output,
+        errors and exit statuses, both versions and relevant locale and operating
+        system settings where available. If you cannot make a comparison yet,
+        describe what you observed and what remains unknown.
     validations:
       required: true
-  - type: input
-    id: versions
-    attributes:
-      label: Versions
-      description: Output of `fastmash --version` and `datamash --version | head -1`
-    validations:
-      required: true
-  - type: input
-    id: environment
-    attributes:
-      label: Environment
-      description: Distribution, WSL or native, and locale settings
-    validations:
-      required: true
-  - type: textarea
-    id: impact
-    attributes:
-      label: Impact
-      description: Does this break a script or pipeline you use? How?
