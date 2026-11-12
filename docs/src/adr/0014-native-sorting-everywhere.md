@@ -13,6 +13,6 @@ installation requirements.
 
 The numerical profile is unchanged. Input and storage failures use Fastmash's
 diagnostics and existing exit statuses. The
-[architecture](../contributing/architecture.md#sorting) describes the native
+[architecture](../../../ARCHITECTURE.md#sorting) describes the native
 sorter. Upgrade handling belongs in the
 [installation guide](../install.md#older-linux-installations).
