@@ -95,7 +95,6 @@ jobs:
               - 'release/macos-archive.sh'
               - 'packaging/linux-source-test.rs'
               - 'packaging/fedora/**'
-              - 'packaging/nix/**'
               - 'release/publish-package-repository.sh'
               - 'release/package-publication-fixtures.sh'
               - 'release/test-package-publication.sh'

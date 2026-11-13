@@ -22,25 +22,20 @@ impl Fixture {
         ));
         fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
         fs::create_dir(path.join("bin")).unwrap();
-        fs::create_dir(path.join("docs")).unwrap();
         copy_executable::copy_executable(
             env!("CARGO_BIN_EXE_fastmash-linux-source-fixture"),
             path.join("bin/fastmash"),
         );
-        for name in ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"] {
-            fs::write(path.join("docs").join(name), b"nonempty\n").unwrap();
-        }
         Self(path)
     }
 
-    fn run(&self, recipe: &str, mode: &str, version: &str) -> Output {
-        fs::write(self.0.join("bin/mode"), format!("{recipe}:{mode}")).unwrap();
+    fn run(&self, mode: &str, version: &str) -> Output {
+        fs::write(self.0.join("bin/mode"), mode).unwrap();
         let mut command = Command::new(env!("CARGO_BIN_EXE_fastmash-test-linux-source"));
-        command.arg(recipe).arg(self.0.join("bin")).arg(version);
-        if recipe == "nix" {
-            command.arg(self.0.join("docs"));
-        }
         command
+            .arg("fedora")
+            .arg(self.0.join("bin"))
+            .arg(version)
             .env("PATH", "/unexpected")
             .env("SOURCE_PACKAGE_SHOULD_BE_CLEARED", "yes")
             .current_dir(&self.0)
@@ -56,74 +51,49 @@ impl Drop for Fixture {
 }
 
 #[test]
-fn both_recipes_keep_pipe_input_and_their_exact_route_environment() {
+fn fedora_keeps_pipe_input_and_its_exact_route_environment() {
     let fixture = Fixture::new();
-    for recipe in ["fedora", "nix"] {
-        let output = fixture.run(recipe, "", "fixture");
-        assert!(output.status.success(), "{recipe}: {output:?}");
-        assert!(output.stdout.is_empty() && output.stderr.is_empty());
-    }
+    let output = fixture.run("", "fixture");
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty() && output.stderr.is_empty());
 }
 
 #[test]
 fn failed_commands_wrong_bytes_versions_and_routes_are_rejected() {
     let fixture = Fixture::new();
-    for recipe in ["fedora", "nix"] {
-        for mode in [
-            "failed-version",
-            "failed-command",
-            "failed-route",
-            "wrong-output",
-            "wrong-geomean",
-            "wrong-paired",
-            "wrong-route",
-        ] {
-            let output = fixture.run(recipe, mode, "fixture");
-            assert_eq!(output.status.code(), Some(1), "{recipe}/{mode}: {output:?}");
-            assert!(!output.stderr.is_empty());
-        }
-        assert_eq!(
-            fixture.run(recipe, "", "another-version").status.code(),
-            Some(1)
-        );
+    for mode in [
+        "failed-version",
+        "failed-command",
+        "failed-route",
+        "wrong-output",
+        "wrong-geomean",
+        "wrong-paired",
+        "wrong-route",
+    ] {
+        let output = fixture.run(mode, "fixture");
+        assert_eq!(output.status.code(), Some(1), "{mode}: {output:?}");
+        assert!(!output.stderr.is_empty());
     }
-}
-
-#[test]
-fn nix_requires_each_nonempty_document_while_fedora_keeps_its_existing_scope() {
-    for name in ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"] {
-        let fixture = Fixture::new();
-        let path = fixture.0.join("docs").join(name);
-        fs::write(&path, []).unwrap();
-        assert_eq!(fixture.run("nix", "", "fixture").status.code(), Some(1));
-        fs::remove_file(path).unwrap();
-        assert_eq!(fixture.run("nix", "", "fixture").status.code(), Some(1));
-        assert!(fixture.run("fedora", "", "fixture").status.success());
-    }
+    assert_eq!(fixture.run("", "another-version").status.code(), Some(1));
 }
 
 #[test]
 fn missing_and_nonexecutable_programs_are_rejected() {
-    for name in ["fastmash"] {
-        let fixture = Fixture::new();
-        let path = fixture.0.join("bin").join(name);
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
-        for recipe in ["fedora", "nix"] {
-            let output = fixture.run(recipe, "", "fixture");
-            assert_eq!(output.status.code(), Some(1));
-            let text = String::from_utf8_lossy(&output.stderr);
-            assert!(text.contains("not an executable file"));
-            assert!(text.contains(&path.display().to_string()));
-        }
-        fs::remove_file(path).unwrap();
-        for recipe in ["fedora", "nix"] {
-            let output = fixture.run(recipe, "", "fixture");
-            assert_eq!(output.status.code(), Some(1));
-            let text = String::from_utf8_lossy(&output.stderr);
-            assert!(text.contains("cannot inspect installed executable"));
-            assert!(text.contains(&fixture.0.join("bin/fastmash").display().to_string()));
-        }
-    }
+    let fixture = Fixture::new();
+    let path = fixture.0.join("bin/fastmash");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+    let output = fixture.run("", "fixture");
+    assert_eq!(output.status.code(), Some(1));
+    let text = String::from_utf8_lossy(&output.stderr);
+    assert!(text.contains("not an executable file"));
+    assert!(text.contains(&path.display().to_string()));
+
+    fs::remove_file(&path).unwrap();
+    let output = fixture.run("", "fixture");
+    assert_eq!(output.status.code(), Some(1));
+    let text = String::from_utf8_lossy(&output.stderr);
+    assert!(text.contains("cannot inspect installed executable"));
+    assert!(text.contains(&path.display().to_string()));
 }
 
 #[test]
@@ -132,7 +102,7 @@ fn invalid_invocations_fail() {
         vec![],
         vec!["unknown"],
         vec!["fedora", "bin"],
-        vec!["nix", "bin", "version"],
+        vec!["nix", "bin", "version", "docs"],
         vec!["fedora", "bin", "version", "docs"],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_fastmash-test-linux-source"))

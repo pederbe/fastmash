@@ -1,4 +1,4 @@
-//! Installed checks shared by the retained Fedora and Nix source recipes.
+//! Installed checks for the retained Fedora source recipe.
 #![forbid(unsafe_code)]
 
 use std::fs;
@@ -41,23 +41,21 @@ fn run() -> io::Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() == 1 && matches!(args[0].to_str(), Some("--help" | "-h")) {
         println!(
-            "Check the Fastmash executable installed by a Fedora or Nix source recipe.\n\n\
+            "Check the Fastmash executable installed by a Fedora source recipe.\n\n\
 Usage: fastmash-test-linux-source fedora BIN_DIR VERSION\n\
-       fastmash-test-linux-source nix BIN_DIR VERSION DOC_DIR\n\n\
+\n\
 BIN_DIR contains the installed executable. VERSION is its expected version number.\n\
-The Nix form also checks nonempty license documents in DOC_DIR. The Fedora form\n\
-keeps its recipe's executable checks. Successful checks are silent.\n\n\
+Successful checks are silent.\n\n\
 Example, replacing VERSION and installed directories with the recipe's outputs:\n\
-  fastmash-test-linux-source nix /path/to/bin VERSION /path/to/documents"
+  fastmash-test-linux-source fedora /path/to/bin VERSION"
         );
         return Ok(());
     }
-    let (fedora, bin, version, docs) = match args.as_slice() {
-        [mode, bin, version] if mode == "fedora" => (true, bin, version, None),
-        [mode, bin, version, docs] if mode == "nix" => (false, bin, version, Some(docs)),
+    let (bin, version) = match args.as_slice() {
+        [mode, bin, version] if mode == "fedora" => (bin, version),
         _ => {
             return Err(io::Error::other(
-                "usage: fastmash-test-linux-source fedora BIN_DIR VERSION | nix BIN_DIR VERSION DOC_DIR",
+                "usage: fastmash-test-linux-source fedora BIN_DIR VERSION",
             ));
         }
     };
@@ -74,22 +72,6 @@ Example, replacing VERSION and installed directories with the recipe's outputs:\
             "installed program is not an executable file: {}",
             binary.display()
         )));
-    }
-    if let Some(docs) = docs {
-        for name in ["LICENSE-MIT", "LICENSE-APACHE", "THIRD-PARTY-LICENSES.md"] {
-            let path = Path::new(docs).join(name);
-            let metadata = fs::metadata(&path).map_err(|error| {
-                io::Error::other(format!(
-                    "cannot inspect installed document {}: {error}",
-                    path.display()
-                ))
-            })?;
-            if !metadata.is_file() || metadata.len() == 0 {
-                return Err(io::Error::other(format!(
-                    "missing or empty document: {name}"
-                )));
-            }
-        }
     }
     let version = version
         .to_str()
@@ -113,12 +95,10 @@ Example, replacing VERSION and installed directories with the recipe's outputs:\
     route
         .args(["-sg1", "pcov", "2:3"])
         .env_clear()
+        .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C")
         .env("FASTMASH_GROUPING", "sort")
         .env("FASTMASH_SORT_TRACE", "1");
-    if fedora {
-        route.env("PATH", "/usr/bin:/bin");
-    }
     let output = pipe(route, b"b\t2\t3\na\t1\t2\na\t3\t6\n")?;
     expect(&output, b"a\t2\nb\t0\n", "paired operation")?;
     if !matches!(
@@ -135,11 +115,9 @@ Example, replacing VERSION and installed directories with the recipe's outputs:\
     rmdup
         .args(["-s", "rmdup", "1"])
         .env_clear()
+        .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C")
         .env("FASTMASH_SORT_TRACE", "1");
-    if fedora {
-        rmdup.env("PATH", "/usr/bin:/bin");
-    }
     let rmdup = pipe(rmdup, b"b\t2\na\t1\nb\t3\n")?;
     expect(&rmdup, b"a\t1\nb\t2\n", "sorted rmdup")?;
     if rmdup.stderr != b"sort route: native sort of whole records\n" {
