@@ -2,9 +2,6 @@
 
 Use hotpath-rs for local diagnosis of startup, decimal calculations, grouping
 and spill. Ordinary builds have no profiling dependency or instrumentation.
-The optional dependency uses MIT-licensed hotpath 0.31.2. Its transitive
-dependencies are checked by the repository's `cargo deny check licenses` policy.
-CPU report decoding also brings in the permissive Zlib-licensed `zlib-rs`.
 
 The integration follows upstream [setup](https://hotpath.rs/),
 [static profiling modes](https://hotpath.rs/profiling_modes),
@@ -197,11 +194,6 @@ Profiling-enabled tests cover the command boundary. Ordinary release workspace
 tests and the frozen corpus remain the numerical and compatibility evidence.
 Native macOS runtime checks require an actual supported Mac. A cross-target
 compile is useful build coverage and cannot replace them.
-
-The static profiling CI matrix covers Linux and macOS 15/26. Its disposable
-Linux runner also captures attributed CPU samples with pinned sampling tools.
-Only that runner relaxes its perf and ptrace settings. Reports are retained as
-CI artifacts for seven days. Desktop settings are configured separately.
 
 All captures above are shared diagnostics. Retain source revision and patch,
 binary hash, compiler and build flags, dataset and command, host identity,

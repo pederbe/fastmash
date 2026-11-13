@@ -56,7 +56,7 @@ programs and their documentation and license directories are gone.
 
 ## Repository admission
 
-Submission requires the maintainer's approval and Fedora's
+Submission follows Fedora's
 [new-package review and packager process](https://docs.fedoraproject.org/en-US/package-maintainers/Joining_the_Package_Maintainers/).
 A Fedora packager must review the source package, dependency bundling, combined
 license expression, generated bundled-crate metadata and maintenance ownership.

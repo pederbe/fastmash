@@ -29,9 +29,10 @@ updates through `pacman -Syu`. Remove Fastmash with `sudo pacman -R fastmash-bin
 
 ## Maintenance
 
-For each published release, update `pkgver` and `sha256sums` from the latest
-Linux archive, then reset `pkgrel` to `1`. Keep the archive URL and checksum
-together so makepkg can verify the exact release it packages.
+For a published release, update `pkgver`, the archive name in `_name` and
+`sha256sums` from its actual Linux asset, then reset `pkgrel` to `1`. Keep the
+archive URL, target suffix and checksum together so makepkg verifies the exact
+release it packages.
 
 Run makepkg, install the resulting package with pacman, check the command and
 installed documentation, then check removal before committing the update.

@@ -97,7 +97,7 @@ capped by `OMP_THREAD_LIMIT`. Set `OMP_NUM_THREADS=1` to sort on one thread.
 
 Sorted `rmdup` keeps complete records and stable key order, with the same
 temporary-storage policy. Case folding affects ordering, while duplicate keys
-are compared exactly. The [architecture](../contributing/architecture.md#sorting)
+are compared exactly. The [architecture](https://github.com/pederbe/fastmash/blob/main/ARCHITECTURE.md#sorting)
 describes buffer sizing, parallel preparation and replay eligibility.
 
 ## Ignoring case: `-i`
