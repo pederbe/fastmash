@@ -9,7 +9,7 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let executable = std::env::current_exe().unwrap();
     let setting = std::fs::read_to_string(executable.parent().unwrap().join("mode")).unwrap();
-    let (recipe, mode) = setting.split_once(':').unwrap();
+    let mode = setting.as_str();
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args == ["--version"] {
         println!("fastmash fixture");
@@ -57,11 +57,7 @@ fn main() -> ExitCode {
             || std::env::var("FASTMASH_GROUPING").as_deref() != Ok("sort")
             || std::env::var("FASTMASH_SORT_TRACE").as_deref() != Ok("1")
             || std::env::var_os("SOURCE_PACKAGE_SHOULD_BE_CLEARED").is_some()
-            || if recipe == "fedora" {
-                path.as_deref() != Some(std::ffi::OsStr::new("/usr/bin:/bin"))
-            } else {
-                path.is_some()
-            }
+            || path.as_deref() != Some(std::ffi::OsStr::new("/usr/bin:/bin"))
         {
             return ExitCode::from(20);
         }
