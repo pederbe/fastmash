@@ -3,7 +3,7 @@
 This document describes how Fastmash is built: what each part does, how a
 command flows through it, and the principles behind the main design choices.
 It is written for contributors and for anyone evaluating the project. The
-[glossary](https://fastmash.io/contributing/glossary.html) defines the terms used here.
+[glossary](GLOSSARY.md) defines the terms used here.
 
 ## At a glance
 
@@ -82,13 +82,13 @@ graph TD
 The unpublished `fastmash-corpus-driver` crate verifies frozen commands and
 transport failures against a selected executable. Source checks and archive
 installation checks use the same driver. The
-[testing guide](https://fastmash.io/contributing/testing.html) describes its
+[testing guide](TESTING.md) describes its
 fixtures, launchers and native fault mechanisms.
 
 The unpublished `fastmash-locale-tools` crate generates and verifies numeric and
 collation tables against identified native references and independent Unicode
 data. Its reports retain the reference inputs and observed differences. See
-[locale tooling](https://fastmash.io/contributing/testing.html#locale-tools).
+[locale tooling](TESTING.md#locale-tools).
 
 The separately built `tools/icu-exemplars/` development tool queries the installed
 ICU 78 reference through safe resource APIs. Its native headers and libclang

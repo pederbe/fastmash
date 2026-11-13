@@ -18,21 +18,12 @@ it with `brew uninstall pederbe/tap/fastmash`.
 
 ## Maintenance
 
-Revision 1 of the
-0.4.0 recipe moves existing Homebrew-built installations to the release files.
-The next Fastmash version starts at revision zero again.
-
 `fastmash.rb` supplies the download layout and installation instructions. Its
-URLs and checksums name the current published release, so the recipe works on
-its own. Keep it compatible with the archives already produced by the release
-pipeline. The archives contain the executable, documentation and licenses.
-
-The installation repository's daily `Update` workflow reads this recipe from
-Fastmash's `main`, selects the latest published release and replaces the URLs
-and checksums with that release's asset metadata. It checks the installation
-and upgrade before committing the recipe. A failed check leaves the existing
-installation recipe available and can be retried without rebuilding Fastmash
-or republishing a release.
+URLs and checksums identify release archives, so the recipe works on its own.
+Keep it compatible with archives produced by the release pipeline. The archives
+contain the executable, documentation and licenses. The
+[installation repository](https://github.com/pederbe/homebrew-tap) uses this
+recipe as its template and selects published asset URLs and checksums there.
 
 Release qualification remains responsible for application correctness. The
 small `check-install.sh` helper checks only the Homebrew delivery path. It
@@ -41,10 +32,9 @@ archive and verifies that licenses are installed. The installation repository
 also uses it to check upgrades from the previous recipe. Both repositories
 check removal afterwards.
 
-Changes to this recipe or helper run the existing Homebrew workflow on macOS
-15, macOS 26 and Linux. These jobs install the published archives, not programs
-rebuilt from the pull request. Application changes continue through the
-ordinary application and release checks.
+The [Homebrew checks](../../.github/workflows/homebrew.yml) install published
+archives, not programs rebuilt from the pull request. Application changes
+continue through ordinary application and release checks.
 
 For a local check, create a disposable test repository with
 `brew tap-new --no-git OWNER/fastmash-test`, copy `fastmash.rb` to its `Formula`

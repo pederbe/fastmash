@@ -202,10 +202,7 @@ for (const scheme of ['light', 'dark']) {
       assert.ok(contrast.ratio >= 4.5, `unreadable ${scheme} code example: ${JSON.stringify(contrast)}`);
       assert.equal(await page.$eval('html', html => getComputedStyle(html).colorScheme), scheme);
       await page.goto(origin + '/contributing/architecture');
-      assert.ok(await page.$$eval(`.diagram-${scheme}`, images => images.length > 0 && images.every(image =>
-        getComputedStyle(image).display === 'block')));
-      assert.ok(await page.$$eval(`.diagram-${scheme === 'dark' ? 'light' : 'dark'}`, images =>
-        images.length > 0 && images.every(image => getComputedStyle(image).display === 'none')));
+      assert.ok(await page.$('main a[href="https://github.com/pederbe/fastmash/blob/main/ARCHITECTURE.md"]'));
       await Promise.all([page.waitForNavigation(), page.click('.sidebar-contents-link')]);
       assert.equal(new URL(page.url()).pathname, '/toc');
       assert.ok(await page.$('a[href="guide/operations"]'));

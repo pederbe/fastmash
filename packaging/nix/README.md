@@ -47,8 +47,8 @@ source installs one executable and needs no system `sort` at runtime.
 
 ## Submission
 
-Submit to Nixpkgs only with the maintainer's approval. Copy `package.nix` to
-the by-name package directory, add its maintainer metadata, and run Nixpkgs'
+Copy `package.nix` to Nixpkgs' by-name package directory, add its maintainer
+metadata, and run Nixpkgs'
 formatting and package checks against the submission revision. After acceptance,
 install from the published Nixpkgs revision in a fresh profile and verify the
 same commands, route trace, licenses and removal before advertising `nix`

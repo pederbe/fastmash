@@ -1,225 +1,105 @@
 # Contributing to Fastmash
 
-Thank you for your interest in Fastmash. Contributions of every size are
-welcome, and some of the most valuable ones involve no code at all.
+You can help by reporting compatibility differences, sharing real workloads,
+improving documentation or contributing code. Look for
+[`good first issue`](https://github.com/pederbe/fastmash/labels/good%20first%20issue)
+for a starting point. Discuss substantial changes in an issue before implementing
+them.
 
-[Design decisions](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/index.md)
-explain the reasoning behind important technical choices.
-
-## Ways to help
-
-- **Try it on your own data.** Run Fastmash alongside `datamash` in a real
-  pipeline and tell us what happened, good or bad.
-- **Report a compatibility difference.** If Fastmash and GNU datamash give
-  different output, status or errors for the same command, and the difference
-  is not in [Differences from GNU datamash](https://fastmash.io/guide/differences.html),
-  please [open an issue](https://github.com/pederbe/fastmash/issues/new/choose).
-- **Share a benchmark.** A slow job, with a description of the data (or a
-  generator for similar data), helps us work on what matters.
-- **Improve the documentation.** Unclear wording, missing examples and broken
-  links are all worth fixing.
-- **Write code.** Issues labelled
-  [`good first issue`](https://github.com/pederbe/fastmash/labels/good%20first%20issue)
-  are a good start. For anything larger, please open an issue to discuss the
-  approach before you invest a lot of time.
-
-Please report security problems privately, as described in
-[SECURITY.md](https://github.com/pederbe/fastmash/blob/main/SECURITY.md), not in a public issue.
+Report bugs and feature requests through the
+[issue templates](https://github.com/pederbe/fastmash/issues/new/choose).
+Include the command, relevant input and observed output or errors. For a GNU
+compatibility difference, compare with GNU datamash 1.9 and check the
+[documented differences](https://fastmash.io/guide/differences.html).
+Report security problems privately through [SECURITY.md](SECURITY.md).
 
 ## Development setup
 
-To develop Fastmash, use Linux (or WSL2), or macOS 15 or
-later, with the latest stable Rust. Website checks also need Python 3.10 or later.
-Native macOS development is verified by the
-[native checks](https://fastmash.io/contributing/testing.html#native-macos-development-gate).
+Use Linux or WSL2, or macOS 15 or later, with the latest stable Rust.
+Website checks also need Python 3.10 or later. From a clone of the repository:
 
 ```sh
-git clone https://github.com/pederbe/fastmash
-cd fastmash
 cargo build
-cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bins
-cargo test --release --workspace
 ./target/debug/fastmash --help
 ```
 
-Linux release downloads use the static musl target. To build that target,
-install it with `rustup target add x86_64-unknown-linux-musl`, then run
-`cargo build --release --locked --target x86_64-unknown-linux-musl`.
-It needs a C compiler for the bundled musl copy routines. Ordinary Linux
-development builds continue to use the system glibc.
+Read [ARCHITECTURE.md](ARCHITECTURE.md) for the code map and
+[GLOSSARY.md](GLOSSARY.md) for the vocabulary used in code, tests and issues.
+[Design decisions](docs/src/adr/index.md) explain the project's constraints.
 
-Having GNU datamash 1.9 installed (`apt install datamash`, `pacman -S datamash`)
-makes it easy to compare behavior. Check `datamash --version`, because
-distributions ship different versions.
+## Checks for your change
 
-## Development workflow
+Use focused local checks while developing. [TESTING.md](TESTING.md) gives the
+commands and prerequisites for application, website, native macOS and tooling
+checks. It also explains how to prepare the test helpers before workspace tests.
+A complete local replay of CI is not required. Use CI for platform coverage
+unavailable locally. Applicable CI checks must pass before merging.
 
-All changes enter `main` through a pull request, including the maintainer's
-changes. For planned work, agree on the scope and acceptance criteria in a
-public issue before implementing it.
+Add a regression test that fails without a bug fix, and matching expectations
+for behavior changes. Update the user guide and `--help` when behavior changes.
+Keep each pull request to one concern and separate refactoring from behavior
+changes.
 
-The maintainer creates a `contrib/` branch in this repository. Other contributors
-create a branch in their fork. Follow [Testing](https://fastmash.io/contributing/testing.html#quick-start) for
-focused local checks and final CI validation. Open the pull request against
-`main` once the local implementation and checks are settled, and link the issue
-when there is one.
+## Code and behavior rules
 
-The maintainer reviews and merges the pull request after the applicable CI checks
-pass. Update the branch with `main` when intervening changes could affect it.
-A branch does not need an update solely because unrelated changes have merged.
-Validation runs before merge. Merging the tested result does not start another
-validation suite. Development-only dependency changes run checks for the affected
-workspace packages. Shared dependency or feature changes retain application checks.
-Workflow-only changes run the check-selection tests or their dedicated
-integration checks. Installer-workflow edits check the published downloads
-without rebuilding Fastmash. Use the manual CI run when a workflow change
-also needs application or platform execution.
-Before closing an implementation ticket, update its acceptance checklist and
-check whether its parent issue is complete.
+- Match GNU datamash 1.9 by default. An intentional compatibility difference
+  needs a reason and an entry in the differences guide in the same change.
+- Any change to printed numbers needs a new Numerical profile version and
+  independent verification. Discuss it in an issue first and name the profile
+  in the pull request.
+- Performance-affecting runtime, dependency and build-recipe changes need
+  before-and-after measurements against the previous accepted build on affected
+  jobs and representative regression guards. A material regression needs a fix
+  or an explicit disposition. Tie new speed claims to dated measurements. See the
+  [measurement method](docs/src/benchmarks/method.md) and [PROFILING.md](PROFILING.md).
+- New first-party unsafe code is prohibited outside the audited startup module.
+  Its approved scope is pre-runtime capture of closed standard streams and the
+  Linux process entry with its initial SIGPIPE setup. Keep each operation minimal
+  and explain its soundness with a `// SAFETY:` comment. Any broader exception
+  needs a new maintainer decision. See [ADR 0017](docs/src/adr/0017-audited-startup.md).
+- Justify new dependencies and use licenses compatible with `MIT OR Apache-2.0`.
+  Use current stable dependencies with compatible ranges and commit lockfiles.
+  Locale-reference updates have additional
+  [qualification requirements](TESTING.md#locale-tools).
 
-### Public issues and pull requests
+## Public issues and pull requests
 
-Issue descriptions use **Problem**, **Desired outcome** and **Evidence**.
-Describe the task and its impact, the result that would resolve it, and available
-reproduction details or examples. Incomplete observations are welcome.
-Pull requests use **Problem**, **Solution** and **Validation**. Explain the
-reason for the change, its behavior and compatibility effects, and meaningful
-checks. Put migration or upgrade instructions in Solution. Keep small changes
-brief and links and examples within these sections.
+Create a branch in your fork and open a pull request against `main` once the
+implementation and local checks are settled. All changes enter `main` through
+a pull request. The maintainer reviews and merges after applicable CI passes.
+Update your branch when intervening changes could affect it.
+
+Use **Problem**, **Solution** and **Validation** in the pull request description.
+Explain the reason, behavior and compatibility effects, and meaningful checks.
+Put migration or upgrade instructions in Solution. Link the issue when there is
+one. Issue descriptions use **Problem**, **Desired outcome** and **Evidence**.
+Keep small changes brief.
 
 Public descriptions and comments cover software behavior, technical rationale
-and evidence. Keep private discussions, authorization exchanges, personal
-decision history and handoffs out of them. State technical outcomes directly
-and attribute checks accurately. Comments are for technical questions, findings
-and review discussion.
+and evidence. Attribute checks accurately, keep private discussions out of public
+records and preserve reporters' observations.
+Before closing an implementation ticket, update its acceptance checklist and
+check whether its parent is complete.
 
-Edit descriptions only to keep technical facts, scope, evidence and acceptance
-criteria accurate within the work at hand. Preserve the reporter's observations
-and human-written wording unless a rewrite is requested. Leave merged PR
-descriptions alone unless a correction is requested. Track progress with
-checklists, linked issues and labels. These rules also apply to API updates.
-Check these limits before posting or editing.
+## Pull request titles and changelog
 
-## Before you open a pull request
+Use a conventional title with a short imperative summary, such as
+`fix: Validate trimmean parameters` or `feat: Add a table operation`.
+Use `perf:` for measured performance changes, `docs:` for documentation and
+`fix(deps):` for user-facing dependency updates. Internal work uses `ci:`,
+`build:`, `chore:`, `test:` or `refactor:`.
 
-1. Read [ARCHITECTURE.md](https://fastmash.io/contributing/architecture.html) for how the code fits together, and
-   [GLOSSARY.md](https://fastmash.io/contributing/glossary.html) for the project's vocabulary. Use its terms in code,
-   comments, issues and commit messages.
-2. Keep each pull request to one change. Separate refactoring from behavior changes.
-3. Add tests. Bug fixes need a test that fails without the fix. Behavior
-   changes need regression cases. See [TESTING.md](https://fastmash.io/contributing/testing.html).
-4. Select checks for what changed, following [Testing](https://fastmash.io/contributing/testing.html#quick-start).
-   Documentation uses the
-   [website checks](https://fastmash.io/contributing/testing.html#website-checks), application code uses the
-   [application checks](https://fastmash.io/contributing/testing.html#quick-start), and build or CI tooling needs
-   checks of the affected tooling and workflow filters.
+The title becomes the short changelog entry. Use `!` for a breaking change,
+such as `feat!: Rename an option`, and explain compatibility consequences in
+the description. Release notes are generated, so leave `[Unreleased]` empty
+and do not add a release-note footer. Use public issue numbers in discussion
+and full public issue links in source comments.
 
-5. Update the user guide under `docs/` and `--help` text when user-visible
-   behavior changes. Follow the [changelog guidance](#releases) in the same PR.
+## Further guidance
 
-### Changes that need extra care
+- [Testing](TESTING.md) and [profiling](PROFILING.md)
+- [Release tooling and recovery](RELEASING.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
 
-Runtime, dependency and build-recipe changes that can affect performance need
-comparison with the previous accepted build during change review. New speed
-claims need dated measurements identifying the actual executable and conditions.
-Weekly releases do not start a whole-release benchmark campaign. See
-[ADR 0012](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0012-release-delivery-and-performance.md) for the
-separation between performance acceptance and release delivery.
-
-- **Numerical output.** Anything that can change a printed number, however
-  slightly, needs a new numerical profile version and independent verification.
-  Please discuss it in an issue first.
-- **Compatibility.** Matching GNU datamash is the default. An intentional
-  difference needs a reason (usually safety or a GNU defect) and an entry in
-  the differences page.
-- **Performance.** Include before-and-after measurements on the affected jobs.
-  A change that slows down an existing representative job needs a strong reason.
-- **`unsafe` code.** New first-party unsafe code is prohibited outside the
-  audited startup module. Its approved scope is pre-runtime capture of closed
-  standard streams and the Linux process entry with its initial SIGPIPE setup.
-  Keep each operation minimal and explain its soundness with a `// SAFETY:`
-  comment. Any broader exception needs a new maintainer decision. See
-  [ADR 0017](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0017-audited-startup.md).
-- **New dependencies.** Explain why the dependency is needed. Fastmash keeps
-  its dependency tree small and every dependency must be compatible with
-  `MIT OR Apache-2.0`.
-
-## Commit messages
-
-Use a conventional pull request title with a short imperative summary, such as
-`fix: Validate trimmean parameters` or `feat: Add a table operation`. Use `perf:`
-for measured performance changes, `docs:` for documentation and `fix(deps):`
-for user-facing dependency updates. Internal work uses `ci:`, `build:`, `chore:`,
-`test:` or `refactor:`. The squash commit retains the pull request title and body.
-Follow the summary with a blank line and an explanation of *why*
-when that is not obvious. Reference public issues as `#123` in commits and
-discussions. Use full public issue links in source comments so their repository
-is explicit. CI checks tracked files for private references.
-
-## Dependency updates
-
-Renovate prepares one combined daily dependency update, including stable major
-releases. GitHub automatically merges the batch after the required CI result
-passes, covering every applicable platform, documentation and package check.
-The daily self-hosted run updates Cargo, npm, Actions, container digests and the
-custom tools in `.github/dependency-pins.json`. The synchronization helper keeps
-tool download hashes together before pushing the PR. Release builders resolve
-the current stable Rust toolchain and record its actual version in each archive.
-The independent Unicode 15 reference crates in `crates/locale-tools` stay
-fixed. Reconsider those pins when the retained reference contract changes.
-Urgent security fixes may produce separate pull requests outside the daily batch.
-Existing Dependabot security alerts and updates remain enabled.
-The macOS 15 archive builder remains the operating-system compatibility
-baseline. The same archive must run unchanged on macOS 15 and 26. Release
-identities and qualification evidence change through the release process,
-not dependency updates.
-
-Use current stable dependencies with compatible version ranges and commit the
-lockfiles. The remaining exact external pins, `unicode-case-mapping` 0.5.0,
-`icu_properties` 1.3.2 and its data crate at 1.3.4, reproduce the independent
-Unicode 15 producer. New casing changes mixed strings containing U+019B or
-U+0264, and newer properties assign previously unassigned characters such as
-U+1C89. Reconsider these pins when an upgrade preserves the reference behavior
-or the reference is deliberately migrated.
-
-Review `icu_collator` and `icu_collator_data` updates against the locale-order
-verification in [TESTING.md](https://fastmash.io/contributing/testing.html). The engine and data determine production
-sort keys, and the ordinary corpus covers only part of the supported alphabets.
-
-The npm KaTeX and lodash-es overrides select patched releases that the diagram
-tool's dependency ranges exclude. Keep compatible ranges on these overrides and
-remove them when the upstream tree resolves patched versions without them.
-Action commit hashes and checksummed build tools identify reproducible inputs.
-Exact versions between published Fastmash crates keep their release contracts
-aligned.
-
-## Profiling
-
-For local performance diagnosis, use [the profiling workflow](https://github.com/pederbe/fastmash/blob/main/PROFILING.md).
-
-## Releases
-
-Release-plz generates dated entries in [CHANGELOG.md](https://github.com/pederbe/fastmash/blob/main/CHANGELOG.md) from merged
-pull request titles. Keep `[Unreleased]` empty for future changes. Review the
-title as the short sentence users will read about the change. Each entry links
-to its pull request. Explain compatibility consequences and required user action
-in the pull request's Solution section. Numerical-output changes
-name their new Numerical profile. Keep performance claims tied to measured
-workloads. See [RELEASING.md](https://github.com/pederbe/fastmash/blob/main/RELEASING.md) for weekly publication.
-
-Use `!` in the title for a breaking change, such as `feat!: Rename an option`,
-so the short entry gets a breaking marker. Release notes do not copy migration
-paragraphs from the description, and no release-note footer is required.
-Use `feat(remove)!:` for removals and `feat(deprecate):` for deprecations so they
-have their own changelog sections.
-
-## Code of conduct
-
-Everyone taking part in the project is expected to follow the
-[code of conduct](https://github.com/pederbe/fastmash/blob/main/CODE_OF_CONDUCT.md).
-
-## License
-
-By contributing, you agree that your contributions are dual licensed under
-[MIT](https://github.com/pederbe/fastmash/blob/main/LICENSE-MIT) or [Apache-2.0](https://github.com/pederbe/fastmash/blob/main/LICENSE-APACHE), at the user's option,
-without any additional terms or conditions.
+Contributions are dual licensed under [MIT](LICENSE-MIT) or
+[Apache-2.0](LICENSE-APACHE), at the user's option, without additional terms.

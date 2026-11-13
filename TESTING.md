@@ -48,7 +48,7 @@ environments also need `shasum` on `PATH`. On Arch-based systems, it is supplied
 at `/usr/bin/core_perl/shasum`. Add that directory to the test environment's
 `PATH` if needed.
 
-Build the private release tools before the workspace tests. Installed-release
+Build the unpublished release-check helpers before the workspace tests. Installed-release
 tests invoke the prepared checker without starting another Cargo build. If the
 tools are built elsewhere, set `FASTMASH_INSTALLED_CHECKER` and
 `FASTMASH_INSTALLED_PLATFORM_FIXTURE` to their executable paths.
@@ -62,10 +62,6 @@ replay of CI is not required. Use CI for platform coverage unavailable locally.
 After review or CI finds a problem, repair it with focused checks where feasible
 before resubmitting. Applicable CI checks must pass before merging. Performance
 measurements retain their separate requirements.
-
-CI runs on pull requests against `main` once the repository is public, or by
-manual dispatch. Merging does not start another validation suite. Private
-automatic runs skip their jobs, while manual runs remain available.
 
 ## Layers
 
@@ -82,7 +78,7 @@ cargo test -p fastmash-portable-numerics   # one crate
 cargo test -p fastmash grammar             # tests whose names match "grammar"
 ```
 
-For changes to the private installation and publication tools, also run the
+For changes to the installation and publication tools, also run the
 following checks. On Linux, install the `git-cliff` version pinned in the
 [release workflow](https://github.com/pederbe/fastmash/blob/main/.github/workflows/release-plz.yml)
 first. The workflow tests use it to check release notes from a local Git fixture
@@ -117,61 +113,13 @@ prepared launcher elsewhere. It sets alarms and selected signal masks in a fresh
 process, creates broken pipes without shared readers, then replaces itself with
 the tested executable. The tests retain its PID and actual signal status.
 
-The native sorting, duplicate-removal, release-installation and ignored Cargo
-installation fixtures also need that launcher to copy
-standalone executables in a separate process. Parallel launches cannot inherit
-the copy's writable descriptor and make Linux refuse to execute it with
-"Text file busy". The Linux regression
-`standalone_executable_copy_does_not_race_concurrent_launches` stages fresh copies
-while other threads launch commands. It fails on the first unexpected exit,
-without retrying the command.
-
-The publication-check fixtures use their own single-threaded command to copy
-executables before launching them. Their Linux regression
-`copied_release_fixture_starts_during_parallel_launches` checks 1,000 fresh copies
-under concurrent process launches.
-
-The macOS full-output checks in these suites own a calibrated full destination
-until the tested child has been reaped and its parent-side handles are closed.
-They then verify cleanup. Failed cleanup retains the private image and evidence.
-The weighted-mean, CSV and selection zero-file-size fixtures use child-only POSIX shell
-setup to ignore SIGXFSZ before the Rust launcher applies the actual limit. A native
-control raises the unblocked signal across exec and verifies the limit and PID.
-The quantile suite retains a 60-second bound for ordinary Commands and a
-30-second bound for full-output checks on macOS.
-Grouping's resource fixtures apply file-size and Linux address-space limits in
-the fresh child. The file-size check uses native spawn attributes to restore
-SIGXFSZ only in that child, with real output pipes and signal status. The paused
-memory check verifies correct completion under a Linux address-space budget.
-
 For focused `record_separators` tests, prepare both launchers with
 `cargo build --release --locked -p fastmash-corpus-driver --bins`.
-Set `FASTMASH_TEST_CORPUS` to use a prepared copy elsewhere. Ordinary-output
-read-error fixtures observe the exact input queued in a raw terminal before
-releasing the executable. They wait for that queue to drain while the child is
-alive, observe the child stopped,
-then reclaim the foreground and resume it to produce real `EIO`. This is an input
-drain observation, not proof of parsed records or an output acknowledgement.
-The existing corpus cases still require their visible output acknowledgement.
-Commands that reject input earlier retain their actual error output and status,
-with no claim that a later read encountered `EIO`.
-Combined read-error/full-output fixtures borrow the calibrated full destination
-through the same coordinator and retain it until both processes are reaped. They
-keep candidate stderr separate from the cancellation channel. Calibration checks
-the selected executable's path and hash, including the named GNU 1.9 reference.
+Set `FASTMASH_TEST_CORPUS` to use a prepared copy elsewhere.
 Native qualification sets `FASTMASH_RECORD_FAULT_EVIDENCE` to a prepared private
-directory. Completed combined cases retain input observations, selected-sink
-calibration and native detach receipts there after child and sink cleanup.
-The record suite forbids unsafe code. Its Linux memory-refusal fixtures apply the
-same 32 MiB address-space limit through the fresh process launcher.
-
-A child can become unsignalable on macOS just before its terminal status is
-observable. Stop selection keeps its PID owned and waits within the existing
-execution deadline for a successful stop or a fresh terminal observation. The
-regression control repeats a post-read parse failure during descriptor teardown. An earlier exit never counts as observed late EIO.
-Resume selection also preserves an observed early exit without recording a
-resume or an EIO transition. Its native control retains the child PID through
-group cleanup and verifies the original exit status.
+directory to retain combined read-error/full-output observations and cleanup
+receipts. The [corpus-driver guide](crates/corpus-driver/README.md) describes
+the owned child processes, signal controls and native fault mechanisms.
 
 Native tests use the same command boundary. `native_descriptors.rs` covers closed
 and incorrectly opened standard streams. `native_streams.rs` covers inherited
@@ -274,6 +222,16 @@ existing job becomes materially slower (the **predecessor guards**). See the
 margins and hardware.
 
 ## Locale tools
+
+Dependency updates must preserve the independent Unicode 15 reference behavior
+unless that reference is deliberately migrated. The exact pins live in the
+[locale-tool manifest](crates/locale-tools/Cargo.toml). New casing changes mixed
+strings containing U+019B or U+0264, and newer properties assign previously
+unassigned characters such as U+1C89.
+
+Production `icu_collator` and data updates need locale-order verification. They
+determine sort keys, while the ordinary corpus covers only part of the supported
+alphabets. Use the production-upgrade comparison described below.
 
 For locale tooling checks, run:
 
@@ -477,10 +435,6 @@ Windows drive: tests are much faster there.
 
 ## Native macOS development gate
 
-Application changes run this gate through `ci.yml`. Development-only package
-updates use affected-package checks instead. Manual and release calls remain
-available for native qualification.
-
 `macos.yml` requires actual `Darwin`, `arm64`, the expected macOS major version
 and the `aarch64-apple-darwin` compiler host. Both `macos-15` and `macos-26` run
 formatting, warnings-denied Clippy and the complete applicable release workspace
@@ -599,6 +553,10 @@ npm run test:docs
 Use mdBook 0.5.4, as pinned by `scripts/build_site.sh`. Rebuild the book before
 running the site builder again, since the builder transforms the generated HTML.
 
+The KaTeX and lodash-es overrides in `package.json` select patched releases
+excluded by the diagram tool's dependency ranges. Keep compatible ranges and
+remove overrides when the upstream tree resolves patched versions without them.
+
 Website-only changes use the website build, link checks, browser checks and
 preview rendering instead of the application, profiling or native installation
 suites. This includes `docs/**`, `site/**`, demo sources, maintained website
@@ -613,11 +571,7 @@ application checks. Manual CI runs retain full coverage.
 
 ## Continuous integration
 
-| Workflow | When | What |
-| --- | --- | --- |
-| `ci.yml` | Public pull requests against `main`, or manual dispatch | Selects affected application, package and tooling checks. Documentation checks run for every PR, including documentation-only changes |
-| `macos.yml` | Called by CI when native checks are selected, by the release workflow, or by manual dispatch | Complete native source checks on macOS 15/26, one archive, both installations when enabled, installed command/corpus checks and scoped hosted GNU observations |
-| `docs.yml` | Called by CI for every public PR or manual CI run, or by its own manual dispatch | Builds the website and checks links |
-| `release-plz.yml` | Monday schedule or manual dispatch on public `main`, and pushes that refresh an open release PR | Prepares and auto-merges a checked version/changelog PR, then creates its tag and draft and dispatches delivery |
-| `release.yml` | Dispatch on a version tag, including dispatch by release-plz | Builds, tests and publishes release assets, then uploads crates and updates package delivery |
-| `package-repository-checks.yml` | Called by CI for package-repository tooling changes or manual CI runs, or by its own manual dispatch | Checks shell and Rust tooling, then apt/dnf clients across interrupted and interleaved uploads using signed fixture packages |
+The [CI workflow](.github/workflows/ci.yml) selects checks for the changed files.
+Use its manual dispatch when a workflow change needs application or platform
+execution beyond the automatically selected tooling checks. Current triggers,
+schedules and job dependencies live in [the workflows](.github/workflows).

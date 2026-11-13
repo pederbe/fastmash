@@ -73,7 +73,7 @@ Fastmash accounts for available memory and cgroup limits when sizing its sort
 buffer. GNU sort sizes from input files and host memory, ignoring cgroup limits,
 and spills sooner on piped input. Hash grouping can avoid sorting records.
 See [grouping and sorting](grouping.md#large-inputs) for resource controls and
-the [architecture](../contributing/architecture.md#sorting) for buffer sizing.
+the [architecture](https://github.com/pederbe/fastmash/blob/main/ARCHITECTURE.md#sorting) for buffer sizing.
 
 ## Locale and sorting differences
 

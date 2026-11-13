@@ -65,31 +65,12 @@ Optional environment variables reuse an existing setup:
   JavaScript entry point.
 - `FFMPEG_PATH`: FFmpeg executable, if it is not on `PATH`.
 
-## Upload formats
+The shared link-preview image uses `scripts/demo/og.html`. Render it with:
 
-MP4 and WebM are containers; H.264 and AV1 are video codecs. An uploader
-listing WebM does not by itself establish support for every WebM codec.
+```sh
+node scripts/demo/record.mjs --og
+```
 
-Checked against platform documentation on 2 October 2026:
-
-- [LinkedIn's native uploader](https://www.linkedin.com/help/linkedin/answer/a548372)
-  lists MP4 and WebM. Its
-  [Videos API](https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/videos-api)
-  specifies MP4.
-- [Bluesky's upload API](https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/video/uploadVideo.json)
-  specifies `video/mp4`.
-- [Mastodon](https://docs.joinmastodon.org/user/posting/#attachments)
-  accepts MP4 and WebM and transcodes video to H.264 MP4.
-
-Use the MP4 when one file needs to work across these upload paths. The AV1
-copy is also available for web playback; platform acceptance of that exact
-encoding has not been tested. This compact WebM is below LinkedIn's published
-bitrate range; use the MP4 there. No platform upload is part of rendering.
-
-## Description for posts
-
-Fastmash terminal demo. Install with one command, read a colored help
-excerpt, view styled results and health findings, then calculate quartiles from 81,407 RefGene records using the same command in both tools. Both return
-4, 8, 14 and 10. GNU datamash takes 112.8 ms; Fastmash takes 26.6 ms, or
-4.2 times as fast on this job on the Intel laptop running native Linux.
-The animation replays the measured times at 20 times slower speed. fastmash.io.
+This also refreshes the demo assets. To inspect a preview and image without
+replacing committed assets, use `node scripts/demo/record.mjs --preview --og`.
+Review the image and its alternative text together.
