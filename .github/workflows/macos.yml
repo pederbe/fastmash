@@ -122,7 +122,7 @@ jobs:
           mkdir -p "$captures"
           shopt -s nullglob
           collected=0
-          for root in /private/tmp/fastmash-test-*.full-output "${TMPDIR:-/tmp}"/fastmash-corpus-*.full-output; do
+          for root in /private/var/tmp/fastmash-test-*.full-output "${TMPDIR:-/tmp}"/fastmash-corpus-*.full-output; do
             test -d "$root" && test ! -L "$root"
             ls -ld "$root/volume/full.dmg" "$root/volume/mount" > "$captures/$(basename "$root").paths.txt" 2>&1 || true
             rsync -a --exclude=full.dmg --exclude=mount "$root" "$captures/"

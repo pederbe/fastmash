@@ -52,6 +52,7 @@ fn invoke(args: &[&str], input: &[u8], address_space: Option<u64>, full: bool) -
         .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
+        .env("TMPDIR", &fixture.0)
         .stdin(fs::File::open(&path).unwrap())
         .stderr(Stdio::piped());
     full_output::output(

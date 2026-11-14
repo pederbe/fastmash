@@ -48,6 +48,14 @@ environments also need `shasum` on `PATH`. On Arch-based systems, it is supplied
 at `/usr/bin/core_perl/shasum`. Add that directory to the test environment's
 `PATH` if needed.
 
+The shared command-test helper creates private fixture directories under
+`/var/tmp`, including large inputs, copied executables and spill files. Before
+large local runs, check that this location is disk-backed, for example with
+`findmnt -T /var/tmp` on Linux. It avoids a RAM-backed `/tmp` while retaining
+private permissions and automatic cleanup. Tests with an explicit temporary
+directory or fault destination keep that setting. Other maintenance tools that
+use the system temporary directory can use a disk-backed `TMPDIR`.
+
 Build the unpublished release-check helpers before the workspace tests. Installed-release
 tests invoke the prepared checker without starting another Cargo build. If the
 tools are built elsewhere, set `FASTMASH_INSTALLED_CHECKER` and

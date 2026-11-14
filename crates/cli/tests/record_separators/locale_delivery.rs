@@ -8,11 +8,8 @@ pub(super) fn run(
     env: &[(&str, &str)],
     spill: bool,
 ) -> Output {
-    let path = std::env::temp_dir().join(format!(
-        "locale-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let fixture = temp_dir::TempDir::new(&format!("locale-{:?}", std::thread::current().id()));
+    let path = fixture.0.join("input");
     fs::write(&path, input).unwrap();
     let mut c = Command::new(binary);
     c.arg0("fastmash")
@@ -23,6 +20,7 @@ pub(super) fn run(
         // The documented policy keeps English messages even where GNU catalogs
         // supply localized quotation marks. Compare that named profile here.
         .env("LANGUAGE", "C")
+        .env("TMPDIR", &fixture.0)
         .envs(env.iter().copied())
         .stdin(fs::File::open(&path).unwrap());
     if let Some(locales) = std::env::var_os("FASTMASH_RECORD_LOCALE_PATH") {
@@ -31,9 +29,7 @@ pub(super) fn run(
     if spill {
         c.env("FASTMASH_SORT_MEMORY_BYTES", "1");
     }
-    let result = c.output().unwrap();
-    fs::remove_file(path).unwrap();
-    result
+    c.output().unwrap()
 }
 
 #[test]

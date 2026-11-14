@@ -143,6 +143,7 @@ fn invoke_locale(
         .env_clear()
         .env("LANG", "C")
         .env("LC_NUMERIC", locale)
+        .env("TMPDIR", &directory.0)
         .env("PATH", "/usr/bin:/bin")
         .stdin(fs::File::open(&path).unwrap())
         .stderr(Stdio::piped());
