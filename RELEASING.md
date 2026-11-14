@@ -87,7 +87,8 @@ It passes the published source commit so a delayed request cannot refresh an
 older delivery. A failed website update can be retried there without rebuilding
 or republishing binaries. Leave the expected source commit empty for a manual
 refresh of the current delivery. Cloudflare reports the actual deployment result
-after accepting the build request.
+after accepting the build request. The workflow records the Cloudflare build
+identifier in its log and summary so that result can be checked.
 
 For the shared social-preview image and demo assets, use the editable sources
 and rendering commands in [the demo guide](scripts/demo/README.md).

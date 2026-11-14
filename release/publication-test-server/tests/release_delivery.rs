@@ -323,6 +323,8 @@ printf '{"success":true,"result":{"build_uuid":"fixture-build"}}' > "${!#}"
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows/website-deploy.yml"),
     )
     .unwrap();
+    assert!(!workflow.contains("workflow_run:"));
+    assert!(workflow.contains("RELEASE_SHA: ${{ inputs.release_sha }}"));
     let script = workflow
         .split_once("        run: |\n")
         .unwrap()
@@ -332,6 +334,7 @@ printf '{"success":true,"result":{"build_uuid":"fixture-build"}}' > "${!#}"
         .collect::<Vec<_>>()
         .join("\n");
     let trace = root.join("trace");
+    let summary = root.join("summary");
     for (sha, mode, success, requested) in [
         ("stale", "success", true, false),
         ("delivered", "success", true, true),
@@ -339,6 +342,7 @@ printf '{"success":true,"result":{"build_uuid":"fixture-build"}}' > "${!#}"
         ("delivered", "failure", false, true),
     ] {
         fs::write(&trace, "").unwrap();
+        fs::write(&summary, "").unwrap();
         let output = Command::new("bash")
             .args(["-c", &script])
             .env(
@@ -350,7 +354,7 @@ printf '{"success":true,"result":{"build_uuid":"fixture-build"}}' > "${!#}"
                 ),
             )
             .env("RUNNER_TEMP", &root)
-            .env("GITHUB_STEP_SUMMARY", root.join("summary"))
+            .env("GITHUB_STEP_SUMMARY", &summary)
             .env("GITHUB_REPOSITORY", "fixture/website")
             .env("RELEASE_SHA", sha)
             .env("CLOUDFLARE_DEPLOY_HOOK", "https://example.invalid/hook")
@@ -365,6 +369,12 @@ printf '{"success":true,"result":{"build_uuid":"fixture-build"}}' > "${!#}"
             String::from_utf8_lossy(&output.stderr)
         );
         assert_eq!(!fs::read_to_string(&trace).unwrap().is_empty(), requested);
+        assert_eq!(
+            fs::read_to_string(&summary)
+                .unwrap()
+                .contains("fixture-build"),
+            success && requested
+        );
     }
     fs::remove_dir_all(root).unwrap();
 }

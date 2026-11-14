@@ -40,5 +40,5 @@ jobs:
           curl --proto '=https' --silent --show-error --fail --retry 2 \
             --connect-timeout 10 --max-time 60 --request POST "$CLOUDFLARE_DEPLOY_HOOK" \
             --output "$RUNNER_TEMP/site-build.json"
-          jq -e '.success == true and (.result.build_uuid | type == "string" and length > 0)' "$RUNNER_TEMP/site-build.json" >/dev/null
-          echo 'Cloudflare accepted the website refresh. Its build result is reported by Cloudflare.' >> "$GITHUB_STEP_SUMMARY"
+          build_uuid=$(jq -er 'select(.success == true) | .result.build_uuid | select(type == "string" and length > 0)' "$RUNNER_TEMP/site-build.json")
+          printf 'Cloudflare accepted website build %s. Its result is reported by Cloudflare.\n' "$build_uuid" | tee -a "$GITHUB_STEP_SUMMARY"
