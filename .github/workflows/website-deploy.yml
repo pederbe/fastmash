@@ -2,10 +2,12 @@ name: Website deployment
 
 # Website delivery has its own result and can be retried without a release.
 on:
-  workflow_run:
-    workflows: [Release]
-    types: [completed]
   workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Expected published source commit. Empty refreshes the current delivery.
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -17,17 +19,14 @@ concurrency:
 
 jobs:
   refresh:
-    if: >-
-      !github.event.repository.private &&
-      (github.event_name == 'workflow_dispatch' ||
-       github.event.workflow_run.conclusion == 'success')
+    if: '!github.event.repository.private'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Refresh the delivered website version
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
           CLOUDFLARE_DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_DEPLOY_HOOK }}
         run: |
           set -euo pipefail
