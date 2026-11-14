@@ -11,6 +11,58 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-14
+
+### Removed
+
+- **Breaking:** The quick installer always installs the latest release and
+  ignores `FASTMASH_VERSION`. To install an earlier version, download its archive
+  or package from the releases page ([#232](https://github.com/pederbe/fastmash/pull/232)).
+- **Breaking:** cargo-binstall stops when a published binary is unavailable.
+  Use `cargo install fastmash --locked` for an intentional source build
+  ([#236](https://github.com/pederbe/fastmash/pull/236)).
+
+### Added
+
+- Deliver static Linux binaries that run on glibc and musl distributions,
+  including Alpine ([#228](https://github.com/pederbe/fastmash/pull/228)).
+
+### Changed
+
+- Publish only the `fastmash` Cargo package, with the former helper crates
+  included as private modules. Cargo installation, command behavior and the
+  Numerical profile are unchanged. Previously published helper versions remain
+  available ([#254](https://github.com/pederbe/fastmash/pull/254)).
+
+### Fixed
+
+- Clarify CLI diagnostics and recovery hints ([#220](https://github.com/pederbe/fastmash/pull/220))
+- Avoid unnecessary native startup refusals ([#225](https://github.com/pederbe/fastmash/pull/225))
+- Restore local Arch binary package installation ([#237](https://github.com/pederbe/fastmash/pull/237))
+- Clarify CLI recovery hints and help examples ([#239](https://github.com/pederbe/fastmash/pull/239))
+- Clarify reports, recovery messages and usage examples ([#241](https://github.com/pederbe/fastmash/pull/241))
+
+### Performance
+
+- Cache repeated long language keys within sort memory budgets ([#240](https://github.com/pederbe/fastmash/pull/240))
+- Optimize Linux releases with checked profile training ([#243](https://github.com/pederbe/fastmash/pull/243))
+
+### Dependencies
+
+- Update daily dependencies ([#222](https://github.com/pederbe/fastmash/pull/222))
+
+### Documentation
+
+- Make guides and decision records easier to use ([#218](https://github.com/pederbe/fastmash/pull/218))
+- Clarify CLI help and current command support ([#219](https://github.com/pederbe/fastmash/pull/219))
+- Finish latest-release installation guidance ([#233](https://github.com/pederbe/fastmash/pull/233))
+- Restore punctuation before profiling commands ([#245](https://github.com/pederbe/fastmash/pull/245))
+- Keep design decisions in the repository ([#249](https://github.com/pederbe/fastmash/pull/249))
+- Focus contribution templates and release notes ([#248](https://github.com/pederbe/fastmash/pull/248))
+- Focus contributor guides on actionable tasks ([#251](https://github.com/pederbe/fastmash/pull/251))
+
+[Full comparison](https://github.com/pederbe/fastmash/compare/v0.5.0...v0.6.0)
+
 ## [0.5.0] - 2026-11-09
 
 ### Added
