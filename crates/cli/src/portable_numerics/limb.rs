@@ -3,7 +3,7 @@ use crate::portable_numerics::arena::{Arena, Desc, Slot9, Slot17};
 use std::cmp::Ordering;
 
 impl Arena {
-    pub(crate) fn assign9(
+    pub(super) fn assign9(
         &mut self,
         slot: Slot9,
         value: u64,
@@ -18,7 +18,7 @@ impl Arena {
         self.set_desc9(slot, Desc { sign, len: 1, exp })
     }
 
-    pub(crate) fn copy9(&mut self, dst: Slot9, src: Slot9) -> Result<(), NumericFailure> {
+    pub(super) fn copy9(&mut self, dst: Slot9, src: Slot9) -> Result<(), NumericFailure> {
         if dst == src {
             return Ok(());
         }
@@ -30,7 +30,7 @@ impl Arena {
         self.set_desc9(dst, desc)
     }
 
-    pub(crate) fn bit_len9(&self, slot: Slot9) -> Result<u16, NumericFailure> {
+    pub(super) fn bit_len9(&self, slot: Slot9) -> Result<u16, NumericFailure> {
         let desc = self.desc9(slot)?;
         if desc.len == 0 {
             return Ok(0);
@@ -44,7 +44,7 @@ impl Arena {
             .ok_or(NumericFailure::Invariant)
     }
 
-    pub(crate) fn bit_len17(&self, slot: Slot17) -> Result<u16, NumericFailure> {
+    pub(super) fn bit_len17(&self, slot: Slot17) -> Result<u16, NumericFailure> {
         let desc = self.desc17(slot)?;
         if desc.len == 0 {
             return Ok(0);
@@ -58,21 +58,21 @@ impl Arena {
             .ok_or(NumericFailure::Invariant)
     }
 
-    pub(crate) fn bit9(&self, slot: Slot9, bit: u16) -> Result<bool, NumericFailure> {
+    pub(super) fn bit9(&self, slot: Slot9, bit: u16) -> Result<bool, NumericFailure> {
         if bit >= 576 {
             return Err(NumericFailure::Invariant);
         }
         Ok((self.limb9(slot, usize::from(bit / 64))? >> (bit % 64)) & 1 != 0)
     }
 
-    pub(crate) fn bit17(&self, slot: Slot17, bit: u16) -> Result<bool, NumericFailure> {
+    pub(super) fn bit17(&self, slot: Slot17, bit: u16) -> Result<bool, NumericFailure> {
         if bit >= 1088 {
             return Err(NumericFailure::Invariant);
         }
         Ok((self.limb17(slot, usize::from(bit / 64))? >> (bit % 64)) & 1 != 0)
     }
 
-    pub(crate) fn set_bit9(&mut self, slot: Slot9, bit: u16) -> Result<(), NumericFailure> {
+    pub(super) fn set_bit9(&mut self, slot: Slot9, bit: u16) -> Result<(), NumericFailure> {
         if bit >= 576 {
             return Err(NumericFailure::Invariant);
         }
@@ -81,7 +81,7 @@ impl Arena {
         self.set_limb9(slot, index, value)
     }
 
-    pub(crate) fn set_bit17(&mut self, slot: Slot17, bit: u16) -> Result<(), NumericFailure> {
+    pub(super) fn set_bit17(&mut self, slot: Slot17, bit: u16) -> Result<(), NumericFailure> {
         if bit >= 1088 {
             return Err(NumericFailure::Invariant);
         }
@@ -90,7 +90,7 @@ impl Arena {
         self.set_limb17(slot, index, value)
     }
 
-    pub(crate) fn normalize9(
+    pub(super) fn normalize9(
         &mut self,
         slot: Slot9,
         sign: bool,
@@ -114,7 +114,7 @@ impl Arena {
         )
     }
 
-    pub(crate) fn normalize17(
+    pub(super) fn normalize17(
         &mut self,
         slot: Slot17,
         sign: bool,
@@ -138,7 +138,7 @@ impl Arena {
         )
     }
 
-    pub(crate) fn cmp17_9(&self, left: Slot17, right: Slot9) -> Result<Ordering, NumericFailure> {
+    pub(super) fn cmp17_9(&self, left: Slot17, right: Slot9) -> Result<Ordering, NumericFailure> {
         let ll = self.desc17(left)?.len;
         let rl = self.desc9(right)?.len;
         if ll != rl {
@@ -153,7 +153,7 @@ impl Arena {
         Ok(Ordering::Equal)
     }
 
-    pub(crate) fn copy17(&mut self, dst: Slot17, src: Slot17) -> Result<(), NumericFailure> {
+    pub(super) fn copy17(&mut self, dst: Slot17, src: Slot17) -> Result<(), NumericFailure> {
         if dst == src {
             return Ok(());
         }
@@ -165,7 +165,7 @@ impl Arena {
         self.set_desc17(dst, desc)
     }
 
-    pub(crate) fn cmp17_signed(
+    pub(super) fn cmp17_signed(
         &mut self,
         left: Slot17,
         right: Slot17,
@@ -240,7 +240,7 @@ impl Arena {
         })
     }
 
-    pub(crate) fn shifted_cmp9(
+    pub(super) fn shifted_cmp9(
         &self,
         left: Slot9,
         left_exp: i32,
@@ -277,7 +277,7 @@ impl Arena {
         Ok(Ordering::Equal)
     }
 
-    pub(crate) fn virtual_bit9(
+    pub(super) fn virtual_bit9(
         &self,
         slot: Slot9,
         exp: i32,
@@ -296,7 +296,7 @@ impl Arena {
         self.bit9(slot, relative)
     }
 
-    pub(crate) fn any_below9(&self, slot: Slot9, cut: u16) -> Result<bool, NumericFailure> {
+    pub(super) fn any_below9(&self, slot: Slot9, cut: u16) -> Result<bool, NumericFailure> {
         if cut > 576 {
             return Err(NumericFailure::Invariant);
         }
@@ -316,7 +316,7 @@ impl Arena {
         Ok(false)
     }
 
-    pub(crate) fn any_below17(&self, slot: Slot17, cut: u16) -> Result<bool, NumericFailure> {
+    pub(super) fn any_below17(&self, slot: Slot17, cut: u16) -> Result<bool, NumericFailure> {
         if cut > 1088 {
             return Err(NumericFailure::Invariant);
         }
@@ -336,7 +336,7 @@ impl Arena {
         Ok(false)
     }
 
-    pub(crate) fn shift_right9_one(&mut self, slot: Slot9) -> Result<bool, NumericFailure> {
+    pub(super) fn shift_right9_one(&mut self, slot: Slot9) -> Result<bool, NumericFailure> {
         let discarded = self.limb9(slot, 0)? & 1 != 0;
         self.set_scalar(5, u64::from(discarded))?;
         self.set_scalar(4, 0)?;
@@ -348,7 +348,7 @@ impl Arena {
         Ok(self.scalar(5)? != 0)
     }
 
-    pub(crate) fn shift_left9_one(&mut self, slot: Slot9) -> Result<(), NumericFailure> {
+    pub(super) fn shift_left9_one(&mut self, slot: Slot9) -> Result<(), NumericFailure> {
         self.set_scalar(4, 0)?;
         for index in 0..9 {
             let old = self.limb9(slot, index)?;
@@ -361,7 +361,7 @@ impl Arena {
         Ok(())
     }
 
-    pub(crate) fn increment9(&mut self, slot: Slot9) -> Result<bool, NumericFailure> {
+    pub(super) fn increment9(&mut self, slot: Slot9) -> Result<bool, NumericFailure> {
         self.set_scalar(4, 1)?;
         for index in 0..9 {
             let (next, carry) = self.limb9(slot, index)?.overflowing_add(1);
@@ -374,7 +374,7 @@ impl Arena {
         Ok(true)
     }
 
-    pub(crate) fn decrement9(&mut self, slot: Slot9) -> Result<(), NumericFailure> {
+    pub(super) fn decrement9(&mut self, slot: Slot9) -> Result<(), NumericFailure> {
         if self.bit_len9(slot)? == 0 {
             return Err(NumericFailure::Invariant);
         }
@@ -390,14 +390,14 @@ impl Arena {
         Err(NumericFailure::Invariant)
     }
 
-    pub(crate) fn shift_left9(&mut self, slot: Slot9, count: u16) -> Result<(), NumericFailure> {
+    pub(super) fn shift_left9(&mut self, slot: Slot9, count: u16) -> Result<(), NumericFailure> {
         for _ in 0..count {
             self.shift_left9_one(slot)?;
         }
         Ok(())
     }
 
-    pub(crate) fn shift_copy9_to17(
+    pub(super) fn shift_copy9_to17(
         &mut self,
         dst: Slot17,
         src: Slot9,
@@ -425,7 +425,7 @@ impl Arena {
         self.normalize17(dst, false, 0)
     }
 
-    pub(crate) fn left_shift17_one(&mut self, slot: Slot17) -> Result<(), NumericFailure> {
+    pub(super) fn left_shift17_one(&mut self, slot: Slot17) -> Result<(), NumericFailure> {
         self.set_scalar(4, 0)?;
         for index in 0..17 {
             let old = self.limb17(slot, index)?;
@@ -438,7 +438,7 @@ impl Arena {
         self.normalize17(slot, false, 0)
     }
 
-    pub(crate) fn sub17_9_in_place(
+    pub(super) fn sub17_9_in_place(
         &mut self,
         dst: Slot17,
         right: Slot9,
@@ -465,7 +465,7 @@ impl Arena {
         self.normalize17(dst, false, 0)
     }
 
-    pub(crate) fn mul_9x9(
+    pub(super) fn mul_9x9(
         &mut self,
         dst: Slot17,
         left: Slot9,
@@ -523,7 +523,7 @@ impl Arena {
         )
     }
 
-    pub(crate) fn div_rem_17_by_9(
+    pub(super) fn div_rem_17_by_9(
         &mut self,
         numerator: Slot17,
         divisor: Slot9,

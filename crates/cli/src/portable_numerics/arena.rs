@@ -1,11 +1,11 @@
 use crate::numeric_contract::{Raw80, Value80};
 use crate::portable_numerics::NumericFailure;
 
-pub(crate) const ARENA_BYTES: usize = 131_072;
+pub(super) const ARENA_BYTES: usize = 131_072;
 const ARENA_CELLS: usize = ARENA_BYTES / size_of::<u64>();
-pub(crate) const CACHE_ENDPOINTS: usize = 10;
-pub(crate) const WORK_ENDPOINTS: usize = 48;
-pub(crate) const STORED_SLOTS: usize = CACHE_ENDPOINTS + WORK_ENDPOINTS;
+pub(super) const CACHE_ENDPOINTS: usize = 10;
+pub(super) const WORK_ENDPOINTS: usize = 48;
+pub(super) const STORED_SLOTS: usize = CACHE_ENDPOINTS + WORK_ENDPOINTS;
 
 const CACHE_MAG_BASE: usize = 0;
 const CACHE_DESC_BASE: usize = 90;
@@ -21,36 +21,36 @@ const MIN_EXP: i32 = -3_100_000;
 const MAX_EXP: i32 = 100_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Slot9(pub(crate) u8);
+pub(super) struct Slot9(pub(super) u8);
 
 impl Slot9 {
-    pub(crate) const fn cache(interval: u8, endpoint: u8) -> Self {
+    pub(super) const fn cache(interval: u8, endpoint: u8) -> Self {
         Self(interval * 2 + endpoint)
     }
 
-    pub(crate) const fn work(register: u8, endpoint: u8) -> Self {
+    pub(super) const fn work(register: u8, endpoint: u8) -> Self {
         Self(CACHE_ENDPOINTS as u8 + register * 2 + endpoint)
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Slot17(pub(crate) u8);
+pub(super) struct Slot17(pub(super) u8);
 
 impl Slot17 {
-    pub(crate) const X0: Self = Self(0);
-    pub(crate) const X1: Self = Self(1);
-    pub(crate) const X2: Self = Self(2);
+    pub(super) const X0: Self = Self(0);
+    pub(super) const X1: Self = Self(1);
+    pub(super) const X2: Self = Self(2);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Desc {
-    pub(crate) sign: bool,
-    pub(crate) len: u8,
-    pub(crate) exp: i32,
+pub(super) struct Desc {
+    pub(super) sign: bool,
+    pub(super) len: u8,
+    pub(super) exp: i32,
 }
 
 impl Desc {
-    pub(crate) const fn zero(sign: bool) -> Self {
+    pub(super) const fn zero(sign: bool) -> Self {
         Self {
             sign,
             len: 0,
@@ -59,34 +59,34 @@ impl Desc {
     }
 }
 
-pub(crate) struct Arena {
+pub(super) struct Arena {
     cells: Vec<u64>,
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct PrimitiveCell(u8);
+pub(super) struct PrimitiveCell(u8);
 
 impl PrimitiveCell {
-    pub(crate) const V0: Self = Self(0);
-    pub(crate) const V1: Self = Self(1);
-    pub(crate) const V2: Self = Self(2);
-    pub(crate) const V3: Self = Self(3);
-    pub(crate) const V4: Self = Self(4);
+    pub(super) const V0: Self = Self(0);
+    pub(super) const V1: Self = Self(1);
+    pub(super) const V2: Self = Self(2);
+    pub(super) const V3: Self = Self(3);
+    pub(super) const V4: Self = Self(4);
     // Only the bit-serial square root, the tests' reference, uses these.
     #[cfg(test)]
-    pub(crate) const V5: Self = Self(5);
+    pub(super) const V5: Self = Self(5);
     #[cfg(test)]
-    pub(crate) const V6: Self = Self(6);
+    pub(super) const V6: Self = Self(6);
     #[cfg(test)]
-    pub(crate) const V7: Self = Self(7);
+    pub(super) const V7: Self = Self(7);
 }
 
-pub(crate) struct PrimitiveCells<'a> {
+pub(super) struct PrimitiveCells<'a> {
     arena: &'a mut Arena,
 }
 
 impl PrimitiveCells<'_> {
-    pub(crate) fn get(&self, cell: PrimitiveCell) -> Result<u64, NumericFailure> {
+    pub(super) fn get(&self, cell: PrimitiveCell) -> Result<u64, NumericFailure> {
         self.arena
             .cells()
             .get(PRIMITIVE_BASE + usize::from(cell.0))
@@ -94,7 +94,7 @@ impl PrimitiveCells<'_> {
             .ok_or(NumericFailure::Invariant)
     }
 
-    pub(crate) fn set(&mut self, cell: PrimitiveCell, value: u64) -> Result<(), NumericFailure> {
+    pub(super) fn set(&mut self, cell: PrimitiveCell, value: u64) -> Result<(), NumericFailure> {
         *self
             .arena
             .cells_mut()
@@ -105,7 +105,7 @@ impl PrimitiveCells<'_> {
 }
 
 impl Arena {
-    pub(crate) fn new() -> Result<Self, NumericFailure> {
+    pub(super) fn new() -> Result<Self, NumericFailure> {
         Self::new_with(ARENA_CELLS)
     }
 
@@ -189,7 +189,7 @@ impl Arena {
     }
 
     #[inline(always)]
-    pub(crate) fn desc9(&self, slot: Slot9) -> Result<Desc, NumericFailure> {
+    pub(super) fn desc9(&self, slot: Slot9) -> Result<Desc, NumericFailure> {
         let desc = Self::decode(
             *self
                 .cells()
@@ -207,7 +207,7 @@ impl Arena {
     }
 
     #[inline(always)]
-    pub(crate) fn desc17(&self, slot: Slot17) -> Result<Desc, NumericFailure> {
+    pub(super) fn desc17(&self, slot: Slot17) -> Result<Desc, NumericFailure> {
         let desc = Self::decode(
             *self
                 .cells()
@@ -224,7 +224,7 @@ impl Arena {
         Ok(desc)
     }
 
-    pub(crate) fn set_desc9(&mut self, slot: Slot9, desc: Desc) -> Result<(), NumericFailure> {
+    pub(super) fn set_desc9(&mut self, slot: Slot9, desc: Desc) -> Result<(), NumericFailure> {
         let index = Self::slot9_desc(slot)?;
         *self
             .cells_mut()
@@ -233,7 +233,7 @@ impl Arena {
         Ok(())
     }
 
-    pub(crate) fn set_desc17(&mut self, slot: Slot17, desc: Desc) -> Result<(), NumericFailure> {
+    pub(super) fn set_desc17(&mut self, slot: Slot17, desc: Desc) -> Result<(), NumericFailure> {
         let index = Self::slot17_desc(slot)?;
         *self
             .cells_mut()
@@ -242,7 +242,7 @@ impl Arena {
         Ok(())
     }
 
-    pub(crate) fn limb9(&self, slot: Slot9, index: usize) -> Result<u64, NumericFailure> {
+    pub(super) fn limb9(&self, slot: Slot9, index: usize) -> Result<u64, NumericFailure> {
         if index >= 9 {
             return Err(NumericFailure::Invariant);
         }
@@ -252,7 +252,7 @@ impl Arena {
             .ok_or(NumericFailure::Invariant)?)
     }
 
-    pub(crate) fn set_limb9(
+    pub(super) fn set_limb9(
         &mut self,
         slot: Slot9,
         index: usize,
@@ -269,7 +269,7 @@ impl Arena {
         Ok(())
     }
 
-    pub(crate) fn limb17(&self, slot: Slot17, index: usize) -> Result<u64, NumericFailure> {
+    pub(super) fn limb17(&self, slot: Slot17, index: usize) -> Result<u64, NumericFailure> {
         if index >= 17 {
             return Err(NumericFailure::Invariant);
         }
@@ -279,7 +279,7 @@ impl Arena {
             .ok_or(NumericFailure::Invariant)?)
     }
 
-    pub(crate) fn set_limb17(
+    pub(super) fn set_limb17(
         &mut self,
         slot: Slot17,
         index: usize,
@@ -296,7 +296,7 @@ impl Arena {
         Ok(())
     }
 
-    pub(crate) fn scalar(&self, index: usize) -> Result<u64, NumericFailure> {
+    pub(super) fn scalar(&self, index: usize) -> Result<u64, NumericFailure> {
         if index >= 6 {
             return Err(NumericFailure::Invariant);
         }
@@ -306,7 +306,7 @@ impl Arena {
             .ok_or(NumericFailure::Invariant)?)
     }
 
-    pub(crate) fn set_scalar(&mut self, index: usize, value: u64) -> Result<(), NumericFailure> {
+    pub(super) fn set_scalar(&mut self, index: usize, value: u64) -> Result<(), NumericFailure> {
         if index >= 6 {
             return Err(NumericFailure::Invariant);
         }
@@ -317,7 +317,7 @@ impl Arena {
         Ok(())
     }
 
-    pub(crate) fn clear9(&mut self, slot: Slot9, sign: bool) -> Result<(), NumericFailure> {
+    pub(super) fn clear9(&mut self, slot: Slot9, sign: bool) -> Result<(), NumericFailure> {
         let offset = Self::slot9_offset(slot)?;
         self.cells_mut()
             .get_mut(offset..offset + 9)
@@ -326,7 +326,7 @@ impl Arena {
         self.set_desc9(slot, Desc::zero(sign))
     }
 
-    pub(crate) fn clear17(&mut self, slot: Slot17) -> Result<(), NumericFailure> {
+    pub(super) fn clear17(&mut self, slot: Slot17) -> Result<(), NumericFailure> {
         let offset = Self::slot17_offset(slot)?;
         self.cells_mut()
             .get_mut(offset..offset + 17)
@@ -335,7 +335,7 @@ impl Arena {
         self.set_desc17(slot, Desc::zero(false))
     }
 
-    pub(crate) fn reset_disposable(&mut self) -> Result<(), NumericFailure> {
+    pub(super) fn reset_disposable(&mut self) -> Result<(), NumericFailure> {
         self.cells_mut()
             .get_mut(2_048..2_408)
             .ok_or(NumericFailure::Invariant)?
@@ -351,7 +351,7 @@ impl Arena {
         Ok(())
     }
 
-    pub(crate) fn release_call_state(&mut self) -> Result<(), NumericFailure> {
+    pub(super) fn release_call_state(&mut self) -> Result<(), NumericFailure> {
         self.cells_mut()
             .get_mut(2_528..2_582)
             .ok_or(NumericFailure::Invariant)?
@@ -363,7 +363,7 @@ impl Arena {
         Ok(())
     }
 
-    pub(crate) fn exact_scope<T>(
+    pub(super) fn exact_scope<T>(
         &mut self,
         operation: impl FnOnce(&mut Self) -> Result<T, NumericFailure>,
     ) -> Result<T, NumericFailure> {
@@ -375,7 +375,7 @@ impl Arena {
         result
     }
 
-    pub(crate) fn primitive_value_scope(
+    pub(super) fn primitive_value_scope(
         &mut self,
         operation: impl FnOnce(&mut PrimitiveCells<'_>) -> Result<Raw80, NumericFailure>,
     ) -> Result<Value80, NumericFailure> {
@@ -409,26 +409,26 @@ impl Arena {
     }
 
     #[cfg(test)]
-    pub(crate) fn allocation_failure() -> Result<Self, NumericFailure> {
+    pub(super) fn allocation_failure() -> Result<Self, NumericFailure> {
         Self::new_with(usize::MAX)
     }
 
     #[cfg(test)]
-    pub(crate) fn cache_snapshot_for_test(&self) -> [u64; 2_048] {
+    pub(super) fn cache_snapshot_for_test(&self) -> [u64; 2_048] {
         let mut snapshot = [0; 2_048];
         snapshot.copy_from_slice(&self.cells()[..2_048]);
         snapshot
     }
 
     #[cfg(test)]
-    pub(crate) fn primitive_cells_clear_for_test(&self) -> bool {
+    pub(super) fn primitive_cells_clear_for_test(&self) -> bool {
         self.cells()[PRIMITIVE_BASE..PRIMITIVE_BASE + PRIMITIVE_CELLS]
             .iter()
             .all(|cell| *cell == 0)
     }
 
     #[cfg(test)]
-    pub(crate) fn inject_primitive_invariant_for_test(
+    pub(super) fn inject_primitive_invariant_for_test(
         &mut self,
     ) -> Result<Value80, NumericFailure> {
         self.primitive_value_scope(|scratch| {

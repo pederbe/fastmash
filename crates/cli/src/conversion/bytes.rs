@@ -74,14 +74,14 @@ pub(crate) enum Exponent {
 pub(crate) struct FiniteToken<'a> {
     // Backing storage may extend past the token or a NUL. Only the validated
     // ranges below describe numeric input; backing bytes are not a token API.
-    pub(crate) bytes: &'a [u8],
-    pub(crate) negative: bool,
-    pub(crate) radix: u8,
-    pub(crate) integer: Range<usize>,
-    pub(crate) fraction: Range<usize>,
-    pub(crate) radix_offset: Option<usize>,
-    pub(crate) exponent: Exponent,
-    pub(crate) exponent_digits: Range<usize>,
+    pub(super) bytes: &'a [u8],
+    pub(super) negative: bool,
+    pub(super) radix: u8,
+    pub(super) integer: Range<usize>,
+    pub(super) fraction: Range<usize>,
+    pub(super) radix_offset: Option<usize>,
+    pub(super) exponent: Exponent,
+    pub(super) exponent_digits: Range<usize>,
 }
 
 impl FiniteToken<'_> {

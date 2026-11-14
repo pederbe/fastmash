@@ -4,14 +4,14 @@ use crate::portable_numerics::arena::{Arena, Desc, Slot9, Slot17};
 use std::cmp::Ordering;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Round {
+pub(super) enum Round {
     Down,
     Up,
     NearestEven,
 }
 
 impl Arena {
-    pub(crate) fn import_value(
+    pub(super) fn import_value(
         &mut self,
         dst: Slot9,
         value: Value80,
@@ -30,7 +30,7 @@ impl Arena {
         self.assign9(dst, significand, sign, exponent)
     }
 
-    pub(crate) fn export_binary80(&self, src: Slot9) -> Result<Value80, NumericFailure> {
+    pub(super) fn export_binary80(&self, src: Slot9) -> Result<Value80, NumericFailure> {
         let desc = self.desc9(src)?;
         if desc.len == 0 {
             return Value80::from_raw(Raw80::new(if desc.sign { 0x8000 } else { 0 }, 0))
@@ -69,11 +69,11 @@ impl Arena {
         .map_err(|_| NumericFailure::Invariant)
     }
 
-    pub(crate) fn infinity(sign: bool) -> Result<Value80, NumericFailure> {
+    pub(super) fn infinity(sign: bool) -> Result<Value80, NumericFailure> {
         Ok(Value80::infinity(sign))
     }
 
-    pub(crate) fn canonical_nan() -> Result<Value80, NumericFailure> {
+    pub(super) fn canonical_nan() -> Result<Value80, NumericFailure> {
         Ok(Value80::canonical_quiet_nan())
     }
 
@@ -101,7 +101,7 @@ impl Arena {
         self.normalize9(dst, sign, exp)
     }
 
-    pub(crate) fn should_increment(
+    pub(super) fn should_increment(
         sign: bool,
         mode: Round,
         guard: bool,
@@ -116,7 +116,7 @@ impl Arena {
         }
     }
 
-    pub(crate) fn round17(
+    pub(super) fn round17(
         &mut self,
         src: Slot17,
         dst: Slot9,
@@ -360,7 +360,7 @@ impl Arena {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn aligned_combine(
+    pub(super) fn aligned_combine(
         &mut self,
         left: Slot9,
         right: Slot9,
@@ -565,7 +565,7 @@ impl Arena {
         Ok(Ordering::Equal)
     }
 
-    pub(crate) fn binary80_round17(
+    pub(super) fn binary80_round17(
         &mut self,
         src: Slot17,
         dst: Slot9,
@@ -630,7 +630,7 @@ impl Arena {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn round_quotient(
+    pub(super) fn round_quotient(
         &mut self,
         quotient: Slot17,
         remainder: Slot17,
@@ -688,7 +688,7 @@ impl Arena {
         Ok(())
     }
 
-    pub(crate) fn binary80_round_quotient(
+    pub(super) fn binary80_round_quotient(
         &mut self,
         quotient: Slot17,
         remainder: Slot17,

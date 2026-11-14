@@ -5,20 +5,20 @@ use crate::portable_numerics::dyadic::Round;
 use std::cmp::Ordering;
 
 #[derive(Clone, Copy)]
-pub(crate) struct Interval {
-    pub(crate) lo: Slot9,
-    pub(crate) hi: Slot9,
+pub(super) struct Interval {
+    pub(super) lo: Slot9,
+    pub(super) hi: Slot9,
 }
 
 impl Interval {
-    pub(crate) const fn cache(index: u8) -> Self {
+    pub(super) const fn cache(index: u8) -> Self {
         Self {
             lo: Slot9::cache(index, 0),
             hi: Slot9::cache(index, 1),
         }
     }
 
-    pub(crate) const fn work(register: u8) -> Self {
+    pub(super) const fn work(register: u8) -> Self {
         Self {
             lo: Slot9::work(register, 0),
             hi: Slot9::work(register, 1),
@@ -27,7 +27,7 @@ impl Interval {
 }
 
 #[cfg(test)]
-pub(crate) const STAGES: [(u16, u16); 5] =
+pub(super) const STAGES: [(u16, u16); 5] =
     [(160, 58), (224, 79), (288, 99), (416, 140), (544, 181)];
 
 impl Arena {
@@ -351,7 +351,7 @@ impl Arena {
         self.copy_interval(Interval::cache(stage), ln2)
     }
 
-    pub(crate) fn initialize_cache(&mut self) -> Result<(), NumericFailure> {
+    pub(super) fn initialize_cache(&mut self) -> Result<(), NumericFailure> {
         self.initialize_cache_stage(0)?;
         self.initialize_cache_stage(1)?;
         self.initialize_cache_stage(2)?;
@@ -556,7 +556,7 @@ impl Arena {
     }
 
     #[cfg(test)]
-    pub(crate) fn certificate_for_test(
+    pub(super) fn certificate_for_test(
         &mut self,
         lo: Slot9,
         hi: Slot9,
@@ -623,7 +623,7 @@ impl Arena {
         self.certificate(result)
     }
 
-    pub(crate) fn log_finite(&mut self, input: Value80) -> Result<Value80, NumericFailure> {
+    pub(super) fn log_finite(&mut self, input: Value80) -> Result<Value80, NumericFailure> {
         if input.exponent() == 0 && input.significand() != 0 {
             return Err(NumericFailure::UnsupportedDomain);
         }
@@ -810,7 +810,7 @@ impl Arena {
         self.certificate(result)
     }
 
-    pub(crate) fn exp_finite(&mut self, input: Value80) -> Result<Value80, NumericFailure> {
+    pub(super) fn exp_finite(&mut self, input: Value80) -> Result<Value80, NumericFailure> {
         if input.significand() == 0 {
             return Ok(Value80::exact_u64(1));
         }
@@ -832,7 +832,7 @@ impl Arena {
         Err(NumericFailure::Capacity)
     }
 
-    pub(crate) fn add_finite(
+    pub(super) fn add_finite(
         &mut self,
         left: Value80,
         right: Value80,
@@ -847,7 +847,7 @@ impl Arena {
         self.export_binary80(out)
     }
 
-    pub(crate) fn divide_finite(
+    pub(super) fn divide_finite(
         &mut self,
         left: Value80,
         right: Value80,

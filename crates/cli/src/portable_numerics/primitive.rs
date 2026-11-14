@@ -11,7 +11,7 @@ struct Window {
 }
 
 impl Arena {
-    pub(crate) fn subtract_finite(
+    pub(super) fn subtract_finite(
         &mut self,
         left: Value80,
         right: Value80,
@@ -19,7 +19,7 @@ impl Arena {
         self.primitive_value_scope(|scratch| subtract(scratch, left, right))
     }
 
-    pub(crate) fn multiply_finite(
+    pub(super) fn multiply_finite(
         &mut self,
         left: Value80,
         right: Value80,
@@ -29,14 +29,14 @@ impl Arena {
 
     /// The square root of a positive finite value. It needs no scratch
     /// cells, so it leaves the arena as it is.
-    pub(crate) fn sqrt_finite(&mut self, value: Value80) -> Result<Value80, NumericFailure> {
+    pub(super) fn sqrt_finite(&mut self, value: Value80) -> Result<Value80, NumericFailure> {
         Value80::from_raw(sqrt(value)?).map_err(|_| NumericFailure::Invariant)
     }
 
     /// [`Arena::sqrt_finite`] by the bit-serial square root it replaced,
     /// the reference its results are checked against.
     #[cfg(test)]
-    pub(crate) fn bit_serial_sqrt_finite(
+    pub(super) fn bit_serial_sqrt_finite(
         &mut self,
         value: Value80,
     ) -> Result<Value80, NumericFailure> {
