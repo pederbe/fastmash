@@ -10,6 +10,9 @@ keywords = ["statistics", "datamash", "tsv", "csv", "cli"]
 categories = ["command-line-utilities", "science", "text-processing"]
 readme = "../../README.md"
 
+[lints.rust]
+unsafe_code = "deny"
+
 # `cargo binstall fastmash` downloads the prebuilt release archive (the
 # tested delivery binaries) instead of compiling. The cargo-binstall workflow
 # checks this route for each release. QuickInstall and source compilation are

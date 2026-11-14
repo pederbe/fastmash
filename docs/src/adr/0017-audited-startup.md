@@ -2,11 +2,14 @@
 
 Status: accepted. Records the maintainer decision of 24 October 2026 and its
 runtime-configuration clarification of 10 November 2026.
+The exclusive unsafe-code scope is partly superseded by
+[0020](0020-existing-allocator-calls.md), which retains two existing GNU Linux
+allocator calls under a separate exception. The startup boundary remains in force.
 
 Keep pre-runtime capture of closed standard streams and the GNU Linux process
 entry with its initial SIGPIPE disposition in `crates/cli/src/startup.rs`.
-These are the only approved exceptions to the first-party unsafe-code
-prohibition. Any extension requires a new maintainer decision.
+This decision originally limited first-party unsafe code to those startup
+operations. Any extension requires a new maintainer decision.
 
 Rust repairs closed standard descriptors before ordinary application code can
 observe them. Safe standard-stream interfaces cannot recover the original
@@ -44,4 +47,5 @@ Normal SIGPIPE restoration uses the small MIT-licensed `sigpipe` dependency,
 which reuses libc and does not report restoration errors. Signal-mask observation
 and blocked-SIGPIPE refusals remain.
 Preserving ordinary pipeline behavior does not require a new native wrapper or
-a broader unsafe-code exception. Allocator tuning remains a separate migration.
+a broader startup exception. The separate allocator decision is recorded in
+[0020](0020-existing-allocator-calls.md).

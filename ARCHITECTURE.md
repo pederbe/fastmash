@@ -387,9 +387,11 @@ end the process with `SIGABRT`. All of them are bugs.
   product version at startup. Normal SIGPIPE restoration uses the safe `sigpipe`
   dependency. Signal-mask observation and blocked-SIGPIPE refusals remain.
   Configuration and argument allocations use standard Rust allocation behavior.
-- **Remaining safety migration.** glibc allocator tuning still has first-party
-  unsafe calls outside the approved startup exception. Its replacement must
-  preserve the existing memory behavior. The conversion, numeric_contract,
+- **GNU Linux allocator controls.** `malloc_arenas.rs` retains the existing
+  `mallopt(M_ARENA_MAX, arenas)` and `malloc_trim(0)` calls under a separate,
+  narrow exception in [ADR 0020](docs/src/adr/0020-existing-allocator-calls.md).
+  The binary package denies unsafe code, with allowances on those two blocks
+  and the audited startup module. The conversion, numeric_contract,
   portable_numerics and sort_process modules forbid unsafe code. Sort run files use
   checked buffer access, record arena cache hints use a safe dependency API,
   and decimal parsing uses safe integer division.
