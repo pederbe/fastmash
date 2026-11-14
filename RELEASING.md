@@ -81,11 +81,14 @@ Website changes use [the website checks](TESTING.md#website-checks).
 `release` pointer for download links. A website-tool change alone does not
 require a binary release.
 
-After package delivery, the separate
-[Website deployment workflow](.github/workflows/website-deploy.yml) requests a
-Cloudflare build. A failed website update can be retried there without
-rebuilding or republishing binaries. Cloudflare reports the actual deployment
-result after accepting the request.
+After package delivery and binary installation checks, Release dispatches the
+separate [Website deployment workflow](.github/workflows/website-deploy.yml).
+It passes the published source commit so a delayed request cannot refresh an
+older delivery. A failed website update can be retried there without rebuilding
+or republishing binaries. Leave the expected source commit empty for a manual
+refresh of the current delivery. Cloudflare reports the actual deployment result
+after accepting the build request. The workflow records the Cloudflare build
+identifier in its log and summary so that result can be checked.
 
 For the shared social-preview image and demo assets, use the editable sources
 and rendering commands in [the demo guide](scripts/demo/README.md).

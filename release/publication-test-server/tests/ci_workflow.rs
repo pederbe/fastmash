@@ -218,6 +218,57 @@ fn release_dispatch_can_find_the_repository_without_a_checkout() {
 
 #[cfg(unix)]
 #[test]
+fn release_dispatches_the_website_after_advancing_the_published_source() {
+    let workflow = fs::read_to_string(root().join(".github/workflows/release.yml")).unwrap();
+    let finish = workflow.split_once("\n  finish:\n").unwrap().1;
+    let script = finish.split_once("        run: |\n").unwrap().1;
+    let script = script
+        .lines()
+        .map(|line| line.strip_prefix("          ").unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let script = format!(
+        r#"gh() {{
+  case "$*" in
+    'api repos/pederbe/fastmash/releases/latest --jq .tag_name') printf '%s\n' "$PUBLISHED_TAG" ;;
+    'workflow run website-deploy.yml --repo pederbe/fastmash --ref main -f release_sha=published-source')
+      printf 'dispatch\n'
+      test "$DISPATCH_RESULT" = success ;;
+    *) return 99 ;;
+  esac
+}}
+git() {{
+  case "$*" in
+    'ls-remote --heads origin refs/heads/release') printf 'previous-source\trefs/heads/release\n' ;;
+    'push --force-with-lease=refs/heads/release:previous-source origin published-source:refs/heads/release') printf 'advance\n' ;;
+    *) return 99 ;;
+  esac
+}}
+{script}"#
+    );
+    for (latest, dispatch, success, expected) in [
+        ("v0.6.0", "success", true, "advance\ndispatch\n"),
+        ("v0.7.0", "success", true, ""),
+        ("v0.6.0", "failure", false, "advance\ndispatch\n"),
+    ] {
+        let output = std::process::Command::new("bash")
+            .args(["-ec", &script])
+            .env("PUBLISHED_TAG", latest)
+            .env("DISPATCH_RESULT", dispatch)
+            .env("GITHUB_REPOSITORY", "pederbe/fastmash")
+            .env("GITHUB_REF_NAME", "v0.6.0")
+            .env("GITHUB_SHA", "published-source")
+            .output()
+            .unwrap();
+        assert_eq!(output.status.success(), success, "{output:?}");
+        assert_eq!(String::from_utf8(output.stdout).unwrap(), expected);
+    }
+    assert!(finish.contains("    needs: [publish, crates-publish, binstall]\n"));
+    assert!(finish.contains("      actions: write\n"));
+}
+
+#[cfg(unix)]
+#[test]
 fn website_reads_published_versions_before_and_after_workspace_inheritance() {
     let script = fs::read_to_string(root().join("scripts/build_site.sh")).unwrap();
     let script = script
