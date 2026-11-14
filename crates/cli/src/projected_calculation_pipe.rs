@@ -635,7 +635,7 @@ mod tests {
         ];
         for mask in 0..4u8 {
             for bits in patterns {
-                let expected = fastmash_numeric_contract::Value80::try_from_bits(bits).unwrap();
+                let expected = crate::numeric_contract::Value80::try_from_bits(bits).unwrap();
                 let mut numbers = [None; 2];
                 for (at, number) in numbers.iter_mut().enumerate() {
                     if mask & (1 << at) != 0 {

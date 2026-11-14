@@ -1,7 +1,7 @@
 //! GNU-compatible normality probabilities and count corrections.
 use super::moments::{excess_kurtosis, skewness};
 use super::{Failure, decimal, integer, numeric_failure, numerics, quiet_nan};
-use fastmash_numeric_contract::Raw80;
+use crate::numeric_contract::Raw80;
 use rustc_apfloat::{
     Float, FloatConvert,
     ieee::{Double, X87DoubleExtended as Extended},
@@ -23,7 +23,7 @@ fn probability(
 ) -> Result<numerics::Value, Failure> {
     if matches!(
         numerics::Numerics::value80(exponent).classify(),
-        fastmash_numeric_contract::ValueClass::Nan { .. }
+        crate::numeric_contract::ValueClass::Nan { .. }
     ) {
         return Ok(quiet_nan());
     }
@@ -47,7 +47,7 @@ pub(super) fn jarque_bera(
     arithmetic: &mut numerics::Numerics,
     cache: &mut super::moments::Cache,
 ) -> Result<numerics::Value, Failure> {
-    use fastmash_numeric_contract::{Raw80, ValueClass};
+    use crate::numeric_contract::{Raw80, ValueClass};
 
     let n = values.len() as u64;
     if n <= 1 {
@@ -113,7 +113,7 @@ pub(super) fn dagostino_pearson(
     arithmetic: &mut numerics::Numerics,
     cache: &mut super::moments::Cache,
 ) -> Result<numerics::Value, Failure> {
-    use fastmash_numeric_contract::{Raw80, ValueClass};
+    use crate::numeric_contract::{Raw80, ValueClass};
 
     let n = values.len() as u64;
     if n <= 1 {
@@ -217,7 +217,7 @@ mod tests {
             .unwrap()
             .with_mean_math(true)
             .unwrap();
-        let mut independent = fastmash_portable_numerics::PortableNumerics::new().unwrap();
+        let mut independent = crate::portable_numerics::PortableNumerics::new().unwrap();
         let mut transition = [false; 2];
         for text in [
             "-0.0001",
@@ -246,7 +246,7 @@ mod tests {
                 if text.starts_with("-45.054") {
                     transition[usize::from(matches!(
                         expected.classify(),
-                        fastmash_numeric_contract::ValueClass::Zero
+                        crate::numeric_contract::ValueClass::Zero
                     ))] = true;
                 }
                 assert_eq!(

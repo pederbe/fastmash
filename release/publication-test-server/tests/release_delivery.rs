@@ -43,7 +43,7 @@ fn maintained_shell_help_runs_before_tools_or_side_effects() {
 }
 
 #[test]
-fn resumes_only_missing_packages_and_refuses_ambiguous_registry_state() {
+fn uploads_only_the_product_and_verifies_an_existing_immutable_version() {
     let root = std::path::PathBuf::from("/var/tmp").join(format!(
         "fastmash-registry-{}-{}",
         std::process::id(),
@@ -76,8 +76,9 @@ for ((i=1; i<=$#; i++)); do
   if [ "${!i}" = --output ]; then j=$((i+1)); output=${!j}; fi
 done
 if [ "$FIXTURE_HTTP" = 403 ]; then printf 403; exit; fi
-if [[ "${!#}" = */fastmash-numeric-contract/* ]]; then
+if [ "$FIXTURE_HTTP" = existing ] || [ "$FIXTURE_HTTP" = mismatch ]; then
   hash=$(printf existing | sha256sum | cut -d' ' -f1)
+  if [ "$FIXTURE_HTTP" = mismatch ]; then hash=$(printf different | sha256sum | cut -d' ' -f1); fi
   printf '{"version":{"num":"0.3.0","yanked":false,"checksum":"%s"}}' "$hash" > "$output"
   printf 200
 else
@@ -104,7 +105,7 @@ fi
             .output()
             .unwrap()
     };
-    let output = run("partial");
+    let output = run("missing");
     assert!(
         output.status.success(),
         "{}",
@@ -115,11 +116,21 @@ fi
         .lines()
         .find(|line| line.starts_with("publish "))
         .unwrap();
-    assert!(!publication.contains("-p fastmash-numeric-contract"));
-    assert!(publication.contains("-p fastmash-conversion"));
-    assert!(publication.contains("-p fastmash-portable-numerics"));
-    assert!(publication.contains("-p fastmash-sort-process"));
-    assert!(publication.ends_with("-p fastmash --dry-run"));
+    assert_eq!(
+        publication,
+        "publish --locked --registry crates-io -p fastmash --dry-run"
+    );
+    fs::write(&trace, "").unwrap();
+    let output = run("existing");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(&trace).unwrap(),
+        "package --locked --registry crates-io --no-verify -p fastmash\n"
+    );
+    fs::write(&trace, "").unwrap();
+    let output = run("mismatch");
+    assert!(!output.status.success(), "{output:?}");
+    assert!(!fs::read_to_string(&trace).unwrap().contains("publish "));
     fs::write(&trace, "").unwrap();
     let output = run("403");
     assert!(!output.status.success());

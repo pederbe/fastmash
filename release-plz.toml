@@ -26,27 +26,9 @@ Required CI checks validate this release before automatic merging.
 release_commits = '^(feat|fix|perf|docs|revert)(\([^)]*\))?!?:|^[a-z]+(\([^)]*\))?!:|^[A-Z]|(?m:^BREAKING[ -]CHANGE:)'
 
 [[package]]
-name = "fastmash-numeric-contract"
-version_group = "fastmash"
-
-[[package]]
-name = "fastmash-conversion"
-version_group = "fastmash"
-
-[[package]]
-name = "fastmash-portable-numerics"
-version_group = "fastmash"
-
-[[package]]
-name = "fastmash-sort-process"
-version_group = "fastmash"
-
-[[package]]
 name = "fastmash"
-version_group = "fastmash"
 changelog_update = true
 changelog_path = "CHANGELOG.md"
-changelog_include = ["fastmash-numeric-contract", "fastmash-conversion", "fastmash-portable-numerics", "fastmash-sort-process"]
 git_tag_name = "v{{ version }}"
 git_tag_enable = true
 git_release_enable = true

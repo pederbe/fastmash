@@ -1,6 +1,6 @@
 //! Per-record numeric transformations, without a wider arithmetic session.
 use super::{Failure, decimal, numeric_failure, numerics, unsupported};
-use fastmash_conversion::profile::Profile;
+use crate::conversion::profile::Profile;
 use rustc_apfloat::{Float, Round, ieee::X87DoubleExtended as Extended};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,9 +101,9 @@ pub(super) fn extract(
     admitted(if negative && value != 0 { -x } else { x })
 }
 fn admitted(x: Extended) -> Result<numerics::Value, Failure> {
-    let raw = fastmash_numeric_contract::Raw80::try_from_bits(x.to_bits())
+    let raw = crate::numeric_contract::Raw80::try_from_bits(x.to_bits())
         .map_err(|_| unsupported("internal line numeric encoding failure"))?;
-    let value = fastmash_numeric_contract::Value80::from_raw(raw)
+    let value = crate::numeric_contract::Value80::from_raw(raw)
         .map_err(|_| unsupported("internal line numeric encoding failure"))?;
     numerics::Numerics::admit(value).map_err(numeric_failure)
 }
@@ -148,7 +148,7 @@ pub(super) fn strbin(bytes: &[u8], buckets: std::num::NonZeroU64) -> u64 {
 
 pub(super) fn bin(
     value: numerics::Value,
-    width: fastmash_numeric_contract::Raw80,
+    width: crate::numeric_contract::Raw80,
 ) -> Result<numerics::Value, Failure> {
     let x = Extended::from_bits(numerics::Numerics::value80(value).raw().to_bits());
     let width = Extended::from_bits(width.to_bits());
@@ -180,8 +180,8 @@ mod tests {
     #[test]
     fn smallest_subnormal_rounds_without_decimal_or_host_arithmetic() {
         for negative in [false, true] {
-            let raw = fastmash_numeric_contract::Raw80::new(if negative { 0x8000 } else { 0 }, 1);
-            let value = fastmash_numeric_contract::Value80::from_raw(raw).unwrap();
+            let raw = crate::numeric_contract::Raw80::new(if negative { 0x8000 } else { 0 }, 1);
+            let value = crate::numeric_contract::Value80::from_raw(raw).unwrap();
             let value = numerics::Numerics::admit(value).unwrap();
             for kind in [
                 Rounding::Round,
@@ -195,11 +195,11 @@ mod tests {
                 let expected = if kind == Rounding::Frac {
                     raw
                 } else if negative && kind == Rounding::Floor {
-                    fastmash_numeric_contract::Raw80::new(0xbfff, 1 << 63)
+                    crate::numeric_contract::Raw80::new(0xbfff, 1 << 63)
                 } else if !negative && kind == Rounding::Ceil {
-                    fastmash_numeric_contract::Raw80::new(0x3fff, 1 << 63)
+                    crate::numeric_contract::Raw80::new(0x3fff, 1 << 63)
                 } else {
-                    fastmash_numeric_contract::Raw80::new(0, 0)
+                    crate::numeric_contract::Raw80::new(0, 0)
                 };
                 assert_eq!(result.raw(), expected, "{negative} {kind:?}");
             }

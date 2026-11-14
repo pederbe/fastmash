@@ -2,7 +2,7 @@
 //! locales; do not edit. Number rules (decimal point, thousands separator and
 //! grouping) of every glibc locale, with or without a modifier (compiled in
 //! UTF-8), whose decimal point is one byte; the others are in `REFUSED`.
-use fastmash_conversion::profile::Profile;
+use crate::conversion::profile::Profile;
 
 /// Sorted by name for binary search.
 pub(super) static NUMERIC: &[(&[u8], Profile)] = &[

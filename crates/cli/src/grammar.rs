@@ -2,11 +2,11 @@
 
 use super::failure::hints;
 use super::{Failure, Kind, conversion_failure, failure, unsupported};
-use fastmash_conversion::{
+use crate::conversion::{
     caller_policy::{self, ScannerRejection, TokenValue},
     profile::Profile,
 };
-use fastmash_numeric_contract::IntegerOperand;
+use crate::numeric_contract::IntegerOperand;
 use std::{ffi::OsString, os::unix::ffi::OsStrExt};
 
 use super::command_memory::reserve;
@@ -45,7 +45,7 @@ enum TokenKind {
     Colon,
     Identifier,
     Integer(i64),
-    Float(fastmash_numeric_contract::Raw80),
+    Float(crate::numeric_contract::Raw80),
 }
 
 #[derive(Clone, Copy)]
@@ -220,8 +220,8 @@ impl Scanner {
             // failure even when the historical errno classifier has no route.
             let finite_overflow = result.phases.iter().any(|phase| {
                 matches!(phase, caller_policy::PrimitivePhase::Floating(parsed)
-                    if matches!(parsed.category, fastmash_conversion::records::Category::Decimal | fastmash_conversion::records::Category::Hexadecimal)
-                    && parsed.value.is_some_and(|v| v.classify() == fastmash_numeric_contract::ValueClass::Infinity))
+                    if matches!(parsed.category, crate::conversion::records::Category::Decimal | crate::conversion::records::Category::Hexadecimal)
+                    && parsed.value.is_some_and(|v| v.classify() == crate::numeric_contract::ValueClass::Infinity))
             });
             let rejection = if result.rejection == Some(ScannerRejection::RequiredFactUnavailable)
                 && finite_overflow
@@ -591,9 +591,9 @@ fn with_parameters(
                     super::numerics::Numerics::value80(super::integer(*n as u64))
                 }
                 Some(TokenKind::Float(raw)) => {
-                    fastmash_numeric_contract::Value80::from_raw(*raw).expect("scanner value")
+                    crate::numeric_contract::Value80::from_raw(*raw).expect("scanner value")
                 }
-                None => fastmash_numeric_contract::Value80::signed_zero(false),
+                None => crate::numeric_contract::Value80::signed_zero(false),
                 _ => unreachable!("numeric trim parameter"),
             };
             kind = Kind::Trimmean(super::ordered_statistics::Trim::new(

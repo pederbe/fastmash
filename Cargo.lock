@@ -228,11 +228,7 @@ dependencies = [
  "astro-float-num",
  "base64",
  "csv-core",
- "fastmash-conversion",
  "fastmash-corpus-driver",
- "fastmash-numeric-contract",
- "fastmash-portable-numerics",
- "fastmash-sort-process",
  "getrandom 0.4.3",
  "hotpath",
  "icu_collator",
@@ -244,6 +240,8 @@ dependencies = [
  "memx",
  "nix",
  "num-bigint",
+ "num-integer",
+ "num-traits",
  "rayon",
  "rustc_apfloat",
  "rustix",
@@ -251,16 +249,6 @@ dependencies = [
  "sha2",
  "sigpipe",
  "unicode-width",
-]
-
-[[package]]
-name = "fastmash-conversion"
-version = "0.5.0"
-dependencies = [
- "fastmash-numeric-contract",
- "num-bigint",
- "num-integer",
- "num-traits",
 ]
 
 [[package]]
@@ -288,7 +276,6 @@ dependencies = [
 name = "fastmash-locale-tools"
 version = "0.0.0"
 dependencies = [
- "fastmash-conversion",
  "icu_properties 1.3.2",
  "icu_properties_data 1.3.4",
  "nix",
@@ -299,25 +286,6 @@ dependencies = [
  "unicode-general-category",
  "unicode-normalization",
  "unicode_names2",
-]
-
-[[package]]
-name = "fastmash-numeric-contract"
-version = "0.5.0"
-
-[[package]]
-name = "fastmash-portable-numerics"
-version = "0.5.0"
-dependencies = [
- "fastmash-numeric-contract",
-]
-
-[[package]]
-name = "fastmash-sort-process"
-version = "0.5.0"
-dependencies = [
- "getrandom 0.4.3",
- "rustix",
 ]
 
 [[package]]

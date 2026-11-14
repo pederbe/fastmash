@@ -9,7 +9,7 @@ use super::{
     numerics::{self, Numerics, Value},
     options, os_failure, unsupported,
 };
-use fastmash_numeric_contract::ValueClass;
+use crate::numeric_contract::ValueClass;
 use std::{
     cmp::Ordering,
     ffi::{OsStr, OsString},

@@ -1,14 +1,14 @@
 //! Invocation-owned portable arithmetic and checked command values.
-use fastmash_numeric_contract::{Raw80, Value80};
-pub(super) use fastmash_portable_numerics::{
+use crate::numeric_contract::{Raw80, Value80};
+pub(super) use crate::portable_numerics::{
     Comparison, NumericFailure, clear_sign, compare, compare_magnitude, sample_order,
 };
-pub(super) type Value = fastmash_portable_numerics::ArithmeticValue;
+pub(super) type Value = crate::portable_numerics::ArithmeticValue;
 
 /// Documented CLI rule: larger quiet significand, then positive sign on ties.
 /// Keep historical arithmetic kernels and comparison/unary rules separate.
 pub(super) fn binary_nan(left: Value, right: Value) -> Option<Value> {
-    use fastmash_numeric_contract::ValueClass;
+    use crate::numeric_contract::ValueClass;
     let a = Numerics::value80(left);
     let b = Numerics::value80(right);
     match (
@@ -45,8 +45,8 @@ impl std::ops::BitOr for Requirements {
 }
 
 pub(super) struct Numerics {
-    session: Option<fastmash_portable_numerics::PortableNumerics>,
-    square_root: Option<fastmash_portable_numerics::SquareRoot>,
+    session: Option<crate::portable_numerics::PortableNumerics>,
+    square_root: Option<crate::portable_numerics::SquareRoot>,
     mean_math: Option<super::mean_math::Transcendentals>,
 }
 fn admit_result(value: Value80) -> Result<Value, NumericFailure> {
@@ -63,7 +63,7 @@ impl Numerics {
         self.session.is_some()
     }
     #[cfg(test)]
-    pub(super) fn identity(&self) -> *const fastmash_portable_numerics::PortableNumerics {
+    pub(super) fn identity(&self) -> *const crate::portable_numerics::PortableNumerics {
         self.session
             .as_ref()
             .map_or(std::ptr::null(), |session| session as *const _)
@@ -84,10 +84,10 @@ impl Numerics {
         Ok(Self {
             mean_math: None,
             session: needs_session
-                .then(fastmash_portable_numerics::PortableNumerics::new)
+                .then(crate::portable_numerics::PortableNumerics::new)
                 .transpose()?,
             square_root: (needs_sqrt && !needs_session)
-                .then(fastmash_portable_numerics::SquareRoot::new)
+                .then(crate::portable_numerics::SquareRoot::new)
                 .transpose()?,
         })
     }
@@ -129,14 +129,14 @@ impl Numerics {
             if FAIL_MEAN_FALLBACK.with(|flag| flag.replace(false)) {
                 return Err(NumericFailure::Allocation);
             }
-            self.session = Some(fastmash_portable_numerics::PortableNumerics::new()?);
+            self.session = Some(crate::portable_numerics::PortableNumerics::new()?);
             // The full owner now provides sqrt too; do not retain two arenas.
             self.square_root = None;
         }
         self.exp(value)
     }
     pub(super) fn promote_u64(value: u64) -> Value {
-        Self::admit(fastmash_portable_numerics::promote_u64(value))
+        Self::admit(crate::portable_numerics::promote_u64(value))
             .expect("u64 promotion is canonical")
     }
     pub(super) fn value80(value: Value) -> Value80 {
@@ -217,7 +217,7 @@ thread_local! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fastmash_numeric_contract::Raw80;
+    use crate::numeric_contract::Raw80;
 
     #[test]
     fn nan_selection_matches_both_arithmetic_routes() {

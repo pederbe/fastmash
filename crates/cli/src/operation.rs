@@ -13,7 +13,7 @@ pub(super) enum Kind {
     Path(path_fields::Operation),
     Rounding(line_numeric::Rounding),
     Getnum(line_numeric::Extraction),
-    Bin(fastmash_numeric_contract::Raw80),
+    Bin(crate::numeric_contract::Raw80),
     Strbin(std::num::NonZeroU64),
     Count,
     Countunique,

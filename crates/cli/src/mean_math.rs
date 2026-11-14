@@ -1,7 +1,7 @@
 //! Checked Rust log/exp shared by geometric mean and normality probabilities.
 use super::numerics::{NumericFailure, Numerics, Value};
+use crate::numeric_contract::{Raw80, Value80, ValueClass};
 use astro_float_num::{BigFloat, Consts, RoundingMode, Sign};
-use fastmash_numeric_contract::{Raw80, Value80, ValueClass};
 
 pub(super) struct Transcendentals {
     constants: Consts,
@@ -45,7 +45,7 @@ mod tests {
     #[test]
     fn exponential_adapter_matches_independent_mpfr() {
         let mut math = Transcendentals::new().unwrap();
-        let mut retained = fastmash_portable_numerics::PortableNumerics::new().unwrap();
+        let mut retained = crate::portable_numerics::PortableNumerics::new().unwrap();
         for line in include_str!("testdata/exp-mpfr.tsv")
             .lines()
             .filter(|line| !line.starts_with('#'))
@@ -161,7 +161,7 @@ mod tests {
     #[test]
     fn logarithms_preserve_retained_bits_and_wider_precision_consistency() {
         let mut log = Transcendentals::new().unwrap();
-        let mut retained = fastmash_portable_numerics::PortableNumerics::new().unwrap();
+        let mut retained = crate::portable_numerics::PortableNumerics::new().unwrap();
         let mut constants = Consts::new().unwrap();
         let mut values = Vec::new();
         for exponent in [1, 2, 8192, 16318, 16382, 16383, 16384, 24576, 32765, 32766] {
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn exponential_bits_and_boundary_selection() {
         let mut math = Transcendentals::new().unwrap();
-        let mut retained = fastmash_portable_numerics::PortableNumerics::new().unwrap();
+        let mut retained = crate::portable_numerics::PortableNumerics::new().unwrap();
         for exponent in [2, 0x7ffe] {
             let boundary =
                 Numerics::admit(Value80::from_raw(Raw80::new(exponent, 1 << 63)).unwrap()).unwrap();

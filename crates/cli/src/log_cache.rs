@@ -1,6 +1,6 @@
 //! Bounded invocation-local reuse of exact successful logarithms.
 use super::numerics::Value;
-use fastmash_numeric_contract::Value80;
+use crate::numeric_contract::Value80;
 
 // Measurements compared 16/64/256/1024 entries. 1024 occupies 32 KiB and removes
 // nearly all repeated-wine log work; unique inputs retain a constant-time miss.

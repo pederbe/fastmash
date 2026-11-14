@@ -1,6 +1,6 @@
 //! Fixed-size weighted totals with the ordered binary80 contribution trace.
 use super::{Failure, decimal, failure, integer, numerics, unsupported};
-use fastmash_numeric_contract::ValueClass;
+use crate::numeric_contract::ValueClass;
 
 pub(super) struct Accumulator {
     weighted_total: numerics::Value,

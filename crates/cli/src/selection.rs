@@ -389,7 +389,7 @@ impl Decoded {
 fn ordered_rank(rank: numerics::Value, field: u64, ordinal: u64) -> Result<(), Failure> {
     if matches!(
         numerics::Numerics::value80(rank).classify(),
-        fastmash_numeric_contract::ValueClass::Nan { .. }
+        crate::numeric_contract::ValueClass::Nan { .. }
     ) {
         return Err(failure(
             format!(

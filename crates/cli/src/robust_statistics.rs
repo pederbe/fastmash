@@ -8,7 +8,7 @@ fn median(values: &mut samples::Samples, kind: Kind) -> Result<numerics::Value, 
         .ok_or_else(|| unsupported("internal MAD sample state missing"))?;
     if let Some(lower) = lower {
         // Both medians within GNU MAD add lower first, unlike standalone median.
-        let half = numerics::canonical(fastmash_numeric_contract::Raw80::new(0x3ffe, 1 << 63));
+        let half = numerics::canonical(crate::numeric_contract::Raw80::new(0x3ffe, 1 << 63));
         decimal::multiply(decimal::add(lower, upper)?, half)
     } else {
         Ok(upper)
@@ -31,7 +31,7 @@ pub(super) fn deviation(
 pub(super) fn scale(deviation: numerics::Value, scaled: bool) -> Result<numerics::Value, Failure> {
     let scale = if scaled {
         // GNU's binary64 1.4826 promoted exactly, not binary80 decimal 1.4826.
-        numerics::canonical(fastmash_numeric_contract::Raw80::new(
+        numerics::canonical(crate::numeric_contract::Raw80::new(
             0x3fff,
             0xbdc5_d638_8659_4800,
         ))
@@ -44,7 +44,7 @@ pub(super) fn scale(deviation: numerics::Value, scaled: bool) -> Result<numerics
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fastmash_numeric_contract::Raw80;
+    use crate::numeric_contract::Raw80;
 
     #[test]
     fn subnormal_deviations_and_scale_overflow_follow_binary80_rounding() {

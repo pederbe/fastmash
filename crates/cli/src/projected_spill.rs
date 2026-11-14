@@ -40,7 +40,7 @@ fn corrupt() -> Failure {
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
 pub(super) fn temporary() -> Result<File, Failure> {
-    let file = fastmash_sort_process::anonymous_file().map_err(io_error)?;
+    let file = crate::sort_process::anonymous_file().map_err(io_error)?;
     if std::env::var_os("FASTMASH_SORT_TRACE").is_some() {
         let _ = crate::standard_io::Stderr.write_all(b"sort spill: private run opened\n");
     }
@@ -1514,7 +1514,7 @@ impl<S: Codec> Finished<S> {
                 1 => true,
                 _ => false,
             }
-            && fastmash_sort_process::sort_threads() >= 2
+            && crate::sort_process::sort_threads() >= 2
     }
 
     #[cfg(target_os = "linux")]
@@ -1782,7 +1782,7 @@ mod tests {
             writeback: false,
             storage: PhantomData,
         };
-        let threads = fastmash_sort_process::sort_threads() >= 2;
+        let threads = crate::sort_process::sort_threads() >= 2;
         assert_eq!(finished.can_pipe(), threads);
         finished.levels.push(Vec::new());
         assert_eq!(finished.can_pipe(), threads);

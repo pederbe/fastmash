@@ -52,11 +52,14 @@ changes.
   jobs and representative regression guards. A material regression needs a fix
   or an explicit disposition. Tie new speed claims to dated measurements. See the
   [measurement method](docs/src/benchmarks/method.md) and [PROFILING.md](PROFILING.md).
-- New first-party unsafe code is prohibited outside the audited startup module.
-  Its approved scope is pre-runtime capture of closed standard streams and the
-  Linux process entry with its initial SIGPIPE setup. Keep each operation minimal
-  and explain its soundness with a `// SAFETY:` comment. Any broader exception
-  needs a new maintainer decision. See [ADR 0017](docs/src/adr/0017-audited-startup.md).
+- First-party unsafe code is limited to the audited startup module and the two
+  existing GNU Linux allocator calls. Startup covers pre-runtime capture of
+  closed standard streams and the Linux process entry with its initial SIGPIPE
+  setup. The allocator exception covers only `mallopt(M_ARENA_MAX, arenas)` and
+  `malloc_trim(0)` in `malloc_arenas.rs`. Keep each operation minimal and explain
+  its soundness with a `// SAFETY:` comment. Any extension needs a new maintainer
+  decision. See [ADR 0017](docs/src/adr/0017-audited-startup.md) and
+  [ADR 0020](docs/src/adr/0020-existing-allocator-calls.md).
 - Justify new dependencies and use licenses compatible with `MIT OR Apache-2.0`.
   Use current stable dependencies with compatible ranges and commit lockfiles.
   Locale-reference updates have additional

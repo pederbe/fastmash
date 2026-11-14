@@ -13,6 +13,9 @@ Release pull requests need repository auto-merge and the required `CI` check.
 `RELEASE_PLZ_TOKEN` needs repository Contents and Pull requests write access
 so those pull requests can run CI. Tags and drafts use the workflow token.
 Cargo publication uses the existing trusted publisher after artifact checks.
+Only the `fastmash` product package is published. Maintenance tools remain
+unpublished. [ADR 0019](docs/src/adr/0019-one-product-crate.md) records the package
+boundary.
 
 The PR title supplies the short changelog entry and breaking marker. Keep
 compatibility consequences and upgrade instructions in the PR's Solution
@@ -59,7 +62,7 @@ Their scripts and workflow inputs define the current build commands.
   must pass installation and command checks on both supported macOS baselines.
 - Run workspace tests, independent numerical fixtures and both corpus input
   modes against the selected executable. Test archive/package extraction,
-  installation, commands and removal. Dry-run published source packages before
+  installation, commands and removal. Dry-run the product source package before
   authenticating for Cargo publication.
 - Retain executable hashes in the build's `release/delivery.sha256` and the
   archive's `binary.sha256`. Downloaded draft assets must match their frozen
@@ -92,8 +95,8 @@ and rendering commands in [the demo guide](scripts/demo/README.md).
 A failed delivery retains its immutable tag and draft assets. Rerun failed
 Release jobs at the original tag after fixing the reported cause. Existing
 draft assets must match the frozen assets byte for byte. Already published
-crates must match their source-package checksums before a partial upload
-resumes. A green release-plz result alone does not establish successful delivery.
+versions must match their source-package checksums before an upload retry
+completes. A green release-plz result alone does not establish successful delivery.
 
 Tag creation, draft creation and delivery dispatch are separate operations.
 Release-plz skips an existing tag on retry. If the tag exists but draft creation
@@ -138,7 +141,7 @@ prerequisites. Review the complete diff, including dependencies and builders.
 ### Build and verify the patch candidate
 
 Use the build and delivery requirements above on the selected source. Prepare
-versions, exact internal dependency requirements, lockfile and dated notes with
+the product version, lockfile and dated notes with
 release-plz. Record the full source revision, lockfile hash, builder, compiler
 and flags. Normal Cargo output is suitable for development checks but is not
 the release artifact.
@@ -148,8 +151,8 @@ and documentation checks on that source. Use [TESTING.md](TESTING.md) and the
 [CI workflow](.github/workflows/ci.yml) for the maintained commands.
 
 For an already built Linux candidate, this Bash block directs the maintained
-command tests and both corpus modes to that executable. Independent library
-tests still execute their own test build.
+command tests and both corpus modes to that executable. Numerical module tests
+still execute their own test build.
 
 ```bash
 bash -c '
@@ -173,8 +176,8 @@ records. Results supporting published claims remain in the public repository.
 
 ### Verify delivery and prepare the draft
 
-Verify that the tag, workspace version, crate versions, notes and executable
-version agree, including exact internal dependency requirements. The archive
+Verify that the tag, workspace version, product package, notes and executable
+version agree. The archive
 and installed-package checks use:
 
 ```bash

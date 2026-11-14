@@ -1,7 +1,7 @@
 //! Percentile positions and trimmed means over the shared stable sample order.
 use super::{Failure, decimal, numerics, unsupported};
-use fastmash_conversion::{presentation::Spec, profile::Profile};
-use fastmash_numeric_contract::{Raw80, Value80};
+use crate::conversion::{presentation::Spec, profile::Profile};
+use crate::numeric_contract::{Raw80, Value80};
 use rustc_apfloat::{
     Float, FloatConvert, Round, Status,
     ieee::{Double, X87DoubleExtended as Extended},
@@ -137,7 +137,7 @@ mod tests {
     fn positions_preserve_frozen_results_and_round_large_counts() {
         for n in [2, 3, 4, 7, 10, 101, 999, 65_536] {
             for percent in 1..100 {
-                let old = fastmash_portable_numerics::percentile_position(n, percent);
+                let old = crate::portable_numerics::percentile_position(n, percent);
                 let new = position(n, percent).ok().unwrap();
                 assert_eq!(old.0, new.0);
                 assert!(old.1.same_bits(new.1));

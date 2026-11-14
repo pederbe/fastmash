@@ -35,6 +35,7 @@ mod command_test_support;
 mod comparison;
 #[cfg(test)]
 mod comparison_tests;
+mod conversion;
 mod crosstab;
 mod csv_input;
 #[cfg(test)]
@@ -63,6 +64,7 @@ mod mean_math;
 mod moments;
 mod named_fields;
 mod normality;
+mod numeric_contract;
 mod numeric_locales;
 mod numerics;
 mod operation;
@@ -72,6 +74,7 @@ mod ordered_statistics;
 mod paired;
 mod path_fields;
 mod platform;
+mod portable_numerics;
 mod preparation;
 #[cfg(test)]
 mod preparation_tests;
@@ -90,6 +93,7 @@ mod scalar_text;
 mod selection;
 #[cfg(test)]
 mod selection_tests;
+mod sort_process;
 mod sort_route;
 mod standard_io;
 mod standard_stream_io;
@@ -111,13 +115,13 @@ mod weighted;
 #[cfg(test)]
 mod weighted_tests;
 
+use crate::conversion::{field_policy, profile::Profile};
 #[cfg(test)]
 use failure::MESSAGE_FAILS;
 use failure::{
     Failure, append, conversion_failure, failure, numeric_failure, os_failure, reported,
     unsupported, unsupported_hint,
 };
-use fastmash_conversion::{field_policy, profile::Profile};
 use operation::Kind;
 use operation_set::OperationSet;
 use std::{
@@ -590,7 +594,7 @@ fn scalar_text_failure(error: scalar_text::Error) -> Failure {
 }
 
 fn quiet_nan() -> numerics::Value {
-    numerics::canonical(fastmash_numeric_contract::Raw80::new(
+    numerics::canonical(crate::numeric_contract::Raw80::new(
         0x7fff,
         0xc000_0000_0000_0000,
     ))
@@ -892,7 +896,7 @@ mod command_tests {
 
     #[test]
     fn numeric_failures_preserve_exact_status_and_diagnostic_bytes() {
-        use fastmash_portable_numerics::NumericFailure;
+        use crate::portable_numerics::NumericFailure;
         for (cause, status, diagnostic) in [
             (
                 NumericFailure::UnsupportedDomain,
@@ -949,7 +953,7 @@ mod command_tests {
 
     #[test]
     fn conversion_failures_distinguish_capacity_allocation_and_internal_causes() {
-        use fastmash_conversion::profile::Error;
+        use crate::conversion::profile::Error;
         for (cause, message) in [
             (
                 Error::InputCapacity,

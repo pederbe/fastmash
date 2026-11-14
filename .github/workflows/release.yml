@@ -172,7 +172,7 @@ jobs:
       - name: Obtain a temporary crates.io token
         id: auth
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
-      - name: Publish remaining workspace crates in dependency order
+      - name: Publish the product package if missing
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: bash release/publish-crates.sh "${GITHUB_REF_NAME#v}" publish

@@ -46,7 +46,7 @@ impl Dispersion {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fastmash_numeric_contract::Raw80;
+    use crate::numeric_contract::Raw80;
     fn value(exponent: u16, significand: u64) -> numerics::Value {
         numerics::canonical(Raw80::new(exponent, significand))
     }
@@ -76,7 +76,7 @@ mod tests {
         data.push(integer(4)).unwrap();
         assert!(matches!(
             numerics::Numerics::value80(data.variance(true).ok().unwrap()).classify(),
-            fastmash_numeric_contract::ValueClass::Nan { .. }
+            crate::numeric_contract::ValueClass::Nan { .. }
         ));
         assert_raw(data.variance(false).ok().unwrap(), Raw80::new(0, 0));
         data.push(integer(6)).unwrap();

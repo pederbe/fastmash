@@ -39,7 +39,10 @@ pub(super) fn cap() {
     }
     // SAFETY: the process is still single-threaded (glibc documents mallopt
     // as unsafe beside other threads), and mallopt takes plain integers.
-    unsafe { libc::mallopt(libc::M_ARENA_MAX, arenas) };
+    #[allow(unsafe_code, reason = "existing GNU Linux allocator call, ADR 0020")]
+    unsafe {
+        libc::mallopt(libc::M_ARENA_MAX, arenas)
+    };
 }
 
 /// Returns the free memory at the top of glibc's heap to the system, as work
@@ -47,7 +50,10 @@ pub(super) fn cap() {
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 pub(super) fn trim() {
     // SAFETY: malloc_trim takes a plain integer and is thread-safe.
-    unsafe { libc::malloc_trim(0) };
+    #[allow(unsafe_code, reason = "existing GNU Linux allocator call, ADR 0020")]
+    unsafe {
+        libc::malloc_trim(0)
+    };
 }
 
 #[cfg(not(all(target_os = "linux", target_env = "gnu")))]

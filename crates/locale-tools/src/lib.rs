@@ -202,7 +202,7 @@ impl Snapshot {
 //! locales; do not edit. Number rules (decimal point, thousands separator and\n\
 //! grouping) of every glibc locale, with or without a modifier (compiled in\n\
 //! UTF-8), whose decimal point is one byte; the others are in `REFUSED`.\n\
-use fastmash_conversion::profile::Profile;\n\n\
+use crate::conversion::profile::Profile;\n\n\
 /// Sorted by name for binary search.\n\
 pub(super) static NUMERIC: &[(&[u8], Profile)] = &[\n",
             self.reference.glibc,

@@ -9,7 +9,7 @@ It is written for contributors and for anyone evaluating the project. The
 
 | | |
 | --- | --- |
-| Language | Rust (edition 2024), five product crates |
+| Language | Rust (edition 2024), one product binary crate |
 | Platform | Linux, Windows through WSL2. Native macOS 15+ |
 | Interface | GNU datamash 1.9 command language, with explicit CSV, health, selection, weighted mean and comparison extensions |
 | Numbers | 80-bit extended precision, implemented in software |
@@ -50,15 +50,15 @@ These choices shape the whole codebase. Each is recorded as a decision in
    allocations, and sorting spills to disk. The few remaining fixed
    limits (such as the 99-byte `--format` string) are documented.
 
-## Crates
+## Product modules
 
 ```mermaid
 graph TD
     cli["<b>fastmash</b><br/>command-line program"]
-    conv["<b>fastmash-conversion</b><br/>number parsing and formatting"]
-    pn["<b>fastmash-portable-numerics</b><br/>software arithmetic"]
-    nc["<b>fastmash-numeric-contract</b><br/>80-bit value representation"]
-    sp["<b>fastmash-sort-process</b><br/>native OS support"]
+    conv["<b>conversion</b><br/>number parsing and formatting"]
+    pn["<b>portable_numerics</b><br/>software arithmetic"]
+    nc["<b>numeric_contract</b><br/>80-bit value representation"]
+    sp["<b>sort_process</b><br/>native OS support"]
 
     cli --> conv
     cli --> pn
@@ -67,15 +67,18 @@ graph TD
     conv --> nc
     pn --> nc
 ```
-<!-- description: The fastmash program depends on four library crates: fastmash-conversion, fastmash-portable-numerics, fastmash-numeric-contract and fastmash-sort-process. The conversion and portable-numerics crates build on fastmash-numeric-contract. The sort-process library supplies private native Spill storage and thread policy. -->
+<!-- description: One fastmash binary crate contains private conversion, portable_numerics, numeric_contract and sort_process modules. Conversion and portable_numerics use numeric_contract. The sort_process module supplies native Spill storage and thread policy. -->
 
-| Crate | Path | Responsibility |
+| Part | Path | Responsibility |
 | --- | --- | --- |
 | `fastmash` | `crates/cli` | The program: options, command grammar, records and fields, grouping, sorting, every operation, output and exit status |
-| `fastmash-conversion` | `crates/conversion` | Reading numbers from bytes and printing them, missing-value detection, locale number conventions. No `unsafe` code |
-| `fastmash-portable-numerics` | `crates/portable-numerics` | Software 80-bit arithmetic for the numerical rules, including fallback `log` and `exp`. No `unsafe` code |
-| `fastmash-numeric-contract` | `crates/numeric-contract` | The 80-bit extended-precision value type and its classification. `no_std`, no `unsafe` code, no dependencies |
-| `fastmash-sort-process` | `crates/sort-process` | Private native Spill storage and thread policy. It builds no executable and forbids unsafe code |
+| `conversion` | `crates/cli/src/conversion` | Reading numbers from bytes and printing them, missing-value detection, locale number conventions |
+| `portable_numerics` | `crates/cli/src/portable_numerics` | Software 80-bit arithmetic for the numerical rules, including fallback `log` and `exp` |
+| `numeric_contract` | `crates/cli/src/numeric_contract.rs` | The checked 80-bit extended-precision value type and its classification |
+| `sort_process` | `crates/cli/src/sort_process` | Native Spill storage and thread policy |
+
+All four modules forbid unsafe code. They have no public Rust library target.
+[ADR 0019](docs/src/adr/0019-one-product-crate.md) records this boundary.
 
 ### Development tools
 
@@ -89,6 +92,11 @@ The unpublished `fastmash-locale-tools` crate generates and verifies numeric and
 collation tables against identified native references and independent Unicode
 data. Its reports retain the reference inputs and observed differences. See
 [locale tooling](TESTING.md#locale-tools).
+
+The unpublished `fastmash-license-notices` package selects the product's normal
+dependency graph for archive notices. The separately built
+`release/publication-test-server/` package checks installation and publication.
+These tools stay outside the product's normal dependencies.
 
 The separately built `tools/icu-exemplars/` development tool queries the installed
 ICU 78 reference through safe resource APIs. Its native headers and libclang
@@ -379,10 +387,12 @@ end the process with `SIGABRT`. All of them are bugs.
   product version at startup. Normal SIGPIPE restoration uses the safe `sigpipe`
   dependency. Signal-mask observation and blocked-SIGPIPE refusals remain.
   Configuration and argument allocations use standard Rust allocation behavior.
-- **Remaining safety migration.** glibc allocator tuning still has first-party
-  unsafe calls outside the approved startup exception. Its replacement must
-  preserve the existing memory behavior. Conversion, numeric-contract,
-  portable-numerics and sort-process forbid unsafe code. Sort run files use
+- **GNU Linux allocator controls.** `malloc_arenas.rs` retains the existing
+  `mallopt(M_ARENA_MAX, arenas)` and `malloc_trim(0)` calls under a separate,
+  narrow exception in [ADR 0020](docs/src/adr/0020-existing-allocator-calls.md).
+  The binary package denies unsafe code, with allowances on those two blocks
+  and the audited startup module. The conversion, numeric_contract,
+  portable_numerics and sort_process modules forbid unsafe code. Sort run files use
   checked buffer access, record arena cache hints use a safe dependency API,
   and decimal parsing uses safe integer division.
 - **Overflow checks stay on** in release builds, and panics abort.
@@ -425,8 +435,8 @@ end the process with `SIGABRT`. All of them are bugs.
 | Sorting and spill | `crates/cli/src/projected_sort.rs`, `projected_spill.rs` |
 | A statistic, for example quantiles | `crates/cli/src/ordered_statistics.rs` |
 | Output and exit status | `crates/cli/src/command_output.rs`, `buffered_stdout.rs`, `failure.rs` |
-| Number parsing and printing | `crates/conversion/src/`. Numeric fields: `crates/cli/src/decimal.rs` |
-| Arithmetic | `crates/portable-numerics/src/lib.rs`, `crates/cli/src/numerics.rs` |
+| Number parsing and printing | `crates/cli/src/conversion/`. Numeric fields: `crates/cli/src/decimal.rs` |
+| Arithmetic | `crates/cli/src/portable_numerics/mod.rs`, `crates/cli/src/numerics.rs` |
 | `log` and `exp` | `crates/cli/src/mean_math.rs`, `guarded_log.rs`, `boundary_exp.rs` |
 
 ## Decision records

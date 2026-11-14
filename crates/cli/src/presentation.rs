@@ -1,12 +1,12 @@
 //! Numeric input locale and output policy owned by one invocation.
 use super::failure::hints;
 use super::{Failure, conversion_failure, failure, named_fields, unsupported};
-use fastmash_conversion::{
+use crate::conversion::{
     format::{self, FormatId},
     presentation::{Invalid, Spec},
     profile::Profile,
 };
-use fastmash_numeric_contract::Value80;
+use crate::numeric_contract::Value80;
 
 pub(super) struct Presentation {
     pub profile: Profile,

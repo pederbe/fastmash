@@ -185,7 +185,7 @@ jobs:
           else
             for package in $PACKAGES; do
               if [ "$package" = fastmash ]; then
-                cargo build --release -p fastmash -p fastmash-sort-process --locked
+                cargo build --release -p fastmash --locked
               fi
               cargo test --release -p "$package" --locked
             done
@@ -302,13 +302,10 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Each published crate carries the licence texts; keep them identical.
-      - name: Licence texts in every crate
+      - name: Licence texts in the product package
         run: |
-          for crate in cli conversion numeric-contract portable-numerics sort-process; do
-            cmp LICENSE-MIT "crates/$crate/LICENSE-MIT"
-            cmp LICENSE-APACHE "crates/$crate/LICENSE-APACHE"
-          done
+          cmp LICENSE-MIT crates/cli/LICENSE-MIT
+          cmp LICENSE-APACHE crates/cli/LICENSE-APACHE
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
 
   native:

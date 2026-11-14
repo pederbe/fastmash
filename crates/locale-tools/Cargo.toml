@@ -57,9 +57,5 @@ icu_properties_data_15 = { package = "icu_properties_data", version = "=1.3.4" }
 # corpus driver, without importing its command policies or first-party FFI.
 nix = { version = "0.31.3", default-features = false, features = ["fs", "signal"] }
 
-[dev-dependencies]
-# Compile emitted tables against the real safe Profile constructor and getters.
-fastmash-conversion = { path = "../conversion", version = "=0.5.0" }
-
 [lints]
 workspace = true

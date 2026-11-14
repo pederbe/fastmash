@@ -178,8 +178,8 @@ pub(super) fn failure(message: Vec<u8>) -> Failure {
         hint: None,
     }
 }
-pub(super) fn numeric_failure(error: fastmash_portable_numerics::NumericFailure) -> Failure {
-    use fastmash_portable_numerics::NumericFailure;
+pub(super) fn numeric_failure(error: crate::portable_numerics::NumericFailure) -> Failure {
+    use crate::portable_numerics::NumericFailure;
     let (status, message) = match error {
         NumericFailure::UnsupportedDomain => (
             77,
@@ -196,8 +196,8 @@ pub(super) fn numeric_failure(error: fastmash_portable_numerics::NumericFailure)
         hint: None,
     }
 }
-pub(super) fn conversion_failure(error: fastmash_conversion::profile::Error) -> Failure {
-    use fastmash_conversion::profile::Error;
+pub(super) fn conversion_failure(error: crate::conversion::profile::Error) -> Failure {
+    use crate::conversion::profile::Error;
     unsupported(match error {
         Error::InputCapacity => "numeric conversion input exceeds 8192-byte limit",
         Error::OutputCapacity => "numeric output exceeds 16384-byte limit",
@@ -417,7 +417,7 @@ mod tests {
     #[test]
     fn failure_presentation_preserves_short_zero_write_and_flush_failures() {
         for error in [
-            numeric_failure(fastmash_portable_numerics::NumericFailure::Invariant),
+            numeric_failure(crate::portable_numerics::NumericFailure::Invariant),
             crate::grammar::parse(&["sum".into()]).err().unwrap(),
         ] {
             for mode in [ColorMode::Never, ColorMode::Always] {
@@ -559,7 +559,7 @@ mod tests {
                         crate::buffered_stdout::BufferedStdout::new(&mut output, 128, false)
                             .unwrap();
                     let internal =
-                        numeric_failure(fastmash_portable_numerics::NumericFailure::Invariant);
+                        numeric_failure(crate::portable_numerics::NumericFailure::Invariant);
                     let status = crate::command_output::complete(
                         buffer,
                         Err(internal),

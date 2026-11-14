@@ -10,6 +10,9 @@ keywords = ["statistics", "datamash", "tsv", "csv", "cli"]
 categories = ["command-line-utilities", "science", "text-processing"]
 readme = "../../README.md"
 
+[lints.rust]
+unsafe_code = "deny"
+
 # `cargo binstall fastmash` downloads the prebuilt release archive (the
 # tested delivery binaries) instead of compiling. The cargo-binstall workflow
 # checks this route for each release. QuickInstall and source compilation are
@@ -31,10 +34,9 @@ test = true
 [dependencies]
 # Optional diagnostics only. Ordinary builds do not compile or link hotpath.
 hotpath = { version = "0.31.2", optional = true, default-features = false }
-fastmash-numeric-contract = { path = "../numeric-contract", version = "=0.5.0" }
-fastmash-conversion = { path = "../conversion", version = "=0.5.0" }
-fastmash-portable-numerics = { path = "../portable-numerics", version = "=0.5.0" }
-fastmash-sort-process = { path = "../sort-process", version = "=0.5.0" }
+num-bigint = { version = "0.5.1", default-features = false }
+num-integer = { version = "0.1.47", default-features = false, features = ["i128"] }
+num-traits = { version = "0.2.19", default-features = false, features = ["i128"] }
 rustc_apfloat = "0.2.3"
 libc = "0.2.191"
 # Safe SIGPIPE restoration through the existing libc dependency.
@@ -84,8 +86,6 @@ csv-core = "0.1.13"
 # Safe descriptor file actions, access checks and bounded child reaping in tests.
 # Owned pseudo-terminals and raw mode setup use the term feature.
 nix = { version = "0.31.3", default-features = false, features = ["fs", "signal", "term", "poll"] }
-# Exact arithmetic for the generated decimal power table and its tests.
-num-bigint = { version = "0.5.1", default-features = false }
 
 # Reuse owned full-output and terminal-input transports in integration tests.
 fastmash-corpus-driver = { path = "../corpus-driver" }
