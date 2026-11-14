@@ -12,13 +12,13 @@ pub(crate) struct TempDir(pub(crate) PathBuf);
 
 impl TempDir {
     pub(crate) fn new(name: &str) -> Self {
-        // Use the shared temporary parent rather than trusting TMPDIR's
-        // ancestors. Darwin's /tmp is a root-owned link to /private/tmp.
-        // Validate that destination; Linux retains its direct-directory check.
+        // Keep large fixtures off a potentially RAM-backed /tmp. Use the
+        // trusted shared parent rather than TMPDIR's ancestors. Darwin's /var
+        // links to /private/var, so validate its canonical destination.
         #[cfg(target_os = "macos")]
-        let parent = fs::canonicalize("/tmp").unwrap();
+        let parent = fs::canonicalize("/var/tmp").unwrap();
         #[cfg(not(target_os = "macos"))]
-        let parent = Path::new("/tmp").to_owned();
+        let parent = Path::new("/var/tmp").to_owned();
         let metadata = fs::symlink_metadata(&parent).unwrap();
         assert!(
             metadata.is_dir()
@@ -57,6 +57,10 @@ mod tests {
     #[test]
     fn owned_roots_are_private_canonical_and_removed_on_drop() {
         let parent = TempDir::new("owned-cleanup");
+        assert_eq!(
+            parent.0.parent().unwrap(),
+            fs::canonicalize("/var/tmp").unwrap()
+        );
         let spelled = parent.0.join(".").join("owned");
         let root = TempDir::create(spelled).unwrap();
         let path = parent.0.join("owned");

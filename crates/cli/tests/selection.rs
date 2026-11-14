@@ -32,6 +32,7 @@ fn invoke_ctype(args: &[&str], input: &[u8], file: bool, ctype: Option<&str>) ->
 }
 
 fn invoke_in(args: &[&str], input: &[u8], file: bool, environment: &[(&str, &str)]) -> Output {
+    let temporary = temp_dir::TempDir::new(&format!("selection-{:?}", std::thread::current().id()));
     let mut command = Command::new(executable::fastmash());
     command
         .arg0("fastmash")
@@ -39,10 +40,10 @@ fn invoke_in(args: &[&str], input: &[u8], file: bool, environment: &[(&str, &str
         .env_clear()
         .env("LC_ALL", "C")
         .env("PATH", "/usr/bin:/bin")
+        .env("TMPDIR", &temporary.0)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     command.envs(environment.iter().copied());
-    let temporary = temp_dir::TempDir::new(&format!("selection-{:?}", std::thread::current().id()));
     if file {
         let path = temporary.0.join("input");
         fs::write(&path, input).unwrap();

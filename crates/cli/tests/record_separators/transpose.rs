@@ -294,7 +294,8 @@ fn transpose_tall_wide_and_output_failure() {
 #[test]
 #[cfg(target_os = "linux")]
 fn transpose_allocation_failure_is_explicit_and_has_no_output() {
-    let path = std::env::temp_dir().join(format!("transpose-memory-{}", std::process::id()));
+    let fixture = temp_dir::TempDir::new("transpose-memory");
+    let path = fixture.0.join("input");
     // Three million tiny cells need more offset storage than this child's allowance.
     let input = b"x\tx\tx\tx\tx\tx\tx\tx\tx\tx\n".repeat(300_000);
     fs::write(&path, &input).unwrap();
@@ -311,7 +312,6 @@ fn transpose_allocation_failure_is_explicit_and_has_no_output() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let o = command.output().unwrap();
-    fs::remove_file(path).unwrap();
     assert_eq!(o.status.code(), Some(77), "{o:?}");
     assert!(o.stdout.is_empty());
     assert!(String::from_utf8_lossy(&o.stderr).contains("transpose memory allocation failed"));

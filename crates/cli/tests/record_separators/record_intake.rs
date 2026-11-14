@@ -12,25 +12,22 @@ use std::{
 const WARNING: &[u8] = b"fastmash: Using -f/--full with non-linewise operations is deprecated and will be disabled in a future release.\n";
 
 fn run(locale: &str, arguments: &[&str], input: &[u8]) -> Output {
-    let path = std::env::temp_dir().join(format!(
-        "record-intake-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let fixture =
+        super::temp_dir::TempDir::new(&format!("record-intake-{:?}", std::thread::current().id()));
+    let path = fixture.0.join("input");
     fs::write(&path, input).unwrap();
-    let output = Command::new(candidate())
+    Command::new(candidate())
         .arg0("fastmash")
         .args(arguments)
         .env_clear()
         .env("LC_ALL", locale)
         .env("PATH", "/usr/bin:/bin")
+        .env("TMPDIR", &fixture.0)
         .stdin(fs::File::open(&path).unwrap())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
-        .unwrap();
-    fs::remove_file(path).unwrap();
-    output
+        .unwrap()
 }
 
 fn assert_result(output: &Output, status: i32, stdout: &[u8], stderr: &[u8]) {

@@ -40,9 +40,7 @@ fn invoke_at(
         .env("FASTMASH_SORT_MEMORY_BYTES", memory)
         .stdin(fs::File::open(&path).unwrap())
         .stderr(Stdio::piped());
-    if let Some(temporary) = temporary {
-        command.env("TMPDIR", temporary);
-    }
+    command.env("TMPDIR", temporary.unwrap_or(&fixture.0));
     full_output::output(
         command,
         binary,
@@ -582,23 +580,19 @@ fn invoke_in(
     input: &[u8],
     environment: &[(&str, &str)],
 ) -> Output {
-    let path = std::env::temp_dir().join(format!(
-        "grouping-in-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
+    let fixture = temp_dir::TempDir::new(&format!("grouping-in-{:?}", std::thread::current().id()));
+    let path = fixture.0.join("input");
     fs::write(&path, input).unwrap();
-    let result = process::bounded(binary, 30)
+    process::bounded(binary, 30)
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("TZ", "UTC")
+        .env("TMPDIR", &fixture.0)
         .envs(environment.iter().copied())
         .stdin(fs::File::open(&path).unwrap())
         .output()
-        .unwrap();
-    fs::remove_file(path).unwrap();
-    result
+        .unwrap()
 }
 
 /// `FASTMASH_GROUPING` is read only by sorted jobs with grouping keys, the
@@ -876,6 +870,7 @@ fn a_restart_reads_standard_input_from_where_the_command_began() {
 fn language_sort_completes_under_an_address_space_limit() {
     use std::io::Write;
     const LIMIT: u64 = 350_000 << 10;
+    let fixture = temp_dir::TempDir::new("language-sort-address-space");
     let records: Vec<u8> = (0..300_000u32)
         .flat_map(|n| format!("k{:05}\t{}\n", n * 7919 % 20_000, n % 1000).into_bytes())
         .collect();
@@ -886,7 +881,7 @@ fn language_sort_completes_under_an_address_space_limit() {
         .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "en_US.UTF-8")
         .env("OMP_NUM_THREADS", "8")
-        .env("TMPDIR", std::env::temp_dir())
+        .env("TMPDIR", &fixture.0)
         .env("FASTMASH_TEST_PROCESS_ADDRESS_SPACE", LIMIT.to_string())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

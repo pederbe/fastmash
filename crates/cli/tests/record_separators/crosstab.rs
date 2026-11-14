@@ -29,7 +29,8 @@ fn crosstab_read_failures() {
 #[test]
 #[cfg(target_os = "linux")]
 fn crosstab_allocation_failure_is_explicit() {
-    let path = std::env::temp_dir().join(format!("crosstab-memory-{}", std::process::id()));
+    let fixture = temp_dir::TempDir::new("crosstab-memory");
+    let path = fixture.0.join("input");
     let mut input = Vec::new();
     for r in 0..500_000 {
         input.extend_from_slice(format!("{r}\tx\n").as_bytes());
@@ -48,7 +49,6 @@ fn crosstab_allocation_failure_is_explicit() {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let output = command.output().unwrap();
-    fs::remove_file(path).unwrap();
     assert_eq!(output.status.code(), Some(77), "{output:?}");
     assert!(output.stdout.is_empty());
     assert!(String::from_utf8_lossy(&output.stderr).contains("crosstab memory allocation failed"));

@@ -52,9 +52,7 @@ fn invoke_at(
         .env("FASTMASH_SORT_MEMORY_BYTES", memory)
         .stdin(fs::File::open(&path).unwrap())
         .stderr(Stdio::piped());
-    if let Some(temp) = temp {
-        command.env("TMPDIR", temp);
-    }
+    command.env("TMPDIR", temp.unwrap_or(&fixture.0));
     full_output::output(
         command,
         binary,

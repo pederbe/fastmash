@@ -20,6 +20,7 @@ fn invoke(
     file: bool,
     variables: &[(&str, &str)],
 ) -> Output {
+    let directory = temp_dir::TempDir::new(&format!("csv-input-{:?}", std::thread::current().id()));
     let mut command = Command::new(executable::fastmash());
     command
         .arg0("fastmash")
@@ -27,12 +28,11 @@ fn invoke(
         .env_clear()
         .env("LC_ALL", "C")
         .env("PATH", "/usr/bin:/bin")
+        .env("TMPDIR", &directory.0)
         .envs(variables.iter().copied())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if file {
-        let directory =
-            temp_dir::TempDir::new(&format!("csv-input-{:?}", std::thread::current().id()));
         let path = directory.0.join("input");
         fs::write(&path, input).unwrap();
         command

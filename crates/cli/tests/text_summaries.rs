@@ -49,6 +49,7 @@ fn command_with_resources(args: &[&str], input: &[u8], full: bool, limited: bool
         .env("PATH", "/usr/bin:/bin")
         .env("LC_ALL", "C")
         .env("TZ", "UTC")
+        .env("TMPDIR", &fixture.0)
         .stdin(File::open(&path).unwrap())
         .stderr(Stdio::piped());
     full_output::output(

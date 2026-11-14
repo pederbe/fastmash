@@ -44,6 +44,7 @@ fn invoke_at(binary: &OsStr, args: &[String], input: &[u8], full: bool, german: 
         .env("LC_CTYPE", "C")
         .env("LC_MESSAGES", "C")
         .env("LC_NUMERIC", if german { "de_DE.utf8" } else { "C" })
+        .env("TMPDIR", &fixture.0)
         .env("PATH", "/usr/bin:/bin")
         .stdin(fs::File::open(&path).unwrap())
         .stderr(Stdio::piped());

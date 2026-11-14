@@ -51,6 +51,7 @@ fn invoke_output(
         .env_clear()
         .env("LC_ALL", "C")
         .env("PATH", "/usr/bin:/bin")
+        .env("TMPDIR", &fixture.0)
         .stdin(fs::File::open(&path).unwrap())
         .stderr(Stdio::piped());
     full_output::output(

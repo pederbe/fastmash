@@ -81,7 +81,7 @@ jobs:
         run: |
           mkdir "$CAPTURES/failed-full-output"
           shopt -s nullglob
-          for root in /private/tmp/fastmash-test-*.full-output; do
+          for root in /private/var/tmp/fastmash-test-*.full-output; do
             test -d "$root" && test ! -L "$root"
             rsync -a --exclude=full.dmg --exclude=mount "$root" "$CAPTURES/failed-full-output/"
           done
