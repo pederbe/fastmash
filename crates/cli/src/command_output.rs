@@ -65,7 +65,7 @@ pub(super) struct Results<'a, W> {
     enabled: bool,
     full: bool,
     vnlog: bool,
-    profile: fastmash_conversion::profile::Profile,
+    profile: crate::conversion::profile::Profile,
     result_names: &'a super::result_names::ResultNames,
 }
 impl<'a, W: Write> Results<'a, W> {

@@ -8,7 +8,7 @@ use super::{
     options::Options,
     os_failure, records, unsupported,
 };
-use fastmash_conversion::{
+use crate::conversion::{
     bytes::{self, Lexeme},
     profile::Profile,
 };

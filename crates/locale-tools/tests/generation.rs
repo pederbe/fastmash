@@ -10,12 +10,6 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-// This is deliberately an exact emitter fixture, compiled by the ordinary
-// test consumer. Formatting it would change the historical emission bytes.
-#[rustfmt::skip]
-#[path = "fixtures/generated_numeric.rs"]
-mod generated;
-
 const UNUSUAL: [&str; 6] = [
     "quote\"name",
     "back\\slash",
@@ -247,7 +241,7 @@ fn sorted_queries_replace_all_codesets_and_keep_first_key_position_last_value() 
 }
 
 #[test]
-fn emitted_fixture_is_exact_source_and_real_profile_data() {
+fn emitted_fixture_is_exact_source_and_profile_data() {
     let mut profiles = original_profiles();
     for name in UNUSUAL {
         profiles.push((name.into(), numeric(".", "", &[])));
@@ -268,16 +262,6 @@ fn emitted_fixture_is_exact_source_and_real_profile_data() {
     ];
     let tables = snapshot.tables().unwrap();
     assert_eq!(tables.numeric, expected);
-    let actual: Vec<_> = generated::NUMERIC
-        .iter()
-        .map(|(name, profile)| CompiledLocale {
-            name: name.to_vec(),
-            decimal: profile.radix(),
-            thousands: profile.thousands().to_vec(),
-            grouping: profile.grouping().to_vec(),
-        })
-        .collect();
-    assert_eq!(actual, expected);
     let bare = bytes(&[
         "aa_ER",
         "back\\slash",
@@ -299,22 +283,11 @@ fn emitted_fixture_is_exact_source_and_real_profile_data() {
     ]);
     assert_eq!(tables.bare_utf8, bare);
     assert_eq!(tables.refused, refused);
-    assert_eq!(
-        generated::BARE_UTF8
-            .iter()
-            .map(|name| name.to_vec())
-            .collect::<Vec<_>>(),
-        bare
-    );
-    assert_eq!(
-        generated::REFUSED
-            .iter()
-            .map(|name| name.to_vec())
-            .collect::<Vec<_>>(),
-        refused
-    );
     let output = snapshot.rust_source().unwrap();
-    assert_eq!(output, include_str!("fixtures/generated_numeric.rs"));
+    assert_eq!(
+        output,
+        include_str!("../../cli/src/conversion/testdata/generated_numeric.rs")
+    );
     let json_output = snapshot.json().unwrap();
     let directory = FixtureDirectory::new();
     for (name, data) in [

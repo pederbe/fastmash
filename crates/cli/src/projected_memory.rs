@@ -86,7 +86,7 @@ pub(super) fn grow(memory: usize, set_aside: usize, records: u64) -> Option<usiz
             size,
             consumed,
             records,
-            threads: fastmash_sort_process::sort_threads(),
+            threads: crate::sort_process::sort_threads(),
         }),
         sorts: running_sorts(Path::new("/")),
         set_aside: set_aside as u64,

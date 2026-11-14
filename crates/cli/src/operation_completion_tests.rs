@@ -31,7 +31,7 @@ fn typed_count_completion_preserves_all_unsigned_integer_bits() {
             .unwrap_or_else(|_| panic!("completed count"));
         assert_eq!(
             super::super::numerics::Numerics::value80(value).raw(),
-            fastmash_numeric_contract::Value80::from_hex(expected.as_bytes())
+            crate::numeric_contract::Value80::from_hex(expected.as_bytes())
                 .unwrap()
                 .raw()
         );

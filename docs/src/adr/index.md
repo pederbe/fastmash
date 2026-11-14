@@ -28,6 +28,7 @@ gets a new record. Editorial corrections keep the existing record and URL.
 | [0016](0016-release-plz.md) | Version releases with release-plz while retaining qualified publication |
 | [0017](0017-audited-startup.md) | Keep one audited startup module for inherited streams and Linux entry |
 | [0018](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0018-static-linux-delivery.md) | Deliver static Linux binaries with musl |
+| [0019](0019-one-product-crate.md) | Publish one product binary crate and retain separate maintenance tools |
 
 ## Superseded decisions
 

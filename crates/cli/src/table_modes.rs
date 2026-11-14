@@ -8,7 +8,7 @@ use super::{
     options::Options,
     os_failure, records,
 };
-use fastmash_conversion::field_policy::FieldRange;
+use crate::conversion::field_policy::FieldRange;
 use std::io::BufRead;
 
 pub(super) fn run(

@@ -80,7 +80,7 @@ jobs:
             printf 'RUSTFLAGS=%s\nCARGO_ENCODED_RUSTFLAGS=%s\n' "${RUSTFLAGS-}" "${CARGO_ENCODED_RUSTFLAGS-}"
             printf 'profile=release opt-level=2 panic=abort overflow-checks=true lto=false codegen-units=1\n'
           } | tee "$EVIDENCE/identity.txt"
-          git ls-files tests/cli crates/portable-numerics/testdata crates/cli/src/testdata |
+          git ls-files tests/cli crates/cli/src/portable_numerics/testdata crates/cli/src/conversion/testdata crates/cli/src/testdata |
             while IFS= read -r path; do shasum -a 256 "$path"; done > "$EVIDENCE/fixtures.sha256"
           shasum -a 256 Cargo.toml Cargo.lock crates/*/Cargo.toml > "$EVIDENCE/manifests.sha256"
       - name: Check formatting and native lint

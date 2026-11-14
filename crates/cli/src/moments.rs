@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn combined_normality_matches_separate_kernels_bit_for_bit() {
         let special = |bits| {
-            numerics::canonical(fastmash_numeric_contract::Raw80::try_from_bits(bits).unwrap())
+            numerics::canonical(crate::numeric_contract::Raw80::try_from_bits(bits).unwrap())
         };
         let edges = [
             0,
@@ -231,7 +231,7 @@ mod tests {
                         special(edges[(case + at) % edges.len()])
                     } else {
                         let exponent = 0x3fffu16 - 40 + (random % 81) as u16;
-                        numerics::canonical(fastmash_numeric_contract::Raw80::new(
+                        numerics::canonical(crate::numeric_contract::Raw80::new(
                             exponent | ((random >> 48) as u16 & 0x8000),
                             random | (1 << 63),
                         ))
@@ -287,7 +287,7 @@ mod tests {
             Kind::Dpo,
         ];
         let special = |bits| {
-            numerics::canonical(fastmash_numeric_contract::Raw80::try_from_bits(bits).unwrap())
+            numerics::canonical(crate::numeric_contract::Raw80::try_from_bits(bits).unwrap())
         };
         let datasets = [
             vec![],

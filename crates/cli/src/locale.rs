@@ -1,6 +1,6 @@
 //! Invocation-owned, pinned locale semantics; never consult host locale data.
 use super::{Failure, collation_glibc, unsupported};
-use fastmash_conversion::profile::Profile;
+use crate::conversion::profile::Profile;
 use icu_collator::{
     Collator as IcuCollator, CollatorBorrowed,
     options::{AlternateHandling, CollatorOptions, Strength},

@@ -2,6 +2,9 @@
 
 Status: accepted. Supersedes the download-version file in
 [0011](0011-native-release-delivery.md).
+The five-package version and publication arrangement below is superseded by
+[0019](0019-one-product-crate.md). Weekly preparation and qualified delivery
+remain in force.
 
 Use release-plz for weekly version and changelog preparation. All five published
 crates share a workspace version and exact internal dependency requirements.

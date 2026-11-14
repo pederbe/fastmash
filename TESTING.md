@@ -74,7 +74,7 @@ operation's edge cases (empty groups, NaN, signed zero, infinities, overflow),
 number parsing and formatting, and the arithmetic primitives.
 
 ```sh
-cargo test -p fastmash-portable-numerics   # one crate
+cargo test --release -p fastmash --bin fastmash portable_numerics   # arithmetic module
 cargo test -p fastmash grammar             # tests whose names match "grammar"
 ```
 
@@ -195,7 +195,7 @@ arithmetic changes get extra scrutiny:
   is deliberate, reviewed and listed in the changelog, never silent.
 
 The native release workspace run includes every retained `v3` primitive and
-exact-helper row in `crates/portable-numerics/testdata/`, the exact conversion
+exact-helper row in `crates/cli/src/portable_numerics/testdata/`, the exact conversion
 tests, and the independent MPFR logarithm/exponential challenge and range-boundary
 fixtures in the CLI. `record_separators::reproducibility` executes representative
 portable expectations through the command itself, including extreme exponents,
@@ -207,6 +207,10 @@ Group-order regression separately checks the resulting numerical selection.
 Generating new MPFR reference data and
 running optional reference-host measurements are separate from consuming these
 already retained independent fixtures.
+
+The binary's conversion tests also compile the locale generator's exact Rust
+fixture against the real profile type. Locale-tool tests compare emitted source
+with that same fixture without depending on the application.
 
 ### Benchmarks
 

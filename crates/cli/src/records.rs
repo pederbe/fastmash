@@ -1,4 +1,4 @@
-use fastmash_conversion::field_policy::FieldRange;
+use crate::conversion::field_policy::FieldRange;
 use std::io::{self, BufRead, Write};
 
 pub enum ReadError {
@@ -19,7 +19,7 @@ pub enum Separator {
     Whitespace,
 }
 
-pub struct Fields<'a> {
+pub(crate) struct Fields<'a> {
     bytes: &'a [u8],
     separator: Separator,
     position: usize,

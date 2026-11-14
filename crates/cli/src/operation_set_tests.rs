@@ -4,12 +4,12 @@ use super::*;
 use std::cell::RefCell;
 
 thread_local! {
-    static PARSED: RefCell<std::collections::VecDeque<Option<fastmash_numeric_contract::Value80>>> = RefCell::default();
+    static PARSED: RefCell<std::collections::VecDeque<Option<crate::numeric_contract::Value80>>> = RefCell::default();
 }
 /// Replaces the next parsed field values in this thread, for injected failures.
 pub(in super::super) fn parsed_value(
-    value: fastmash_numeric_contract::Value80,
-) -> fastmash_numeric_contract::Value80 {
+    value: crate::numeric_contract::Value80,
+) -> crate::numeric_contract::Value80 {
     PARSED.with(|values| values.borrow_mut().pop_front().flatten().unwrap_or(value))
 }
 
@@ -435,7 +435,7 @@ fn request_grammar_preserves_order_and_duplicates() {
 
 #[test]
 fn count_fast_format_matches_general_default14() {
-    use fastmash_conversion::{
+    use crate::conversion::{
         format::{self, FormatId},
         profile::Profile,
     };
@@ -642,7 +642,7 @@ fn checksums_collect_without_a_numerical_session() {
 
 #[test]
 fn parsed_signaling_nan_stops_before_mutation_but_preserves_paired_left() {
-    let snan = fastmash_numeric_contract::Value80::from_raw(fastmash_numeric_contract::Raw80::new(
+    let snan = crate::numeric_contract::Value80::from_raw(crate::numeric_contract::Raw80::new(
         0x7fff,
         0x8000_0000_0000_0001,
     ))
@@ -674,7 +674,7 @@ fn parsed_signaling_nan_stops_before_mutation_but_preserves_paired_left() {
         );
         assert!(
             numerics::Numerics::value80(set.states[0].value)
-                .same_bits(fastmash_numeric_contract::Value80::exact_u64(0))
+                .same_bits(crate::numeric_contract::Value80::exact_u64(0))
         );
     }
     let options = options(&["dotprod", "1:2"]);
@@ -703,10 +703,9 @@ fn arithmetic_failure_preserves_partial_rows_and_stdout_completion() {
             .unwrap()
             .with_mean_math(true)
             .unwrap();
-        let tiny = fastmash_numeric_contract::Value80::from_raw(
-            fastmash_numeric_contract::Raw80::new(0, 1),
-        )
-        .unwrap();
+        let tiny =
+            crate::numeric_contract::Value80::from_raw(crate::numeric_contract::Raw80::new(0, 1))
+                .unwrap();
         PARSED.with(|values| values.borrow_mut().push_back(Some(tiny)));
         let input = if grouped {
             b"a\t1".as_slice()

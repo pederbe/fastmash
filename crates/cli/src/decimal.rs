@@ -4,12 +4,12 @@
 use super::{
     Failure, conversion_failure, decimal_powers, failure, numeric_failure, numerics, unsupported,
 };
-use fastmash_conversion::{
+use crate::conversion::{
     bytes::{self, Lexeme},
     convert, field_policy,
     profile::Profile,
 };
-use fastmash_numeric_contract::{Raw80, Value80};
+use crate::numeric_contract::{Raw80, Value80};
 use rustc_apfloat::{
     Float, Round, Status,
     ieee::{IeeeFloat, Semantics, X87DoubleExtended as Extended},
@@ -3367,10 +3367,10 @@ mod tests {
                     });
                     if matches!(
                         numerics::Numerics::value80(left).classify(),
-                        fastmash_numeric_contract::ValueClass::Nan { .. }
+                        crate::numeric_contract::ValueClass::Nan { .. }
                     ) && matches!(
                         numerics::Numerics::value80(right).classify(),
-                        fastmash_numeric_contract::ValueClass::Nan { .. }
+                        crate::numeric_contract::ValueClass::Nan { .. }
                     ) {
                         // The CLI's NaN selection differs from the retained core
                         // here; independent policy cases cover both routes.

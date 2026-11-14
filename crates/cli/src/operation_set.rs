@@ -1276,7 +1276,7 @@ fn quartile(
     sorted: &[numerics::Value],
     which: samples::Quartile,
 ) -> Result<numerics::Value, Failure> {
-    use fastmash_numeric_contract::Raw80;
+    use crate::numeric_contract::Raw80;
     match which.select(sorted) {
         Some(samples::Selection::Single(value)) => Ok(value),
         Some(samples::Selection::Between {
@@ -1306,7 +1306,7 @@ fn middle_value(
     lower: Option<numerics::Value>,
 ) -> Result<numerics::Value, Failure> {
     if let Some(lower) = lower {
-        let half = numerics::canonical(fastmash_numeric_contract::Raw80::new(0x3ffe, 1 << 63));
+        let half = numerics::canonical(crate::numeric_contract::Raw80::new(0x3ffe, 1 << 63));
         decimal::multiply(decimal::add(upper, lower)?, half)
     } else {
         Ok(upper)
@@ -1330,7 +1330,7 @@ fn format_count(count: u64, presentation: &presentation::Presentation) -> Result
         let mut output = Vec::new();
         output
             .try_reserve_exact(digits.len() - start)
-            .map_err(|_| conversion_failure(fastmash_conversion::profile::Error::Allocation))?;
+            .map_err(|_| conversion_failure(crate::conversion::profile::Error::Allocation))?;
         output.extend_from_slice(&digits[start..]);
         return Ok(output);
     }
@@ -1559,10 +1559,10 @@ fn complete_own_state<'s>(
         return Ok(Completed::Number(match plan.kind {
             Kind::Sum | Kind::Count | Kind::Countunique => integer(0),
             Kind::Min | Kind::Absmin => {
-                numerics::canonical(fastmash_numeric_contract::Raw80::new(0xffff, 1 << 63))
+                numerics::canonical(crate::numeric_contract::Raw80::new(0xffff, 1 << 63))
             }
             Kind::Max | Kind::Absmax => {
-                numerics::canonical(fastmash_numeric_contract::Raw80::new(0x7fff, 1 << 63))
+                numerics::canonical(crate::numeric_contract::Raw80::new(0x7fff, 1 << 63))
             }
             _ => super::quiet_nan(),
         }));

@@ -676,7 +676,7 @@ fn admitted_records(
     let (shape, threads) = match collator {
         Some(_) => (
             spill::Shape::language(keys.len())?,
-            fastmash_sort_process::sort_threads() as usize,
+            crate::sort_process::sort_threads() as usize,
         ),
         None => (spill::Shape::original(keys.len())?, 1),
     };
@@ -1275,7 +1275,7 @@ fn calculate_records<W: Write, S: spill::Codec>(
     });
     // Collation keys also make parallel language preparation worthwhile.
     let threads = if collator.is_some() || (share_keys && parallel_numeric && keys.len() == 1) {
-        fastmash_sort_process::sort_threads() as usize
+        crate::sort_process::sort_threads() as usize
     } else {
         1
     };

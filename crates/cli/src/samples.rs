@@ -154,7 +154,7 @@ impl Samples {
             let is_nan = |value| {
                 matches!(
                     super::numerics::Numerics::value80(value).classify(),
-                    fastmash_numeric_contract::ValueClass::Nan { .. }
+                    crate::numeric_contract::ValueClass::Nan { .. }
                 )
             };
             if !is_nan(self.values[0])
@@ -237,9 +237,9 @@ fn merge_initialized(values: &mut [Value], scratch: &mut [Value]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::numeric_contract::Raw80;
     use crate::numerics::test_support::Inspect;
-    use fastmash_numeric_contract::Raw80;
-    use fastmash_portable_numerics::percentile_position;
+    use crate::portable_numerics::percentile_position;
 
     fn original_merge(values: &mut [Value], scratch: &mut [Value]) {
         let n = values.len();

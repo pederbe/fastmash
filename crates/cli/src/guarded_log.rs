@@ -427,8 +427,8 @@ mod tests {
     }
     #[test]
     fn accepted_random_logarithms_match_retained_engine() {
-        use fastmash_numeric_contract::{Raw80, Value80};
-        let mut retained = fastmash_portable_numerics::PortableNumerics::new().unwrap();
+        use crate::numeric_contract::{Raw80, Value80};
+        let mut retained = crate::portable_numerics::PortableNumerics::new().unwrap();
         let (mut accepted, mut total) = (0, 0);
         let mut state = 0x2545f4914f6cdd1du128;
         for _ in 0..20_000 {
@@ -445,7 +445,7 @@ mod tests {
                     continue;
                 }
                 let input = Value80::from_raw(Raw80::try_from_bits(bits).unwrap()).unwrap();
-                let input = fastmash_portable_numerics::ArithmeticValue::try_from(input).unwrap();
+                let input = crate::portable_numerics::ArithmeticValue::try_from(input).unwrap();
                 assert_eq!(
                     actual,
                     retained.log(input).unwrap().raw().to_bits(),
