@@ -4,6 +4,7 @@
 use fastmash_corpus_driver::windows_output;
 use std::{
     fs,
+    os::windows::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Output},
     time::Duration,
@@ -32,7 +33,7 @@ impl Workflow {
         fs::write(&script_path, script).unwrap();
         let mut command = if delayed_parent {
             let mut command = Command::new(std::env::var_os("ComSpec").unwrap());
-            command.args(["/d", "/v:on", "/s", "/c"]).arg(format!(
+            command.args(["/d", "/v:on", "/s", "/c"]).raw_arg(format!(
                 "\"\"{}\" -NoProfile -NonInteractive -File \"{}\"\"",
                 self.shell.display(),
                 script_path.display()
@@ -63,6 +64,7 @@ impl Drop for Workflow {
         }
     }
 }
+#[track_caller]
 fn success(observed: &Output) {
     assert!(observed.status.success(), "{observed:?}");
     assert!(observed.stderr.is_empty(), "{observed:?}");
