@@ -87,6 +87,22 @@ fn redirected_bytes_are_binary_and_unicode_paths_work() {
     let result = pipe(&["reverse"], bytes);
     assert!(result.status.success(), "{result:?}");
     assert_eq!(result.stdout, bytes);
+    // Exercise paths parsed and opened by the product, not only inherited files.
+    let before = fixture.file("before é 🦀.tsv", b"2\n");
+    let after = fixture.file("after é 🦀.tsv", b"5\n");
+    let result = finish(
+        command(&["compare"])
+            .arg(before)
+            .arg(after)
+            .args(["sum", "1"])
+            .spawn()
+            .unwrap(),
+    );
+    assert!(result.status.success(), "{result:?}");
+    assert_eq!(
+        result.stdout,
+        b"matched\t\tnot_requested\t2\t5\t3\tavailable\t150\tavailable\n"
+    );
 }
 
 #[test]
