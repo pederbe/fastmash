@@ -3,5 +3,6 @@ use serde::Serialize;
 #[derive(Clone, Debug, Serialize)]
 pub struct Destination {
     pub isatty: bool,
+    pub kind: &'static str,
     pub block_size: u64,
 }

@@ -163,3 +163,20 @@ fn shards_cover_the_same_manifest_once_without_changing_expectations() {
     invalid.shard = Some((0, 0));
     assert!(run(&invalid, &mut Vec::new()).is_err());
 }
+
+#[test]
+fn held_file_output_remains_a_real_regular_file() {
+    let mut value = case("held-file", "echo", b"1\n", b"1\n", b"", 0);
+    value["observe_held"] = json!(true);
+    value["expected"]["held"] = json!({"alive":true,"bytes":0});
+    let fixture = Fixture::new(&[value]);
+    let options = fixture.options(false);
+    let result = run(&options, &mut Vec::new()).unwrap();
+    assert_eq!(result.passed, 1);
+    assert!(result.failed.is_empty());
+    let record: Value = serde_json::from_str(
+        &fs::read_to_string(options.evidence_dir.unwrap().join("observations.jsonl")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(record["observed"]["destination"]["kind"], "regular-file");
+}

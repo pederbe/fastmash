@@ -185,6 +185,35 @@ impl Capture {
     }
 }
 
+enum OutputCapture {
+    Pipe(Capture),
+    File(PathBuf),
+}
+impl OutputCapture {
+    fn snapshot(&self) -> Result<Vec<u8>> {
+        match self {
+            Self::Pipe(capture) => capture.snapshot(),
+            Self::File(path) => {
+                let mut bytes = Vec::new();
+                File::open(path)?.take(CAP + 1).read_to_end(&mut bytes)?;
+                Ok(bytes)
+            }
+        }
+    }
+    fn overflow(&self) -> Result<bool> {
+        match self {
+            Self::Pipe(capture) => capture.overflow(),
+            Self::File(path) => Ok(fs::metadata(path)?.len() > CAP),
+        }
+    }
+    fn finish(self) -> Result<Vec<u8>> {
+        match self {
+            Self::Pipe(capture) => capture.finish(),
+            Self::File(_) => self.snapshot(),
+        }
+    }
+}
+
 pub(crate) fn invoke(
     case: &Case,
     binary: &Path,
@@ -197,21 +226,37 @@ pub(crate) fn invoke(
     let data = decode(&case.input_hex)?;
     let (out_reader, out_writer) = io::pipe()?;
     let (err_reader, err_writer) = io::pipe()?;
-    let captured = if case.io == "closed-pipe" || case.io == "full" {
+    let regular_output = case.io == "normal" && case.observes_held();
+    let (captured, output) = if regular_output {
         drop(out_reader);
-        None
+        drop(out_writer);
+        let path = directory.join("stdout");
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        (Some(OutputCapture::File(path)), Stdio::from(file))
+    } else if case.io == "full" {
+        drop(out_reader);
+        drop(out_writer);
+        (
+            None,
+            Stdio::from(
+                full.as_mut()
+                    .ok_or_else(|| Error::message("missing full output"))?
+                    .destination()?,
+            ),
+        )
+    } else if case.io == "closed-pipe" {
+        drop(out_reader);
+        (None, Stdio::from(out_writer))
     } else {
-        Some(Capture::new(out_reader))
+        (
+            Some(OutputCapture::Pipe(Capture::new(out_reader))),
+            Stdio::from(out_writer),
+        )
     };
     let error_capture = Capture::new(err_reader);
-    let output = match case.io.as_str() {
-        "full" => Stdio::from(
-            full.as_mut()
-                .ok_or_else(|| Error::message("missing full output"))?
-                .destination()?,
-        ),
-        _ => Stdio::from(out_writer),
-    };
     let mut pump = None;
     let mut release: Option<mpsc::Sender<()>> = None;
     let input = if case.io == "directory" {
@@ -293,13 +338,13 @@ pub(crate) fn invoke(
         overflow = error_capture.overflow()?
             || captured
                 .as_ref()
-                .map(Capture::overflow)
+                .map(OutputCapture::overflow)
                 .transpose()?
                 .unwrap_or(false);
         if held.is_none() && observation_end.is_some_and(|end| Instant::now() >= end) {
             let bytes = captured
                 .as_ref()
-                .map(Capture::snapshot)
+                .map(OutputCapture::snapshot)
                 .transpose()?
                 .unwrap_or_default();
             held = Some(Held {
@@ -330,7 +375,7 @@ pub(crate) fn invoke(
             .map_err(|_| Error::message("input pump did not stop after Job cleanup"))?;
     }
     let stdout = captured
-        .map(Capture::finish)
+        .map(OutputCapture::finish)
         .transpose()?
         .unwrap_or_default();
     let stderr = error_capture.finish()?;
@@ -361,6 +406,11 @@ pub(crate) fn invoke(
         destination: case.observes_held().then_some(Destination {
             isatty: false,
             block_size: 8192,
+            kind: if regular_output {
+                "regular-file"
+            } else {
+                "pipe"
+            },
         }),
         acknowledged: None,
         input_error_mechanism: None,
