@@ -17,7 +17,7 @@ Facts about other tools come from their documentation, checked September 2026.
 | Grouped statistics | Yes | Yes | Yes (`stats1 -g`) | Through `pivotp` or `sqlp` | Yes (`summary -g`) |
 | Joins and expression filters | No | No | Yes | Yes | Yes |
 | Table reshaping | Transpose and crosstab | Transpose and crosstab | Yes | Yes | Yes |
-| Platforms | Linux, macOS, Windows | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
+| Platforms | Linux, macOS 15+, Windows 11 | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
 
 ## GNU datamash
 
