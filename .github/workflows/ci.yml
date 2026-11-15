@@ -220,7 +220,8 @@ jobs:
       !cancelled() &&
       (github.event_name == 'workflow_dispatch' ||
        (!github.event.repository.private &&
-        (needs.changes.outputs.application != 'false' || needs.changes.outputs.configuration == 'true')))
+        (needs.changes.outputs.application != 'false' || needs.changes.outputs.configuration == 'true' ||
+         contains(format(' {0} ', needs.changes.outputs.packages), ' fastmash-corpus-driver '))))
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
