@@ -14,6 +14,10 @@ pub struct Observed {
     pub process_group: u32,
     pub returncode: i32,
     pub timed_out: bool,
+    #[cfg(windows)]
+    pub spawn_millis: u128,
+    #[cfg(windows)]
+    pub elapsed_millis: u128,
     pub overflow: bool,
     pub cleanup_confirmed: bool,
     pub stdin_held_until_exit: bool,

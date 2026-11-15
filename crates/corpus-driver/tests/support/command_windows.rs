@@ -6,7 +6,32 @@ use std::{
 #[allow(clippy::zombie_processes)] // Deliberately outlive the leader to test Job cancellation.
 pub(super) fn main() {
     let mut args = std::env::args().skip(1);
-    match args.next().as_deref().unwrap_or("echo") {
+    let action = args.next().unwrap_or_else(|| "echo".into());
+    let trace = if matches!(action.as_str(), "echo" | "file-echo" | "descendant") {
+        std::env::args().nth(3)
+    } else {
+        None
+    };
+    let record = |phase: &str| {
+        if let Some(path) = &trace {
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .unwrap();
+            writeln!(
+                file,
+                "{} {phase}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+            )
+            .unwrap();
+        }
+    };
+    record("main");
+    match action.as_str() {
         action @ ("echo" | "file-echo") => {
             if action == "file-echo" {
                 assert!(
@@ -15,7 +40,9 @@ pub(super) fn main() {
                 );
             }
             let mut bytes = Vec::new();
+            record("read-start");
             std::io::stdin().read_to_end(&mut bytes).unwrap();
+            record("read-eof");
             std::io::stdout().write_all(&bytes).unwrap();
         }
         "console-held" => {
@@ -84,6 +111,7 @@ pub(super) fn main() {
         }
         "stall" => std::thread::sleep(Duration::from_secs(30)),
         "descendant" => {
+            record("descendant-spawn-start");
             Command::new(std::env::current_exe().unwrap())
                 .arg("mark-later")
                 .arg(args.next().unwrap())
@@ -92,6 +120,7 @@ pub(super) fn main() {
                 .stderr(Stdio::inherit())
                 .spawn()
                 .unwrap();
+            record("descendant-spawn-complete");
         }
         "mark-later" => {
             std::thread::sleep(Duration::from_secs(2));

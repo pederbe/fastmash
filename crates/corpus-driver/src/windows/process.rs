@@ -317,6 +317,7 @@ pub(crate) fn invoke(
         .stderr(err_writer);
     let started = Instant::now();
     let mut running = Running::spawn(command)?;
+    let spawn_millis = started.elapsed().as_millis();
     let process_group = running.child.id();
     let mut held = None;
     let mut observation_end = None;
@@ -403,6 +404,8 @@ pub(crate) fn invoke(
         process_group,
         returncode: status.and_then(|status| status.code()).unwrap_or(1),
         timed_out,
+        spawn_millis,
+        elapsed_millis: started.elapsed().as_millis(),
         overflow,
         cleanup_confirmed: true,
         stdin_held_until_exit,

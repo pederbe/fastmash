@@ -34,7 +34,13 @@ impl Fixture {
         .unwrap();
         let mut content = Vec::new();
         for case in cases {
-            serde_json::to_writer(&mut content, case).unwrap();
+            let mut case = case.clone();
+            if matches!(case["args"][0].as_str(), Some("echo" | "file-echo")) {
+                let args = case["args"].as_array_mut().unwrap();
+                args.push(json!(""));
+                args.push(json!(root.join(format!("startup-{}.log", content.len()))));
+            }
+            serde_json::to_writer(&mut content, &case).unwrap();
             content.push(b'\n');
         }
         let mut gzip = GzEncoder::new(Vec::new(), Compression::default());
@@ -111,7 +117,11 @@ fn descendants_are_cancelled_after_the_leader_exits() {
     let mut value = case("descendant", "descendant", b"", b"", b"", 0);
     let fixture = Fixture::new(&[]);
     let marker = fixture.root.join("escaped");
-    value["args"] = json!(["descendant", marker]);
+    value["args"] = json!([
+        "descendant",
+        marker,
+        fixture.root.join("startup-descendant.log")
+    ]);
     // Recreate only the fixture manifest, preserving the same owned directory.
     let mut content = serde_json::to_vec(&value).unwrap();
     content.push(b'\n');
