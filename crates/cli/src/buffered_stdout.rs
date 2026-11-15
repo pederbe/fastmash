@@ -182,7 +182,8 @@ impl<'a, W: Write> BufferedStdout<'a, W> {
                 Err(error) => error.into(),
             };
             self.first_error.get_or_insert(failure);
-            self.unsupported_write |= !matches!(failure.code, Some(9 | 28));
+            self.unsupported_write |=
+                !super::io_errors::supported_output(failure.code, failure.kind);
             return Err(failure);
         }
         Ok(())

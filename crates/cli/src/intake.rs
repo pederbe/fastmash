@@ -358,7 +358,7 @@ pub(super) fn write_full_warning(program: &[u8]) {
 
 /// The diagnostic for a read error that ended the input.
 pub(super) fn read_failure(error: &io::Error) -> Failure {
-    if error.raw_os_error() == Some(5) {
+    if super::io_errors::device_read(error.raw_os_error()) {
         failure(b"read error: Input/output error\n".to_vec())
     } else {
         os_failure(error, true)

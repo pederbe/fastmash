@@ -1,23 +1,30 @@
 //! Preserve invalid inherited streams without disabling Rust's descriptor safety.
 #![forbid(unsafe_code)]
 use super::platform;
+#[cfg(unix)]
 use std::{
     fs,
-    io::{self, Read, Seek, Write},
     os::{fd::AsFd, unix::fs::MetadataExt},
+};
+use std::{
+    io::{self, Read, Seek, Write},
     sync::atomic::{AtomicBool, Ordering},
 };
 
 static STDERR_FAILED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(unix)]
 pub(super) use super::startup::originally_closed;
+#[cfg(windows)]
+pub(super) use super::windows_stdio::{originally_closed, regular_input_length};
 
 pub(super) fn finish_stderr() -> bool {
     let failed = STDERR_FAILED.load(Ordering::Relaxed);
     // Standard error has no Rust owner and this is its last use.
     let closed = platform::close(2);
     !failed
-        && (closed.is_ok() || closed.is_err_and(|error| error.raw_os_error() == Some(libc::EBADF)))
+        && (closed.is_ok()
+            || closed.is_err_and(|error| super::io_errors::bad_descriptor(error.raw_os_error())))
 }
 
 pub(super) struct Stdin;
@@ -27,7 +34,7 @@ impl Read for Stdin {
             let result = platform::read(0, bytes);
             if !result
                 .as_ref()
-                .is_err_and(|error| error.raw_os_error() == Some(libc::EINTR))
+                .is_err_and(|error| error.kind() == io::ErrorKind::Interrupted)
             {
                 return result;
             }
@@ -45,6 +52,7 @@ impl Seek for Stdin {
 /// storage, which can be read again from an earlier offset. Kernel pseudo-
 /// files regenerate their content on each read, and are left out: those
 /// under /proc report no length, those under /sys occupy no blocks.
+#[cfg(unix)]
 pub(super) fn regular_input_length() -> Option<u64> {
     let file = fs::File::from(io::stdin().as_fd().try_clone_to_owned().ok()?);
     let metadata = file.metadata().ok()?;
@@ -56,7 +64,7 @@ pub(super) fn write(fd: usize, bytes: &[u8]) -> io::Result<usize> {
         let result = platform::write(fd, bytes);
         if !result
             .as_ref()
-            .is_err_and(|error| error.raw_os_error() == Some(libc::EINTR))
+            .is_err_and(|error| error.kind() == io::ErrorKind::Interrupted)
         {
             return result;
         }

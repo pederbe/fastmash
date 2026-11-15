@@ -12,7 +12,7 @@ use crate::conversion::{
     bytes::{self, Lexeme},
     profile::Profile,
 };
-use std::{ffi::OsString, io::BufRead, os::unix::ffi::OsStrExt};
+use std::{ffi::OsString, io::BufRead};
 
 pub(super) const SAMPLE_BYTES: usize = 128;
 
@@ -63,7 +63,7 @@ impl Settings {
         let mut declarations = Vec::new();
         let mut arguments = arguments.iter();
         while let Some(control) = arguments.next() {
-            match control.as_bytes() {
+            match control.as_encoded_bytes() {
                 b"examples" => {
                     let limit = decimal_count(arguments.next(), "examples")?;
                     if limit > isize::MAX as usize / std::mem::size_of::<Example>() {
@@ -104,18 +104,20 @@ impl Settings {
                             b"health: named fields require --header-in or -H\nhint: use a header option if the first record names the fields, or use field numbers\n".to_vec(),
                         ));
                     }
-                    let rule = match control.as_bytes() {
-                        b"type" => Rule::Type(match arguments.next().map(|kind| kind.as_bytes()) {
-                            Some(b"integer") => Type::Integer,
-                            Some(b"number") => Type::Number,
-                            Some(b"text") => Type::Text,
-                            _ => {
-                                return Err(failure(
-                                    b"health: type requires integer, number or text\n".to_vec(),
-                                )
-                                .with_hint(super::failure::hints::HEALTH_TYPE));
-                            }
-                        }),
+                    let rule = match control.as_encoded_bytes() {
+                        b"type" => {
+                            Rule::Type(match arguments.next().map(|kind| kind.as_encoded_bytes()) {
+                                Some(b"integer") => Type::Integer,
+                                Some(b"number") => Type::Number,
+                                Some(b"text") => Type::Text,
+                                _ => {
+                                    return Err(failure(
+                                        b"health: type requires integer, number or text\n".to_vec(),
+                                    )
+                                    .with_hint(super::failure::hints::HEALTH_TYPE));
+                                }
+                            })
+                        }
                         b"required" => Rule::Presence(Presence::Required),
                         b"nonmissing" => Rule::Presence(Presence::Nonmissing),
                         _ => unreachable!(),
@@ -126,7 +128,7 @@ impl Settings {
                 _ => {
                     let mut message = b"health: unknown control ".to_vec();
                     super::named_fields::quote_with(
-                        control.as_bytes(),
+                        control.as_encoded_bytes(),
                         &mut message,
                         options.locale.utf8,
                     );
@@ -152,7 +154,7 @@ impl Settings {
 }
 
 fn decimal_count(argument: Option<&OsString>, control: &str) -> Result<usize, Failure> {
-    let bytes = argument.map_or(&[][..], |argument| argument.as_bytes());
+    let bytes = argument.map_or(&[][..], |argument| argument.as_encoded_bytes());
     if bytes.is_empty() || !bytes.iter().all(u8::is_ascii_digit) {
         return Err(failure(
             format!("health: {control} requires a nonnegative decimal integer\n").into_bytes(),

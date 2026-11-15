@@ -7,7 +7,7 @@ use crate::conversion::{
     profile::Profile,
 };
 use crate::numeric_contract::IntegerOperand;
-use std::{ffi::OsString, os::unix::ffi::OsStrExt};
+use std::ffi::OsString;
 
 use super::command_memory::reserve;
 
@@ -98,9 +98,9 @@ impl Scanner {
         if args.is_empty() {
             return Err(unsupported("unsupported command: no operation specified"));
         }
-        let length = args
-            .iter()
-            .try_fold(args.len() - 1, |n, arg| n.checked_add(arg.as_bytes().len()));
+        let length = args.iter().try_fold(args.len() - 1, |n, arg| {
+            n.checked_add(arg.as_encoded_bytes().len())
+        });
         let length = length.ok_or_else(|| unsupported("command memory allocation failed"))?;
         let mut script = Vec::new();
         reserve(&mut script, length)?;
@@ -108,7 +108,7 @@ impl Scanner {
             if index != 0 {
                 script.push(b' ');
             }
-            script.extend_from_slice(arg.as_bytes());
+            script.extend_from_slice(arg.as_encoded_bytes());
         }
         if !grouped && script.is_empty() {
             return Err(
@@ -901,10 +901,16 @@ pub(super) fn command_for_format(
     profile: Profile,
     utf8: bool,
 ) -> Result<Command, Failure> {
-    if args.first().is_some_and(|arg| arg.as_bytes() == b"compare") {
+    if args
+        .first()
+        .is_some_and(|arg| arg.as_encoded_bytes() == b"compare")
+    {
         return comparison_command(args, group, named_numbers, profile, utf8);
     }
-    if args.first().is_some_and(|arg| arg.as_bytes() == b"health") {
+    if args
+        .first()
+        .is_some_and(|arg| arg.as_encoded_bytes() == b"health")
+    {
         return Ok(Command {
             mode: Mode::Health,
             keys: Vec::new(),
@@ -1106,18 +1112,18 @@ fn comparison_command(
     };
     let before = args.get(1).ok_or_else(missing)?;
     let after = args.get(2).ok_or_else(missing)?;
-    if before.as_bytes() == b"-" && after.as_bytes() == b"-" {
+    if before.as_encoded_bytes() == b"-" && after.as_encoded_bytes() == b"-" {
         return Err(
             failure(b"compare permits stdin on at most one side\n".to_vec())
                 .with_hint(hints::COMPARE_STDIN),
         );
     }
     let copy = |path: &OsString| -> Result<OsString, Failure> {
-        use std::os::unix::ffi::OsStringExt;
-        let mut bytes = Vec::new();
-        reserve(&mut bytes, path.as_bytes().len())?;
-        bytes.extend_from_slice(path.as_bytes());
-        Ok(OsString::from_vec(bytes))
+        let mut copy = OsString::new();
+        copy.try_reserve_exact(path.len())
+            .map_err(|_| unsupported("memory allocation failed"))?;
+        copy.push(path);
+        Ok(copy)
     };
     let unsigned = |argument: Option<&OsString>| -> Result<u64, Failure> {
         let bytes = argument
@@ -1125,7 +1131,7 @@ fn comparison_command(
                 failure(b"missing comparison modifier value\n".to_vec())
                     .with_hint(hints::COMPARISON_MODIFIER)
             })?
-            .as_bytes();
+            .as_encoded_bytes();
         if bytes.is_empty() || !bytes.iter().all(u8::is_ascii_digit) {
             return Err(failure(
                 b"comparison modifiers require positive unsigned decimal integers\n".to_vec(),
@@ -1144,11 +1150,14 @@ fn comparison_command(
             })
     };
     let mut at = 3;
-    let ranking = if args.get(at).is_some_and(|arg| arg.as_bytes() == b"rank") {
+    let ranking = if args
+        .get(at)
+        .is_some_and(|arg| arg.as_encoded_bytes() == b"rank")
+    {
         at += 1;
         let result = unsigned(args.get(at))?;
         at += 1;
-        let percent = match args.get(at).map(|arg| arg.as_bytes()) {
+        let percent = match args.get(at).map(|arg| arg.as_encoded_bytes()) {
             Some(b"percent") => {
                 at += 1;
                 true
@@ -1159,7 +1168,10 @@ fn comparison_command(
             }
             _ => false,
         };
-        let limit = if args.get(at).is_some_and(|arg| arg.as_bytes() == b"limit") {
+        let limit = if args
+            .get(at)
+            .is_some_and(|arg| arg.as_encoded_bytes() == b"limit")
+        {
             at += 1;
             let limit = unsigned(args.get(at))?;
             at += 1;

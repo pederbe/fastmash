@@ -530,6 +530,29 @@ logs, per-case dispositions and hosted comparison data. The checkout stays clean
 for archive provenance. A prepared workflow or an Apple-target compile check is
 not native runtime evidence, release qualification or a performance claim.
 
+## Native Windows backend development
+
+Windows 11 x64 builds use stable Rust's `x86_64-pc-windows-msvc` target and
+the Visual Studio C++ build tools. This development gate covers the backend,
+not the full command corpus or release installation. Windows users should
+continue using WSL2 until native release qualification is complete.
+
+Run from native PowerShell:
+
+```powershell
+cargo clippy -p fastmash --bin fastmash --test windows_backend --locked -- -D warnings
+cargo test --release -p fastmash --test windows_backend --locked
+```
+
+The focused tests cover binary streams, native Unicode paths, file/pipe grouping,
+wrong-access and broken-pipe errors, unpaired UTF-16 refusal, forced spill,
+storage failure and cleanup after completion or termination. The inherited
+original standard handles remain open until process cleanup. See
+[ADR 0021](docs/src/adr/0021-windows-development-backend.md) for the ownership
+boundary. The Unix corpus driver and remaining Unix-only test fixtures are
+outside this gate. Hosted Windows checks do not replace native Windows 11
+validation for changes to this backend.
+
 ## Website checks
 
 Changes confined to `docs/` and Markdown files need the website build, local
