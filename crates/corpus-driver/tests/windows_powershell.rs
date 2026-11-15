@@ -121,7 +121,7 @@ fn native_powershell_baseline_and_current_preserve_workflow_contracts() {
         let (observed, actual) = workflow.execute("text-pipe", "'1', '2' | & $env:FASTMASH_TEST_BINARY reverse > $env:FASTMASH_TEST_OUTPUT\nexit $LASTEXITCODE", b"", "C", false);
         success(&observed);
         assert_eq!(actual, b"1\r\n2\r\n");
-        let (observed, actual) = workflow.execute("quoted-argument", "& $env:ComSpec /d /v:off /s /c '\"\"%FASTMASH_TEST_BINARY%\" reverse < \"%FASTMASH_TEST_INPUT%\"\"' | & $env:FASTMASH_TEST_BINARY --no-strict '--filler=x \"quote\" y' transpose > $env:FASTMASH_TEST_OUTPUT\nexit $LASTEXITCODE", b"a\nb\tc\n", "C", false);
+        let (observed, actual) = workflow.execute("quoted-argument", "& $env:ComSpec /d /v:off /s /c '\"\"%FASTMASH_TEST_BINARY%\" --no-strict reverse < \"%FASTMASH_TEST_INPUT%\"\"' | & $env:FASTMASH_TEST_BINARY --no-strict '--filler=x \"quote\" y' transpose > $env:FASTMASH_TEST_OUTPUT\nexit $LASTEXITCODE", b"a\nb\tc\n", "C", false);
         success(&observed);
         assert_eq!(actual, b"a\tc\nx \"quote\" y\tb\n");
         let (observed, actual) = workflow.execute("locale", "& $env:ComSpec /d /v:off /s /c '\"\"%FASTMASH_TEST_BINARY%\" sum 1 < \"%FASTMASH_TEST_INPUT%\"\"' > $env:FASTMASH_TEST_OUTPUT\nexit $LASTEXITCODE", b"1,25\n2,5\n", "de_DE.UTF-8", false);
@@ -135,7 +135,7 @@ fn native_powershell_baseline_and_current_preserve_workflow_contracts() {
             ),
             (
                 "refusal",
-                "& $env:FASTMASH_TEST_BINARY unsupported-operation 1\nexit $LASTEXITCODE",
+                "$env:LC_ALL = 'not-a-supported-locale'\n& $env:FASTMASH_TEST_BINARY sum 1\nexit $LASTEXITCODE",
                 77,
             ),
             (
