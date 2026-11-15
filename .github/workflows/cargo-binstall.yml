@@ -146,3 +146,50 @@ jobs:
             test ! -e "$RUNNER_TEMP/root/bin/$program"
           done
           test -z "$(ls -A "$RUNNER_TEMP/root/bin")"
+
+  windows:
+    name: cargo-binstall on Windows
+    # Windows assets begin with releases using this workflow. PR checks use the
+    # frozen candidate archive; published registry installation runs after upload.
+    if: github.event_name != 'pull_request' && inputs.version != ''
+    runs-on: windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      REQUESTED_VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download and verify the published Windows archive
+        run: |
+          $version = $env:REQUESTED_VERSION -replace '^v',''
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Expected a stable version' }
+          "VERSION=$version" >> $env:GITHUB_ENV
+          $name = "fastmash-v$version-x86_64-pc-windows-msvc"
+          New-Item -ItemType Directory "$env:RUNNER_TEMP/archive" | Out-Null
+          gh release download "v$version" --repo $env:GITHUB_REPOSITORY --dir "$env:RUNNER_TEMP/archive" --pattern "$name.tar.gz" --pattern "$name.tar.gz.sha256"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $archive = "$env:RUNNER_TEMP/archive/$name.tar.gz"
+          gh attestation verify $archive --repo $env:GITHUB_REPOSITORY --signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/release.yml"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $expected = (Get-Content "$archive.sha256" -Raw).Split(' ')[0]
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Published archive hash differs' }
+          tar -xzf $archive -C "$env:RUNNER_TEMP/archive"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "EXPECTED_BINARY_SHA=$((Get-FileHash "$env:RUNNER_TEMP/archive/$name/fastmash.exe" -Algorithm SHA256).Hash.ToLowerInvariant())" >> $env:GITHUB_ENV
+      - name: Install current cargo-binstall and use the published crate metadata
+        run: |
+          $archive = "$env:RUNNER_TEMP/binstall.zip"
+          Invoke-WebRequest https://github.com/cargo-bins/cargo-binstall/releases/download/v1.27.0/cargo-binstall-x86_64-pc-windows-msvc.zip -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '624ae880d18eb0ee8c7934982e52b2aca23998cb87a01b1e59223083b6ee5dae') { throw 'cargo-binstall hash differs' }
+          Expand-Archive $archive "$env:RUNNER_TEMP/binstall"
+          & "$env:RUNNER_TEMP/binstall/cargo-binstall.exe" "fastmash@$env:VERSION" --bin fastmash --root "$env:RUNNER_TEMP/binstalled" --no-confirm --disable-telemetry --strategies crate-meta-data
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $binary = "$env:RUNNER_TEMP/binstalled/bin/fastmash.exe"
+          if ((Get-FileHash $binary -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:EXPECTED_BINARY_SHA) { throw 'cargo-binstall substituted executable bytes' }
+          & $binary --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item "$env:RUNNER_TEMP/binstalled" -Recurse -Force
+          if (Test-Path $binary) { throw 'cargo-binstall installation remains' }

@@ -34,6 +34,7 @@ pub enum Target {
     Linux,
     LinuxMusl,
     Macos,
+    Windows,
 }
 
 impl Target {
@@ -42,6 +43,7 @@ impl Target {
             "x86_64-unknown-linux-gnu" => Ok(Self::Linux),
             "x86_64-unknown-linux-musl" => Ok(Self::LinuxMusl),
             "aarch64-apple-darwin" => Ok(Self::Macos),
+            "x86_64-pc-windows-msvc" => Ok(Self::Windows),
             _ => Err(format!("unsupported target: {value}").into()),
         }
     }
@@ -51,6 +53,7 @@ impl Target {
             Self::Linux => "x86_64-unknown-linux-gnu",
             Self::LinuxMusl => "x86_64-unknown-linux-musl",
             Self::Macos => "aarch64-apple-darwin",
+            Self::Windows => "x86_64-pc-windows-msvc",
         }
     }
 }
@@ -119,6 +122,12 @@ pub fn write_notices(metadata: &Value, target: Target, out: &mut impl Write) -> 
         "# Third-party licenses\n\nThe fastmash executable includes the following third-party code.\n\n{RUST_STD}\n"
     )?;
     write!(out, "Target: `{}`.\n\n", target.triple())?;
+    if target == Target::Windows {
+        writeln!(
+            out,
+            "## Microsoft C runtime\n\nThe Windows archive links the MSVC C runtime statically. Microsoft runtime\ncomponents are covered by the Visual Studio license and distributable-code terms:\n<https://visualstudio.microsoft.com/license-terms/> and\n<https://learn.microsoft.com/cpp/windows/redistributing-visual-cpp-files>.\n"
+        )?;
+    }
     if target == Target::LinuxMusl {
         write!(
             out,

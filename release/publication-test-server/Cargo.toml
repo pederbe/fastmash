@@ -33,3 +33,7 @@ workspace = true
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+[dependencies]
+# Stream SHA-256 admission of exact Windows archive executables.
+sha2 = { version = "0.11.1", default-features = false }

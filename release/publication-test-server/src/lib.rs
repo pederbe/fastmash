@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod bytes;
+pub mod windows_archive;
 
 #[cfg(unix)]
 pub mod installed;

@@ -32,8 +32,18 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
 
+  windows:
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+    uses: ./.github/workflows/windows.yml
+    permissions:
+      contents: read
+      attestations: read
+    with:
+      release-archive: true
+      check-installation: false
+
   draft:
-    needs: [build, macos]
+    needs: [build, macos, windows]
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -53,6 +63,19 @@ jobs:
           test "${digest%% *}" = "$EXPECTED_SHA256"
           (cd macos && sha256sum -c ./*.tar.gz.sha256)
           cp macos/*.tar.gz macos/*.tar.gz.sha256 assets/
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-archive
+          path: windows
+      - name: Stage the frozen Windows archive
+        env:
+          EXPECTED_SHA256: ${{ needs.windows.outputs.archive-sha256 }}
+        run: |
+          test -n "$EXPECTED_SHA256"
+          digest=$(sha256sum windows/*.tar.gz)
+          test "${digest%% *}" = "$EXPECTED_SHA256"
+          (cd windows && sha256sum -c ./*.tar.gz.sha256)
+          cp windows/*.tar.gz windows/*.tar.gz.sha256 assets/
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
@@ -95,8 +118,19 @@ jobs:
       release-archive: true
       archive-sha256: ${{ needs.macos.outputs.archive-sha256 }}
 
+  delivered-windows:
+    needs: [draft, windows]
+    uses: ./.github/workflows/windows-install.yml
+    permissions:
+      contents: write
+      attestations: read
+    with:
+      source: release
+      tag: ${{ github.ref_name }}
+      archive-sha256: ${{ needs.windows.outputs.archive-sha256 }}
+
   publish:
-    needs: [draft, delivered-macos, crates-check]
+    needs: [draft, delivered-macos, delivered-windows, crates-check]
     runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
