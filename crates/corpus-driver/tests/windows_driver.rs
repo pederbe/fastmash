@@ -61,6 +61,27 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        for entry in fs::read_dir(&self.root).unwrap().flatten() {
+            let path = entry.path();
+            if entry.file_name().to_string_lossy().starts_with("startup-") {
+                eprintln!(
+                    "control startup {}: {}",
+                    path.display(),
+                    fs::read_to_string(&path).unwrap()
+                );
+            } else if let Ok(records) = fs::read_to_string(path.join("observations.jsonl")) {
+                for line in records.lines() {
+                    let value: Value = serde_json::from_str(line).unwrap();
+                    eprintln!(
+                        "control {}: spawn={}ms elapsed={}ms timed_out={}",
+                        value["id"],
+                        value["observed"]["spawn_millis"],
+                        value["observed"]["elapsed_millis"],
+                        value["observed"]["timed_out"]
+                    );
+                }
+            }
+        }
         if !std::thread::panicking() {
             fs::remove_dir_all(&self.root).unwrap();
         }
