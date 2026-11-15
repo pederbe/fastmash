@@ -55,7 +55,7 @@ icu_properties_data_15 = { package = "icu_properties_data", version = "=1.3.4" }
 [target.'cfg(unix)'.dependencies]
 # Reuse the safe pipe-flag and group-signal interfaces used by the
 # corpus driver, without importing its command policies or first-party FFI.
-nix = { version = "0.31.3", default-features = false, features = ["fs", "signal"] }
+nix = { version = "0.32.0", default-features = false, features = ["fs", "signal"] }
 
 [lints]
 workspace = true

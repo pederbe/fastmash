@@ -121,12 +121,12 @@ jobs:
         run: |
           bash -n .github/scripts/*.sh
           bash .github/scripts/test-ci-scope.sh
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         if: needs.changes.outputs.configuration == 'true' || needs.changes.outputs.application != 'false' || needs.changes.outputs.packages != ''
         with:
           toolchain: stable
           components: rustfmt, clippy
-      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2
+      - uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2
         if: needs.changes.outputs.configuration == 'true' || needs.changes.outputs.application != 'false'
         with:
           tool: git-cliff@2.14.2
@@ -166,7 +166,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
           targets: x86_64-unknown-linux-musl
@@ -226,7 +226,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
           components: clippy
@@ -246,7 +246,7 @@ jobs:
           printf '61875daad67888798690dea3cb2748279df6ac299c5c6a857d67eed7642473d9  %s\n' "$RUNNER_TEMP/samply.tar.xz" | sha256sum -c -
           tar -xJf "$RUNNER_TEMP/samply.tar.xz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/samply-x86_64-unknown-linux-gnu" >> "$GITHUB_PATH"
-          cargo install hotpath --version 0.31.2 --bin hotpath-samply --no-default-features --locked
+          cargo install hotpath --version 0.31.3 --bin hotpath-samply --no-default-features --locked
           sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.yama.ptrace_scope=0 kernel.kptr_restrict=0
       - name: Capture attributed CPU samples
         if: runner.os == 'Linux'

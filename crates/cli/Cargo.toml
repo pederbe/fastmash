@@ -33,7 +33,7 @@ test = true
 
 [dependencies]
 # Optional diagnostics only. Ordinary builds do not compile or link hotpath.
-hotpath = { version = "0.31.2", optional = true, default-features = false }
+hotpath = { version = "0.31.3", optional = true, default-features = false }
 num-bigint = { version = "0.5.1", default-features = false }
 num-integer = { version = "0.1.47", default-features = false, features = ["i128"] }
 num-traits = { version = "0.2.19", default-features = false, features = ["i128"] }
@@ -42,7 +42,7 @@ libc = "0.2.191"
 # Safe SIGPIPE restoration through the existing libc dependency.
 sigpipe = "0.1.3"
 # Safe descriptor observations, closure, resource-limit and signal-mask queries.
-nix = { version = "0.31.3", default-features = false, features = ["fs", "resource", "signal"] }
+nix = { version = "0.32.0", default-features = false, features = ["fs", "resource", "signal"] }
 memchr = "2.8.3"
 # "unstable" only re-exports CollationKeySink, for sort keys that refuse
 # instead of aborting when they cannot grow.
@@ -85,7 +85,7 @@ hotpath-callgrind = ["hotpath", "hotpath/hotpath-callgrind"]
 csv-core = "0.1.13"
 # Safe descriptor file actions, access checks and bounded child reaping in tests.
 # Owned pseudo-terminals and raw mode setup use the term feature.
-nix = { version = "0.31.3", default-features = false, features = ["fs", "signal", "term", "poll"] }
+nix = { version = "0.32.0", default-features = false, features = ["fs", "signal", "term", "poll"] }
 
 # Reuse owned full-output and terminal-input transports in integration tests.
 fastmash-corpus-driver = { path = "../corpus-driver" }
