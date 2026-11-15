@@ -135,7 +135,7 @@ fn native_powershell_baseline_and_current_preserve_workflow_contracts() {
             ),
             (
                 "refusal",
-                "& $env:FASTMASH_TEST_BINARY rmdup 1,2\nexit $LASTEXITCODE",
+                "& $env:FASTMASH_TEST_BINARY rmdup '1,2'\nexit $LASTEXITCODE",
                 77,
             ),
             (
