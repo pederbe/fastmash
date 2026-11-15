@@ -54,8 +54,6 @@ gh attestation verify fastmash.tar.gz --repo pederbe/fastmash --signer-workflow 
 
 The macOS archive is not Apple-notarized.
 
-The published [benchmarks](benchmarks/index.md) measure qualified Linux release binaries. Hosted macOS checks do not extend those speed claims to macOS.
-
 ## Building from source
 
 Use the latest stable Rust and a C compiler (`cc`, or set `CC`).

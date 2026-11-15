@@ -5,6 +5,13 @@ performance-manifest prerequisite and manual publication step in
 [0011](0011-native-release-delivery.md). Delivery details were updated by
 [0013](0013-reuse-tested-release-artifacts.md) and [0014](0014-native-sorting-everywhere.md).
 
+The version-bound public benchmark presentation below is superseded. Benchmark
+pages describe the current release without release numbers or executable hashes.
+Refresh their measurements when updating comparisons. Change-scoped performance
+review and independent release delivery remain in force. The
+[release guide](https://github.com/pederbe/fastmash/blob/main/RELEASING.md#performance-acceptance)
+owns the current procedure.
+
 Assess performance when runtime code, dependencies or build recipes change.
 Compare affected workloads with the previous accepted build. New public speed
 claims require dated measurements identifying the executable and conditions.

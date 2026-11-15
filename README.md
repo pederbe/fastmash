@@ -39,7 +39,7 @@ Grouped summary
 
 ## Why Fastmash
 
-- **Speed.** Up to four times faster than GNU datamash 1.9 in
+- **Speed.** About five times faster than GNU datamash on RefGene quartiles in
   [published Linux benchmarks](https://fastmash.io/benchmarks/).
 - **Familiar commands.** Over 70 operations and modes, with grouping, headers,
   field selectors, percentiles, `crosstab` and `transpose`.
@@ -53,8 +53,7 @@ Grouped summary
 
 Fastmash runs on **Linux**, **macOS 15 and later**, and **Windows 11**.
 [Native Windows installation](https://fastmash.io/install.html#on-windows) uses
-PowerShell 7.4+ and needs a release containing a Windows archive.
-Earlier releases work through WSL2.
+PowerShell 7.4+.
 
 Install prebuilt programs with your package manager. On Debian or Ubuntu,
 add the [signed apt repository](https://fastmash.io/install.html#debian-and-ubuntu).

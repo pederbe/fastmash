@@ -36,13 +36,12 @@ curl -fsSL https://fastmash.io/install.sh | sh
 
 ## Fastmash is faster than GNU datamash<sup>*</sup>
 
-Up to four times faster, on real jobs: quantiles, grouped summaries and
-millions of decimals.
+About five times faster on RefGene quartiles, with faster grouped summaries
+and decimal totals too.
 
 {{#include benchmarks/core-jobs.svg}}
 
-<small>* Some disk-spilling sorts and the distinct-value geometric-mean
-job are slower on native Linux.
+<small>* Large sorted summaries can be slower on Linux.
 [All results and the method](benchmarks/index.md).</small>
 
 ## And better in other ways

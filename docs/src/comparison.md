@@ -26,14 +26,14 @@ everywhere and is packaged by every Linux distribution, conda-forge and
 Homebrew.
 
 **Choose Fastmash when** you run datamash commands on Linux and want them
-faster (up to 4 times on the published Linux [benchmarks](benchmarks/index.md)),
+faster (about five times on RefGene quartiles in the Linux [benchmarks](benchmarks/index.md)),
 want the same digits on every machine, or want clear errors where datamash
 1.9 aborts or reads past its data. Most commands transfer directly. The
 [differences](guide/differences.md) are listed on one page.
 
 **Stay with GNU datamash when** you need Intel macOS or
-a platform outside Fastmash's supported targets, or when you need a GNU-maintained tool. Some disk-spilling jobs still
-favor GNU on native Linux. The [benchmarks](benchmarks/index.md) show the
+a platform outside Fastmash's supported targets, or when you need a GNU-maintained tool. Large sorted summaries can still
+favor GNU on Linux. The [benchmarks](benchmarks/index.md) show the
 costs and measurement conditions.
 
 ## Miller

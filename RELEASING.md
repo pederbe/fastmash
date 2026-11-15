@@ -27,17 +27,14 @@ verification. See [ADR 0016](docs/src/adr/0016-release-plz.md).
 ## Performance acceptance
 
 Performance-affecting runtime, dependency and build-recipe changes keep the
-[predecessor guards](docs/src/benchmarks/method.md#acceptance-rules) during
+[predecessor guards](PROFILING.md#performance-acceptance) during
 change review. Select affected workloads and representative regression guards
 before measuring. A material regression needs a fix or an explicit disposition.
 New speed claims identify the executable, input, host and conditions.
 
-Routine versioning does not repeat a full benchmark campaign. Changing package
-versions can change executable layout, so a later release is not claimed to be
-byte-equivalent to an earlier measured build. Published results remain attached
-to their named version and date. The existing charts describe the measured
-Linux 0.1.0 binaries and do not become claims for later releases or macOS.
-See [ADR 0012](docs/src/adr/0012-release-delivery-and-performance.md).
+Keep the public benchmarks current when refreshing performance claims. Their
+pages show the timings and method without tying the documentation to a release
+number. Routine versioning does not repeat a full benchmark campaign.
 
 ## Build, test and publish
 
