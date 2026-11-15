@@ -55,7 +55,7 @@ such as `round` do not produce this warning.
 
 Fastmash writes results progressively through a small output buffer, so a
 command that fails part-way may already have printed earlier groups. In scripts, check the exit
-status rather than whether output appeared, and in pipelines enable
+status rather than whether output appeared. In Bash pipelines, enable
 `set -o pipefail` so an earlier command's failure isn't hidden:
 
 ```sh
