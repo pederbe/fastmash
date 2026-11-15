@@ -125,28 +125,24 @@ is needed. To update, rebuild the package from the current recipe.
 
 ### Debian or RPM package
 
-Each block looks up the latest release, then downloads and installs its
-package. Run it in Bash, entering `bash` first if you use Fish.
+Download the `.deb` package for Debian or Ubuntu, or the `.rpm` package for
+Fedora, RHEL and similar systems, from the
+[release downloads](https://github.com/pederbe/fastmash/releases/latest).
+Save it in an empty folder, then open a terminal there.
+
 On Debian or Ubuntu:
 
-```bash
-bash -eu <<'EOF'
-tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
-tag=${tag##*/}
-curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash_${tag#v}_amd64.deb"
-sudo apt install "./fastmash_${tag#v}_amd64.deb"
-EOF
+```sh
+sudo apt install ./fastmash_*.deb
 ```
 
 On Fedora, RHEL and similar:
 
-```bash
-bash -eu <<'EOF'
-tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
-tag=${tag##*/}
-sudo dnf install "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-${tag#v}-1.x86_64.rpm"
-EOF
+```sh
+sudo dnf install ./fastmash-*.rpm
 ```
+
+To update, repeat these steps with a fresh download.
 
 ### Linux and macOS archives
 
