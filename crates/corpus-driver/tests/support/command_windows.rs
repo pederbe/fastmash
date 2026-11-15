@@ -29,7 +29,21 @@ pub(super) fn main() {
                 .stdin(Stdio::piped());
             let mut wrapped = CommandWrap::from(command);
             wrapped.wrap(JobObject);
-            let mut child = wrapped.spawn().unwrap();
+            let mut limits = win32job::ExtendedLimitInfo::new();
+            limits.limit_kill_on_job_close();
+            let proof = win32job::Job::create_with_limit_info(&limits).unwrap();
+            let mut child = wrapped
+                .spawn_with(|command| {
+                    use std::os::windows::io::AsRawHandle;
+                    let mut child = command.spawn()?;
+                    if let Err(error) = proof.assign_process(child.as_raw_handle() as isize) {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err(std::io::Error::other(error));
+                    }
+                    Ok(child)
+                })
+                .unwrap();
             drop(wrapped);
             let mut input = child.stdin().take().unwrap();
             input.write_all(b"value\n1\n2\n").unwrap();

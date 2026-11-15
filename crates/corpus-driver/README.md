@@ -121,7 +121,7 @@ closed-pipe, full-volume, early-exit and held-output checks. Regular-file input
 runs 2,843 ordinary cases. Every run records a disposition for all 3,137 IDs.
 Fourteen raw Unix-byte argument cases, 32 Unix PTY cases and three POSIX
 controlling-terminal read failures are excluded with explicit reasons. Separate
-ConPTY tests check console Unicode and color. Exclusions are not Windows coverage.
+ConPTY tests check console Unicode, color and header delivery before input EOF. Exclusions are not Windows coverage.
 
 Safe `process-wrap` and `win32job` interfaces suspend each child, assign it to
 owned Jobs before its code runs and resume it. Completion or failure cancels the
