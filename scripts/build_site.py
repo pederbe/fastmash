@@ -312,7 +312,7 @@ def llms_txt(book):
         '> GNU datamash commands, portable results, weighted means, complete-record',
         '> selection, table health and dataset comparison.',
         '',
-        f'Published version {published_version()}: Linux, macOS 15 or later and Windows 11. Install:',
+        f'Published version {published_version()}. Platform requirements and installation: install.html.',
         '`curl -fsSL https://fastmash.io/install.sh | sh`, or `cargo install --locked fastmash` on Linux.',
         'On macOS, use `cargo install --locked --bin fastmash fastmash`.',
         'For Windows downloads and PowerShell 7.4+ workflows, see install.html#on-windows and quick-start.html#powershell-74.',
