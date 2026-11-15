@@ -15,17 +15,21 @@ numerical profile version that introduced it.
 
 ### Added
 
-- Add a safe native Windows development backend ([#259](https://github.com/pederbe/fastmash/pull/259))
-- Package and qualify native Windows release archives ([#261](https://github.com/pederbe/fastmash/pull/261))
+- Run natively on Windows 11 x64, with PowerShell 7.4+ file and pipeline
+  workflows ([#259](https://github.com/pederbe/fastmash/pull/259),
+  [#260](https://github.com/pederbe/fastmash/pull/260)).
+- Install prebuilt Windows archives without a Rust compiler or a separate
+  Visual C++ runtime installation ([#261](https://github.com/pederbe/fastmash/pull/261)).
 
 ### Dependencies
 
-- Update daily dependencies ([#258](https://github.com/pederbe/fastmash/pull/258))
+- Update Unix I/O and optional profiling dependencies
+  ([#258](https://github.com/pederbe/fastmash/pull/258)).
 
 ### Documentation
 
-- Add Windows setup to the shared quick start ([#262](https://github.com/pederbe/fastmash/pull/262))
-
+- Add Windows installation, file input, pipelines and exit-status examples to
+  the shared quick start ([#262](https://github.com/pederbe/fastmash/pull/262)).
 
 ## [0.6.0] - 2026-11-14
 
