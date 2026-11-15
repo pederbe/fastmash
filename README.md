@@ -51,8 +51,10 @@ Grouped summary
 
 ## Install
 
-Fastmash runs on **Linux**, **Windows through WSL2** and
-**macOS 15 and later**.
+Fastmash runs on **Linux**, **macOS 15 and later**, and **Windows 11**.
+[Native Windows installation](https://fastmash.io/install.html#on-windows) uses
+PowerShell 7.4+ and needs a release containing a Windows archive.
+Earlier releases work through WSL2.
 
 Install prebuilt programs with your package manager. On Debian or Ubuntu,
 add the [signed apt repository](https://fastmash.io/install.html#debian-and-ubuntu).
@@ -69,7 +71,7 @@ With Homebrew on macOS or Linux:
 brew install pederbe/tap/fastmash
 ```
 
-On any supported system, the quick installer downloads the latest release:
+On Linux, macOS or inside WSL2, the quick installer downloads the latest release:
 
 ```sh
 curl -fsSL https://fastmash.io/install.sh | sh
@@ -91,7 +93,8 @@ printf 'price\tunits\n10\t2\n5\t3\n' | fastmash -H wmean price:units
 printf 'item,revenue\na,10\nb,30\nc,20\n' | fastmash --csv -H top:2 revenue
 ```
 
-Use `--csv` for quoted CSV and `-H` to select fields by header name.
+These examples use Bash. See the [PowerShell quick start](https://fastmash.io/quick-start.html#powershell-74)
+for Windows file input and pipelines. Use `--csv` for quoted CSV and `-H` to select fields by header name.
 The [user guide](https://fastmash.io/guide/) covers all operations and options,
 with complete examples for [table validation](https://fastmash.io/guide/table-health.html)
 and [before-and-after reports](https://fastmash.io/guide/dataset-comparison.html).

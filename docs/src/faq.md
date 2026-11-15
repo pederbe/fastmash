@@ -76,11 +76,8 @@ results depend on the hardware and C library. See
 
 ## Does it work on macOS or Windows?
 
-On Windows, use WSL2. Fastmash also supports macOS 15
-and later, with the published archive checked natively on macOS 15 and 26.
-Install it with [Homebrew](install.md#homebrew) or the
-[native archive](install.md#macos-archive).
-Intel macOS and native Windows are outside the current product scope.
+Yes. See the [installation guide](install.md) for native Windows and macOS
+requirements, downloads and setup. WSL2 remains available for Linux workflows.
 
 ## How does Fastmash relate to GNU datamash?
 

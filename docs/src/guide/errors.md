@@ -38,7 +38,7 @@ record, source file or option before rerunning the command.
 | `invalid CSV` | Use double quotes around a complete field. Write a quote inside it as two double quotes. The reported record and physical line locate the problem |
 | A CSV option conflicts with another option | Remove text-input controls such as `-t` or `-W` when reading CSV. CSV output chooses its own comma separator, so omit `--output-delimiter` |
 | A weighted mean has no positive retained weight | At least one retained value/weight pair must have a positive weight. Check zero weights and pairs omitted by `--narm` |
-| `sort temporary I/O error` | Check that `TMPDIR`, or `/tmp` when it is unset, exists, is writable and has free space. Choose another writable directory if needed |
+| `sort temporary I/O error` | Check that the temporary directory exists, is writable and has free space. Choose another writable directory if needed |
 | Memory allocation failed | Check available memory and process limits. Sorting can spill to disk, but retained samples and complete tables stay in memory |
 | A read or write failed | Check the input/output paths, access permissions and free disk space. A closed or incorrectly opened standard stream must be fixed by the shell or program launching Fastmash |
 
@@ -73,6 +73,23 @@ writing its report, including the header. Output write failures can still leave
 partial bytes. Table health likewise completes inspection before report emission;
 `health ... validate` can emit a complete report and return 1 for declared
 violations. Advisory findings alone do not make validation fail.
+
+### PowerShell 7.4+
+
+Read `$LASTEXITCODE` immediately after the native command. It uses the
+[statuses above](#exit-statuses), including `1` for an error and `77` for a refusal.
+To return that status from a `.ps1` script, using the
+[quick start's CSV file](../quick-start.md#powershell-74):
+
+```powershell
+cmd /d /v:off /c 'fastmash --csv -H sum amount < "sales.csv"' > totals.csv
+exit $LASTEXITCODE
+```
+
+The script returns `0` on success, or the failure status if the command fails.
+Treat `totals.csv` as complete only after success. In a native pipeline,
+`$LASTEXITCODE` reports the last native program's status. Run stages separately
+and check each status when you need to detect a failure in an earlier stage.
 
 ## Why refusals exist
 
@@ -139,8 +156,9 @@ or lower. If a sorted job still refuses under the limit:
 
 ## Disk
 
-Sorting large inputs with `-s` writes temporary data to `TMPDIR` (default
-`/tmp`), using anonymous files that the operating system removes automatically.
+On Windows, sorting uses the system temporary directory selected by Windows.
+On Linux and macOS, sorting large inputs with `-s` writes temporary data to
+`TMPDIR` (default `/tmp`), using anonymous files that the operating system removes automatically.
 Where the filesystem has no anonymous files (`O_TMPFILE`), such as NFS or a
 container's `/tmp` on Linux before 6.10, Fastmash creates private files with
 random names and removes their names at once, so they also disappear when

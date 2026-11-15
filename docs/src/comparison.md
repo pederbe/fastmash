@@ -17,7 +17,7 @@ Facts about other tools come from their documentation, checked September 2026.
 | Grouped statistics | Yes | Yes | Yes (`stats1 -g`) | Through `pivotp` or `sqlp` | Yes (`summary -g`) |
 | Joins and expression filters | No | No | Yes | Yes | Yes |
 | Table reshaping | Transpose and crosstab | Transpose and crosstab | Yes | Yes | Yes |
-| Platforms | Linux, WSL2, macOS 15+ | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
+| Platforms | Linux, macOS, Windows | Linux, macOS, Windows and others | Linux, macOS, Windows, BSD | Linux, macOS, Windows | Linux, macOS, Windows, BSD |
 
 ## GNU datamash
 
@@ -31,7 +31,7 @@ want the same digits on every machine, or want clear errors where datamash
 1.9 aborts or reads past its data. Most commands transfer directly. The
 [differences](guide/differences.md) are listed on one page.
 
-**Stay with GNU datamash when** you need Intel macOS, native Windows or
+**Stay with GNU datamash when** you need Intel macOS or
 a platform outside Fastmash's supported targets, or when you need a GNU-maintained tool. Some disk-spilling jobs still
 favor GNU on native Linux. The [benchmarks](benchmarks/index.md) show the
 costs and measurement conditions.

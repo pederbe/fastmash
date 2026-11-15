@@ -64,7 +64,7 @@ documented differences when migrating a workflow.
 
 ## Get started
 
-- [Install Fastmash](install.md) on Linux, macOS or Windows through WSL2
+- [Install Fastmash](install.md) on Linux, macOS or Windows
 - [Quick start](quick-start.md): a five-minute tour
 - [Operations](guide/operations.md): every statistic and transformation
 - [Quoted CSV and result names](guide/csv-and-result-names.md): structured input and useful report labels

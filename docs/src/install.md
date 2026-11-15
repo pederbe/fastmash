@@ -1,7 +1,7 @@
 # Install
 
-Fastmash runs on **Linux**, **Windows through WSL2** and
-**macOS 15 and later**.
+Fastmash runs on **Linux**, **macOS 15 and later**, and **Windows 11**.
+For Windows, use [PowerShell 7.4 or later](#on-windows).
 
 ## Choose a method
 
@@ -13,7 +13,8 @@ programs and brings you later versions with your other updates.
 | Debian, Ubuntu | [apt repository](#debian-and-ubuntu) | `sudo apt update`, then `sudo apt install --only-upgrade fastmash` |
 | Fedora, RHEL and similar | [dnf repository](#fedora-rhel-and-similar) | `sudo dnf upgrade fastmash` |
 | macOS, or Linux with Homebrew | [Homebrew](#homebrew) | `brew upgrade fastmash` |
-| Any supported system | [Quick install](#quick-install) | Run it again |
+| Linux, macOS, or WSL2 | [Quick install](#quick-install) | Run it again |
+| Windows | [Native archive](#on-windows) | Replace the extracted folder |
 
 All of these install prebuilt programs. If you prefer to compile Fastmash
 yourself, see [Cargo](#with-cargo).
@@ -82,6 +83,8 @@ Update with `brew upgrade fastmash` and remove it with
 `brew uninstall pederbe/tap/fastmash`.
 
 ## Quick install
+
+On Linux, macOS or inside WSL2:
 
 ```sh
 curl -fsSL https://fastmash.io/install.sh | sh
@@ -238,14 +241,15 @@ On Linux or WSL2, run:
 cargo binstall fastmash --strategies crate-meta-data
 ```
 
-On macOS 15 or later, select its single executable:
+On macOS or Windows, select its single executable:
 
 ```sh
 cargo binstall fastmash --strategies crate-meta-data --bin fastmash
 ```
 
 These commands install the published binaries and stop with an error if the
-download is unavailable. Other platforms have no prebuilt Fastmash executable.
+download is unavailable. On Windows, choose a release that includes the
+[native archive](#on-windows).
 
 To compile Fastmash from source with `cargo install`, use the latest stable
 [Rust toolchain](https://rustup.rs). On Linux or WSL2:
@@ -262,6 +266,8 @@ cargo install --locked --bin fastmash fastmash
 ```
 
 ## Check that it works
+
+In Bash, or use the [PowerShell example](quick-start.md#powershell-74):
 
 ```sh
 printf '1\t2\n3\t4\n' | fastmash sum 1 mean 2
@@ -309,10 +315,28 @@ moves an existing directory to the front.
 
 ## On Windows
 
-Install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install), then
-install Fastmash inside your Linux distribution as above. Keep your data in
-the Linux file system (such as your home directory) rather than under
-`/mnt/c`: it is much faster.
+Use [PowerShell 7.4 or later](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows) on Windows 11.
+Choose a release containing a Windows archive. If your release has none, use
+[WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and follow the Linux instructions.
+
+1. Open the [release downloads](https://github.com/pederbe/fastmash/releases/latest)
+   and choose the archive ending in `x86_64-pc-windows-msvc.tar.gz`.
+2. Extract it and keep the extracted folder somewhere permanent.
+3. Search Windows for **Edit environment variables for your account**. Edit
+   **Path** and add the folder containing `fastmash.exe`.
+4. Open a new PowerShell terminal and run:
+
+   ```powershell
+   fastmash --version
+   ```
+
+It prints the installed version. Continue with the
+[PowerShell quick start](quick-start.md#powershell-74) for files and pipelines.
+To update, replace the extracted folder and keep its location on `Path`.
+To uninstall, remove that folder and its `Path` entry. No Rust compiler or
+separate Visual C++ runtime installation is needed.
+
+Keep WSL2 data in the Linux file system rather than under `/mnt/c`.
 
 ## Uninstall
 

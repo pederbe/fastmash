@@ -2,7 +2,8 @@
 
 This tour takes about five minutes. It assumes Fastmash is
 [installed](install.md). Every example reads from standard input, so you can
-paste it straight into a terminal.
+paste it straight into Bash. For Windows, start with
+[PowerShell 7.4+](#powershell-74). The Fastmash operations and options are the same.
 
 > **Locale.** The examples use decimal points. If your shell uses a locale with
 > decimal commas or an unsupported locale (see
@@ -24,6 +25,47 @@ Summary
 
 `sum 1` adds up field 1 and `mean 2` averages field 2. The summary shows both
 results in the order you requested.
+
+## PowerShell 7.4+
+
+For a CSV file, pass its bytes directly through `cmd` input redirection.
+Try this sample, or use your own `sales.csv` with an `amount` field:
+
+```powershell
+'item,amount', 'a,2', 'b,4' | Set-Content -Encoding utf8 sales.csv
+cmd /d /v:off /c 'fastmash --csv -H sum amount < "sales.csv"'
+```
+
+```text
+sum(amount)
+6
+```
+
+`--csv` accepts Windows line endings. PowerShell does not support `<` input
+redirection itself. `Get-Content` decodes a file into text, so use the `cmd`
+recipe when you want to preserve its original bytes.
+
+You can also send text directly:
+
+```powershell
+'item,amount', 'a,2', 'b,4' | fastmash --csv -H sum amount
+```
+
+This produces the same result. For a native program pipeline, extract the
+amounts and pass them to another Fastmash command:
+
+```powershell
+cmd /d /v:off /c 'fastmash --csv-in --header-in cut amount < "sales.csv"' |
+    fastmash sum 1
+```
+
+The summary shows `6`. PowerShell 7.4+ preserves bytes between native programs
+and when redirecting their output with `>`. PowerShell string pipelines create
+text, including Windows line endings. See [Fields and input](guide/input.md#records-and-fields)
+for how ordinary text and CSV handle those endings.
+
+After a command, `$LASTEXITCODE` gives its status. In scripts, follow
+[PowerShell exit-status handling](guide/errors.md#powershell-74).
 
 ## Several fields at once
 
