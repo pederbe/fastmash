@@ -76,7 +76,7 @@ fn redirected_bytes_are_binary_and_unicode_paths_work() {
     let bytes = b"a\0\r\x1a\xff\xc3\xa9\n";
     let input = fixture.file("input é 🦀.tsv", bytes);
     let output = fixture.0.join("output é 🦀.tsv");
-    let child = command(&["noop"])
+    let child = command(&["reverse"])
         .stdin(File::open(input).unwrap())
         .stdout(File::create(&output).unwrap())
         .spawn()
@@ -84,7 +84,7 @@ fn redirected_bytes_are_binary_and_unicode_paths_work() {
     let result = finish(child);
     assert!(result.status.success(), "{result:?}");
     assert_eq!(fs::read(output).unwrap(), bytes);
-    let result = pipe(&["noop"], bytes);
+    let result = pipe(&["reverse"], bytes);
     assert!(result.status.success(), "{result:?}");
     assert_eq!(result.stdout, bytes);
 }
