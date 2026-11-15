@@ -28,6 +28,42 @@ pub fn require_unblocked_signals() -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn command_output(
+    mut command: Command,
+    timeout: Duration,
+) -> Result<std::process::Output> {
+    let (out, stdout) = io::pipe()?;
+    let (err, stderr) = io::pipe()?;
+    let out = Capture::new(out);
+    let err = Capture::new(err);
+    command.stdin(Stdio::null()).stdout(stdout).stderr(stderr);
+    let started = Instant::now();
+    let mut running = Running::spawn(command)?;
+    let status = loop {
+        if let Some(status) = running.status()? {
+            break status;
+        }
+        if started.elapsed() >= timeout || out.overflow()? || err.overflow()? {
+            running.stop()?;
+            return Err(Error::message(
+                "Windows workflow exceeded its time or output guard",
+            ));
+        }
+        thread::sleep(Duration::from_millis(2));
+    };
+    running.stop()?;
+    let stdout = out.finish()?;
+    let stderr = err.finish()?;
+    if stdout.len() as u64 > CAP || stderr.len() as u64 > CAP {
+        return Err(Error::message("Windows workflow output exceeded its guard"));
+    }
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
 /// The second Job supplies an independent membership proof. Assignment occurs
 /// while process-wrap holds the child suspended, before target code executes.
 struct Running {

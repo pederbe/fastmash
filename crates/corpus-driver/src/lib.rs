@@ -30,6 +30,15 @@ use std::path::{Path, PathBuf};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Capture a Windows workflow under the same bounded Job ownership as cases.
+#[cfg(windows)]
+pub fn windows_output(
+    command: std::process::Command,
+    timeout: std::time::Duration,
+) -> Result<std::process::Output> {
+    process::command_output(command, timeout)
+}
+
 #[derive(Debug)]
 pub struct Error(Box<dyn std::error::Error + Send + Sync>);
 
