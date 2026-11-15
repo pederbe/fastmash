@@ -670,6 +670,7 @@ impl Options {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::os::unix::ffi::OsStringExt;
 
     fn args(parts: &[&str]) -> Vec<OsString> {
@@ -909,15 +910,18 @@ mod tests {
             1
         );
 
-        let raw = vec![
-            OsString::from_vec(vec![b'-', b'c', 0xff]),
-            "unique".into(),
-            "1".into(),
-        ];
-        let Action::Calculate(options) = parse(&raw, b"fastmash", false).ok().unwrap() else {
-            panic!()
-        };
-        assert_eq!(options.collapse, 0xff);
+        #[cfg(unix)]
+        {
+            let raw = vec![
+                OsString::from_vec(vec![b'-', b'c', 0xff]),
+                "unique".into(),
+                "1".into(),
+            ];
+            let Action::Calculate(options) = parse(&raw, b"fastmash", false).ok().unwrap() else {
+                panic!()
+            };
+            assert_eq!(options.collapse, 0xff);
+        }
     }
 
     #[test]
@@ -1130,19 +1134,22 @@ mod tests {
             (options.input, options.output),
             (Separator::Literal(b'H'), b'|')
         );
-        let raw = vec![
-            OsString::from_vec(b"-Ht\xff".to_vec()),
-            "sum".into(),
-            "1".into(),
-        ];
-        let Action::Calculate(options) = parse(&raw, b"fastmash", false).ok().unwrap() else {
-            panic!()
-        };
-        assert!(options.header_in && options.header_out);
-        assert_eq!(
-            (options.input, options.output),
-            (Separator::Literal(0xff), 0xff)
-        );
+        #[cfg(unix)]
+        {
+            let raw = vec![
+                OsString::from_vec(b"-Ht\xff".to_vec()),
+                "sum".into(),
+                "1".into(),
+            ];
+            let Action::Calculate(options) = parse(&raw, b"fastmash", false).ok().unwrap() else {
+                panic!()
+            };
+            assert!(options.header_in && options.header_out);
+            assert_eq!(
+                (options.input, options.output),
+                (Separator::Literal(0xff), 0xff)
+            );
+        }
     }
 
     #[test]
@@ -1291,6 +1298,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn high_byte_override_and_literal_controls() {
         for delimiter in [b' ', b'\t', b'\r', b'\n', 0x80, 0xff] {
             let mut input = args(&["-t"]);

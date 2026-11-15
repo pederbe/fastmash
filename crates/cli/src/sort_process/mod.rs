@@ -147,6 +147,7 @@ fn threads_from(num: Option<&str>, limit: Option<&str>, available: u32) -> u32 {
 mod storage_tests {
     use super::*;
     #[test]
+    #[cfg(unix)]
     fn named_fallback_file_is_private_usable_and_already_unlinked() {
         use std::io::{Read, Seek, Write};
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -165,6 +166,7 @@ mod storage_tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn named_storage_failures_preserve_unrelated_entries() {
         let dir = std::env::temp_dir().join(format!(
             "fastmash-named-failure-test-{}",

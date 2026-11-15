@@ -100,6 +100,10 @@ nix = { version = "0.32.0", default-features = false, features = ["fs", "signal"
 # Reuse owned full-output and terminal-input transports in integration tests.
 fastmash-corpus-driver = { path = "../corpus-driver" }
 
+[target.'cfg(windows)'.dev-dependencies]
+# Exercise the real Windows console Unicode/color path, separately from pipes.
+portable-pty = "0.9.0"
+
 # Same as the workspace release profile, for crates.io installs (cargo
 # ignores workspace profiles there). Workspace builds warn that this copy is
 # ignored; keep the two in step.

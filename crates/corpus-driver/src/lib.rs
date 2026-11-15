@@ -3,12 +3,19 @@
 //! Frozen Command checks, including directory, closed-pipe and full-output I/O.
 //! Remaining transports stay in the full corpus gate until migration completes.
 
+#[cfg(unix)]
 mod child_status;
 pub mod fixture;
+#[cfg_attr(windows, path = "windows/full_output.rs")]
 pub mod full_output;
+#[cfg(unix)]
 pub mod full_volume;
+#[cfg_attr(windows, path = "windows/held_output.rs")]
 mod held_output;
+#[cfg(unix)]
 pub mod late_input;
+mod observation;
+#[cfg_attr(windows, path = "windows/process.rs")]
 mod process;
 
 use fixture::{Fixture, digest};
@@ -47,11 +54,13 @@ impl From<serde_json::Error> for Error {
         Self(error.into())
     }
 }
+#[cfg(unix)]
 impl From<nix::errno::Errno> for Error {
     fn from(error: nix::errno::Errno) -> Self {
         Self(error.into())
     }
 }
+#[cfg(unix)]
 impl From<rustix::io::Errno> for Error {
     fn from(value: rustix::io::Errno) -> Self {
         Self(value.into())
@@ -101,7 +110,7 @@ pub struct RunResult {
 }
 
 pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
-    if !cfg!(any(target_os = "linux", target_os = "macos")) {
+    if !cfg!(any(target_os = "linux", target_os = "macos", windows)) {
         return Err(Error::message("unsupported regression test platform"));
     }
     require_unblocked_signals()?;
@@ -142,7 +151,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
         None
     };
     let evidence = json!({
-        "platform": if cfg!(target_os="macos") { "darwin" } else { "linux" },
+        "platform": if cfg!(windows) { "windows" } else if cfg!(target_os="macos") { "darwin" } else { "linux" },
         "binary": binary, "binary_sha256":binary_sha256,
         "fixture":fixture.path, "fixture_sha256":fixture.fixture_sha256,
         "content_sha256":fixture.content_sha256,
@@ -179,6 +188,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     for case in cases {
         let mut expected = case.expected(&options.root, options.expected_version.as_deref())?;
         result.attempted += 1;
+        #[cfg(unix)]
         let observed = if case.io == "read-error" {
             let root = options
                 .evidence_dir
@@ -196,6 +206,15 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
                 full.as_mut(),
             )?
         };
+        #[cfg(windows)]
+        let observed = invoke(
+            case,
+            &binary,
+            &launcher,
+            &directory.path,
+            options.stdin_file,
+            full.as_mut(),
+        )?;
         case.adapt_native_buffer(&mut expected, observed.destination.as_ref())?;
         let passed =
             observed.matches(&expected) && (!case.hold_stdin || observed.stdin_held_until_exit);
@@ -331,14 +350,17 @@ fn write_line(output: &mut impl Write, value: &impl Serialize) -> Result<()> {
 
 pub fn main_entry(mut args: impl Iterator<Item = OsString>) -> Result<i32> {
     let first = args.next();
+    #[cfg(unix)]
     if first.as_deref() == Some(std::ffi::OsStr::new(late_input::COORDINATE)) {
         late_input::coordinate(args)?;
         return Ok(0);
     }
+    #[cfg(unix)]
     if first.as_deref() == Some(std::ffi::OsStr::new(late_input::EXEC)) {
         late_input::exec(args)?;
         return Err(Error::message("late-input exec unexpectedly returned"));
     }
+    #[cfg(unix)]
     if first.as_deref() == Some(std::ffi::OsStr::new(process::EXEC_MODE)) {
         process::exec_target(args)?;
         return Err(Error::message("internal exec unexpectedly returned"));

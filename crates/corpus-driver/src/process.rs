@@ -1,5 +1,8 @@
-use crate::fixture::{Case, Expected, Held, decode, encode};
-use crate::held_output::{Destination, Streaming};
+use crate::fixture::{Case, Held, decode, encode};
+use crate::held_output::Streaming;
+pub use crate::observation::Observed;
+#[cfg(test)]
+use crate::observation::normalize_sort_name;
 use crate::{Error, Result};
 use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
@@ -8,7 +11,6 @@ use nix::sys::resource::{Resource, setrlimit};
 use nix::sys::signal::SigSet;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::{Pid, setsid};
-use serde::Serialize;
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{self, DirBuilder, File, OpenOptions};
@@ -24,44 +26,6 @@ use std::time::{Duration, Instant};
 pub const CAP: u64 = 524_288;
 const DEADLINE: Duration = Duration::from_secs(8);
 pub(crate) const EXEC_MODE: &str = "__fastmash_corpus_exec";
-
-#[derive(Debug, Serialize)]
-pub struct Observed {
-    pub argv: Vec<String>,
-    // Hex arguments retain invalid UTF-8 without relying on a JSON encoder's
-    // replacement-character display. Actual launch always uses these raw bytes.
-    pub argv_hex: Vec<String>,
-    pub executable: PathBuf,
-    pub env: BTreeMap<String, String>,
-    pub process_group: u32,
-    pub returncode: i32,
-    pub timed_out: bool,
-    pub overflow: bool,
-    pub cleanup_confirmed: bool,
-    pub stdin_held_until_exit: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub held: Option<Held>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub destination: Option<Destination>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub acknowledged: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_error_mechanism: Option<String>,
-    pub stdout_hex: String,
-    pub stderr_hex: String,
-}
-
-impl Observed {
-    pub fn matches(&self, expected: &Expected) -> bool {
-        !self.timed_out
-            && !self.overflow
-            && self.cleanup_confirmed
-            && self.returncode == expected.returncode
-            && self.stdout_hex == expected.stdout_hex
-            && normalize_sort_name(&self.stderr_hex) == expected.stderr_hex
-            && self.held == expected.held
-    }
-}
 
 pub fn require_unblocked_signals() -> Result<()> {
     // Nix's Signal iterator omits Linux real-time signals. The actual kernel
@@ -431,24 +395,6 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
-}
-
-fn normalize_sort_name(stderr: &str) -> String {
-    // Exactly the existing multiline prefix normalization, with no lossy UTF-8
-    // conversion or replacement inside a diagnostic's body.
-    let Ok(bytes) = decode(stderr) else {
-        return stderr.to_owned();
-    };
-    let mut result = Vec::new();
-    for line in bytes.split_inclusive(|b| *b == b'\n') {
-        if let Some(rest) = line.strip_prefix(b"/usr/bin/sort: ") {
-            result.extend_from_slice(b"sort: ");
-            result.extend_from_slice(rest);
-        } else {
-            result.extend_from_slice(line);
-        }
-    }
-    encode(&result)
 }
 
 #[cfg(test)]

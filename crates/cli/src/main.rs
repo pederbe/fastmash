@@ -113,10 +113,10 @@ mod startup;
 mod table_checks;
 mod table_modes;
 mod terminal_style;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "../tests/support/temp_dir.rs"]
 mod test_dir;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "../tests/support/terminal.rs"]
 mod test_terminal;
 mod text_order;
@@ -656,9 +656,15 @@ fn run_process() {
             });
         }
     };
+    #[cfg(unix)]
     let name = args
         .first()
         .map_or(b"fastmash".as_slice(), |v| v.as_encoded_bytes());
+    #[cfg(windows)]
+    let name = args
+        .first()
+        .and_then(|name| std::path::Path::new(name).file_stem())
+        .map_or(b"fastmash".as_slice(), |name| name.as_encoded_bytes());
     let mut stdin = io::BufReader::with_capacity(INPUT_BUFFER, standard_io::Stdin);
     let mut stdout = command_output::Stdout::new();
     let environment = Environment::from_env(terminal);

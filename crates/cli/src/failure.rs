@@ -390,6 +390,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn allocation_failure_fallback_uses_default_stderr_detection() {
         for stderr_terminal in [false, true] {
             for (environment, eligible) in [

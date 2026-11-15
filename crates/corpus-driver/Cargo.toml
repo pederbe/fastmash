@@ -28,6 +28,7 @@ flate2 = { version = "1.1.11", default-features = false, features = ["rust_backe
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = { version = "0.11.1", default-features = false }
+[target.'cfg(unix)'.dependencies]
 # Safe Unix signal-mask, session, resource-limit and whole-group cancellation
 # APIs keep the existing harness process contract without first-party unsafe.
 nix = { version = "0.32.0", default-features = false, features = ["signal", "resource", "fs", "term"] }
@@ -37,9 +38,15 @@ plist = { version = "1.10.3", default-features = false }
 # Safe controlling-terminal ownership for actual late input errors.
 rustix = { version = "1.1.6", default-features = false, features = ["std", "stdio", "process", "termios"] }
 
-[dev-dependencies]
+[target.'cfg(unix)'.dev-dependencies]
 # Safe controlling-terminal ownership and foreground process-group probes.
 nix = { version = "0.32.0", default-features = false, features = ["term"] }
+
+[target.'cfg(windows)'.dependencies]
+# Suspend/assign/resume before running the target, plus independent membership
+# queries so cancellation proves that descendants have stopped.
+process-wrap = { version = "10.0.1", default-features = false, features = ["std", "job-object"] }
+win32job = "2.1.0"
 
 [lints]
 workspace = true
