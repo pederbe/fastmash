@@ -11,6 +11,22 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-15
+
+### Added
+
+- Add a safe native Windows development backend ([#259](https://github.com/pederbe/fastmash/pull/259))
+- Package and qualify native Windows release archives ([#261](https://github.com/pederbe/fastmash/pull/261))
+
+### Dependencies
+
+- Update daily dependencies ([#258](https://github.com/pederbe/fastmash/pull/258))
+
+### Documentation
+
+- Add Windows setup to the shared quick start ([#262](https://github.com/pederbe/fastmash/pull/262))
+
+
 ## [0.6.0] - 2026-11-14
 
 ### Removed
