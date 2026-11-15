@@ -209,7 +209,11 @@ impl OutputCapture {
     fn finish(self) -> Result<Vec<u8>> {
         match self {
             Self::Pipe(capture) => capture.finish(),
-            Self::File(_) => self.snapshot(),
+            Self::File(ref path) => {
+                let result = self.snapshot();
+                fs::remove_file(path)?;
+                result
+            }
         }
     }
 }

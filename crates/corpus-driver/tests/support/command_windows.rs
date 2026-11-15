@@ -7,7 +7,13 @@ use std::{
 pub(super) fn main() {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref().unwrap_or("echo") {
-        "echo" => {
+        action @ ("echo" | "file-echo") => {
+            if action == "file-echo" {
+                assert!(
+                    winapi_util::file::typ(std::io::stdout()).unwrap().is_disk(),
+                    "expected native disk output"
+                );
+            }
             let mut bytes = Vec::new();
             std::io::stdin().read_to_end(&mut bytes).unwrap();
             std::io::stdout().write_all(&bytes).unwrap();

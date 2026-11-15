@@ -47,6 +47,8 @@ nix = { version = "0.32.0", default-features = false, features = ["term"] }
 # queries so cancellation proves that descendants have stopped.
 process-wrap = { version = "10.0.1", default-features = false, features = ["std", "job-object"] }
 win32job = "2.1.0"
+# Independent native destination-type controls use the same safe API as the CLI.
+winapi-util = "0.1.11"
 
 [lints]
 workspace = true
