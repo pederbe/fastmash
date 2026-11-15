@@ -148,74 +148,29 @@ sudo dnf install "https://github.com/pederbe/fastmash/releases/download/$tag/fas
 EOF
 ```
 
-### Linux archive
+### Linux and macOS archives
 
-On Linux or WSL2, download an archive from the
-[latest release](https://github.com/pederbe/fastmash/releases/latest), or run this in
-Bash (enter `bash` first if using Fish):
+1. Open the [release downloads](https://github.com/pederbe/fastmash/releases/latest)
+   and choose the archive for your system:
 
-```bash
-bash -eu <<'EOF'
-tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
-tag=${tag##*/}
-name=fastmash-$tag-x86_64-unknown-linux-musl
-curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz
-curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz.sha256
-sha256sum -c $name.tar.gz.sha256
-tar -xzf $name.tar.gz
-if [ ! -f "$name/fastmash" ] || [ -L "$name/fastmash" ]; then
-  printf '%s\n' 'The archive has no regular fastmash executable. No installation was changed.' >&2
-  exit 1
-fi
-mkdir -p ~/.local/bin
-staging=$(mktemp -d "$HOME/.local/bin/.fastmash.XXXXXX")
-trap 'rm -rf "$staging"' EXIT
-cp "$name/fastmash" "$staging/fastmash"
-chmod 755 "$staging/fastmash"
-mv -f "$staging/fastmash" "$HOME/.local/bin/fastmash"
-printf '1\n2\n' | ~/.local/bin/fastmash sum 1
-EOF
-```
+   | System | Archive ending |
+   | --- | --- |
+   | Linux or WSL2 | `x86_64-unknown-linux-musl.tar.gz` |
+   | macOS | `aarch64-apple-darwin.tar.gz` |
 
-The final command prints `3`. To update, repeat these steps in an empty directory.
+2. Extract the archive, then open a terminal in the extracted folder containing
+   `fastmash`.
+3. Move the executable into your local command directory and try it:
 
-### macOS archive
+   ```sh
+   mkdir -p ~/.local/bin
+   mv -f fastmash ~/.local/bin/fastmash
+   printf '1\n2\n' | ~/.local/bin/fastmash sum 1
+   ```
 
-The quick installer chooses the macOS archive automatically. To download
-the latest archive by hand, run this in Bash in an empty directory. Enter
-`bash` first if using Fish:
-
-```sh
-bash -eu <<'EOF'
-tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
-tag=${tag##*/}
-curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-$tag-aarch64-apple-darwin.tar.gz"
-curl -fLO "https://github.com/pederbe/fastmash/releases/download/$tag/fastmash-$tag-aarch64-apple-darwin.tar.gz.sha256"
-EOF
-```
-
-Then install it from the same directory in Bash (enter `bash` first if using
-Fish):
-
-```bash
-bash -eu <<'EOF'
-set -- fastmash-v*-aarch64-apple-darwin.tar.gz
-name=${1%.tar.gz}
-shasum -a 256 -c "$name.tar.gz.sha256"
-tar -xzf "$name.tar.gz"
-(cd "$name" && shasum -a 256 -c binary.sha256)
-mkdir -p ~/.local/bin
-staging=$(mktemp -d "$HOME/.local/bin/.fastmash.XXXXXX")
-trap 'rm -rf "$staging"' EXIT
-cp "$name/fastmash" "$staging/fastmash"
-chmod 755 "$staging/fastmash"
-mv -f "$staging/fastmash" ~/.local/bin/fastmash
-printf '1\n2\n' | ~/.local/bin/fastmash sum 1
-EOF
-```
-
-The final command prints `3`. To update, repeat the download and installation
-steps in an empty directory.
+The final command prints `3`. If your shell cannot find `fastmash` by name,
+see [Command not found](#command-not-found). To update, repeat these steps with
+a fresh download.
 
 ## With Cargo
 
