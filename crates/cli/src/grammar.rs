@@ -1879,6 +1879,7 @@ mod tests {
 
     #[test]
     fn field_and_operation_escapes_decode_bytes() {
+        #[cfg(unix)]
         use std::os::unix::ffi::OsStringExt;
         for (raw, name) in [
             (b"a\\ b".as_slice(), b"a b".as_slice()),
@@ -1887,10 +1888,15 @@ mod tests {
             (b"a\\-b\\,c\\:d", b"a-b,c:d"),
             (b"a\\\\b", b"a\\b"),
         ] {
+            #[cfg(unix)]
+            let argument = OsString::from_vec(raw.to_vec());
+            #[cfg(windows)]
+            let argument = match std::str::from_utf8(raw) {
+                Ok(raw) => OsString::from(raw),
+                Err(_) => continue,
+            };
             assert_eq!(
-                parse(&["sum".into(), OsString::from_vec(raw.to_vec())])
-                    .ok()
-                    .unwrap(),
+                parse(&["sum".into(), argument]).ok().unwrap(),
                 [(Kind::Sum, Field::Name(name.to_vec()))]
             );
         }

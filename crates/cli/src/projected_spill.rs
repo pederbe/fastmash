@@ -1757,7 +1757,7 @@ mod tests {
         let mut writer = RunFile {
             file: std::fs::OpenOptions::new()
                 .write(true)
-                .open("/dev/null")
+                .open(if cfg!(windows) { "NUL" } else { "/dev/null" })
                 .unwrap(),
             written: 0,
             synced: 0,
@@ -1814,6 +1814,10 @@ mod tests {
             // native EBADF on write, exercising the same propagation path.
             File::open("/dev/null").unwrap()
         }
+        #[cfg(windows)]
+        {
+            File::open("NUL").unwrap()
+        }
     }
     #[test]
     fn run_position_queries_preserve_buffered_read_ahead() {
@@ -1839,7 +1843,7 @@ mod tests {
         let source = || {
             let unreadable = std::fs::OpenOptions::new()
                 .write(true)
-                .open("/dev/null")
+                .open(if cfg!(windows) { "NUL" } else { "/dev/null" })
                 .unwrap();
             b"abcde".as_slice().chain(unreadable)
         };
@@ -1851,7 +1855,10 @@ mod tests {
             let mut rest = [0xff; 5];
             let error = reader.read_exact(&mut rest).unwrap_err();
             assert_eq!(&rest, b"cde\xff\xff");
-            assert_eq!(error.raw_os_error(), Some(libc::EBADF));
+            assert_eq!(
+                error.raw_os_error(),
+                Some(if cfg!(windows) { 5 } else { libc::EBADF })
+            );
             let refill_error = reader.fill_buf().unwrap_err();
             assert_eq!(refill_error.raw_os_error(), error.raw_os_error());
             (error.kind(), error.raw_os_error())
@@ -2065,6 +2072,7 @@ mod tests {
         }
     }
     #[test]
+    #[cfg(unix)]
     fn exhausted_merge_inputs_are_released_before_the_merge_ends() {
         // Two runs whose key ranges do not overlap: the first is exhausted
         // (and closed) while the second still has records to merge.

@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
 use std::io::Read;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
@@ -86,6 +87,19 @@ pub struct Held {
 
 #[derive(Clone, Debug)]
 pub struct Argument(Vec<u8>);
+
+fn os_argument(bytes: Vec<u8>) -> Result<OsString> {
+    #[cfg(unix)]
+    {
+        Ok(OsString::from_vec(bytes))
+    }
+    #[cfg(windows)]
+    {
+        String::from_utf8(bytes)
+            .map(OsString::from)
+            .map_err(|_| Error::message("non-Unicode frozen argument"))
+    }
+}
 
 impl<'de> Deserialize<'de> for Argument {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
@@ -200,6 +214,59 @@ impl Fixture {
 }
 
 impl Case {
+    #[cfg(windows)]
+    fn windows_exclusion(&self) -> Option<&'static str> {
+        if self.arguments().is_err() {
+            return Some(
+                "Unix raw-byte arguments cannot be represented as Windows Unicode arguments",
+            );
+        }
+        match self.io.as_str() {
+            "pty" => {
+                Some("Unix PTY transport; Windows console checks use native ConPTY separately")
+            }
+            "read-error" => Some("POSIX controlling-terminal job-control read error"),
+            _ => None,
+        }
+    }
+
+    #[cfg(windows)]
+    fn windows_expected(&self, status: i32, mut stderr: Vec<u8>) -> Result<(i32, Vec<u8>)> {
+        // These Linux cases terminate at their first SIGPIPE. Windows keeps
+        // running, reports the primary command error, then completes output.
+        let primary: Option<&[u8]> = match self.id.as_str() {
+            "output-header-lifecycle:missing-closed-pipe"
+            | "output-header-lifecycle:lf-missing-closed-pipe" => {
+                Some(b"fastmash: invalid input: field 2 requested, line 1 has only 1 fields\n")
+            }
+            "output-header-lifecycle:invalid-closed-pipe" => {
+                Some(b"fastmash: invalid numeric value in line 2 field 1: 'x'\n")
+            }
+            _ => None,
+        };
+        if let Some(primary) = primary {
+            return Ok((1, [primary, b"fastmash: write error\n"].concat()));
+        }
+        // The 8192-byte Windows buffer keeps this smaller header pending until
+        // finalization. Its final write supplies the full-destination reason.
+        if self.id == "output-header-lifecycle:header-4087-1-full" {
+            return Ok((
+                1,
+                b"fastmash: write error: No space left on device\n".to_vec(),
+            ));
+        }
+        if self.io == "closed-pipe"
+            && (status == -13
+                || (status == 77 && stderr == b"fastmash: unsupported output I/O error\n"))
+        {
+            if status == 77 {
+                stderr.clear();
+            }
+            stderr.extend_from_slice(b"fastmash: write error: Broken pipe\n");
+            return Ok((1, stderr));
+        }
+        Ok((status, stderr))
+    }
     pub fn observes_held(&self) -> bool {
         self.observe_held == serde_json::Value::Bool(true)
     }
@@ -209,6 +276,10 @@ impl Case {
     }
 
     pub fn supported(&self, stdin_file: bool) -> bool {
+        #[cfg(windows)]
+        if self.windows_exclusion().is_some() {
+            return false;
+        }
         self.ordinary()
             || (!stdin_file
                 && self.io == "read-error"
@@ -249,6 +320,10 @@ impl Case {
     }
 
     pub fn deferred_reason(&self, stdin_file: bool) -> Option<&'static str> {
+        #[cfg(windows)]
+        if let Some(reason) = self.windows_exclusion() {
+            return Some(reason);
+        }
         if self.supported(stdin_file) {
             None
         } else if self.supported(false) {
@@ -262,12 +337,9 @@ impl Case {
         match (&self.args_hex, &self.args) {
             (Some(args), _) => args
                 .iter()
-                .map(|s| decode(s).map(OsString::from_vec))
+                .map(|s| decode(s).and_then(os_argument))
                 .collect(),
-            (None, Some(args)) => Ok(args
-                .iter()
-                .map(|arg| OsString::from_vec(arg.0.clone()))
-                .collect()),
+            (None, Some(args)) => args.iter().map(|arg| os_argument(arg.0.clone())).collect(),
             (None, None) => Err(Error::message(format!("{} has no arguments", self.id))),
         }
     }
@@ -312,8 +384,12 @@ impl Case {
         } else {
             diagnostic_guidance(decode(&self.expected.stderr_hex)?)
         };
+        #[cfg(windows)]
+        let (status, stderr) = self.windows_expected(self.expected.returncode, stderr)?;
+        #[cfg(not(windows))]
+        let status = self.expected.returncode;
         Ok(Expected {
-            returncode: self.expected.returncode,
+            returncode: status,
             stdout_hex: encode(&stdout),
             stderr_hex: encode(&stderr),
             held,
@@ -325,7 +401,7 @@ impl Case {
         expected: &mut Expected,
         destination: Option<&crate::held_output::Destination>,
     ) -> Result<()> {
-        if !cfg!(target_os = "macos") {
+        if !cfg!(any(target_os = "macos", windows)) {
             return Ok(());
         }
         self.adapt_buffer(expected, destination)
@@ -372,10 +448,21 @@ impl Case {
 
     pub fn native_dispositions(&self) -> Vec<&'static str> {
         let mut reasons = Vec::new();
+        #[cfg(windows)]
+        {
+            if self.id == "output-header-lifecycle:header-4087-1-full" {
+                reasons.push("8192-byte Windows buffer defers the header failure to finalization");
+            }
+            if self.io == "closed-pipe" {
+                reasons.push("Windows continues after a broken pipe, preserving command and completion diagnostics instead of Unix SIGPIPE");
+            }
+        }
         if NATIVE_SORT_DIAGNOSTICS.contains(&self.id.as_str()) {
             reasons.push(NATIVE_REASON);
         }
-        if cfg!(target_os = "macos") && NATIVE_BUFFER_OBSERVATIONS.contains(&self.id.as_str()) {
+        if (cfg!(target_os = "macos") || cfg!(windows))
+            && NATIVE_BUFFER_OBSERVATIONS.contains(&self.id.as_str())
+        {
             reasons.push("held prefix uses native destination block size; completed stdout and status frozen");
         }
         reasons
@@ -506,6 +593,8 @@ mod tests {
         let original = case.expected(Path::new("."), None).unwrap();
         let mut expected = original.clone();
         let facts = Destination {
+            #[cfg(windows)]
+            kind: "pipe",
             isatty: false,
             block_size: 4,
         };
@@ -523,6 +612,8 @@ mod tests {
             case.adapt_buffer(
                 &mut expected,
                 Some(&Destination {
+                    #[cfg(windows)]
+                    kind: "pipe",
                     isatty: true,
                     block_size: 4
                 })
@@ -533,6 +624,8 @@ mod tests {
             case.adapt_buffer(
                 &mut expected,
                 Some(&Destination {
+                    #[cfg(windows)]
+                    kind: "pipe",
                     isatty: false,
                     block_size,
                 }),
@@ -569,7 +662,7 @@ mod tests {
                 .iter()
                 .filter(|case| case.supported(false))
                 .count(),
-            3137
+            if cfg!(windows) { 3088 } else { 3137 }
         );
         assert_eq!(
             fixture
@@ -577,7 +670,7 @@ mod tests {
                 .iter()
                 .filter(|case| case.supported(true))
                 .count(),
-            2857
+            if cfg!(windows) { 2843 } else { 2857 }
         );
         assert_eq!(
             fixture.cases.iter().filter(|case| !case.ordinary()).count(),
@@ -606,16 +699,26 @@ mod tests {
             10
         );
         for case in ordinary {
+            #[cfg(windows)]
+            if case.windows_exclusion().is_some() {
+                assert!(case.arguments().is_err());
+                continue;
+            }
             case.arguments().unwrap();
             decode(&case.input_hex).unwrap();
         }
-        use std::os::unix::ffi::OsStrExt;
         let high_byte = fixture
             .cases
             .iter()
             .find(|case| case.id == "collapse/high-byte-delimiter")
             .unwrap();
-        assert_eq!(high_byte.arguments().unwrap()[0].as_bytes(), b"-c\xff");
+        #[cfg(unix)]
+        assert_eq!(
+            high_byte.arguments().unwrap()[0].as_encoded_bytes(),
+            b"-c\xff"
+        );
+        #[cfg(windows)]
+        assert!(high_byte.arguments().is_err());
     }
 
     #[test]
@@ -638,7 +741,11 @@ mod tests {
     fn ordinary_expectations_only_apply_the_existing_named_adaptations() {
         let fixture = fixture();
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for case in fixture.cases.iter().filter(|case| case.ordinary()) {
+        for case in fixture
+            .cases
+            .iter()
+            .filter(|case| case.ordinary() && case.supported(false))
+        {
             let original = case.expected(&root, None).unwrap();
             let versioned = case.expected(&root, Some("development")).unwrap();
             assert_eq!(original.returncode, versioned.returncode);

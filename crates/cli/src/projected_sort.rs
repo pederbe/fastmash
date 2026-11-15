@@ -1556,7 +1556,7 @@ mod compact_tests {
             fn close(&mut self) -> io::Result<()> {
                 self.0.closed = true;
                 self.1
-                    .map_or(Ok(()), |code| Err(io::Error::from_raw_os_error(code)))
+                    .map_or(Ok(()), |code| Err(crate::test_io::write(code)))
             }
         }
 
@@ -1604,7 +1604,7 @@ mod compact_tests {
                                     expected.push(b"read error: Input/output error\n".to_vec())
                                 }
                                 Some(9) => {
-                                    expected.push(b"read error: Bad file descriptor\n".to_vec())
+                                    expected.push(crate::test_io::BAD_READ.as_bytes().to_vec())
                                 }
                                 Some(21) => expected.push(b"read error: Is a directory\n".to_vec()),
                                 None if !weighted => expected.push(

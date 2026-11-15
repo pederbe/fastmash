@@ -6,7 +6,7 @@ directory input, output to a pipe whose reader has closed and full-output errors
 verifies the frozen fixture and provenance, records executable identities and
 compares exact bytes and status. It preserves byte arguments, the isolated
 environment, the eight-second execution deadline and the 524,288-byte output
-guard. Each invocation owns a process group that is cancelled on completion or
+guard. On Unix, each invocation owns a process group that is cancelled on completion or
 failure. Candidate processes must retain inherited credentials and remain in
 that group and session. Exit is observed without reaping the leader, so its PID
 stays owned until group cancellation finishes. On macOS, signalling a group with
@@ -37,7 +37,7 @@ target/release/fastmash-corpus --binary target/release/fastmash --expected-versi
 '
 ```
 
-The default run executes all 3,137 frozen cases: 2,857 ordinary cases, 22 directory-input
+On Unix, the default run executes all 3,137 frozen cases: 2,857 ordinary cases, 22 directory-input
 cases, 51 closed-output-pipe cases, 72 full-output cases and 65 early commands
 with stdin held open, plus 67 held-output observations and three late-input errors. Regular-file mode executes the same 2,857 ordinary cases as before
 and records why each other case belongs to the default Rust run. Both modes
@@ -112,3 +112,50 @@ syscall return `EINVAL` or `ENOSYS`. This exercises native fallback on older
 kernels without affecting other syscalls. The filter survives target execution
 and applies to its descendants. It belongs to this unpublished development
 crate and does not enter product archives.
+
+## Windows transports
+
+The Windows driver uses the same frozen fixture, exact numerical bytes and
+command interface. Default input runs 3,088 cases, including native directory,
+closed-pipe, full-volume, early-exit and held-output checks. Regular-file input
+runs 2,843 ordinary cases. Every run records a disposition for all 3,137 IDs.
+Fourteen raw Unix-byte argument cases, 32 Unix PTY cases and three POSIX
+controlling-terminal read failures are excluded with explicit reasons. Separate
+ConPTY tests check console Unicode, color and header delivery before input EOF. Exclusions are not Windows coverage.
+
+Safe `process-wrap` and `win32job` interfaces suspend each child, assign it to
+owned Jobs before its code runs and resume it. Completion or failure cancels the
+whole Job. An independent Job membership query must show no remaining processes
+before cleanup is confirmed. Pipe reader and input writer threads have bounded
+completion waits. The eight-second per-command deadline and 524,288-byte output
+guard remain in force. The output guard limits test captures, not product data.
+Three held-output cases retain a real regular-file destination, with bounded
+prefix reads. The other admitted held-output cases use actual pipes.
+
+Windows reports a nonzero broken-pipe write failure instead of Unix SIGPIPE.
+Where Unix terminates before a primary command diagnostic, Windows reports that
+diagnostic followed by output completion failure. The fixed 8,192-byte Windows
+output buffer changes four held-prefix observations and one full-destination
+finalization diagnostic. Each adaptation is named in the driver and recorded in
+`dispositions.jsonl`. The frozen fixture and its provenance remain unchanged.
+
+Full-output tests require `FASTMASH_TEST_FULL_VOLUME`, pointing to the private
+mounted volume prepared by [windows-volume.ps1](../../.github/scripts/windows-volume.ps1).
+The maintained setup creates a disposable 64 MiB NTFS image. Calibration fills
+one newly created file, stops after at most 128 MiB of writes, then verifies that
+a single byte fails with native disk-full status before and after each candidate.
+The driver removes its fill file. The setup owner detaches and removes the image
+even after a failed test. Calibration and volume receipts identify the actual sink.
+
+PowerShell workflow tests run the product under the 7.4 baseline and current
+stable shell. They distinguish raw native pipelines and stdout redirection from
+PowerShell string pipelines. Their file-input route launches `cmd.exe /d /v:off`
+with environment-variable indirection for executable and input paths, so the
+shell streams the file without decoding it or loading it into memory. Tests
+include spaces, Unicode, single quotes, literal `%NAME%`, ampersands and `!`,
+also from a parent with delayed expansion enabled. See
+[Testing](../../TESTING.md#native-windows-command-validation) for entrypoints.
+
+Use `--shard PART/TOTAL` with zero-based `PART` when a runner needs bounded
+phases. Shards partition the unchanged fixture order and retain their selection
+in `identity.json`. All shards are required for complete default-mode coverage.

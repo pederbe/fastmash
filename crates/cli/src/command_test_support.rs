@@ -25,7 +25,7 @@ impl BufRead for Input<'_> {
         if self.bytes.is_empty()
             && let Some(code) = self.error
         {
-            return Err(io::Error::from_raw_os_error(code));
+            return Err(test_io::read(code));
         }
         Ok(&self.bytes[..self.bytes.len().min(self.segment)])
     }
@@ -44,7 +44,7 @@ pub(super) struct Output {
 impl Write for Output {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if let Some(code) = self.error {
-            return Err(io::Error::from_raw_os_error(code));
+            return Err(test_io::write(code));
         }
         // Short writes exercise complete byte preservation without coupling to
         // the header renderer's internal calls.
@@ -143,9 +143,7 @@ impl command_sources::Resolver for Sources<'_> {
         let result = scan(&mut self.inputs[at]);
         self.completed += 1;
         let completion = self.closes[at].map_or(Ok(()), |code| {
-            Err(command_sources::close_failure(
-                &io::Error::from_raw_os_error(code),
-            ))
+            Err(command_sources::close_failure(&test_io::read(code)))
         });
         command_sources::complete(result, completion)
     }

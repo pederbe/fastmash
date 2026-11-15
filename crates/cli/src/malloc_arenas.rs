@@ -8,14 +8,14 @@
 //! the C library could not start a thread. Under such a limit, the process
 //! keeps to one arena for each 512 MiB of it, from one to eight; threads that
 //! share an arena wait for each other's allocations.
-#[cfg(any(test, all(target_os = "linux", target_env = "gnu")))]
+#[cfg(any(all(test, unix), all(target_os = "linux", target_env = "gnu")))]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 /// The address space that a limit gives each malloc arena.
-#[cfg(any(test, all(target_os = "linux", target_env = "gnu")))]
+#[cfg(any(all(test, unix), all(target_os = "linux", target_env = "gnu")))]
 const PER_ARENA: u64 = 512 << 20;
 /// The most malloc arenas under a limit: one for each thread of a sort.
-#[cfg(any(test, all(target_os = "linux", target_env = "gnu")))]
+#[cfg(any(all(test, unix), all(target_os = "linux", target_env = "gnu")))]
 const MOST: u64 = 8;
 
 /// Caps glibc's malloc arenas when the address space is limited
@@ -61,7 +61,7 @@ pub(super) fn trim() {}
 
 /// The malloc arenas under an address-space limit of `limit` bytes: one for
 /// each 512 MiB, from one to eight; none without a limit.
-#[cfg(any(test, all(target_os = "linux", target_env = "gnu")))]
+#[cfg(any(all(test, unix), all(target_os = "linux", target_env = "gnu")))]
 fn arenas(limit: u64) -> Option<libc::c_int> {
     (limit != libc::RLIM_INFINITY).then(|| (limit / PER_ARENA).clamp(1, MOST) as libc::c_int)
 }
@@ -70,7 +70,7 @@ fn arenas(limit: u64) -> Option<libc::c_int> {
 /// number, which glibc takes: the tunable `glibc.malloc.arena_max` in
 /// `GLIBC_TUNABLES` (`name=value` items separated by colons), or its alias
 /// `MALLOC_ARENA_MAX`. glibc ignores other values, such as 0.
-#[cfg(any(test, all(target_os = "linux", target_env = "gnu")))]
+#[cfg(any(all(test, unix), all(target_os = "linux", target_env = "gnu")))]
 fn configured(tunables: Option<&OsStr>, alias: Option<&OsStr>) -> bool {
     let positive = |value: &[u8]| {
         !value.is_empty()
@@ -86,7 +86,7 @@ fn configured(tunables: Option<&OsStr>, alias: Option<&OsStr>) -> bool {
         })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

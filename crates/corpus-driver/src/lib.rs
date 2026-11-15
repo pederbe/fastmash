@@ -3,12 +3,19 @@
 //! Frozen Command checks, including directory, closed-pipe and full-output I/O.
 //! Remaining transports stay in the full corpus gate until migration completes.
 
+#[cfg(unix)]
 mod child_status;
 pub mod fixture;
+#[cfg_attr(windows, path = "windows/full_output.rs")]
 pub mod full_output;
+#[cfg(unix)]
 pub mod full_volume;
+#[cfg_attr(windows, path = "windows/held_output.rs")]
 mod held_output;
+#[cfg(unix)]
 pub mod late_input;
+mod observation;
+#[cfg_attr(windows, path = "windows/process.rs")]
 mod process;
 
 use fixture::{Fixture, digest};
@@ -22,6 +29,15 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Capture a Windows workflow under the same bounded Job ownership as cases.
+#[cfg(windows)]
+pub fn windows_output(
+    command: std::process::Command,
+    timeout: std::time::Duration,
+) -> Result<std::process::Output> {
+    process::command_output(command, timeout)
+}
 
 #[derive(Debug)]
 pub struct Error(Box<dyn std::error::Error + Send + Sync>);
@@ -47,11 +63,13 @@ impl From<serde_json::Error> for Error {
         Self(error.into())
     }
 }
+#[cfg(unix)]
 impl From<nix::errno::Errno> for Error {
     fn from(error: nix::errno::Errno) -> Self {
         Self(error.into())
     }
 }
+#[cfg(unix)]
 impl From<rustix::io::Errno> for Error {
     fn from(value: rustix::io::Errno) -> Self {
         Self(value.into())
@@ -73,6 +91,7 @@ pub struct Options {
     pub expected_version: Option<String>,
     pub stdin_file: bool,
     pub evidence_dir: Option<PathBuf>,
+    pub shard: Option<(usize, usize)>,
 }
 
 impl Options {
@@ -87,6 +106,7 @@ impl Options {
             expected_version: None,
             stdin_file: false,
             evidence_dir: None,
+            shard: None,
         }
     }
 }
@@ -101,7 +121,15 @@ pub struct RunResult {
 }
 
 pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
-    if !cfg!(any(target_os = "linux", target_os = "macos")) {
+    if options
+        .shard
+        .is_some_and(|(part, total)| total == 0 || part >= total)
+    {
+        return Err(Error::message(
+            "--shard requires PART/TOTAL with 0 <= PART < TOTAL",
+        ));
+    }
+    if !cfg!(any(target_os = "linux", target_os = "macos", windows)) {
         return Err(Error::message("unsupported regression test platform"));
     }
     require_unblocked_signals()?;
@@ -122,7 +150,14 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     let matched: Vec<_> = fixture
         .cases
         .iter()
-        .filter(|case| case.id.contains(&options.pattern))
+        .enumerate()
+        .filter(|(index, case)| {
+            case.id.contains(&options.pattern)
+                && options
+                    .shard
+                    .is_none_or(|(part, total)| index % total == part)
+        })
+        .map(|(_, case)| case)
         .collect();
     let cases: Vec<_> = matched
         .iter()
@@ -142,12 +177,13 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
         None
     };
     let evidence = json!({
-        "platform": if cfg!(target_os="macos") { "darwin" } else { "linux" },
+        "platform": if cfg!(windows) { "windows" } else if cfg!(target_os="macos") { "darwin" } else { "linux" },
         "binary": binary, "binary_sha256":binary_sha256,
         "fixture":fixture.path, "fixture_sha256":fixture.fixture_sha256,
         "content_sha256":fixture.content_sha256,
         "provenance":fixture.provenance_path, "provenance_sha256":fixture.provenance_sha256,
         "expected_version":options.expected_version, "stdin_file":options.stdin_file,
+        "shard":options.shard,
         "full_output_calibration":full.as_ref().map(|full| full.identity()).transpose()?,
         "selected_cases":cases.len(), "matched_cases":matched.len(),
         "transport_dispositions":excluded,
@@ -179,6 +215,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     for case in cases {
         let mut expected = case.expected(&options.root, options.expected_version.as_deref())?;
         result.attempted += 1;
+        #[cfg(unix)]
         let observed = if case.io == "read-error" {
             let root = options
                 .evidence_dir
@@ -196,6 +233,15 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
                 full.as_mut(),
             )?
         };
+        #[cfg(windows)]
+        let observed = invoke(
+            case,
+            &binary,
+            &launcher,
+            &directory.path,
+            options.stdin_file,
+            full.as_mut(),
+        )?;
         case.adapt_native_buffer(&mut expected, observed.destination.as_ref())?;
         let passed =
             observed.matches(&expected) && (!case.hold_stdin || observed.stdin_held_until_exit);
@@ -331,14 +377,17 @@ fn write_line(output: &mut impl Write, value: &impl Serialize) -> Result<()> {
 
 pub fn main_entry(mut args: impl Iterator<Item = OsString>) -> Result<i32> {
     let first = args.next();
+    #[cfg(unix)]
     if first.as_deref() == Some(std::ffi::OsStr::new(late_input::COORDINATE)) {
         late_input::coordinate(args)?;
         return Ok(0);
     }
+    #[cfg(unix)]
     if first.as_deref() == Some(std::ffi::OsStr::new(late_input::EXEC)) {
         late_input::exec(args)?;
         return Err(Error::message("late-input exec unexpectedly returned"));
     }
+    #[cfg(unix)]
     if first.as_deref() == Some(std::ffi::OsStr::new(process::EXEC_MODE)) {
         process::exec_target(args)?;
         return Err(Error::message("internal exec unexpectedly returned"));
@@ -359,6 +408,7 @@ Example, replacing VERSION with the selected executable's version number:\n\
   fastmash-corpus --binary target/release/fastmash --expected-version VERSION \\\n    --evidence-dir /var/tmp/fastmash-corpus-run\n\n\
   --fixture PATH          compressed corpus with its sibling provenance file\n\
   --match TEXT            select case IDs containing TEXT\n\
+  --shard PART/TOTAL      select a zero-based shard of the frozen inventory\n\
   --expected-version V    expected version for --version cases\n\
   --stdin-file            ordinary input through a regular file\n\
   --keep-going            continue after mismatches\n\
@@ -380,6 +430,20 @@ Guide: https://fastmash.io/contributing/testing.html#regression-corpus"
                 options.pattern = value(&mut args)?
                     .into_string()
                     .map_err(|_| Error::message("--match requires UTF-8 text"))?
+            }
+            Some("--shard") => {
+                options.shard = Some(
+                    value(&mut args)?
+                        .to_str()
+                        .and_then(|text| text.split_once('/'))
+                        .and_then(|(part, total)| {
+                            Some((part.parse::<usize>().ok()?, total.parse::<usize>().ok()?))
+                        })
+                        .filter(|(part, total)| *total > 0 && part < total)
+                        .ok_or_else(|| {
+                            Error::message("--shard requires PART/TOTAL with 0 <= PART < TOTAL")
+                        })?,
+                );
             }
             Some("--expected-version") => {
                 options.expected_version = Some(

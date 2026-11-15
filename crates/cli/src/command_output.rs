@@ -519,7 +519,7 @@ mod tests {
     use std::{cell::RefCell, rc::Rc};
 
     fn io_error(code: i32) -> IoFailure {
-        io::Error::from_raw_os_error(code).into()
+        crate::test_io::write(code).into()
     }
 
     #[test]
@@ -557,7 +557,7 @@ mod tests {
                 Some(9),
                 false,
                 false,
-                Some((1, "write error: Bad file descriptor\n")),
+                Some((1, crate::test_io::BAD_WRITE)),
             ),
             (
                 None,
@@ -565,7 +565,7 @@ mod tests {
                 Some(9),
                 true,
                 false,
-                Some((1, "write error: Bad file descriptor\n")),
+                Some((1, crate::test_io::BAD_WRITE)),
             ),
             (
                 None,
@@ -607,7 +607,7 @@ mod tests {
         impl Write for Sink {
             fn write(&mut self, _: &[u8]) -> io::Result<usize> {
                 self.events.borrow_mut().push("flush".into());
-                Err(io::Error::from_raw_os_error(self.code))
+                Err(crate::test_io::write(self.code))
             }
             fn flush(&mut self) -> io::Result<()> {
                 panic!("unbuffered")
@@ -674,7 +674,7 @@ mod tests {
                 if self.0 == 2 {
                     Ok(0)
                 } else {
-                    Err(io::Error::from_raw_os_error(28))
+                    Err(crate::test_io::write(28))
                 }
             }
             fn flush(&mut self) -> io::Result<()> {
@@ -691,12 +691,15 @@ mod tests {
             buffer.formatted(b"last");
             let result = buffer.finish(|_| {
                 if close_fails {
-                    Err(io::Error::from_raw_os_error(28))
+                    Err(crate::test_io::write(28))
                 } else {
                     Ok(())
                 }
             });
-            assert_eq!(completion_failure(result).unwrap().status, 77);
+            assert_eq!(
+                completion_failure(result).unwrap().status,
+                if cfg!(windows) { 1 } else { 77 }
+            );
         }
     }
 }

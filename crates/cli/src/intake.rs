@@ -560,7 +560,7 @@ mod tests {
             match self.0 {
                 1 => Ok(b"a
 partial"),
-                2 => Err(io::Error::from_raw_os_error(5)),
+                2 => Err(crate::test_io::read(5)),
                 _ => panic!("read after the input ended"),
             }
         }
@@ -624,7 +624,7 @@ partial"),
         );
         assert_eq!(
             intake.read_error().and_then(io::Error::raw_os_error),
-            Some(5)
+            Some(crate::test_io::read_code(5))
         );
         let error = intake.finish().err().unwrap();
         assert_eq!(

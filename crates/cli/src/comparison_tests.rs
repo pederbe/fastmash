@@ -1742,7 +1742,7 @@ fn comparison_output_flush_and_close_failures_are_completed() {
         fn close(&mut self) -> std::io::Result<()> {
             self.inner.closed = true;
             self.close
-                .map_or(Ok(()), |code| Err(std::io::Error::from_raw_os_error(code)))
+                .map_or(Ok(()), |code| Err(crate::test_io::read(code)))
         }
     }
     for csv in [false, true] {

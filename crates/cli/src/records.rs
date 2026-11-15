@@ -866,7 +866,7 @@ mod tests {
     impl BufRead for BrokenReader {
         fn fill_buf(&mut self) -> io::Result<&[u8]> {
             if self.sent {
-                Err(io::Error::from_raw_os_error(5))
+                Err(crate::test_io::read(5))
             } else {
                 Ok(b"partial")
             }
@@ -899,7 +899,7 @@ mod tests {
         }
         fn flush(&mut self) -> io::Result<()> {
             if self.fail_flush {
-                Err(io::Error::from_raw_os_error(28))
+                Err(crate::test_io::write(28))
             } else {
                 Ok(())
             }

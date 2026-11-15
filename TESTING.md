@@ -530,27 +530,60 @@ logs, per-case dispositions and hosted comparison data. The checkout stays clean
 for archive provenance. A prepared workflow or an Apple-target compile check is
 not native runtime evidence, release qualification or a performance claim.
 
-## Native Windows backend development
+## Native Windows command validation
 
-Windows 11 x64 builds use stable Rust's `x86_64-pc-windows-msvc` target and
-the Visual Studio C++ build tools. This development gate covers the backend,
-not the full command corpus or release installation. Windows users should
-continue using WSL2 until native release qualification is complete.
+Native development checks use Windows 11 x64, stable Rust's
+`x86_64-pc-windows-msvc` target, the Visual Studio C++ build tools and PowerShell
+7.4 or later. Native release installation remains a separate qualification.
+Windows users should continue using WSL2 until that work is complete.
 
-Run from native PowerShell:
+Run the product and driver checks from native PowerShell:
 
 ```powershell
-cargo clippy -p fastmash --bin fastmash --test windows_backend --locked -- -D warnings
-cargo test --release -p fastmash --test windows_backend --locked
+cargo clippy -p fastmash --bin fastmash --test windows_backend --test windows_console -p fastmash-corpus-driver --bins --test windows_driver --test windows_powershell --locked -- -D warnings
+cargo build --release -p fastmash -p fastmash-corpus-driver --bins --locked
+cargo test --release -p fastmash --bin fastmash --test windows_backend --test windows_console --locked
+cargo test --release -p fastmash-corpus-driver --lib --test windows_driver --locked
 ```
 
-The focused tests cover binary streams, native Unicode paths, file/pipe grouping,
-wrong-access and broken-pipe errors, unpaired UTF-16 refusal, forced spill,
-storage failure and cleanup after completion or termination. The inherited
-original standard handles remain open until process cleanup. See
-[ADR 0021](docs/src/adr/0021-windows-development-backend.md) for the ownership
-boundary. The Unix corpus driver and remaining Unix-only test fixtures are
-outside this gate. Hosted Windows checks do not replace native Windows 11
+The command corpus runs through the same `fastmash-corpus.exe` interface as on
+Linux and macOS. Its default Windows run checks 3,088 cases and regular-file
+input checks 2,843. Both account for all 3,137 frozen IDs. Fourteen raw Unix-byte
+argument cases, 32 Unix PTY cases and three POSIX job-control input failures have
+explicit exclusions. They do not count as passing Windows tests. The native
+console tests exercise actual ConPTY Unicode output across application-buffer
+boundaries, header delivery before input EOF and automatic color, including
+`NO_COLOR`. Shared unit tests cover
+synthetic read, write, flush and close failures using native error meanings.
+The [driver guide](crates/corpus-driver/README.md#windows-transports) lists
+transport differences and evidence.
+
+The full-output corpus needs a private mounted test volume through
+`FASTMASH_TEST_FULL_VOLUME`. The setup and cleanup in
+[Windows CI](.github/workflows/ci.yml) use
+[windows-volume.ps1](.github/scripts/windows-volume.ps1) to create a disposable
+64 MiB NTFS image. Creating and removing it requires administrator rights.
+Candidate validation on Windows 11 runs as an ordinary user. Never point a
+full-output run at a volume containing useful data.
+
+The ignored `windows_powershell` integration test requires `FASTMASH_TEST_BINARY`,
+`FASTMASH_PWSH_74` and `FASTMASH_PWSH_CURRENT`, each naming an executable.
+[windows-powershell.ps1](.github/scripts/windows-powershell.ps1) prepares the two
+checksum-verified portable shells used in CI. Run the workflow checks with
+`cargo test --release -p fastmash-corpus-driver --test windows_powershell --locked -- --ignored`.
+They check raw file input and native pipelines separately from text pipelines,
+quoting, literal special characters in paths, inherited delayed expansion,
+explicit numeric locale and exit propagation. Use PowerShell 7.4 or later for
+byte-preserving native stdout redirection. A PowerShell string pipeline supplies
+encoded text and can change line endings.
+
+The focused backend tests also cover binary streams, Unicode paths, file/pipe
+grouping, wrong-access and broken-pipe errors, unpaired UTF-16 refusal, forced
+spill and temporary-storage cleanup. Inherited original standard handles remain
+open until process cleanup. See
+[ADR 0021](docs/src/adr/0021-windows-development-backend.md) for that ownership
+boundary. Unix descriptor, signal, resource-limit and terminal-job-control
+fixtures stay on Unix. Hosted Windows checks do not replace Windows 11
 validation for changes to this backend.
 
 ## Website checks

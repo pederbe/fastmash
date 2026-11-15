@@ -12,7 +12,7 @@ impl Write for Output {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         let remaining = self.fail_at.map_or(usize::MAX, |at| at - self.bytes.len());
         if remaining == 0 {
-            return Err(io::Error::from_raw_os_error(28));
+            return Err(crate::test_io::write(28));
         }
         let count = bytes.len().min(2).min(remaining);
         self.bytes.extend_from_slice(&bytes[..count]);
@@ -20,7 +20,7 @@ impl Write for Output {
     }
     fn flush(&mut self) -> io::Result<()> {
         if self.fail_flush {
-            Err(io::Error::from_raw_os_error(28))
+            Err(crate::test_io::write(28))
         } else {
             Ok(())
         }

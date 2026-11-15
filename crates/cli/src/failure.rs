@@ -221,6 +221,7 @@ pub(super) fn os_failure(error: &io::Error, reading: bool) -> Failure {
         } else {
             match error.kind() {
                 io::ErrorKind::PermissionDenied => Some("Access denied"),
+                io::ErrorKind::IsADirectory if reading => Some("Is a directory"),
                 io::ErrorKind::BrokenPipe => Some("Broken pipe"),
                 io::ErrorKind::StorageFull => Some("No space left on device"),
                 io::ErrorKind::WriteZero => Some("Unable to write output"),
@@ -296,7 +297,7 @@ mod tests {
         fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
             let remaining = self.fail_at.map_or(usize::MAX, |at| at - self.bytes.len());
             if remaining == 0 {
-                return Err(io::Error::from_raw_os_error(28));
+                return Err(crate::test_io::write(28));
             }
             if self.zero {
                 return Ok(0);
@@ -307,7 +308,7 @@ mod tests {
         }
         fn flush(&mut self) -> io::Result<()> {
             if self.fail_flush {
-                Err(io::Error::from_raw_os_error(28))
+                Err(crate::test_io::write(28))
             } else {
                 Ok(())
             }
@@ -390,6 +391,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn allocation_failure_fallback_uses_default_stderr_detection() {
         for stderr_terminal in [false, true] {
             for (environment, eligible) in [
@@ -467,7 +469,7 @@ mod tests {
                         write(&mut sink, b"fastmash", &error, style(mode))
                             .unwrap_err()
                             .raw_os_error(),
-                        Some(28)
+                        Some(crate::test_io::write_code(28))
                     );
                     assert_eq!(sink.bytes, expected[..fail_at]);
                 }
@@ -490,7 +492,7 @@ mod tests {
                     write(&mut sink, b"fastmash", &error, style(mode))
                         .unwrap_err()
                         .raw_os_error(),
-                    Some(28)
+                    Some(crate::test_io::write_code(28))
                 );
                 assert_eq!(sink.bytes, expected);
             }
@@ -508,10 +510,10 @@ mod tests {
             fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
                 if self.fail_at == Some(self.bytes.len()) {
                     self.fail_at = None;
-                    return Err(io::Error::from_raw_os_error(28));
+                    return Err(crate::test_io::write(28));
                 }
                 if self.fail_at.is_none() && self.fail_reset {
-                    return Err(io::Error::from_raw_os_error(5));
+                    return Err(crate::test_io::write(5));
                 }
                 let remaining = self.fail_at.map_or(usize::MAX, |at| at - self.bytes.len());
                 let count = bytes.len().min(2).min(remaining);
@@ -539,7 +541,7 @@ mod tests {
                     )
                     .unwrap_err()
                     .raw_os_error(),
-                    Some(28)
+                    Some(crate::test_io::write_code(28))
                 );
                 let reset = if fail_reset {
                     b"".as_slice()
@@ -556,7 +558,7 @@ mod tests {
                     write_prefix(&mut startup_sink, b"fastmash", style(ColorMode::Always))
                         .unwrap_err()
                         .raw_os_error(),
-                    Some(28)
+                    Some(crate::test_io::write_code(28))
                 );
                 // Startup keeps the fallback body independent of prefix errors.
                 let refusal = Failure {
@@ -567,7 +569,10 @@ mod tests {
                 let body = reported(&refusal);
                 let result = startup_sink.write_all(body);
                 if fail_reset {
-                    assert_eq!(result.unwrap_err().raw_os_error(), Some(5));
+                    assert_eq!(
+                        result.unwrap_err().raw_os_error(),
+                        Some(crate::test_io::write_code(5))
+                    );
                 } else {
                     result.unwrap();
                     assert_eq!(
@@ -598,7 +603,7 @@ mod tests {
                         Err(internal),
                         |_| {
                             closed = true;
-                            Err(io::Error::from_raw_os_error(close_error))
+                            Err(crate::test_io::write(close_error))
                         },
                         &mut |failure| {
                             attempts += 1;

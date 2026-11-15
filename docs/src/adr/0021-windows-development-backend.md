@@ -45,9 +45,14 @@ do not expand. Numerical rules and the Numerical profile remain unchanged.
 
 ## Consequences and alternatives
 
-Focused native tests qualify the backend mechanisms. Full Windows command,
-console, PowerShell 7.4+ and exact-archive installation qualification are still
-required before advertising support or adding Windows release artifacts.
+Native development validation covers the backend, the applicable frozen command
+corpus, shared numerical and command unit tests, actual console Unicode, color and header delivery before input EOF,
+and PowerShell 7.4 plus the current stable shell. Unix-only transport mechanisms
+retain explicit exclusions. The development corpus driver owns whole Windows
+Jobs through safe dependency interfaces and verifies cancellation before cleanup.
+See [Testing](../../../TESTING.md#native-windows-command-validation) for the
+maintained inventory and commands. Exact-archive installation qualification is
+still required before advertising support or adding Windows release artifacts.
 
 Closing the original standard handles would require an additional safe ownership
 handover mechanism or a separately approved unsafe exception. Owning copies
