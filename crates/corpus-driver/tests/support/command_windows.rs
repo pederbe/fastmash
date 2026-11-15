@@ -18,6 +18,45 @@ pub(super) fn main() {
             std::io::stdin().read_to_end(&mut bytes).unwrap();
             std::io::stdout().write_all(&bytes).unwrap();
         }
+        "console-held" => {
+            use process_wrap::std::{CommandWrap, JobObject};
+            let binary = args.next().unwrap();
+            let ready = args.next().unwrap();
+            let release = args.next().unwrap();
+            let mut command = Command::new(binary);
+            command
+                .args(["--csv-out", "-H", "sum", "1"])
+                .stdin(Stdio::piped());
+            let mut wrapped = CommandWrap::from(command);
+            wrapped.wrap(JobObject);
+            let mut child = wrapped.spawn().unwrap();
+            drop(wrapped);
+            let mut input = child.stdin().take().unwrap();
+            input.write_all(b"value\n1\n2\n").unwrap();
+            std::fs::write(ready, b"input delivered").unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            while !std::path::Path::new(&release).exists() {
+                if std::time::Instant::now() >= deadline {
+                    child.start_kill().unwrap();
+                    child.wait().unwrap();
+                    panic!("console observation was not released");
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            drop(input);
+            loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    assert!(status.success(), "held console child failed");
+                    break;
+                }
+                if std::time::Instant::now() >= deadline {
+                    child.start_kill().unwrap();
+                    child.wait().unwrap();
+                    panic!("held console child did not complete");
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
         "wrong-output" => println!("incorrect"),
         "wrong-error" => eprintln!("incorrect"),
         "wrong-status" => std::process::exit(17),

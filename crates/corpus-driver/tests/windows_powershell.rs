@@ -80,9 +80,11 @@ fn native_powershell_baseline_and_current_preserve_workflow_contracts() {
             if baseline { "74" } else { "current" }
         ));
         fs::create_dir(&root).unwrap();
+        let quoted_binary = root.join("fastmash ' é %NAME% & !.exe");
+        fs::copy(&binary, &quoted_binary).unwrap();
         let workflow = Workflow {
             root,
-            binary: binary.clone(),
+            binary: quoted_binary,
             shell,
         };
         let (version, _) = workflow.execute(

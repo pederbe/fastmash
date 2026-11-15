@@ -6,11 +6,27 @@ use std::{
     ffi::OsString,
     fs,
     io::{Read, Write},
-    sync::mpsc,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, mpsc},
     time::{Duration, Instant},
 };
 
 fn console(args: &[OsString], no_color: bool) -> String {
+    console_command(
+        Path::new(env!("CARGO_BIN_EXE_fastmash")),
+        args,
+        no_color,
+        None,
+    )
+    .0
+}
+
+fn console_command(
+    program: &Path,
+    args: &[OsString],
+    no_color: bool,
+    held: Option<(&Path, &Path)>,
+) -> (String, Option<String>) {
     let pair = native_pty_system()
         .openpty(PtySize {
             rows: 500,
@@ -19,7 +35,7 @@ fn console(args: &[OsString], no_color: bool) -> String {
             pixel_height: 0,
         })
         .unwrap();
-    let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_fastmash"));
+    let mut command = CommandBuilder::new(program);
     command.args(args);
     command.env("LC_ALL", "C.UTF-8");
     command.env("TERM", "xterm");
@@ -45,6 +61,8 @@ fn console(args: &[OsString], no_color: bool) -> String {
         let _ = input_sent.send(result);
     });
     let replies = input.clone();
+    let prefix = Arc::new(Mutex::new(Vec::new()));
+    let observed = Arc::clone(&prefix);
     let (sent, output) = mpsc::channel();
     std::thread::spawn(move || {
         let result = (|| {
@@ -60,6 +78,7 @@ fn console(args: &[OsString], no_color: bool) -> String {
                 if bytes.len() > 1 << 20 {
                     return Err(std::io::Error::other("console output exceeded 1 MiB"));
                 }
+                observed.lock().unwrap().extend_from_slice(&buffer[..count]);
                 // INHERIT_CURSOR queries the host before process creation.
                 // This fresh, otherwise unused terminal starts at row/column 1.
                 for word in bytes[start..].windows(4) {
@@ -88,7 +107,18 @@ fn console(args: &[OsString], no_color: bool) -> String {
         .expect("ConPTY spawn deadline")
         .unwrap();
     let deadline = Instant::now() + Duration::from_secs(15);
+    let mut observation_end = None;
+    let mut held_bytes = None;
     let status = loop {
+        if let Some((ready, release)) = held {
+            if ready.exists() {
+                observation_end.get_or_insert_with(|| Instant::now() + Duration::from_secs(2));
+            }
+            if held_bytes.is_none() && observation_end.is_some_and(|end| Instant::now() >= end) {
+                held_bytes = Some(prefix.lock().unwrap().clone());
+                fs::write(release, b"allow EOF").unwrap();
+            }
+        }
         if let Some(status) = child.try_wait().unwrap() {
             break Some(status);
         }
@@ -132,7 +162,10 @@ fn console(args: &[OsString], no_color: bool) -> String {
         "console command failed: {}",
         String::from_utf8_lossy(&bytes)
     );
-    String::from_utf8(bytes).expect("console emits valid UTF-8")
+    (
+        String::from_utf8(bytes).expect("console emits valid UTF-8"),
+        held_bytes.map(|bytes| String::from_utf8(bytes).expect("held console emits valid UTF-8")),
+    )
 }
 
 #[test]
@@ -177,4 +210,42 @@ fn automatic_console_color_and_no_color_use_the_actual_terminal() {
         "console heading palette absent: {colored:?}"
     );
     assert!(!plain.contains("189;147;249"));
+}
+
+#[test]
+fn console_flushes_a_complete_header_before_input_eof() {
+    let binary = PathBuf::from(env!("CARGO_BIN_EXE_fastmash"));
+    let helper = binary
+        .parent()
+        .unwrap()
+        .join("fastmash-corpus-test-command.exe");
+    assert!(
+        helper.is_file(),
+        "build the corpus driver binaries before this test"
+    );
+    let root = std::env::temp_dir().join(format!("fastmash-console-held-{}", std::process::id()));
+    fs::create_dir(&root).unwrap();
+    let ready = root.join("ready");
+    let release = root.join("release");
+    let args = [
+        "console-held".into(),
+        binary.into_os_string(),
+        ready.clone().into_os_string(),
+        release.clone().into_os_string(),
+    ];
+    let (complete, held) = console_command(&helper, &args, true, Some((&ready, &release)));
+    fs::remove_dir_all(root).unwrap();
+    let held = held.expect("console child must remain alive until input EOF");
+    assert!(
+        held.contains("sum(value)"),
+        "header was buffered until EOF: {held:?}"
+    );
+    assert!(
+        !held.contains("\r\n3\r\n"),
+        "aggregate completed before EOF: {held:?}"
+    );
+    assert!(
+        complete.contains("\r\n3\r\n"),
+        "aggregate missing after EOF: {complete:?}"
+    );
 }
