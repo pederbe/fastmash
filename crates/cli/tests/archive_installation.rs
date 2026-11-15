@@ -25,15 +25,15 @@ use temp_dir::TempDir;
 
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
-fn documented_instructions(section: &str) -> &'static str {
+fn documented_instructions() -> &'static str {
     let (_, native_section) = include_str!("../../../docs/src/install.md")
-        .split_once(section)
+        .split_once("### Linux and macOS archives\n")
         .expect("documented archive installation section");
     native_section
         .split("\n## ")
         .next()
         .unwrap()
-        .split("```bash\n")
+        .split("```sh\n")
         .nth(1)
         .unwrap()
         .split("```")
@@ -682,153 +682,58 @@ fn unsupported_native_target_or_old_macos_preserves_the_installation() {
 }
 
 #[test]
-fn documented_linux_method_installs_the_archive_and_its_legacy_helper() {
-    for (target, supervisor) in [
-        ("x86_64-unknown-linux-musl", false),
-        ("x86_64-unknown-linux-gnu", true),
+fn documented_archive_method_installs_and_updates_the_extracted_executable() {
+    for (label, target, os, arch, version) in [
+        ("linux", "x86_64-unknown-linux-musl", "Linux", "x86_64", ""),
+        ("macos", "aarch64-apple-darwin", "Darwin", "arm64", "15.7"),
     ] {
-        let root = TempDir::new("documented-linux-install");
-        let version = "0.6.0-documentation-test";
-        let (filename, _) = fixture_archive(&root.0, version, target, supervisor);
+        let root = TempDir::new(&format!("documented-{label}-install"));
+        let (filename, _) = fixture_archive(&root.0, "documentation-test", target, false);
+        assert!(
+            include_str!("../../../docs/src/install.md").contains(&format!("`{target}.tar.gz`"))
+        );
         let name = filename.strip_suffix(".tar.gz").unwrap();
-        let executable = "#!/bin/sh\nprintf '3\\n'\n";
-        script(&root.0.join(name).join("fastmash"), executable);
-        let status = Command::new("tar")
-            .arg("-czf")
-            .arg(root.0.join(&filename))
-            .arg("-C")
-            .arg(&root.0)
-            .arg(name)
-            .status()
-            .unwrap();
-        assert!(status.success());
-        let files = mirrored_files(
-            (filename.clone(), fs::read(root.0.join(&filename)).unwrap()),
-            false,
-        );
-        let mirror = Mirror::new(version, files);
-        let path = fixture_path(&root.0, "Linux", "x86_64", "");
-        symlink(real_tool("bash"), path.join("bash")).unwrap();
-        let instructions = documented_instructions("### Linux archive\n").replace(
-            "https://github.com/pederbe/fastmash/releases",
-            &mirror.url(),
-        );
-        let output = Command::new("/bin/bash")
-            .args(["-c", &instructions])
-            .current_dir(&root.0)
-            .env_clear()
-            .env("HOME", &root.0)
-            .env("PATH", &path)
-            .output()
-            .unwrap();
-        assert!(output.status.success(), "{target}: {output:?}");
-        assert!(output.stdout.ends_with(b"3\n"), "{output:?}");
-        let installed = root.0.join(".local/bin");
-        assert_eq!(
-            fs::read(installed.join("fastmash")).unwrap(),
-            executable.as_bytes()
-        );
-        assert_eq!(
-            installed.join("fastmash-sort-supervisor").exists(),
-            supervisor
-        );
-        if supervisor {
+        let stage = root.0.join(name);
+        let path = fixture_path(&root.0, os, arch, version);
+        for marker in ["first installation", "updated installation"] {
+            let executable = format!("#!/bin/sh\n# {marker}\nprintf '3\\n'\n");
+            script(&stage.join("fastmash"), &executable);
+            let status = Command::new("tar")
+                .arg("-czf")
+                .arg(root.0.join(&filename))
+                .arg("-C")
+                .arg(&root.0)
+                .arg(name)
+                .status()
+                .unwrap();
+            assert!(status.success());
+            fs::remove_dir_all(&stage).unwrap();
+            let status = Command::new("tar")
+                .arg("-xzf")
+                .arg(root.0.join(&filename))
+                .arg("-C")
+                .arg(&root.0)
+                .status()
+                .unwrap();
+            assert!(status.success());
+            let output = Command::new("/bin/bash")
+                .args(["-c", documented_instructions()])
+                .current_dir(&stage)
+                .env_clear()
+                .env("HOME", &root.0)
+                .env("PATH", &path)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{target}: {output:?}");
+            assert_eq!(output.stdout, b"3\n", "{output:?}");
+            let installed = root.0.join(".local/bin");
             assert_eq!(
-                fs::read(installed.join("fastmash-sort-supervisor")).unwrap(),
-                b"replacement supervisor"
+                fs::read(installed.join("fastmash")).unwrap(),
+                executable.as_bytes()
             );
+            assert_eq!(fs::read_dir(installed).unwrap().count(), 1);
+            assert!(!stage.join("fastmash").exists());
         }
-        assert!(!fs::read_dir(installed).unwrap().any(|entry| {
-            entry
-                .unwrap()
-                .file_name()
-                .to_string_lossy()
-                .starts_with(".fastmash.")
-        }));
-    }
-}
-
-#[test]
-fn documented_macos_method_installs_a_verified_archive() {
-    let root = TempDir::new("documented-macos-install");
-    let version = "0.2.0-documentation-test";
-    let name = format!("fastmash-v{version}-aarch64-apple-darwin");
-    let stage = root.0.join(&name);
-    fs::create_dir(&stage).unwrap();
-    let executable = b"#!/bin/sh\nprintf '3\\n'\n";
-    script(
-        &stage.join("fastmash"),
-        std::str::from_utf8(executable).unwrap(),
-    );
-    fs::write(
-        stage.join("binary.sha256"),
-        format!("{}  fastmash\n", digest(executable)),
-    )
-    .unwrap();
-    fs::write(stage.join("build-provenance.txt"), b"fixture provenance\n").unwrap();
-    let archive = root.0.join(format!("{name}.tar.gz"));
-    let status = Command::new("tar")
-        .args(["-czf"])
-        .arg(&archive)
-        .arg("-C")
-        .arg(&root.0)
-        .arg(&name)
-        .status()
-        .unwrap();
-    assert!(status.success());
-    fs::write(
-        root.0.join(format!("{name}.tar.gz.sha256")),
-        format!("{}  {name}.tar.gz\n", digest(&fs::read(archive).unwrap())),
-    )
-    .unwrap();
-    let path = fixture_path(&root.0, "Darwin", "arm64", "15.7");
-    // The manual method uses an already downloaded archive, without curl or
-    // GNU checksum tools. Selecting Linux instructions must fail here.
-    fs::remove_file(path.join("curl")).unwrap();
-    symlink(real_tool("bash"), path.join("bash")).unwrap();
-    let output = Command::new("/bin/bash")
-        .args(["-c", documented_instructions("### macOS archive\n")])
-        .current_dir(&root.0)
-        .env_clear()
-        .env("HOME", &root.0)
-        .env("PATH", &path)
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    assert!(output.stdout.ends_with(b"3\n"), "{output:?}");
-    let installed = root.0.join(".local/bin");
-    assert_eq!(fs::read(installed.join("fastmash")).unwrap(), executable);
-    assert_eq!(fs::read_dir(installed).unwrap().count(), 1);
-}
-
-#[test]
-fn documented_archive_or_binary_checksum_failure_preserves_the_installation() {
-    let root = TempDir::new("documented-macos-checksum");
-    let version = "0.2.0-macos-test";
-    let (name, archive) = fixture_archive(&root.0, version, "aarch64-apple-darwin", false);
-    let path = fixture_path(&root.0, "Darwin", "arm64", "15.7");
-    symlink(real_tool("bash"), path.join("bash")).unwrap();
-    let dir = root.0.join(".local/bin");
-    fs::create_dir(root.0.join(".local")).unwrap();
-    previous_installation(&dir);
-    // The second attempt has an authentic archive but no binary checksum;
-    // both checks must stop the documented method before replacing a program.
-    for checksum in ["0".repeat(64), digest(&archive)] {
-        fs::write(
-            root.0.join(format!("{name}.sha256")),
-            format!("{checksum}  {name}\n"),
-        )
-        .unwrap();
-        let output = Command::new("/bin/bash")
-            .args(["-c", documented_instructions("### macOS archive\n")])
-            .current_dir(&root.0)
-            .env_clear()
-            .env("HOME", &root.0)
-            .env("PATH", &path)
-            .output()
-            .unwrap();
-        assert!(!output.status.success(), "{output:?}");
-        assert_previous(&dir);
     }
 }
 
@@ -888,14 +793,24 @@ fn native_archive_installs_and_runs_outside_the_checkout() {
     let root = TempDir::new("native-archive-install");
     // Execute the exact manual installation block published in the guide.
     // Its HOME and working directory are private and outside the checkout.
-    let instructions = documented_instructions("### macOS archive\n");
+    let instructions = documented_instructions();
     for (file, contents) in &files {
         fs::write(root.0.join(file), contents).unwrap();
     }
+    let unpacked = root.0.join(name.strip_suffix(".tar.gz").unwrap());
     let documented_install = || {
+        // Extraction is the guide's manual step before running its commands.
+        let status = Command::new("tar")
+            .arg("-xzf")
+            .arg(root.0.join(&name))
+            .arg("-C")
+            .arg(&root.0)
+            .status()
+            .unwrap();
+        assert!(status.success());
         Command::new("/bin/bash")
             .args(["-c", instructions])
-            .current_dir(&root.0)
+            .current_dir(&unpacked)
             .env_clear()
             .env("HOME", &root.0)
             .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
@@ -916,16 +831,13 @@ fn native_archive_installs_and_runs_outside_the_checkout() {
             .next()
             .unwrap()
     );
-    fs::write(
-        root.0.join(format!("{name}.sha256")),
-        format!("{}  {name}\n", "0".repeat(64)),
-    )
-    .unwrap();
-    let failed_manual = documented_install();
-    assert!(!failed_manual.status.success(), "{failed_manual:?}");
+    let updated_manual = documented_install();
+    assert!(updated_manual.status.success(), "{updated_manual:?}");
+    assert!(
+        updated_manual.stdout.ends_with(b"3\n"),
+        "{updated_manual:?}"
+    );
     assert_eq!(fs::read(&manual_binary).unwrap(), original_manual);
-    fs::write(root.0.join(format!("{name}.sha256")), &files[1].1).unwrap();
-    let unpacked = root.0.join(name.strip_suffix(".tar.gz").unwrap());
     let provenance = fs::read_to_string(unpacked.join("build-provenance.txt")).unwrap();
     let source = Command::new("git")
         .args(["-C", ROOT, "rev-parse", "HEAD"])
@@ -1045,8 +957,8 @@ fn native_archive_installs_and_runs_outside_the_checkout() {
         );
         assert!(output.stderr.is_empty(), "{output:?}");
     }
-    // Observe the documented terminal download's security metadata without
-    // removing quarantine, bypassing assessment or changing a macOS policy.
+    // Observe archive and installed-binary security metadata without removing
+    // quarantine, bypassing assessment or changing a macOS policy.
     let download = root.0.join(&name);
     let status = Command::new("/usr/bin/curl")
         .args(["-fsSL", "-o"])
