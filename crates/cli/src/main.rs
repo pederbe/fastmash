@@ -116,6 +116,8 @@ mod terminal_style;
 #[cfg(all(test, unix))]
 #[path = "../tests/support/temp_dir.rs"]
 mod test_dir;
+#[cfg(test)]
+mod test_io;
 #[cfg(all(test, unix))]
 #[path = "../tests/support/terminal.rs"]
 mod test_terminal;
@@ -1151,7 +1153,7 @@ mod command_tests {
             }
             fn flush(&mut self) -> io::Result<()> {
                 if self.fail_flush {
-                    Err(io::Error::from_raw_os_error(28))
+                    Err(crate::test_io::write(28))
                 } else {
                     Ok(())
                 }

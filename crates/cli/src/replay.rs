@@ -465,7 +465,7 @@ mod tests {
         // what follows it is read only after.
         let mut script = Script::new(vec![
             Ok(b"a\nb".to_vec()),
-            Err(io::Error::from_raw_os_error(5)),
+            Err(crate::test_io::read(5)),
             Ok(b"c\n".to_vec()),
         ]);
         let mut replay = Replay::new(&mut script, true);

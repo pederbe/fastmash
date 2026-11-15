@@ -416,9 +416,9 @@ mod tests {
             self.attempts.push(bytes.to_vec());
             let n = match self.steps.pop_front() {
                 Some(Step::Short(n)) => n.min(bytes.len()),
-                Some(Step::Error(code)) => return Err(io::Error::from_raw_os_error(code)),
+                Some(Step::Error(code)) => return Err(crate::test_io::write(code)),
                 Some(Step::Zero) => return Ok(0),
-                None if self.full => return Err(io::Error::from_raw_os_error(28)),
+                None if self.full => return Err(crate::test_io::write(28)),
                 None => bytes.len(),
             };
             self.bytes.extend_from_slice(&bytes[..n]);
@@ -474,7 +474,10 @@ mod tests {
             output.emit(Part::Close);
             output.emit(Part::Separator(b'\n'));
             let completion = output.finish(close);
-            assert_eq!(completion.first_error.unwrap().code, Some(28));
+            assert_eq!(
+                completion.first_error.unwrap().code,
+                Some(crate::test_io::write_code(28))
+            );
             assert!(completion.flush_error.is_none());
             assert_eq!(sink.bytes, b"p(value)\n");
             assert_eq!(
@@ -541,7 +544,10 @@ mod tests {
             );
             let result = output.finish(close);
             assert_eq!(result.pending_before_finish, pending);
-            assert_eq!(result.first_error.unwrap().code, Some(28));
+            assert_eq!(
+                result.first_error.unwrap().code,
+                Some(crate::test_io::write_code(28))
+            );
             assert_eq!(result.flush_error.is_some(), pending);
             assert!(result.close_error.is_none());
         }
@@ -571,7 +577,10 @@ mod tests {
         );
         output.before_diagnostic();
         let result = output.finish(close);
-        assert_eq!(result.first_error.unwrap().code, Some(28));
+        assert_eq!(
+            result.first_error.unwrap().code,
+            Some(crate::test_io::write_code(28))
+        );
         assert!(!result.pending_before_finish);
         assert!(result.flush_error.is_none() && result.close_error.is_none());
         assert_eq!(sink.attempts, vec![b"sum(a)\t".to_vec()]);
@@ -616,7 +625,10 @@ mod tests {
             sink.bytes,
             format!("sum({})\tsum)\n", "a".repeat(119)).as_bytes()
         );
-        assert_eq!(result.first_error.unwrap().code, Some(28));
+        assert_eq!(
+            result.first_error.unwrap().code,
+            Some(crate::test_io::write_code(28))
+        );
         assert!(result.flush_error.is_none());
     }
 
@@ -680,10 +692,13 @@ mod tests {
             }
             let result = output.finish(|s| {
                 s.closes += 1;
-                Err(io::Error::from_raw_os_error(9))
+                Err(crate::test_io::write(9))
             });
             assert_eq!(result.pending_before_finish, pending);
-            assert_eq!(result.close_error.unwrap().code, Some(9));
+            assert_eq!(
+                result.close_error.unwrap().code,
+                Some(crate::test_io::write_code(9))
+            );
             assert!(result.first_error.is_none() && result.flush_error.is_none());
             assert_eq!(sink.closes, 1);
         }
@@ -731,7 +746,10 @@ mod tests {
         );
         assert_eq!(sink.attempts[1], sink.attempts[0][2..]);
         assert_eq!(sink.attempts[2], b")\n");
-        assert_eq!(result.first_error.unwrap().code, Some(28));
+        assert_eq!(
+            result.first_error.unwrap().code,
+            Some(crate::test_io::write_code(28))
+        );
         assert!(result.flush_error.is_none() && result.close_error.is_none());
     }
 
@@ -747,11 +765,20 @@ mod tests {
         output.emit(Part::Separator(b'\n'));
         let result = output.finish(|s| {
             s.closes += 1;
-            Err(io::Error::from_raw_os_error(9))
+            Err(crate::test_io::write(9))
         });
-        assert_eq!(result.first_error.unwrap().code, Some(28));
-        assert_eq!(result.flush_error.unwrap().code, Some(5));
-        assert_eq!(result.close_error.unwrap().code, Some(9));
+        assert_eq!(
+            result.first_error.unwrap().code,
+            Some(crate::test_io::write_code(28))
+        );
+        assert_eq!(
+            result.flush_error.unwrap().code,
+            Some(crate::test_io::write_code(5))
+        );
+        assert_eq!(
+            result.close_error.unwrap().code,
+            Some(crate::test_io::write_code(9))
+        );
         assert!(result.pending_before_finish);
         assert_eq!(sink.closes, 1);
     }

@@ -681,7 +681,7 @@ fn csv_input_finalization_preserves_close_failure_status_and_io_context() {
         }
         fn close(&mut self) -> io::Result<()> {
             self.output.closed = true;
-            Err(io::Error::from_raw_os_error(self.code))
+            Err(crate::test_io::write(self.code))
         }
     }
     for (code, status, diagnostic) in [

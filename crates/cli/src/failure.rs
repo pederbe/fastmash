@@ -296,7 +296,7 @@ mod tests {
         fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
             let remaining = self.fail_at.map_or(usize::MAX, |at| at - self.bytes.len());
             if remaining == 0 {
-                return Err(io::Error::from_raw_os_error(28));
+                return Err(crate::test_io::write(28));
             }
             if self.zero {
                 return Ok(0);
@@ -307,7 +307,7 @@ mod tests {
         }
         fn flush(&mut self) -> io::Result<()> {
             if self.fail_flush {
-                Err(io::Error::from_raw_os_error(28))
+                Err(crate::test_io::write(28))
             } else {
                 Ok(())
             }
@@ -509,10 +509,10 @@ mod tests {
             fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
                 if self.fail_at == Some(self.bytes.len()) {
                     self.fail_at = None;
-                    return Err(io::Error::from_raw_os_error(28));
+                    return Err(crate::test_io::write(28));
                 }
                 if self.fail_at.is_none() && self.fail_reset {
-                    return Err(io::Error::from_raw_os_error(5));
+                    return Err(crate::test_io::write(5));
                 }
                 let remaining = self.fail_at.map_or(usize::MAX, |at| at - self.bytes.len());
                 let count = bytes.len().min(2).min(remaining);
@@ -599,7 +599,7 @@ mod tests {
                         Err(internal),
                         |_| {
                             closed = true;
-                            Err(io::Error::from_raw_os_error(close_error))
+                            Err(crate::test_io::write(close_error))
                         },
                         &mut |failure| {
                             attempts += 1;

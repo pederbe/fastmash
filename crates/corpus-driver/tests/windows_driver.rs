@@ -125,3 +125,41 @@ fn descendants_are_cancelled_after_the_leader_exits() {
     std::thread::sleep(Duration::from_millis(2200));
     assert!(!marker.exists(), "descendant escaped its Job");
 }
+
+#[test]
+fn shards_cover_the_same_manifest_once_without_changing_expectations() {
+    let cases = (0..5)
+        .map(|index| {
+            case(
+                &format!("case-{index}"),
+                "echo",
+                b"x\0\xff\n",
+                b"x\0\xff\n",
+                b"",
+                0,
+            )
+        })
+        .collect::<Vec<_>>();
+    let fixture = Fixture::new(&cases);
+    let mut seen = std::collections::BTreeSet::new();
+    for part in 0..2 {
+        let mut options = fixture.options(false);
+        let evidence = fixture.root.join(format!("shard-{part}"));
+        options.shard = Some((part, 2));
+        options.evidence_dir = Some(evidence.clone());
+        let result = run(&options, &mut Vec::new()).unwrap();
+        assert_eq!(result.passed, if part == 0 { 3 } else { 2 });
+        assert!(result.failed.is_empty());
+        for line in fs::read_to_string(evidence.join("cases.jsonl"))
+            .unwrap()
+            .lines()
+        {
+            let value: Value = serde_json::from_str(line).unwrap();
+            assert!(seen.insert(value["id"].as_str().unwrap().to_owned()));
+        }
+    }
+    assert_eq!(seen, (0..5).map(|index| format!("case-{index}")).collect());
+    let mut invalid = fixture.options(false);
+    invalid.shard = Some((0, 0));
+    assert!(run(&invalid, &mut Vec::new()).is_err());
+}

@@ -91,6 +91,7 @@ pub struct Options {
     pub expected_version: Option<String>,
     pub stdin_file: bool,
     pub evidence_dir: Option<PathBuf>,
+    pub shard: Option<(usize, usize)>,
 }
 
 impl Options {
@@ -105,6 +106,7 @@ impl Options {
             expected_version: None,
             stdin_file: false,
             evidence_dir: None,
+            shard: None,
         }
     }
 }
@@ -119,6 +121,14 @@ pub struct RunResult {
 }
 
 pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
+    if options
+        .shard
+        .is_some_and(|(part, total)| total == 0 || part >= total)
+    {
+        return Err(Error::message(
+            "--shard requires PART/TOTAL with 0 <= PART < TOTAL",
+        ));
+    }
     if !cfg!(any(target_os = "linux", target_os = "macos", windows)) {
         return Err(Error::message("unsupported regression test platform"));
     }
@@ -140,7 +150,14 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
     let matched: Vec<_> = fixture
         .cases
         .iter()
-        .filter(|case| case.id.contains(&options.pattern))
+        .enumerate()
+        .filter(|(index, case)| {
+            case.id.contains(&options.pattern)
+                && options
+                    .shard
+                    .is_none_or(|(part, total)| index % total == part)
+        })
+        .map(|(_, case)| case)
         .collect();
     let cases: Vec<_> = matched
         .iter()
@@ -166,6 +183,7 @@ pub fn run(options: &Options, output: &mut impl Write) -> Result<RunResult> {
         "content_sha256":fixture.content_sha256,
         "provenance":fixture.provenance_path, "provenance_sha256":fixture.provenance_sha256,
         "expected_version":options.expected_version, "stdin_file":options.stdin_file,
+        "shard":options.shard,
         "full_output_calibration":full.as_ref().map(|full| full.identity()).transpose()?,
         "selected_cases":cases.len(), "matched_cases":matched.len(),
         "transport_dispositions":excluded,
@@ -390,6 +408,7 @@ Example, replacing VERSION with the selected executable's version number:\n\
   fastmash-corpus --binary target/release/fastmash --expected-version VERSION \\\n    --evidence-dir /var/tmp/fastmash-corpus-run\n\n\
   --fixture PATH          compressed corpus with its sibling provenance file\n\
   --match TEXT            select case IDs containing TEXT\n\
+  --shard PART/TOTAL      select a zero-based shard of the frozen inventory\n\
   --expected-version V    expected version for --version cases\n\
   --stdin-file            ordinary input through a regular file\n\
   --keep-going            continue after mismatches\n\
@@ -411,6 +430,20 @@ Guide: https://fastmash.io/contributing/testing.html#regression-corpus"
                 options.pattern = value(&mut args)?
                     .into_string()
                     .map_err(|_| Error::message("--match requires UTF-8 text"))?
+            }
+            Some("--shard") => {
+                options.shard = Some(
+                    value(&mut args)?
+                        .to_str()
+                        .and_then(|text| text.split_once('/'))
+                        .and_then(|(part, total)| {
+                            Some((part.parse::<usize>().ok()?, total.parse::<usize>().ok()?))
+                        })
+                        .filter(|(part, total)| *total > 0 && part < total)
+                        .ok_or_else(|| {
+                            Error::message("--shard requires PART/TOTAL with 0 <= PART < TOTAL")
+                        })?,
+                );
             }
             Some("--expected-version") => {
                 options.expected_version = Some(

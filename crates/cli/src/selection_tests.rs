@@ -290,7 +290,7 @@ impl command_output::Transport for ClosingOutput {
     fn close(&mut self) -> io::Result<()> {
         self.inner.closed = true;
         self.close_error
-            .map_or(Ok(()), |code| Err(io::Error::from_raw_os_error(code)))
+            .map_or(Ok(()), |code| Err(crate::test_io::write(code)))
     }
 }
 

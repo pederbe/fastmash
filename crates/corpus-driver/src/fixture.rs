@@ -636,7 +636,7 @@ mod tests {
                 .iter()
                 .filter(|case| case.supported(false))
                 .count(),
-            3137
+            if cfg!(windows) { 3088 } else { 3137 }
         );
         assert_eq!(
             fixture
@@ -644,7 +644,7 @@ mod tests {
                 .iter()
                 .filter(|case| case.supported(true))
                 .count(),
-            2857
+            if cfg!(windows) { 2843 } else { 2857 }
         );
         assert_eq!(
             fixture.cases.iter().filter(|case| !case.ordinary()).count(),

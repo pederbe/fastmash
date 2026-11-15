@@ -734,7 +734,7 @@ fn weighted_commands_complete_short_writes_and_refuse_incomplete_transports() {
         assert_eq!(
             diagnostics,
             vec![if code == 9 {
-                b"read error: Bad file descriptor\n".to_vec()
+                crate::test_io::BAD_READ.as_bytes().to_vec()
             } else {
                 b"read error: Input/output error\n".to_vec()
             }]
@@ -827,7 +827,7 @@ fn weighted_output_close_failure_keeps_ordinary_failure_precedence() {
         }
         fn close(&mut self) -> io::Result<()> {
             self.0.closed = true;
-            Err(io::Error::from_raw_os_error(self.1))
+            Err(crate::test_io::write(self.1))
         }
     }
     for code in [28, 5] {
@@ -1028,7 +1028,7 @@ fn a_failed_weighted_hash_rewind_cannot_emit_abandoned_contributions() {
             Some(0)
         }
         fn rewind(&mut self, _: u64) -> io::Result<()> {
-            Err(io::Error::from_raw_os_error(5))
+            Err(crate::test_io::read(5))
         }
     }
     let mut input = BrokenRewind(Input {
@@ -1477,7 +1477,7 @@ fn grouped_headers_copies_and_results_survive_transport_faults() {
     impl Write for Limited {
         fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
             if self.remaining == 0 {
-                return Err(io::Error::from_raw_os_error(self.code));
+                return Err(crate::test_io::write(self.code));
             }
             let count = self
                 .output

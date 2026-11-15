@@ -560,7 +560,7 @@ mod tests {
             match self.0 {
                 1 => Ok(b"a
 partial"),
-                2 => Err(io::Error::from_raw_os_error(5)),
+                2 => Err(crate::test_io::read(5)),
                 _ => panic!("read after the input ended"),
             }
         }
