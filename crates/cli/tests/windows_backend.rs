@@ -4,6 +4,8 @@
 
 #[path = "../src/console_utf8.rs"]
 mod console_utf8;
+#[path = "../src/random.rs"]
+mod random;
 
 use std::{
     ffi::OsString,
@@ -74,7 +76,7 @@ fn redirected_bytes_are_binary_and_unicode_paths_work() {
     let bytes = b"a\0\r\x1a\xff\xc3\xa9\n";
     let input = fixture.file("input é 🦀.tsv", bytes);
     let output = fixture.0.join("output é 🦀.tsv");
-    let child = command(&["cut", "1"])
+    let child = command(&["noop"])
         .stdin(File::open(input).unwrap())
         .stdout(File::create(&output).unwrap())
         .spawn()
@@ -82,7 +84,7 @@ fn redirected_bytes_are_binary_and_unicode_paths_work() {
     let result = finish(child);
     assert!(result.status.success(), "{result:?}");
     assert_eq!(fs::read(output).unwrap(), bytes);
-    let result = pipe(&["cut", "1"], bytes);
+    let result = pipe(&["noop"], bytes);
     assert!(result.status.success(), "{result:?}");
     assert_eq!(result.stdout, bytes);
 }
@@ -92,7 +94,7 @@ fn pipe_and_disk_grouping_agree() {
     let fixture = Fixture::new();
     let bytes = b"a\t1\nb\t2\na\t3\n";
     let input = fixture.file("groups", bytes);
-    let args = ["-g", "1", "sum", "2"];
+    let args = ["-s", "-g", "1", "sum", "2"];
     let piped = pipe(&args, bytes);
     let disk = finish(
         command(&args)
@@ -147,6 +149,14 @@ fn unpaired_utf16_arguments_are_refused() {
         .unwrap();
     assert_eq!(output.status.code(), Some(77), "{output:?}");
     assert!(String::from_utf8_lossy(&output.stderr).contains("non-Unicode"));
+    let fixture = Fixture::new();
+    let path = fixture.file("read-only-diagnostic", b"");
+    let output = command(&["sum"])
+        .arg(OsString::from_wide(&[0xd800]))
+        .stderr(File::open(path).unwrap())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
 }
 
 #[test]

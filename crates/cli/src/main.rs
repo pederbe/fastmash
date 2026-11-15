@@ -630,11 +630,8 @@ fn run_process() {
         Ok(guard) => guard,
         Err(message) => {
             let reported = writeln!(standard_io::Stderr, "fastmash: {message}").is_ok();
-            std::process::exit(if reported && standard_io::finish_stderr() {
-                77
-            } else {
-                1
-            });
+            let completed = standard_io::finish_stderr();
+            std::process::exit(if reported && completed { 77 } else { 1 });
         }
     };
     let terminal = terminal_style::Detection::from_env();
@@ -646,11 +643,17 @@ fn run_process() {
                 terminal_style::ColorMode::Auto,
                 terminal_style::Destination::Stderr,
             );
-            let _ = failure::write_prefix(&mut stderr, b"fastmash", style);
-            let _ = stderr.write_all(reported(&error));
+            let reported = failure::write_prefix(&mut stderr, b"fastmash", style)
+                .and_then(|()| stderr.write_all(reported(&error)))
+                .is_ok();
+            let completed = standard_io::finish_stderr();
             #[cfg(feature = "hotpath")]
             drop(profiling);
-            std::process::exit(error.status);
+            std::process::exit(if reported && completed {
+                error.status
+            } else {
+                1
+            });
         }
     };
     let name = args
@@ -704,7 +707,8 @@ fn run_process() {
         status = failure::combine(status, error.status);
         reported_all &= report(&error);
     }
-    if !reported_all || !standard_io::finish_stderr() {
+    let stderr_completed = standard_io::finish_stderr();
+    if !reported_all || !stderr_completed {
         status = 1;
     }
     if status != 0 {
