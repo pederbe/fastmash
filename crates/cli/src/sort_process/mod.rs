@@ -3,11 +3,16 @@
 #[cfg(target_os = "linux")]
 #[doc(hidden)]
 pub(crate) mod linux;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
+#[cfg(unix)]
+use std::path::Path;
 use std::{
     fs::{File, OpenOptions},
     io,
-    os::unix::fs::OpenOptionsExt,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 /// The directory for temporary native sort data: `TMPDIR` as given, or `/tmp` when it is unset. An empty
 /// `TMPDIR` names no directory: the error opening it would give.
@@ -41,6 +46,7 @@ pub(crate) fn anonymous_file() -> io::Result<File> {
         result => result,
     }
 }
+#[cfg(unix)]
 fn named_file(dir: &Path) -> io::Result<File> {
     for _ in 0..8 {
         let mut random = [0u8; 16];
@@ -80,9 +86,36 @@ pub(crate) fn anonymous_file() -> io::Result<File> {
 fn random_bytes(bytes: &mut [u8]) -> io::Result<()> {
     linux::random(bytes)
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn random_bytes(bytes: &mut [u8]) -> io::Result<()> {
     getrandom::fill(bytes).map_err(io::Error::from)
+}
+
+/// Keep cleanup attached to the handle, including process termination.
+#[cfg(windows)]
+pub(crate) fn anonymous_file() -> io::Result<File> {
+    const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+    let directory = temporary_dir()?;
+    for _ in 0..8 {
+        let mut random = [0u8; 16];
+        random_bytes(&mut random)?;
+        let name = random
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>();
+        match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .share_mode(0)
+            .custom_flags(FILE_FLAG_DELETE_ON_CLOSE)
+            .open(directory.join(format!("fastmash-spill-{name}")))
+        {
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            result => return result,
+        }
+    }
+    Err(io::ErrorKind::AlreadyExists.into())
 }
 
 /// Threads for native sorting, as GNU sort chooses its default: the

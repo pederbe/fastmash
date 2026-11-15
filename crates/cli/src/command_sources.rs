@@ -4,7 +4,6 @@ use std::{
     ffi::OsStr,
     fs::File,
     io::{self, BufRead, Read},
-    os::{fd::IntoRawFd, unix::ffi::OsStrExt},
 };
 
 pub(super) trait Resolver {
@@ -24,7 +23,7 @@ impl Resolver for Files {
         path: &OsStr,
         scan: impl FnOnce(&mut dyn BufRead) -> Result<T, Failure>,
     ) -> Result<T, Failure> {
-        if path.as_bytes() == b"-" {
+        if path.as_encoded_bytes() == b"-" {
             return scan(stdin);
         }
         let mut bytes = Vec::new();
@@ -39,10 +38,9 @@ impl Resolver for Files {
             end: 0,
         };
         let result = scan(&mut input);
-        let fd = input.file.into_raw_fd();
         // Ownership was taken from the File; close errors remain part of the
         // source's completion rather than being lost through File::drop.
-        let completion = platform::close(fd as usize).map_err(|error| close_failure(&error));
+        let completion = platform::close_file(input.file).map_err(|error| close_failure(&error));
         complete(result, completion)
     }
 }

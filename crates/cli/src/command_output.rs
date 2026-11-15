@@ -329,15 +329,21 @@ impl<W: Write> CommandOutput for Results<'_, W> {
 
 fn completion_failure(done: Completion) -> Option<Failure> {
     let close = done.close_error.filter(|error| {
-        error.code != Some(9) || done.first_error.is_some() || done.pending_before_finish
+        !super::io_errors::bad_descriptor(error.code)
+            || done.first_error.is_some()
+            || done.pending_before_finish
     });
     let last = close.or(done.flush_error);
-    if done.unsupported_write || last.is_some_and(|error| !matches!(error.code, Some(9 | 28))) {
+    if done.unsupported_write
+        || last.is_some_and(|error| !super::io_errors::supported_output(error.code, error.kind))
+    {
         return Some(unsupported("unsupported output I/O error"));
     }
     if let Some(error) = last {
         Some(os_failure(
-            &io::Error::from_raw_os_error(error.code.unwrap()),
+            &error
+                .code
+                .map_or_else(|| io::Error::from(error.kind), io::Error::from_raw_os_error),
             false,
         ))
     } else if done.first_error.is_some() {
@@ -434,13 +440,18 @@ impl Stdout {
             terminal,
         )
     }
+    #[cfg(windows)]
+    pub fn buffering(&self) -> (usize, bool) {
+        use std::io::IsTerminal;
+        (8192, io::stdout().is_terminal())
+    }
     pub fn close(&mut self) -> io::Result<()> {
         let Some(fd) = self.fd.take() else {
             return Ok(());
         };
         let result = platform::close(fd);
         if standard_io::originally_closed(fd) {
-            Err(io::Error::from_raw_os_error(9))
+            Err(super::io_errors::invalid_descriptor())
         } else {
             result
         }
@@ -448,7 +459,7 @@ impl Stdout {
 }
 impl Write for Stdout {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        let fd = self.fd.ok_or_else(|| io::Error::from_raw_os_error(9))?;
+        let fd = self.fd.ok_or_else(super::io_errors::invalid_descriptor)?;
         standard_io::write(fd, bytes)
     }
     fn flush(&mut self) -> io::Result<()> {

@@ -2,14 +2,19 @@
 #![forbid(unsafe_code)]
 use std::io;
 
+#[cfg(unix)]
 pub(super) use super::standard_stream_io::{read, seek, write};
+#[cfg(windows)]
+pub(super) use super::windows_stdio::{close, read, seek, write};
 
 /// Closes an exclusively owned raw descriptor, without retrying an uncertain
 /// close. Callers must finish every use of the descriptor first.
+#[cfg(unix)]
 pub(super) fn close(fd: usize) -> io::Result<()> {
     nix::unistd::close(fd as std::os::fd::RawFd).map_err(io::Error::from)
 }
 
+#[cfg(unix)]
 pub(super) fn sigpipe_mask() -> io::Result<u64> {
     use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
     // The pinned pthread query wrapper misses positive error returns. Use the
@@ -19,7 +24,19 @@ pub(super) fn sigpipe_mask() -> io::Result<u64> {
     Ok(u64::from(mask.contains(Signal::SIGPIPE)) << 12)
 }
 
-#[cfg(test)]
+pub(super) fn close_file(file: std::fs::File) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::fd::IntoRawFd;
+        close(file.into_raw_fd() as usize)
+    }
+    #[cfg(windows)]
+    {
+        io_close::Close::close(file)
+    }
+}
+
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 

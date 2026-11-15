@@ -12,9 +12,15 @@
         target_arch = "aarch64",
         target_os = "macos",
         target_pointer_width = "64"
+    ),
+    all(
+        target_arch = "x86_64",
+        target_os = "windows",
+        target_env = "msvc",
+        target_pointer_width = "64"
     )
 )))]
-compile_error!("Fastmash supports Linux x86-64 and Apple Silicon macOS");
+compile_error!("Fastmash builds for Linux x86-64, Apple Silicon macOS and Windows x64 MSVC");
 #[cfg(all(target_os = "linux", not(any(target_env = "gnu", target_env = "musl"))))]
 compile_error!("Fastmash requires glibc or musl");
 mod annotated;
@@ -35,6 +41,8 @@ mod command_test_support;
 mod comparison;
 #[cfg(test)]
 mod comparison_tests;
+#[cfg(any(windows, test))]
+mod console_utf8;
 mod conversion;
 mod crosstab;
 mod csv_input;
@@ -55,6 +63,7 @@ mod health_render;
 mod health_tests;
 mod help;
 mod intake;
+mod io_errors;
 mod line_numeric;
 mod locale;
 mod log_cache;
@@ -96,8 +105,10 @@ mod selection_tests;
 mod sort_process;
 mod sort_route;
 mod standard_io;
+#[cfg(unix)]
 mod standard_stream_io;
 #[allow(unsafe_code)]
+#[cfg(unix)]
 mod startup;
 mod table_checks;
 mod table_modes;
@@ -114,6 +125,8 @@ mod transpose;
 mod weighted;
 #[cfg(test)]
 mod weighted_tests;
+#[cfg(windows)]
+mod windows_stdio;
 
 use crate::conversion::{field_policy, profile::Profile};
 #[cfg(test)]
@@ -124,18 +137,18 @@ use failure::{
 };
 use operation::Kind;
 use operation_set::OperationSet;
-use std::{
-    io::{self, BufRead, Write},
-    os::unix::ffi::OsStrExt,
-};
+use std::io::{self, BufRead, Write};
 
 fn setup_sigpipe() -> Result<(), Failure> {
-    let mask = platform::sigpipe_mask()
-        .map_err(|_| unsupported("unable to inspect runtime signal mask"))?;
-    if mask & (1 << 12) != 0 {
-        return Err(unsupported("blocked SIGPIPE is unsupported"));
+    #[cfg(unix)]
+    {
+        let mask = platform::sigpipe_mask()
+            .map_err(|_| unsupported("unable to inspect runtime signal mask"))?;
+        if mask & (1 << 12) != 0 {
+            return Err(unsupported("blocked SIGPIPE is unsupported"));
+        }
+        sigpipe::reset();
     }
-    sigpipe::reset();
     Ok(())
 }
 
@@ -601,7 +614,7 @@ fn quiet_nan() -> numerics::Value {
 }
 
 /// Musl and Darwin use Rust's runtime and argument initialization.
-#[cfg(all(not(test), any(target_env = "musl", target_os = "macos")))]
+#[cfg(all(not(test), any(target_env = "musl", target_os = "macos", windows)))]
 fn main() {
     run_process();
 }
@@ -642,7 +655,7 @@ fn run_process() {
     };
     let name = args
         .first()
-        .map_or(b"fastmash".as_slice(), |v| v.as_bytes());
+        .map_or(b"fastmash".as_slice(), |v| v.as_encoded_bytes());
     let mut stdin = io::BufReader::with_capacity(INPUT_BUFFER, standard_io::Stdin);
     let mut stdout = command_output::Stdout::new();
     let environment = Environment::from_env(terminal);
@@ -675,9 +688,17 @@ fn run_process() {
         Ok(status) => (status, status != 1),
         Err(error) => (error.status, report(&error)),
     };
+    #[cfg(windows)]
+    if let Err(error) = platform::close(0)
+        && !io_errors::bad_descriptor(error.raw_os_error())
+    {
+        let error = intake::read_failure(&error);
+        status = failure::combine(status, error.status);
+        reported_all &= report(&error);
+    }
     // Standard output is still open where the Command stopped before any output.
     if let Err(error) = stdout.close()
-        && error.raw_os_error() != Some(9)
+        && !io_errors::bad_descriptor(error.raw_os_error())
     {
         let error = os_failure(&error, false);
         status = failure::combine(status, error.status);

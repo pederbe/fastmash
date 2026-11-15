@@ -214,6 +214,39 @@ pub(super) fn conversion_failure(error: crate::conversion::profile::Error) -> Fa
     })
 }
 pub(super) fn os_failure(error: &io::Error, reading: bool) -> Failure {
+    #[cfg(windows)]
+    {
+        let reason = if super::io_errors::bad_descriptor(error.raw_os_error()) {
+            Some("Invalid handle")
+        } else {
+            match error.kind() {
+                io::ErrorKind::PermissionDenied => Some("Access denied"),
+                io::ErrorKind::BrokenPipe => Some("Broken pipe"),
+                io::ErrorKind::StorageFull => Some("No space left on device"),
+                io::ErrorKind::WriteZero => Some("Unable to write output"),
+                _ if matches!(error.raw_os_error(), Some(39 | 112)) => {
+                    Some("No space left on device")
+                }
+                _ if error.raw_os_error() == Some(1117) => Some("Input/output error"),
+                _ => None,
+            }
+        };
+        match reason {
+            Some(reason) => failure(
+                format!(
+                    "{} error: {reason}\n",
+                    if reading { "read" } else { "write" }
+                )
+                .into_bytes(),
+            ),
+            None => unsupported(if reading {
+                "unsupported input I/O error"
+            } else {
+                "unsupported output I/O error"
+            }),
+        }
+    }
+    #[cfg(unix)]
     match (reading, error.raw_os_error()) {
         (true, Some(9)) => failure(b"read error: Bad file descriptor\n".to_vec()),
         (false, Some(9)) => failure(b"write error: Bad file descriptor\n".to_vec()),

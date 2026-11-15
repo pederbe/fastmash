@@ -39,10 +39,6 @@ num-integer = { version = "0.1.47", default-features = false, features = ["i128"
 num-traits = { version = "0.2.19", default-features = false, features = ["i128"] }
 rustc_apfloat = "0.2.3"
 libc = "0.2.191"
-# Safe SIGPIPE restoration through the existing libc dependency.
-sigpipe = "0.1.3"
-# Safe descriptor observations, closure, resource-limit and signal-mask queries.
-nix = { version = "0.32.0", default-features = false, features = ["fs", "resource", "signal"] }
 memchr = "2.8.3"
 # "unstable" only re-exports CollationKeySink, for sort keys that refuse
 # instead of aborting when they cannot grow.
@@ -71,7 +67,19 @@ rustix = { version = "1.1.6", default-features = false, features = ["std", "rand
 [target.'cfg(target_os = "macos")'.dependencies]
 # Borrow standard descriptors without initializing an additional I/O buffer.
 rustix = { version = "1.1.6", default-features = false, features = ["std", "stdio", "fs", "termios"] }
+
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
 getrandom = { version = "0.4.3", default-features = false, features = ["std"] }
+
+[target.'cfg(unix)'.dependencies]
+sigpipe = "0.1.3"
+nix = { version = "0.32.0", default-features = false, features = ["fs", "resource", "signal"] }
+
+[target.'cfg(windows)'.dependencies]
+# Checked consuming close and native disk/pipe classification, without
+# first-party FFI. Metadata and seek can misidentify Windows pipes.
+io-close = "0.3.7"
+winapi-util = "0.1.11"
 
 [features]
 default = []
@@ -83,6 +91,8 @@ hotpath-callgrind = ["hotpath", "hotpath/hotpath-callgrind"]
 [dev-dependencies]
 # Independent byte-reader check for canonical CSV output, not the input parser.
 csv-core = "0.1.13"
+
+[target.'cfg(unix)'.dev-dependencies]
 # Safe descriptor file actions, access checks and bounded child reaping in tests.
 # Owned pseudo-terminals and raw mode setup use the term feature.
 nix = { version = "0.32.0", default-features = false, features = ["fs", "signal", "term", "poll"] }

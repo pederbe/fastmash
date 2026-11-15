@@ -29,7 +29,7 @@ impl SeedSource for OsSeedSource {
                 }
             }
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", windows))]
         getrandom::fill(&mut bytes).map_err(|_| ())?;
         Ok(u32::from_ne_bytes(bytes))
     }
@@ -58,7 +58,7 @@ impl TableState {
         let mut bytes = [0u8; 8];
         #[cfg(target_os = "linux")]
         let filled = getrandom(&mut bytes, GetRandomFlags::NONBLOCK).ok() == Some(bytes.len());
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", windows))]
         let filled = getrandom::fill(&mut bytes).is_ok();
         filled.then(|| u64::from_ne_bytes(bytes))
     }

@@ -6,7 +6,7 @@ use icu_collator::{
     options::{AlternateHandling, CollatorOptions, Strength},
 };
 use icu_locale_core::Locale;
-use std::{ffi::OsString, os::unix::ffi::OsStrExt};
+use std::ffi::OsString;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub(super) enum Collation {
@@ -148,7 +148,7 @@ fn refusal(category: &'static str, reason: &str, hint: &str, utf8: bool) -> Fail
         category
     };
     let mut message = reason.as_bytes().to_vec();
-    super::named_fields::quote_with(value.as_bytes(), &mut message, utf8);
+    super::named_fields::quote_with(value.as_encoded_bytes(), &mut message, utf8);
     message.extend_from_slice(
         format!(" from {source}\nhint: {}\n", hint.replace("{}", variable)).as_bytes(),
     );
@@ -168,16 +168,16 @@ impl Policy {
         // quotation style and whether -i can fold ASCII letters; neither
         // category refuses a command by itself.
         let ctype = category("LC_CTYPE");
-        let utf8 =
-            recognized(ctype.as_bytes()).map_or_else(|| utf8_codeset(ctype.as_bytes()), |v| v.0);
-        let numeric = recognized(category("LC_NUMERIC").as_bytes()).map(|v| v.1);
-        let collation =
-            recognized(category("LC_COLLATE").as_bytes()).map_or(Collation::Unsupported, |v| v.2);
+        let utf8 = recognized(ctype.as_encoded_bytes())
+            .map_or_else(|| utf8_codeset(ctype.as_encoded_bytes()), |v| v.0);
+        let numeric = recognized(category("LC_NUMERIC").as_encoded_bytes()).map(|v| v.1);
+        let collation = recognized(category("LC_COLLATE").as_encoded_bytes())
+            .map_or(Collation::Unsupported, |v| v.2);
         Self {
             numeric: numeric.unwrap_or(Profile::C),
             numbers: numeric.is_some(),
             utf8,
-            ascii_case: !turkic_case(ctype.as_bytes()),
+            ascii_case: !turkic_case(ctype.as_encoded_bytes()),
             collation,
         }
     }

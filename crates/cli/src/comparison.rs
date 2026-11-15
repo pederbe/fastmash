@@ -14,7 +14,6 @@ use std::{
     cmp::Ordering,
     ffi::{OsStr, OsString},
     io::BufRead,
-    os::unix::ffi::OsStrExt,
 };
 
 #[path = "comparison_keys.rs"]
@@ -34,7 +33,7 @@ pub(super) struct Ranking {
 
 fn source_context(mut error: Failure, role: &str, path: &OsStr, utf8: bool) -> Failure {
     let mut quoted = Vec::new();
-    super::named_fields::quote_with(path.as_bytes(), &mut quoted, utf8);
+    super::named_fields::quote_with(path.as_encoded_bytes(), &mut quoted, utf8);
     super::append(
         &mut error,
         &[b"compare: ", role.as_bytes(), b" source ", &quoted, b"\n"],

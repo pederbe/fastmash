@@ -6,11 +6,7 @@ use super::command_memory::reserve;
 use super::failure::hints;
 use super::terminal_style::ColorMode;
 use super::{Failure, failure, records::Separator, unsupported, unsupported_hint};
-use std::{
-    borrow::Cow,
-    ffi::OsString,
-    os::unix::ffi::{OsStrExt, OsStringExt},
-};
+use std::{borrow::Cow, ffi::OsString};
 
 pub(super) enum Action {
     Calculate(Box<Options>),
@@ -171,12 +167,20 @@ fn copy_argument(bytes: &[u8]) -> Result<OsString, Failure> {
     let mut copy = Vec::new();
     reserve(&mut copy, bytes.len())?;
     copy.extend_from_slice(bytes);
-    Ok(OsString::from_vec(copy))
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        Ok(OsString::from_vec(copy))
+    }
+    #[cfg(windows)]
+    String::from_utf8(copy)
+        .map(OsString::from)
+        .map_err(|_| unsupported("non-Unicode command arguments are unsupported on Windows"))
 }
 
 fn push_operand(operands: &mut Vec<OsString>, arg: &OsString) -> Result<(), Failure> {
     reserve(operands, 1)?;
-    operands.push(copy_argument(arg.as_bytes())?);
+    operands.push(copy_argument(arg.as_encoded_bytes())?);
     Ok(())
 }
 
@@ -185,6 +189,12 @@ pub(super) fn collect_args(
 ) -> Result<Vec<OsString>, Failure> {
     let mut collected = Vec::new();
     for arg in args {
+        #[cfg(windows)]
+        if arg.to_str().is_none() {
+            return Err(unsupported(
+                "non-Unicode command arguments are unsupported on Windows",
+            ));
+        }
         reserve(&mut collected, 1)?;
         collected.push(arg);
     }
@@ -344,7 +354,7 @@ fn parse_options(
     allow_unavailable: bool,
     color: &mut ColorMode,
 ) -> Result<Action, Failure> {
-    if args.iter().any(|arg| arg.as_bytes().contains(&0)) {
+    if args.iter().any(|arg| arg.as_encoded_bytes().contains(&0)) {
         return Err(unsupported("NUL bytes in arguments are unsupported"));
     }
     let mut options = Options {
@@ -387,7 +397,7 @@ fn parse_options(
     let mut at = 0;
     while let Some(arg) = args.get(at) {
         at += 1;
-        let bytes = arg.as_bytes();
+        let bytes = arg.as_encoded_bytes();
         if bytes == b"--" {
             for arg in &args[at..] {
                 push_operand(&mut options.operands, arg)?;
@@ -456,7 +466,7 @@ fn parse_options(
                             }
                         })?;
                         at += 1;
-                        Some(arg.as_bytes())
+                        Some(arg.as_encoded_bytes())
                     }
                 }
             } else {
@@ -469,7 +479,11 @@ fn parse_options(
                 // consumers belong to the respective mode implementations.
                 Setting::TableOnly => options.strict = false,
                 Setting::Filler => {
-                    options.filler = Cow::Owned(copy_argument(value.unwrap())?.into_vec())
+                    let value = value.unwrap();
+                    let mut bytes = Vec::new();
+                    reserve(&mut bytes, value.len())?;
+                    bytes.extend_from_slice(value);
+                    options.filler = Cow::Owned(bytes)
                 }
                 Setting::Vnlog => {
                     options.vnlog = true;
@@ -547,14 +561,12 @@ fn parse_options(
                             &mut ColorMode::Auto,
                         )
                     {
-                        parsed
-                            .operands
-                            .first()
-                            .is_some_and(|arg| matches!(arg.as_bytes(), b"health" | b"compare"))
-                            || matches!(
-                                super::grammar::requests_selection(&parsed.operands),
-                                Ok(true)
-                            )
+                        parsed.operands.first().is_some_and(|arg| {
+                            matches!(arg.as_encoded_bytes(), b"health" | b"compare")
+                        }) || matches!(
+                            super::grammar::requests_selection(&parsed.operands),
+                            Ok(true)
+                        )
                     } else {
                         false
                     };

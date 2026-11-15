@@ -24,6 +24,16 @@ pub(super) struct Detection {
 
 impl Detection {
     pub(super) fn from_env() -> Self {
+        #[cfg(windows)]
+        {
+            use std::io::IsTerminal;
+            Self {
+                stdout_terminal: std::io::stdout().is_terminal(),
+                stderr_terminal: std::io::stderr().is_terminal(),
+                suppressed: environment_suppresses(),
+            }
+        }
+        #[cfg(unix)]
         Self {
             stdout_terminal: nix::unistd::isatty(rustix::stdio::stdout()).unwrap_or(false),
             stderr_terminal: nix::unistd::isatty(rustix::stdio::stderr()).unwrap_or(false),
