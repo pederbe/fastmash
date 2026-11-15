@@ -47,8 +47,8 @@ jobs:
           ./.github/scripts/windows-powershell.ps1 -Root "$env:RUNNER_TEMP/fastmash-powershell"
           ./.github/scripts/windows-volume.ps1 -Root "$env:RUNNER_TEMP/fastmash-volume"
           "FASTMASH_TEST_FULL_VOLUME=$env:RUNNER_TEMP/fastmash-volume/mount" >> $env:GITHUB_ENV
-          "FASTMASH_POWERSHELL_EVIDENCE=$env:RUNNER_TEMP/windows-install-evidence/powershell" >> $env:GITHUB_ENV
-          "FASTMASH_CONSOLE_EVIDENCE=$env:RUNNER_TEMP/windows-install-evidence/console" >> $env:GITHUB_ENV
+          "FASTMASH_POWERSHELL_EVIDENCE=$env:RUNNER_TEMP/windows-install-results/powershell" >> $env:GITHUB_ENV
+          "FASTMASH_CONSOLE_EVIDENCE=$env:RUNNER_TEMP/windows-install-results/console" >> $env:GITHUB_ENV
           cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bin fastmash-check-archive
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo build --release -p fastmash-corpus-driver --bins --locked
@@ -64,9 +64,9 @@ jobs:
           $source = (git rev-parse HEAD).Trim()
           $installed = ./release/windows-install.ps1 -Archive $archive -ExpectedSha256 $env:EXPECTED_SHA256 -QualifiedDirectory $qualified -ExpectedSource $source -Prefix "$env:RUNNER_TEMP/windows-installed" -Checker "$pwd/target/debug/fastmash-check-archive.exe"
           "FASTMASH_TEST_BINARY=$installed/fastmash.exe" >> $env:GITHUB_ENV
-          New-Item -ItemType Directory "$env:RUNNER_TEMP/windows-install-evidence" -Force | Out-Null
-          Copy-Item "$qualified/binary.sha256","$qualified/build-provenance.txt" "$env:RUNNER_TEMP/windows-install-evidence"
-          Get-FileHash $archive,"$installed/fastmash.exe" | Format-List | Out-File "$env:RUNNER_TEMP/windows-install-evidence/installed-sha256.txt"
+          New-Item -ItemType Directory "$env:RUNNER_TEMP/windows-install-results" -Force | Out-Null
+          Copy-Item "$qualified/binary.sha256","$qualified/build-provenance.txt" "$env:RUNNER_TEMP/windows-install-results"
+          Get-FileHash $archive,"$installed/fastmash.exe" | Format-List | Out-File "$env:RUNNER_TEMP/windows-install-results/installed-sha256.txt"
       - name: Check installed streams, paths, spill and actual console
         run: cargo test --release -p fastmash --test windows_backend --test windows_console --locked
       - name: Check both native PowerShell workflows
@@ -74,9 +74,9 @@ jobs:
       - name: Execute both installed corpus input modes
         run: |
           $version = (Select-String '^version = "([^"]+)"' Cargo.toml).Matches.Groups[1].Value
-          & target/release/fastmash-corpus.exe --binary $env:FASTMASH_TEST_BINARY --expected-version $version --keep-going --evidence-dir "$env:RUNNER_TEMP/windows-install-evidence/pipe"
+          & target/release/fastmash-corpus.exe --binary $env:FASTMASH_TEST_BINARY --expected-version $version --keep-going --evidence-dir "$env:RUNNER_TEMP/windows-install-results/pipe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & target/release/fastmash-corpus.exe --binary $env:FASTMASH_TEST_BINARY --expected-version $version --stdin-file --keep-going --evidence-dir "$env:RUNNER_TEMP/windows-install-evidence/file"
+          & target/release/fastmash-corpus.exe --binary $env:FASTMASH_TEST_BINARY --expected-version $version --stdin-file --keep-going --evidence-dir "$env:RUNNER_TEMP/windows-install-results/file"
           exit $LASTEXITCODE
       - name: Verify the executable after command checks and remove the installation
         if: success()
@@ -98,7 +98,7 @@ jobs:
         with:
           name: installed-contract-windows-${{ inputs.source }}
           path: |
-            ${{ runner.temp }}/windows-install-evidence/
+            ${{ runner.temp }}/windows-install-results/
             ${{ runner.temp }}/fastmash-volume/*.txt
             ${{ runner.temp }}/fastmash-volume/*.json
           if-no-files-found: error
