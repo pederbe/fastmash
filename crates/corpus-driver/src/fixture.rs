@@ -593,6 +593,8 @@ mod tests {
         let original = case.expected(Path::new("."), None).unwrap();
         let mut expected = original.clone();
         let facts = Destination {
+            #[cfg(windows)]
+            kind: "pipe",
             isatty: false,
             block_size: 4,
         };
@@ -610,6 +612,8 @@ mod tests {
             case.adapt_buffer(
                 &mut expected,
                 Some(&Destination {
+                    #[cfg(windows)]
+                    kind: "pipe",
                     isatty: true,
                     block_size: 4
                 })
@@ -620,6 +624,8 @@ mod tests {
             case.adapt_buffer(
                 &mut expected,
                 Some(&Destination {
+                    #[cfg(windows)]
+                    kind: "pipe",
                     isatty: false,
                     block_size,
                 }),
