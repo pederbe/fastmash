@@ -333,7 +333,7 @@ fn selection_reports_write_and_close_failures_using_transport_precedence() {
             (Some(5), None, false, 77),
             (None, Some(28), false, 1),
             (None, Some(5), false, 77),
-            (None, None, true, 77),
+            (None, None, true, if cfg!(windows) { 1 } else { 77 }),
             (Some(28), Some(5), false, 77),
         ] {
             let mut reader = input(bytes, None);

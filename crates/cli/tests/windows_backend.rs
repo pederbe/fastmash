@@ -1,4 +1,4 @@
-//! Focused development checks. The full Windows command corpus is a later gate.
+//! Focused development checks alongside the native Windows command corpus.
 #![cfg(windows)]
 #![forbid(unsafe_code)]
 
@@ -11,7 +11,7 @@ use std::{
     ffi::OsString,
     fs::{self, File, OpenOptions},
     io::Write,
-    os::windows::ffi::OsStringExt,
+    os::windows::{ffi::OsStringExt, fs::OpenOptionsExt},
     path::PathBuf,
     process::{Child, Command, Output, Stdio},
     sync::atomic::{AtomicU64, Ordering},
@@ -250,4 +250,18 @@ fn termination_removes_open_spill_files() {
     child.wait().unwrap();
     drop(input);
     assert_eq!(fs::read_dir(&fixture.0).unwrap().count(), 0);
+}
+
+#[test]
+fn directory_input_is_a_checked_read_error() {
+    let fixture = Fixture::new();
+    let directory = OpenOptions::new()
+        .read(true)
+        .custom_flags(0x0200_0000) // FILE_FLAG_BACKUP_SEMANTICS admits directory handles.
+        .open(&fixture.0)
+        .unwrap();
+    let output = finish(command(&["sum", "1"]).stdin(directory).spawn().unwrap());
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert!(output.stdout.is_empty());
+    assert_eq!(output.stderr, b"fastmash: read error: Is a directory\n");
 }

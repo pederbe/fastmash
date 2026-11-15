@@ -1843,7 +1843,7 @@ mod tests {
         let source = || {
             let unreadable = std::fs::OpenOptions::new()
                 .write(true)
-                .open("/dev/null")
+                .open(if cfg!(windows) { "NUL" } else { "/dev/null" })
                 .unwrap();
             b"abcde".as_slice().chain(unreadable)
         };

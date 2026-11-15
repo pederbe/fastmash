@@ -624,7 +624,7 @@ partial"),
         );
         assert_eq!(
             intake.read_error().and_then(io::Error::raw_os_error),
-            Some(5)
+            Some(crate::test_io::read_code(5))
         );
         let error = intake.finish().err().unwrap();
         assert_eq!(

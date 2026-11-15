@@ -696,7 +696,10 @@ mod tests {
                     Ok(())
                 }
             });
-            assert_eq!(completion_failure(result).unwrap().status, 77);
+            assert_eq!(
+                completion_failure(result).unwrap().status,
+                if cfg!(windows) { 1 } else { 77 }
+            );
         }
     }
 }

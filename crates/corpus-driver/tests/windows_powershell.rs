@@ -71,9 +71,7 @@ fn success(observed: &Output) {
 #[test]
 #[ignore = "requires FASTMASH_TEST_BINARY, FASTMASH_PWSH_74 and FASTMASH_PWSH_CURRENT"]
 fn native_powershell_baseline_and_current_preserve_workflow_contracts() {
-    let binary = PathBuf::from(std::env::var_os("FASTMASH_TEST_BINARY").unwrap())
-        .canonicalize()
-        .unwrap();
+    let binary = PathBuf::from(std::env::var_os("FASTMASH_TEST_BINARY").unwrap());
     for (variable, baseline) in [("FASTMASH_PWSH_74", true), ("FASTMASH_PWSH_CURRENT", false)] {
         let shell = PathBuf::from(std::env::var_os(variable).unwrap());
         let root = std::env::temp_dir().join(format!(

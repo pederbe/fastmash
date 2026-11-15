@@ -12,6 +12,7 @@ use std::{
 enum Stream {
     File(File),
     Console(File, Utf8),
+    Directory(File),
     Failed(Option<i32>, io::ErrorKind),
     Closed,
 }
@@ -36,6 +37,8 @@ fn copy(stream: &(impl AsHandle + AsRawHandle + IsTerminal)) -> io::Result<Strea
     let file = File::from(owned);
     Ok(if stream.is_terminal() {
         Stream::Console(file, Utf8::default())
+    } else if winapi_util::file::typ(&file)?.is_disk() && file.metadata()?.is_dir() {
+        Stream::Directory(file)
     } else {
         Stream::File(file)
     })
@@ -82,6 +85,7 @@ pub(super) fn originally_closed(fd: usize) -> bool {
 pub(super) fn read(fd: usize, bytes: &mut [u8]) -> io::Result<usize> {
     with(fd, |stream| match stream {
         Stream::File(file) => file.read(bytes),
+        Stream::Directory(_) => Err(io::ErrorKind::IsADirectory.into()),
         Stream::Console(..) => io::stdin().read(bytes),
         _ => unreachable!(),
     })
@@ -90,6 +94,7 @@ pub(super) fn read(fd: usize, bytes: &mut [u8]) -> io::Result<usize> {
 pub(super) fn write(fd: usize, bytes: &[u8]) -> io::Result<usize> {
     with(fd, |stream| match stream {
         Stream::File(file) => file.write(bytes),
+        Stream::Directory(_) => Err(io::ErrorKind::IsADirectory.into()),
         Stream::Console(_, text) => {
             if fd == 1 {
                 text.write(bytes, &mut io::stdout().lock())
@@ -137,7 +142,7 @@ pub(super) fn close(fd: usize) -> io::Result<()> {
         .lock()
         .map_err(|_| io::Error::other("standard stream lock poisoned"))?;
     match std::mem::replace(&mut *state, Stream::Closed) {
-        Stream::File(file) => file.close(),
+        Stream::File(file) | Stream::Directory(file) => file.close(),
         Stream::Console(file, text) => {
             let complete = text.finish().and_then(|()| match fd {
                 1 => io::stdout().flush(),

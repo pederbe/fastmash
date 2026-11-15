@@ -20,7 +20,7 @@ impl BufRead for Input<'_> {
         if self.bytes.is_empty()
             && let Some(code) = self.error
         {
-            return Err(io::Error::from_raw_os_error(code));
+            return Err(crate::test_io::read(code));
         }
         Ok(&self.bytes[..self.bytes.len().min(self.segment)])
     }
@@ -43,7 +43,7 @@ impl Write for Output {
         if let Some(code) = self.write_error
             && self.bytes.len() >= self.write_error_after
         {
-            return Err(io::Error::from_raw_os_error(code));
+            return Err(crate::test_io::write(code));
         }
         let mut count = bytes.len().min(2);
         if self.write_error.is_some() {
@@ -63,7 +63,7 @@ impl command_output::Transport for Output {
     fn close(&mut self) -> io::Result<()> {
         self.closed = true;
         self.close_error
-            .map_or(Ok(()), |code| Err(io::Error::from_raw_os_error(code)))
+            .map_or(Ok(()), |code| Err(crate::test_io::write(code)))
     }
 }
 

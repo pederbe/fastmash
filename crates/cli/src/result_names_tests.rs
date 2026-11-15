@@ -253,7 +253,7 @@ fn csv_finalization_reports_close_failures_and_keeps_status_precedence() {
         }
         fn close(&mut self) -> io::Result<()> {
             self.output.closed = true;
-            Err(io::Error::from_raw_os_error(self.code))
+            Err(crate::test_io::write(self.code))
         }
     }
     for (code, status, diagnostic) in [

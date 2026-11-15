@@ -232,6 +232,29 @@ impl Case {
 
     #[cfg(windows)]
     fn windows_expected(&self, status: i32, mut stderr: Vec<u8>) -> Result<(i32, Vec<u8>)> {
+        // These Linux cases terminate at their first SIGPIPE. Windows keeps
+        // running, reports the primary command error, then completes output.
+        let primary: Option<&[u8]> = match self.id.as_str() {
+            "output-header-lifecycle:missing-closed-pipe"
+            | "output-header-lifecycle:lf-missing-closed-pipe" => {
+                Some(b"fastmash: invalid input: field 2 requested, line 1 has only 1 fields\n")
+            }
+            "output-header-lifecycle:invalid-closed-pipe" => {
+                Some(b"fastmash: invalid numeric value in line 2 field 1: 'x'\n")
+            }
+            _ => None,
+        };
+        if let Some(primary) = primary {
+            return Ok((1, [primary, b"fastmash: write error\n"].concat()));
+        }
+        // The 8192-byte Windows buffer keeps this smaller header pending until
+        // finalization. Its final write supplies the full-destination reason.
+        if self.id == "output-header-lifecycle:header-4087-1-full" {
+            return Ok((
+                1,
+                b"fastmash: write error: No space left on device\n".to_vec(),
+            ));
+        }
         if self.io == "closed-pipe"
             && (status == -13
                 || (status == 77 && stderr == b"fastmash: unsupported output I/O error\n"))
@@ -241,11 +264,6 @@ impl Case {
             }
             stderr.extend_from_slice(b"fastmash: write error: Broken pipe\n");
             return Ok((1, stderr));
-        }
-        if self.io == "directory" {
-            let text = String::from_utf8(stderr)
-                .map_err(|_| Error::message("non-Unicode directory diagnostic"))?;
-            stderr = text.replace("Is a directory", "Access denied").into_bytes();
         }
         Ok((status, stderr))
     }
@@ -432,17 +450,19 @@ impl Case {
         let mut reasons = Vec::new();
         #[cfg(windows)]
         {
-            if self.io == "closed-pipe" {
-                reasons.push("Windows broken-pipe write error replaces Unix SIGPIPE");
+            if self.id == "output-header-lifecycle:header-4087-1-full" {
+                reasons.push("8192-byte Windows buffer defers the header failure to finalization");
             }
-            if self.io == "directory" {
-                reasons.push("Windows directory read reports Access denied");
+            if self.io == "closed-pipe" {
+                reasons.push("Windows continues after a broken pipe, preserving command and completion diagnostics instead of Unix SIGPIPE");
             }
         }
         if NATIVE_SORT_DIAGNOSTICS.contains(&self.id.as_str()) {
             reasons.push(NATIVE_REASON);
         }
-        if cfg!(target_os = "macos") && NATIVE_BUFFER_OBSERVATIONS.contains(&self.id.as_str()) {
+        if (cfg!(target_os = "macos") || cfg!(windows))
+            && NATIVE_BUFFER_OBSERVATIONS.contains(&self.id.as_str())
+        {
             reasons.push("held prefix uses native destination block size; completed stdout and status frozen");
         }
         reasons

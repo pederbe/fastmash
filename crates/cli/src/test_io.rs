@@ -36,8 +36,16 @@ pub(super) fn read_code(reference: i32) -> i32 {
     }
 }
 pub(super) fn write(reference: i32) -> io::Error {
-    io::Error::from_raw_os_error(write_code(reference))
+    if cfg!(windows) && reference == 4 {
+        io::ErrorKind::Interrupted.into()
+    } else {
+        io::Error::from_raw_os_error(write_code(reference))
+    }
 }
 pub(super) fn read(reference: i32) -> io::Error {
-    io::Error::from_raw_os_error(read_code(reference))
+    if cfg!(windows) && reference == 21 {
+        io::ErrorKind::IsADirectory.into()
+    } else {
+        io::Error::from_raw_os_error(read_code(reference))
+    }
 }

@@ -469,9 +469,15 @@ mod tests {
             Ok(b"c\n".to_vec()),
         ]);
         let mut replay = Replay::new(&mut script, true);
-        assert_eq!(drain(&mut replay, usize::MAX), (b"a\nb".to_vec(), Some(5)));
+        assert_eq!(
+            drain(&mut replay, usize::MAX),
+            (b"a\nb".to_vec(), Some(crate::test_io::read_code(5)))
+        );
         replay.rewind(0).unwrap();
-        assert_eq!(drain(&mut replay, usize::MAX), (b"a\nb".to_vec(), Some(5)));
+        assert_eq!(
+            drain(&mut replay, usize::MAX),
+            (b"a\nb".to_vec(), Some(crate::test_io::read_code(5)))
+        );
         assert_eq!(drain(&mut replay, usize::MAX), (b"c\n".to_vec(), None));
         // Only where holding began can it be read again.
         let mut script = Script::new(vec![Ok(b"a".to_vec())]);

@@ -221,6 +221,7 @@ pub(super) fn os_failure(error: &io::Error, reading: bool) -> Failure {
         } else {
             match error.kind() {
                 io::ErrorKind::PermissionDenied => Some("Access denied"),
+                io::ErrorKind::IsADirectory if reading => Some("Is a directory"),
                 io::ErrorKind::BrokenPipe => Some("Broken pipe"),
                 io::ErrorKind::StorageFull => Some("No space left on device"),
                 io::ErrorKind::WriteZero => Some("Unable to write output"),
@@ -468,7 +469,7 @@ mod tests {
                         write(&mut sink, b"fastmash", &error, style(mode))
                             .unwrap_err()
                             .raw_os_error(),
-                        Some(28)
+                        Some(crate::test_io::write_code(28))
                     );
                     assert_eq!(sink.bytes, expected[..fail_at]);
                 }
@@ -491,7 +492,7 @@ mod tests {
                     write(&mut sink, b"fastmash", &error, style(mode))
                         .unwrap_err()
                         .raw_os_error(),
-                    Some(28)
+                    Some(crate::test_io::write_code(28))
                 );
                 assert_eq!(sink.bytes, expected);
             }
@@ -540,7 +541,7 @@ mod tests {
                     )
                     .unwrap_err()
                     .raw_os_error(),
-                    Some(28)
+                    Some(crate::test_io::write_code(28))
                 );
                 let reset = if fail_reset {
                     b"".as_slice()
@@ -557,7 +558,7 @@ mod tests {
                     write_prefix(&mut startup_sink, b"fastmash", style(ColorMode::Always))
                         .unwrap_err()
                         .raw_os_error(),
-                    Some(28)
+                    Some(crate::test_io::write_code(28))
                 );
                 // Startup keeps the fallback body independent of prefix errors.
                 let refusal = Failure {
@@ -568,7 +569,10 @@ mod tests {
                 let body = reported(&refusal);
                 let result = startup_sink.write_all(body);
                 if fail_reset {
-                    assert_eq!(result.unwrap_err().raw_os_error(), Some(5));
+                    assert_eq!(
+                        result.unwrap_err().raw_os_error(),
+                        Some(crate::test_io::write_code(5))
+                    );
                 } else {
                     result.unwrap();
                     assert_eq!(
