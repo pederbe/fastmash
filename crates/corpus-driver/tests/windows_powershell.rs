@@ -135,7 +135,7 @@ fn native_powershell_baseline_and_current_preserve_workflow_contracts() {
             ),
             (
                 "refusal",
-                "$env:LC_ALL = 'not-a-supported-locale'\n& $env:FASTMASH_TEST_BINARY sum 1\nexit $LASTEXITCODE",
+                "& $env:FASTMASH_TEST_BINARY rmdup 1,2\nexit $LASTEXITCODE",
                 77,
             ),
             (
