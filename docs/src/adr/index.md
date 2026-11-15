@@ -31,7 +31,6 @@ gets a new record. Editorial corrections keep the existing record and URL.
 | [0019](0019-one-product-crate.md) | Publish one product binary crate and retain separate maintenance tools |
 | [0020](0020-existing-allocator-calls.md) | Retain only the existing GNU Linux allocator calls outside startup |
 | [0021](0021-windows-development-backend.md) | Develop a safe native Windows backend with checked owned stream copies |
-
 | [0022](0022-windows-release-delivery.md) | Qualify native Windows archives and preserve exact tested delivery bytes |
 
 ## Superseded decisions
