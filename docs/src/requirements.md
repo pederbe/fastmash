@@ -10,17 +10,16 @@ distributions, including Alpine. Follow the [install](install.md) steps.
 | Linux (`x86_64-unknown-linux-musl`) | Static prebuilt binaries, with no glibc version requirement |
 | Linux (`x86_64-unknown-linux-gnu`) | Also supported for source builds using the system glibc |
 | macOS 15 or later (`aarch64-apple-darwin`) | Supported platform for the native archive, checked on macOS 15 and 26 |
+| Windows 11 (`x86_64-pc-windows-msvc`), PowerShell 7.4+ | Native archive, with the C runtime included |
 | `/proc` mounted on Linux | Supplies memory and terminal information. Without it, Fastmash uses conservative sort memory and writes output in 8 KiB blocks, even to a terminal |
-| A writable `TMPDIR` (default `/tmp`) | Temporary data for large sorted jobs |
+| A writable temporary directory | Temporary data for large sorted jobs |
 
-Fastmash supports Linux, Windows through WSL2 and
-**macOS 15 or later** (`aarch64-apple-darwin`), with native checks
-on macOS 15 and 26. Intel macOS, older macOS versions and native Windows are
-outside the scope. See [Homebrew](install.md#homebrew) or the
-[native archive instructions](install.md#macos-archive).
+See [native Windows installation](install.md#on-windows) or
+[macOS installation](install.md#homebrew). Intel macOS, older macOS versions,
+Windows 10 and ARM64 Windows are outside the supported scope.
 
-Sorting runs inside Fastmash and needs no other program. `TMPDIR` must be
-writable when a job spills to disk.
+Sorting runs inside Fastmash and needs no other program. Its temporary
+directory must be writable when a job spills to disk.
 
 For commands under an address-space limit (`ulimit -v`, as some batch schedulers set), see
 [Address-space limits](guide/errors.md#address-space-limits).

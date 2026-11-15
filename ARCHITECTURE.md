@@ -10,16 +10,17 @@ It is written for contributors and for anyone evaluating the project. The
 | | |
 | --- | --- |
 | Language | Rust (edition 2024), one product binary crate |
-| Platform | Linux, Windows through WSL2. Native macOS 15+ |
+| Platform | Linux, macOS 15+, Windows 11 x64 |
 | Interface | GNU datamash 1.9 command language, with explicit CSV, health, selection, weighted mean and comparison extensions |
 | Numbers | 80-bit extended precision, implemented in software |
 | Sorting | Built-in stable sorting with disk spill |
-| Runtime dependencies | Static musl Linux download, or system glibc for GNU source builds. System libraries on macOS |
+| Runtime dependencies | Static musl Linux download, or system glibc for GNU source builds. System libraries on macOS. Static CRT and system DLLs on Windows |
 | Network access | None |
 
 ## Design principles
 
-Linux and macOS use built-in sorting and private anonymous spill storage.
+All supported platforms use built-in sorting and private spill storage.
+[ADR 0022](docs/src/adr/0022-windows-release-delivery.md) records Windows delivery.
 [ADR 0014: Native sorting in one executable](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0014-native-sorting-everywhere.md)
 retires the external Sort route.
 [ADR 0010: Native macOS](https://github.com/pederbe/fastmash/blob/main/docs/src/adr/0010-native-apple-silicon.md)

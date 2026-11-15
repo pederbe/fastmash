@@ -63,8 +63,9 @@ the job is faster.
 ### Large inputs
 
 Fastmash sorts inside its own executable. It holds a sort buffer in memory and
-writes sorted runs to temporary files when needed. `TMPDIR` selects their
-directory, with `/tmp` as the default. The operating system removes the files
+writes sorted runs to temporary files when needed. Windows uses its system
+temporary directory. On Linux and macOS, `TMPDIR` selects the directory,
+with `/tmp` as the default. The operating system removes the files
 when Fastmash exits, including after interruption.
 
 For eligible input with repeated keys, hash grouping collects operation state
