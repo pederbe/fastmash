@@ -1,24 +1,25 @@
-# source	0.1.0 release binary 1f1fec94, 2026-10-05/06
-job	host	gnu_ms	fastmash_ms
-refgene-quantiles	laptop	112.8	26.6
-refgene-transcripts	laptop	112.0	61.0
-refgene-exons	laptop	159.4	83.1
-gene-many	laptop	160.4	105.0
-genes-example	laptop	7.3	3.8
-decimal-1000000	laptop	324.7	122.5
-decimal-100000	laptop	36.8	14.6
-grouped-decimal-100000	laptop	69.9	38.5
-dominant-group	laptop	21.9	11.9
-wine-by-quality	laptop	6.4	3.2
-disk-spill	laptop	572.4	694.1
-refgene-quantiles	desktop	50.3	13.1
-refgene-transcripts	desktop	45.6	26.5
-refgene-exons	desktop	62.2	36.5
-gene-many	desktop	55.0	38.7
-genes-example	desktop	3.0	1.6
-decimal-1000000	desktop	105.9	46.8
-decimal-100000	desktop	10.9	5.3
-grouped-decimal-100000	desktop	25.6	14.8
-dominant-group	desktop	9.0	4.5
-wine-by-quality	desktop	2.8	1.4
-disk-spill	desktop	180.0	309.7
+job	host	gnu_ms	fastmash_ms	arguments
+decimal-100000	laptop	32.8	9.5	-H sum 3 mean 3
+decimal-1000000	laptop	325.4	87.5	-H sum 3 mean 3
+grouped-decimal-100000	laptop	68.1	38.7	-H -s -g 2 count 3 mean 3 median 3
+wine-white-summary	laptop	4.2	1.9	-t ';' -H mean 9 median 9 min 9 max 9
+wine-by-quality	laptop	6.0	2.6	-t ';' -H -s -g 12 count 1 mean 11 median 11
+genes-example	laptop	7.0	4.2	-H -s -g 13 count 2
+refgene-transcripts	laptop	110.8	73.0	-s -g 13 count 2 collapse 2
+refgene-exons	laptop	157.8	86.8	-s -g 13 count 9 min 9 max 9 mean 9 median 9
+refgene-quantiles	laptop	111.0	21.5	q1 9 median 9 q3 9 iqr 9
+gene-many	laptop	159.8	127.1	-s -g 1 count 2 collapse 2
+dominant-group	laptop	21.6	9.1	-s -g 1 count 2 collapse 2
+disk-spill	laptop	547.2	495.1	-s -g 1 count 2 collapse 2
+decimal-100000	desktop	11.6	3.9	-H sum 3 mean 3
+decimal-1000000	desktop	114.8	37.2	-H sum 3 mean 3
+grouped-decimal-100000	desktop	27.5	18.0	-H -s -g 2 count 3 mean 3 median 3
+wine-white-summary	desktop	1.7	0.9	-t ';' -H mean 9 median 9 min 9 max 9
+wine-by-quality	desktop	3.0	1.2	-t ';' -H -s -g 12 count 1 mean 11 median 11
+genes-example	desktop	3.3	2.1	-H -s -g 13 count 2
+refgene-transcripts	desktop	57.0	37.9	-s -g 13 count 2 collapse 2
+refgene-exons	desktop	74.8	45.0	-s -g 13 count 9 min 9 max 9 mean 9 median 9
+refgene-quantiles	desktop	60.0	12.6	q1 9 median 9 q3 9 iqr 9
+gene-many	desktop	66.1	53.1	-s -g 1 count 2 collapse 2
+dominant-group	desktop	9.3	3.9	-s -g 1 count 2 collapse 2
+disk-spill	desktop	204.4	240.2	-s -g 1 count 2 collapse 2

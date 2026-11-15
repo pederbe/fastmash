@@ -316,7 +316,7 @@ def llms_txt(book):
         '`curl -fsSL https://fastmash.io/install.sh | sh`, or `cargo install --locked fastmash` on Linux.',
         'On macOS, use `cargo install --locked --bin fastmash fastmash`.',
         'For Windows downloads and PowerShell 7.4+ workflows, see install.html#on-windows and quick-start.html#powershell-74.',
-        'The published benchmarks measure Linux 0.1.0 binaries; macOS speed is not covered.',
+        'The benchmarks compare Fastmash with GNU datamash on Linux.',
         'Commands, options and output follow GNU datamash 1.9; the differences page',
         'lists every intentional difference. Created by Peder Bergan (https://pederbe.dev).',
     ]

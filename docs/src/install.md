@@ -159,14 +159,7 @@ bash -eu <<'EOF'
 tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/pederbe/fastmash/releases/latest)
 tag=${tag##*/}
 name=fastmash-$tag-x86_64-unknown-linux-musl
-if ! curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz; then
-  if command -v ldd >/dev/null 2>&1 && ldd --version 2>&1 | grep -qi musl; then
-    printf '%s\n' 'Could not download the static Linux archive. Check your connection and retry. This system cannot use the older glibc archive.' >&2
-    exit 1
-  fi
-  name=fastmash-$tag-x86_64-unknown-linux-gnu
-  curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz
-fi
+curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz
 curl -fLO https://github.com/pederbe/fastmash/releases/download/$tag/$name.tar.gz.sha256
 sha256sum -c $name.tar.gz.sha256
 tar -xzf $name.tar.gz
@@ -177,19 +170,14 @@ fi
 mkdir -p ~/.local/bin
 staging=$(mktemp -d "$HOME/.local/bin/.fastmash.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
-for program in fastmash fastmash-sort-supervisor; do
-  if [ -f "$name/$program" ]; then
-    cp "$name/$program" "$staging/$program"
-    chmod 755 "$staging/$program"
-    mv -f "$staging/$program" "$HOME/.local/bin/$program"
-  fi
-done
+cp "$name/fastmash" "$staging/fastmash"
+chmod 755 "$staging/fastmash"
+mv -f "$staging/fastmash" "$HOME/.local/bin/fastmash"
 printf '1\n2\n' | ~/.local/bin/fastmash sum 1
 EOF
 ```
 
-The final command prints `3`. The staged replacement also works when an
-older copy is running. To update, repeat these steps in an empty directory.
+The final command prints `3`. To update, repeat these steps in an empty directory.
 
 ### macOS archive
 
@@ -248,8 +236,7 @@ cargo binstall fastmash --strategies crate-meta-data --bin fastmash
 ```
 
 These commands install the published binaries and stop with an error if the
-download is unavailable. On Windows, choose a release that includes the
-[native archive](#on-windows).
+download is unavailable.
 
 To compile Fastmash from source with `cargo install`, use the latest stable
 [Rust toolchain](https://rustup.rs). On Linux or WSL2:
@@ -303,7 +290,7 @@ If Bash starts a login shell, add the line to `~/.bash_profile` instead.
 Replace `~/.local/bin` with your chosen directory if you set
 `FASTMASH_INSTALL_DIR`.
 
-If the command runs an older copy, this shows which one your shell found:
+To see which installation your shell uses:
 
 ```sh
 command -v fastmash
@@ -316,8 +303,6 @@ moves an existing directory to the front.
 ## On Windows
 
 Use [PowerShell 7.4 or later](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows) on Windows 11.
-Choose a release containing a Windows archive. If your release has none, use
-[WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and follow the Linux instructions.
 
 1. Open the [release downloads](https://github.com/pederbe/fastmash/releases/latest)
    and choose the archive ending in `x86_64-pc-windows-msvc.tar.gz`.
@@ -336,7 +321,9 @@ To update, replace the extracted folder and keep its location on `Path`.
 To uninstall, remove that folder and its `Path` entry. No Rust compiler or
 separate Visual C++ runtime installation is needed.
 
-Keep WSL2 data in the Linux file system rather than under `/mnt/c`.
+For Linux workflows, you can also use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install)
+and follow the Linux instructions. Keep WSL2 data in the Linux file system rather
+than under `/mnt/c`.
 
 ## Uninstall
 
@@ -357,21 +344,6 @@ cargo uninstall fastmash
 ```
 
 Fastmash keeps no configuration files, caches or background services.
-
-## Older Linux installations
-
-Early releases installed a second executable, `fastmash-sort-supervisor`,
-which Fastmash no longer uses.
-
-The quick installer removes an old helper during an upgrade when its checksum
-matches the earlier installation's ownership receipt. An installation without
-a receipt, or with a changed helper, leaves that file in place. You can
-remove it if it belongs to the installation you upgraded
-or uninstalled:
-
-```sh
-rm ~/.local/bin/fastmash-sort-supervisor
-```
 
 See [System requirements](requirements.md) for building from source and
 [verifying release archives](requirements.md#verifying-a-release-archive).

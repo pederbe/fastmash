@@ -13,7 +13,7 @@
   "guide/errors.md": "Understand Fastmash diagnostics, exit statuses, explicit refusals and resource requirements when a command cannot complete.",
   "guide/differences.md": "Check the documented differences between Fastmash and GNU datamash 1.9, including numerical results, locales, errors and unsupported cases.",
   "requirements.md": "Check supported platforms, sorting requirements and temporary storage.",
-  "benchmarks/index.md": "See Fastmash 0.1.0 benchmark results against GNU datamash on real and synthetic data, including speed improvements and remaining slower cases.",
+  "benchmarks/index.md": "Compare Fastmash with GNU datamash on real and synthetic data, with timings for quantiles, grouped summaries and decimal tables.",
   "benchmarks/method.md": "Read how Fastmash benchmarks are measured, checked and compared, with workload definitions, hardware details and complete result tables.",
   "faq.md": "Answers to common Fastmash questions about datamash compatibility, performance, supported systems, input formats and portable results.",
   "contributing/index.md": "Help improve Fastmash by reporting compatibility differences, testing real data, sharing benchmarks, improving documentation or contributing code.",

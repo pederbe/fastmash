@@ -199,7 +199,26 @@ All captures above are shared diagnostics. Retain source revision and patch,
 binary hash, compiler and build flags, dataset and command, host identity,
 background activity, exit status and report. The runner records reproducible
 job inputs and streams. Record the remaining host and source facts alongside
-the destination. Follow the maintained [measurement method](docs/src/benchmarks/method.md)
+the destination. Follow the [performance acceptance rules](#performance-acceptance)
 for final before-and-after acceptance comparisons, with profiling disabled in
 both ordinary builds. Diagnostic timings cannot establish a speedup or satisfy
 Predecessor guards.
+
+## Performance acceptance
+
+The rules are fixed before a performance comparison is measured:
+
+| Rule | Threshold |
+| --- | --- |
+| A job counts as a win | At least 20% lower median elapsed time and at least 5 ms saved per run, in both sessions and in at least five of six paired rounds |
+| Fastmash is "faster" overall | On each host: wins in at least three of the four non-startup job families, including real-data wins in at least two; no unresolved material slowdowns; small commands within their limits |
+| Material slowdown | Median elapsed time more than 10% **and** more than 5 ms longer |
+| Small commands | At most 5 ms slower than GNU datamash, and at most 20 ms in total |
+| CPU slowdown | More than 20% **and** more than 5 ms extra CPU time |
+| Memory review | Peak memory more than twice GNU datamash's **and** 64 MiB more |
+
+A job that fails, times out or gives a wrong answer counts as a failure, not
+a result. Performance-affecting changes are compared with the previous accepted
+Fastmash build through predecessor guards covering affected workloads and
+representative regressions. A material slowdown needs a fix or an explicit
+disposition. New whole-catalog and overall-speed claims use the full matrix.
