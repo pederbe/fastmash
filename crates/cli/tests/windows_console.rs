@@ -115,6 +115,18 @@ fn console(args: &[OsString], no_color: bool) -> String {
         .recv_timeout(Duration::from_secs(2))
         .expect("ConPTY input deadline")
         .unwrap();
+    if let Some(root) = std::env::var_os("FASTMASH_CONSOLE_EVIDENCE") {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let root = std::path::PathBuf::from(root);
+        fs::create_dir_all(&root).unwrap();
+        let index = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        fs::write(root.join(format!("{index}.bin")), &bytes).unwrap();
+        fs::write(
+            root.join(format!("{index}.txt")),
+            format!("args={args:?}\nstatus={status:?}\nno_color={no_color}\n"),
+        )
+        .unwrap();
+    }
     assert!(
         status.is_some_and(|status| status.success()),
         "console command failed: {}",
@@ -160,7 +172,8 @@ fn automatic_console_color_and_no_color_use_the_actual_terminal() {
     assert!(colored.contains("Usage:"));
     assert!(plain.contains("Usage:"));
     assert!(
-        colored.contains("189;147;249"),
+        colored.contains("\u{1b}[38;2;189;147;249")
+            || colored.contains("\u{1b}[1;38;2;189;147;249"),
         "console heading palette absent: {colored:?}"
     );
     assert!(!plain.contains("189;147;249"));

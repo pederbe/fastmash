@@ -237,6 +237,7 @@ jobs:
           "FASTMASH_TEST_FULL_VOLUME=$env:RUNNER_TEMP\fastmash-volume\mount" >> $env:GITHUB_ENV
           "FASTMASH_TEST_BINARY=$pwd\target\release\fastmash.exe" >> $env:GITHUB_ENV
           "FASTMASH_POWERSHELL_EVIDENCE=$env:RUNNER_TEMP\fastmash-windows\powershell" >> $env:GITHUB_ENV
+          "FASTMASH_CONSOLE_EVIDENCE=$env:RUNNER_TEMP\fastmash-windows\console" >> $env:GITHUB_ENV
       - run: cargo clippy -p fastmash --bin fastmash --test windows_backend --test windows_console -p fastmash-corpus-driver --bins --test windows_driver --test windows_powershell --locked -- -D warnings
       - run: cargo build --release -p fastmash -p fastmash-corpus-driver --bins --locked
       - run: cargo test --release -p fastmash --bin fastmash --test windows_backend --test windows_console --locked
