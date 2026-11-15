@@ -18,3 +18,5 @@ Linux benchmark results do not become macOS performance claims. The
 [testing guide](../../../TESTING.md#native-macos-development-gate) and
 [release guide](https://github.com/pederbe/fastmash/blob/main/RELEASING.md#native-macos-release-delivery)
 describe the checks.
+
+The Windows exclusion is superseded by [0022](0022-windows-release-delivery.md).

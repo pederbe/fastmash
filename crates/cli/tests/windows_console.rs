@@ -13,7 +13,9 @@ use std::{
 
 fn console(args: &[OsString], no_color: bool) -> String {
     console_command(
-        Path::new(env!("CARGO_BIN_EXE_fastmash")),
+        &std::env::var_os("FASTMASH_TEST_BINARY")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into()),
         args,
         no_color,
         None,
@@ -214,8 +216,11 @@ fn automatic_console_color_and_no_color_use_the_actual_terminal() {
 
 #[test]
 fn console_flushes_a_complete_header_before_input_eof() {
-    let binary = PathBuf::from(env!("CARGO_BIN_EXE_fastmash"));
-    let helper = binary
+    let compiled = PathBuf::from(env!("CARGO_BIN_EXE_fastmash"));
+    let binary = std::env::var_os("FASTMASH_TEST_BINARY")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| compiled.clone());
+    let helper = compiled
         .parent()
         .unwrap()
         .join("fastmash-corpus-test-command.exe");

@@ -32,6 +32,8 @@ gets a new record. Editorial corrections keep the existing record and URL.
 | [0020](0020-existing-allocator-calls.md) | Retain only the existing GNU Linux allocator calls outside startup |
 | [0021](0021-windows-development-backend.md) | Develop a safe native Windows backend with checked owned stream copies |
 
+| [0022](0022-windows-release-delivery.md) | Qualify native Windows archives and preserve exact tested delivery bytes |
+
 ## Superseded decisions
 
 These describe earlier designs, not current requirements.

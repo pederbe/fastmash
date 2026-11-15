@@ -77,6 +77,7 @@ jobs:
             release_inputs:
               - 'release/**'
               - '.github/workflows/macos*.yml'
+              - '.github/workflows/windows*.yml'
               - '.github/workflows/linux-release.yml'
               - '.github/workflows/release.yml'
             homebrew:
@@ -213,7 +214,7 @@ jobs:
           if-no-files-found: ignore
 
   windows-backend:
-    name: Windows command contract
+    name: Windows unit and driver checks
     timeout-minutes: 30
     needs: changes
     if: >-
@@ -230,42 +231,21 @@ jobs:
           toolchain: stable
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - name: Prepare native workflow tools
-        shell: pwsh
-        run: |
-          ./.github/scripts/windows-powershell.ps1 -Root "$env:RUNNER_TEMP\fastmash-powershell"
-          ./.github/scripts/windows-volume.ps1 -Root "$env:RUNNER_TEMP\fastmash-volume"
-          "FASTMASH_TEST_FULL_VOLUME=$env:RUNNER_TEMP\fastmash-volume\mount" >> $env:GITHUB_ENV
-          "FASTMASH_TEST_BINARY=$pwd\target\release\fastmash.exe" >> $env:GITHUB_ENV
-          "FASTMASH_POWERSHELL_EVIDENCE=$env:RUNNER_TEMP\fastmash-windows\powershell" >> $env:GITHUB_ENV
-          "FASTMASH_CONSOLE_EVIDENCE=$env:RUNNER_TEMP\fastmash-windows\console" >> $env:GITHUB_ENV
       - run: cargo clippy -p fastmash --bin fastmash --test windows_backend --test windows_console -p fastmash-corpus-driver --bins --test windows_driver --test windows_powershell --locked -- -D warnings
-      - run: cargo build --release -p fastmash -p fastmash-corpus-driver --bins --locked
-      - run: cargo test --release -p fastmash --bin fastmash --test windows_backend --test windows_console --locked
-      - run: cargo test --release -p fastmash-corpus-driver --lib --test windows_driver --test windows_powershell --locked -- --include-ignored
-      - name: Frozen commands with pipe and file input
-        shell: pwsh
-        run: |
-          $version = (Select-String '^version = "([^"]+)"' Cargo.toml).Matches.Groups[1].Value
-          & target/release/fastmash-corpus.exe --binary $env:FASTMASH_TEST_BINARY --expected-version $version --keep-going --evidence-dir "$env:RUNNER_TEMP\fastmash-windows\pipe"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & target/release/fastmash-corpus.exe --binary $env:FASTMASH_TEST_BINARY --expected-version $version --stdin-file --keep-going --evidence-dir "$env:RUNNER_TEMP\fastmash-windows\file"
-          exit $LASTEXITCODE
-      - name: Remove private test volume
-        if: always()
-        shell: pwsh
-        run: ./.github/scripts/windows-volume.ps1 -Root "$env:RUNNER_TEMP\fastmash-volume" -Action Remove
-      - name: Retain Windows command evidence
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: corpus-windows
-          retention-days: 7
-          path: |
-            ${{ runner.temp }}/fastmash-windows/
-            ${{ runner.temp }}/fastmash-volume/*.txt
-            ${{ runner.temp }}/fastmash-volume/*.json
-          if-no-files-found: ignore
+      - run: cargo build --release -p fastmash-corpus-driver --bins --locked
+      - run: cargo test --release -p fastmash --bin fastmash --locked
+      - run: cargo test --release -p fastmash-corpus-driver --lib --test windows_driver --locked
+
+  windows-archive:
+    needs: [changes, windows-backend]
+    if: >-
+      !cancelled() && needs.windows-backend.result == 'success'
+    uses: ./.github/workflows/windows.yml
+    permissions:
+      contents: read
+      attestations: read
+    with:
+      release-archive: true
 
   profiling:
     name: Static profiling on ${{ matrix.os }}
@@ -428,7 +408,7 @@ jobs:
 
   ci:
     name: CI
-    needs: [changes, check, test, windows-backend, profiling, licenses, native, release-linux, documentation, homebrew, locale, packages-repository, binstall]
+    needs: [changes, check, test, windows-backend, windows-archive, profiling, licenses, native, release-linux, documentation, homebrew, locale, packages-repository, binstall]
     if: always()
     runs-on: ubuntu-26.04
     steps:

@@ -207,3 +207,11 @@ fn targets_preserve_archive_description_and_standard_library_preface() {
     assert!(linux.contains("Target: `x86_64-unknown-linux-gnu`.\n\n"));
     assert!(macos.contains("Target: `aarch64-apple-darwin`.\n\n"));
 }
+
+#[test]
+fn windows_target_keeps_runtime_and_dependency_notices_separate_from_unix() {
+    assert_eq!(
+        Target::parse("x86_64-pc-windows-msvc").unwrap(),
+        Target::Windows
+    );
+}

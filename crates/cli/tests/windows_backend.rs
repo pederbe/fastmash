@@ -42,7 +42,10 @@ impl Drop for Fixture {
     }
 }
 fn command(args: &[&str]) -> Command {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_fastmash"));
+    let mut command = Command::new(
+        std::env::var_os("FASTMASH_TEST_BINARY")
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_fastmash").into()),
+    );
     command
         .args(args)
         .env("LC_ALL", "C")

@@ -1,6 +1,6 @@
 # 0021: Add a safe native Windows development backend
 
-Status: accepted for development. Partly supersedes [0010](0010-native-apple-silicon.md)
+Status: accepted for development. Release delivery is extended by [0022](0022-windows-release-delivery.md). Partly supersedes [0010](0010-native-apple-silicon.md)
 by admitting Windows 11 x64 builds with the MSVC target. Windows release delivery
 remains unqualified under [0011](0011-native-release-delivery.md) and
 [0013](0013-reuse-tested-release-artifacts.md).

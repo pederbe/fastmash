@@ -74,6 +74,37 @@ apt/dnf delivery. The [Homebrew guide](packaging/homebrew/README.md) covers the
 release-archive recipe. Additional distribution submissions and announcements
 are separate from the delivery pipeline.
 
+## Windows archives
+
+The [Windows builder](.github/workflows/windows.yml) produces a tar.gz archive
+with the same naming pattern as the other targets. `release/windows-archive.ps1`
+uses PowerShell 7.4+, stable Rust and the installed MSVC/Windows SDK. Release
+mode compares two clean static-CRT executable builds before packaging one.
+The Rust archive checker validates PE imports, byte identity, documents and
+provenance. Windows notices include only the target's normal Cargo dependencies.
+
+The [installation workflow](.github/workflows/windows-install.yml) receives the
+frozen digest and independent build files. It extracts outside the checkout,
+checks admission, then points the Windows backend, console, PowerShell and
+corpus tests at the installed executable. It checks identity again before
+removal. Draft downloads must match the retained digest and release attestation.
+Cargo-binstall checks the Windows archive through published crate metadata after
+Cargo publication, with compilation and alternate download strategies disabled.
+
+For initial Windows 11 qualification, download the `windows-archive` artifact
+from the checked source run and retain its artifact digest. Use those exact
+archive bytes with `release/windows-install.ps1`, then run the maintained native
+checks in [Testing](TESTING.md#native-windows-command-validation). Preserve
+source, toolchain, archive and executable identities and both PowerShell receipts.
+The native VM is a qualification host, not a weekly release runner.
+[ADR 0022](docs/src/adr/0022-windows-release-delivery.md) defines this cadence.
+
+Development mode labels an archive with its source revision. Release-candidate
+mode keeps the ordinary versioned layout and requires two identical clean builds.
+Neither mode uploads assets or publishes a release. Current public downloads
+remain governed by their published asset lists. WSL2 remains the route for a
+release without a native Windows archive.
+
 ## Website updates
 
 Website changes use [the website checks](TESTING.md#website-checks).

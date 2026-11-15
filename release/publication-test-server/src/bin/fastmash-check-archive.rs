@@ -21,9 +21,13 @@ fn main() -> ExitCode {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.len() == 1 && matches!(args[0].to_str(), Some("--help" | "-h")) {
         println!(
-            "Check archive executable identity or recorded macOS deployment metadata.\n\n\
+            "Check native archive identity, installation and platform metadata.\n\n\
 Usage: fastmash-check-archive bytes ORIGINAL COPY\n\
-       fastmash-check-archive deployment VTOOL_OUTPUT\n\n\
+       fastmash-check-archive deployment VTOOL_OUTPUT\n\
+       fastmash-check-archive sha256 FILE\n\
+       fastmash-check-archive pe HEADERS_FILE IMPORTS_FILE\n\
+       fastmash-check-archive outside CHECKOUT INSTALLED_DIRECTORY\n\
+       fastmash-check-archive windows INSTALLED QUALIFIED SOURCE LABEL KIND\n\n\
 bytes compares the contents of two executable files. deployment checks literal\n\
 vtool output text for the macOS 15 deployment target, not a metadata file path.\n\
 Successful checks are silent. A failed check exits with status 1.\n\n\
@@ -33,6 +37,53 @@ Examples, replacing executable paths with the archive's programs:\n\
 Guide: https://github.com/pederbe/fastmash/blob/main/RELEASING.md"
         );
         return ExitCode::SUCCESS;
+    }
+    let checked = match args.as_slice() {
+        [mode, path] if mode == "sha256" => {
+            match fastmash_publication_test_server::windows_archive::sha256(Path::new(path)) {
+                Ok(hash) => {
+                    println!("{hash}");
+                    return ExitCode::SUCCESS;
+                }
+                Err(error) => Some(Err(error)),
+            }
+        }
+        [mode, headers, imports] if mode == "pe" => Some((|| {
+            fastmash_publication_test_server::windows_archive::pe(
+                &std::fs::read_to_string(headers)?,
+                &std::fs::read_to_string(imports)?,
+            )
+        })()),
+        [mode, source, installed] if mode == "outside" => {
+            Some(fastmash_publication_test_server::windows_archive::outside(
+                Path::new(source),
+                Path::new(installed),
+            ))
+        }
+        [mode, stage, qualified, source, label, kind] if mode == "windows" => Some((|| {
+            fastmash_publication_test_server::windows_archive::verify(
+                Path::new(stage),
+                Path::new(qualified),
+                source
+                    .to_str()
+                    .ok_or_else(|| std::io::Error::other("non-Unicode source revision"))?,
+                label
+                    .to_str()
+                    .ok_or_else(|| std::io::Error::other("non-Unicode archive label"))?,
+                kind.to_str()
+                    .ok_or_else(|| std::io::Error::other("non-Unicode archive kind"))?,
+            )
+        })()),
+        _ => None,
+    };
+    if let Some(result) = checked {
+        return match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::FAILURE
+            }
+        };
     }
     let error = match args.as_slice() {
         [mode, left, right] if mode == "bytes" => match same(Path::new(left), Path::new(right)) {

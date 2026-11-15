@@ -1,0 +1,104 @@
+name: Native Windows archive installation
+on:
+  workflow_call:
+    inputs:
+      source:
+        type: string
+        default: artifact
+      tag:
+        type: string
+        default: ''
+      archive-sha256:
+        type: string
+        required: true
+jobs:
+  installed:
+    name: Install ${{ inputs.source }} archive on Windows
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # Independent build files remain separate from a downloaded release asset.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-archive
+          path: ${{ runner.temp }}/windows-qualified
+      - name: Download and verify the draft asset
+        if: inputs.source == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          New-Item -ItemType Directory "$env:RUNNER_TEMP/windows-delivered" | Out-Null
+          gh release download $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --dir "$env:RUNNER_TEMP/windows-delivered" --pattern "fastmash-$env:RELEASE_TAG-x86_64-pc-windows-msvc.tar.gz"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh attestation verify (Get-Item "$env:RUNNER_TEMP/windows-delivered/*.tar.gz").FullName --repo $env:GITHUB_REPOSITORY --signer-workflow "$env:GITHUB_REPOSITORY/.github/workflows/release.yml"
+          exit $LASTEXITCODE
+      - name: Prepare installed command checks
+        run: |
+          ./.github/scripts/windows-powershell.ps1 -Root "$env:RUNNER_TEMP/fastmash-powershell"
+          ./.github/scripts/windows-volume.ps1 -Root "$env:RUNNER_TEMP/fastmash-volume"
+          "FASTMASH_TEST_FULL_VOLUME=$env:RUNNER_TEMP/fastmash-volume/mount" >> $env:GITHUB_ENV
+          "FASTMASH_POWERSHELL_EVIDENCE=$env:RUNNER_TEMP/windows-install-evidence/powershell" >> $env:GITHUB_ENV
+          "FASTMASH_CONSOLE_EVIDENCE=$env:RUNNER_TEMP/windows-install-evidence/console" >> $env:GITHUB_ENV
+          cargo build --locked --manifest-path release/publication-test-server/Cargo.toml --target-dir target --bin fastmash-check-archive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --release -p fastmash-corpus-driver --bins --locked
+          exit $LASTEXITCODE
+      - name: Install the exact frozen archive outside the checkout
+        env:
+          EXPECTED_SHA256: ${{ inputs.archive-sha256 }}
+          ARCHIVE_SOURCE: ${{ inputs.source }}
+        run: |
+          $qualified = "$env:RUNNER_TEMP/windows-qualified"
+          $directory = if ($env:ARCHIVE_SOURCE -eq 'release') { "$env:RUNNER_TEMP/windows-delivered" } else { $qualified }
+          $archive = (Get-Item "$directory/*.tar.gz").FullName
+          $source = (git rev-parse HEAD).Trim()
+          $installed = ./release/windows-install.ps1 -Archive $archive -ExpectedSha256 $env:EXPECTED_SHA256 -QualifiedDirectory $qualified -ExpectedSource $source -Prefix "$env:RUNNER_TEMP/windows-installed" -Checker "$pwd/target/debug/fastmash-check-archive.exe"
+          "FASTMASH_TEST_BINARY=$installed/fastmash.exe" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory "$env:RUNNER_TEMP/windows-install-evidence" -Force | Out-Null
+          Copy-Item "$qualified/binary.sha256","$qualified/build-provenance.txt" "$env:RUNNER_TEMP/windows-install-evidence"
+          Get-FileHash $archive,"$installed/fastmash.exe" | Format-List | Out-File "$env:RUNNER_TEMP/windows-install-evidence/installed-sha256.txt"
+      - name: Check installed streams, paths, spill and actual console
+        run: cargo test --release -p fastmash --test windows_backend --test windows_console --locked
+      - name: Check both native PowerShell workflows
+        run: cargo test --release -p fastmash-corpus-driver --test windows_powershell --locked -- --ignored
+      - name: Execute both installed corpus input modes
+        run: |
+          $version = (Select-String '^version = "([^"]+)"' Cargo.toml).Matches.Groups[1].Value
+          & target/release/fastmash-corpus.exe --binary $env:FASTMASH_TEST_BINARY --expected-version $version --keep-going --evidence-dir "$env:RUNNER_TEMP/windows-install-evidence/pipe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & target/release/fastmash-corpus.exe --binary $env:FASTMASH_TEST_BINARY --expected-version $version --stdin-file --keep-going --evidence-dir "$env:RUNNER_TEMP/windows-install-evidence/file"
+          exit $LASTEXITCODE
+      - name: Verify the executable after command checks and remove the installation
+        if: success()
+        run: |
+          $installed = Split-Path $env:FASTMASH_TEST_BINARY
+          $qualified = "$env:RUNNER_TEMP/windows-qualified"
+          $label = (Get-Content "$qualified/archive-version.txt" -Raw).Trim()
+          $kind = (Get-Content "$qualified/archive-kind.txt" -Raw).Trim()
+          & target/debug/fastmash-check-archive.exe windows $installed $qualified (git rev-parse HEAD).Trim() $label $kind
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item "$env:RUNNER_TEMP/windows-installed" -Recurse -Force
+          if (Test-Path $env:FASTMASH_TEST_BINARY) { throw 'Installed executable remains after removal' }
+      - name: Remove private test volume
+        if: always()
+        run: ./.github/scripts/windows-volume.ps1 -Root "$env:RUNNER_TEMP/fastmash-volume" -Action Remove
+      - name: Retain installed archive evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installed-contract-windows-${{ inputs.source }}
+          path: |
+            ${{ runner.temp }}/windows-install-evidence/
+            ${{ runner.temp }}/fastmash-volume/*.txt
+            ${{ runner.temp }}/fastmash-volume/*.json
+          if-no-files-found: error

@@ -534,7 +534,7 @@ not native runtime evidence, release qualification or a performance claim.
 
 Native development checks use Windows 11 x64, stable Rust's
 `x86_64-pc-windows-msvc` target, the Visual Studio C++ build tools and PowerShell
-7.4 or later. Native release installation remains a separate qualification.
+7.4 or later. Native release archive qualification follows [ADR 0022](docs/src/adr/0022-windows-release-delivery.md) and the [Windows release workflow](RELEASING.md#windows-archives).
 Windows users should continue using WSL2 until that work is complete.
 
 Run the product and driver checks from native PowerShell:
@@ -576,6 +576,13 @@ quoting, literal special characters in paths, inherited delayed expansion,
 explicit numeric locale and exit propagation. Use PowerShell 7.4 or later for
 byte-preserving native stdout redirection. A PowerShell string pipeline supplies
 encoded text and can change line endings.
+
+For exact-archive qualification, set `FASTMASH_TEST_BINARY` to the admitted
+installed `fastmash.exe` before running `windows_backend`, `windows_console`,
+`windows_powershell` and both corpus modes. The corpus driver and console helper
+remain development tools built from that source. They are not placed in the
+archive. The Windows installation workflow retains the independent build files,
+installed hashes, corpus dispositions and shell/console receipts.
 
 The focused backend tests also cover binary streams, Unicode paths, file/pipe
 grouping, wrong-access and broken-pipe errors, unpaired UTF-16 refusal, forced

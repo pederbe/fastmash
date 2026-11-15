@@ -1,0 +1,66 @@
+name: Native Windows archive
+on:
+  workflow_dispatch:
+    inputs:
+      check-installation:
+        type: boolean
+        default: true
+      release-archive:
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      check-installation:
+        type: boolean
+        default: true
+      release-archive:
+        type: boolean
+        default: true
+    outputs:
+      archive-sha256:
+        value: ${{ jobs.archive.outputs.sha256 }}
+permissions:
+  contents: read
+  attestations: read
+concurrency:
+  group: windows-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  archive:
+    name: Build the Windows x64 archive
+    runs-on: windows-2025
+    timeout-minutes: 30
+    outputs:
+      sha256: ${{ steps.archive.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Build the checksummed archive
+        id: archive
+        shell: pwsh
+        env:
+          RELEASE_ARCHIVE: ${{ inputs.release-archive }}
+        run: |
+          $mode = if ($env:RELEASE_ARCHIVE -eq 'true') { 'release' } else { 'development' }
+          ./release/windows-archive.ps1 -OutputDirectory "$env:RUNNER_TEMP/windows-archive" -WorkDirectory "$env:RUNNER_TEMP/windows-build" -Mode $mode
+          $archive = Get-Item "$env:RUNNER_TEMP/windows-archive/*.tar.gz"
+          "sha256=$((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+      - name: Retain the frozen archive and build provenance
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-archive
+          path: ${{ runner.temp }}/windows-archive/
+          if-no-files-found: error
+  installed-contract:
+    if: inputs.check-installation
+    needs: archive
+    uses: ./.github/workflows/windows-install.yml
+    permissions:
+      contents: read
+      attestations: read
+    with:
+      archive-sha256: ${{ needs.archive.outputs.sha256 }}
