@@ -11,6 +11,20 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-11-17
+
+### Dependencies
+
+- Update daily dependencies ([#270](https://github.com/pederbe/fastmash/pull/270))
+
+### Documentation
+
+- Keep platform lists out of page descriptions ([#264](https://github.com/pederbe/fastmash/pull/264))
+- Refresh benchmarks and remove old-release guidance ([#265](https://github.com/pederbe/fastmash/pull/265))
+- Simplify manual archive installation ([#266](https://github.com/pederbe/fastmash/pull/266))
+- Simplify standalone package downloads ([#267](https://github.com/pederbe/fastmash/pull/267))
+
+
 ## [0.7.0] - 2026-11-15
 
 ### Added
