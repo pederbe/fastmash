@@ -247,7 +247,7 @@ dependencies = [
 
 [[package]]
 name = "fastmash"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "astro-float-num",
  "base64",
