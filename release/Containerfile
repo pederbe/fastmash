@@ -1,6 +1,6 @@
 # Static musl binaries run on glibc and musl distributions.
 # Install the current stable Rust toolchain through the standard Rustup installer.
-FROM docker.io/library/ubuntu:stonking-20261105.1@sha256:8f52618638aaad6b239d47d734112b15757a22fe1a8e76ace2c402e33ed672c8
+FROM docker.io/library/ubuntu:stonking-20261117.1@sha256:eb37f58646a901dc7727cf448cae36daaefaba79de33b5058dab79aa4c04aefb
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl gcc libc6-dev binutils \
  && rm -rf /var/lib/apt/lists/*
