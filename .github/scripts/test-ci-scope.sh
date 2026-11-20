@@ -15,6 +15,7 @@ printf '[package]\nname = "helper"\nversion = "1.0.0"\n[dependencies]\ncommon = 
 touch crates/app/src/lib.rs crates/helper/src/lib.rs .github/workflows/ci.yml release/publication-test-server/tests/release_delivery.rs scripts/build_site.py
 touch packaging/homebrew/fastmash.rb release/publication-test-server/Cargo.toml
 touch .github/workflows/homebrew.yml .github/workflows/macos.yml
+printf 'FROM ubuntu:old\n' > release/Containerfile
 touch release-plz.toml renovate.json release/changelog.sh .github/workflows/release-plz.yml
 cat > Cargo.lock <<'LOCK'
 version = 4
@@ -89,6 +90,8 @@ expect application=true configuration=false packages=fastmash
 printf '# installer workflow change\n' > .github/workflows/homebrew.yml
 printf '# archive builder change\n' > .github/workflows/macos.yml
 expect application=false configuration=true packages=
+printf 'FROM ubuntu:new\n' > release/Containerfile
+expect application=true configuration=true packages=
 printf '// release tooling change\n' > release/publication-test-server/tests/release_delivery.rs
 expect application=false configuration=true packages=
 printf '# release configuration change\n' > release-plz.toml

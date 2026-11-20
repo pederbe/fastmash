@@ -111,6 +111,10 @@ if base:
             continue
         if path == ".github/workflows/homebrew.yml":
             continue  # Dedicated workflows check these inputs without application builds.
+        if path == "release/Containerfile":
+            application = True
+            configuration = True
+            continue
         if path.startswith((".github/workflows/", ".github/scripts/", "release/publication-test-server/tests/")) or path in {
             "release/prepare-linux.sh", "release/check-crate-packages.sh", "release/publish-crates.sh",
             "release/changelog.sh",
