@@ -1,6 +1,7 @@
 # Static musl binaries run on glibc and musl distributions.
 # Install the current stable Rust toolchain through the standard Rustup installer.
-FROM docker.io/library/ubuntu:stonking-20261105.1@sha256:8f52618638aaad6b239d47d734112b15757a22fe1a8e76ace2c402e33ed672c8
+# Track the official amd64 repository so Renovate sees tags published with an x86-64 image.
+FROM docker.io/amd64/ubuntu:stonking-20261117.1@sha256:ed2128eae94f1dce83f9aafb8e1dc2e3f098b5ce733ed4a13ccaf94330e3e0a8
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl gcc libc6-dev binutils \
  && rm -rf /var/lib/apt/lists/*
