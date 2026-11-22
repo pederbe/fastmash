@@ -128,14 +128,14 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
-      - uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
+      - uses: kunobi-ninja/kache-action@061011817fd04b0e460f79d6bb3c115b1fc8f029 # v1
         if: needs.changes.outputs.configuration == 'true' || needs.changes.outputs.application != 'false' || needs.changes.outputs.packages != ''
         with:
           version: v2.1.1
           cache-key-prefix: kache-${{ github.job }}
           cache-executables: true
           pr-comment: false
-      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2
+      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2
         if: needs.changes.outputs.configuration == 'true' || needs.changes.outputs.application != 'false'
         with:
           tool: git-cliff@2.14.2
@@ -177,7 +177,7 @@ jobs:
         with:
           toolchain: stable
           targets: x86_64-unknown-linux-musl
-      - uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
+      - uses: kunobi-ninja/kache-action@061011817fd04b0e460f79d6bb3c115b1fc8f029 # v1
         with:
           version: v2.1.1
           cache-key-prefix: kache-${{ github.job }}
@@ -241,7 +241,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy
-      - uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
+      - uses: kunobi-ninja/kache-action@061011817fd04b0e460f79d6bb3c115b1fc8f029 # v1
         with:
           version: v2.1.1
           cache-key-prefix: kache-${{ github.job }}
@@ -281,7 +281,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy
-      - uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed # v1
+      - uses: kunobi-ninja/kache-action@061011817fd04b0e460f79d6bb3c115b1fc8f029 # v1
         with:
           version: v2.1.1
           cache-key-prefix: kache-${{ github.job }}
