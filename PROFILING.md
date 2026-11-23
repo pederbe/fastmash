@@ -116,13 +116,13 @@ than individual records or arithmetic primitives.
 
 ## CPU sampling
 
-Reuse `samply` 0.13.x, `hotpath-samply` 0.32.1 and the hotpath CLI/TUI when
+Reuse `samply` 0.13.x, `hotpath-samply` 0.33.0 and the hotpath CLI/TUI when
 installed. If missing, upstream installation commands are:
 
 ```sh
 cargo install samply --locked
-cargo install hotpath --version 0.32.1 --bin hotpath-samply
-cargo install hotpath --version 0.32.1 --features tui --bin hotpath
+cargo install hotpath --version 0.33.0 --bin hotpath-samply
+cargo install hotpath --version 0.33.0 --features tui --bin hotpath
 ```
 
 Build with symbols and CPU support, then capture only the decimal job. On Linux
