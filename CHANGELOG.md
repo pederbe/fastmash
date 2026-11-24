@@ -11,6 +11,14 @@ numerical profile version that introduced it.
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-24
+
+### Dependencies
+
+- Update daily dependencies ([#272](https://github.com/pederbe/fastmash/pull/272))
+- Update dependency hotpath to v0.33.0 ([#279](https://github.com/pederbe/fastmash/pull/279))
+
+
 ## [0.7.1] - 2026-11-17
 
 ### Dependencies
