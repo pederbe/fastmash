@@ -27,7 +27,7 @@ bench = false
 flate2 = { version = "1.1.11", default-features = false, features = ["rust_backend"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-sha2 = { version = "0.11.1", default-features = false }
+sha2 = { version = "0.11.2", default-features = false }
 [target.'cfg(unix)'.dependencies]
 # Safe Unix signal-mask, session, resource-limit and whole-group cancellation
 # APIs keep the existing harness process contract without first-party unsafe.
@@ -45,7 +45,7 @@ nix = { version = "0.32.0", default-features = false, features = ["term"] }
 [target.'cfg(windows)'.dependencies]
 # Suspend/assign/resume before running the target, plus independent membership
 # queries so cancellation proves that descendants have stopped.
-process-wrap = { version = "10.0.1", default-features = false, features = ["std", "job-object"] }
+process-wrap = { version = "11.0.0", default-features = false, features = ["std", "job-object"] }
 win32job = "2.1.0"
 # Independent native destination-type controls use the same safe API as the CLI.
 winapi-util = "0.1.11"

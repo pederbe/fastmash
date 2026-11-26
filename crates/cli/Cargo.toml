@@ -48,7 +48,7 @@ astro-float-num = { version = "0.3.7", default-features = false, features = ["st
 base64 = { version = "0.23.1", default-features = false }
 md-5 = { version = "0.11.0", default-features = false }
 sha1 = { version = "0.11.0", default-features = false }
-sha2 = { version = "0.11.1", default-features = false }
+sha2 = { version = "0.11.2", default-features = false }
 # Align terminal fields by displayed Unicode columns, not UTF-8 byte counts.
 unicode-width = { version = "0.2.3", default-features = false }
 # Reuse projection workers across batches instead of starting each batch anew.

@@ -135,7 +135,7 @@ jobs:
           cache-key-prefix: kache-${{ github.job }}
           cache-executables: true
           pr-comment: false
-      - uses: taiki-e/install-action@fe3acb53a98b62c772db35de75ce0e4595e7ca8c # v2
+      - uses: taiki-e/install-action@893d6ee8d714b6c7dfe2bcd94e5759e9a7958a7e # v2
         if: needs.changes.outputs.configuration == 'true' || needs.changes.outputs.application != 'false'
         with:
           tool: git-cliff@2.14.2
@@ -362,7 +362,7 @@ jobs:
         run: |
           cmp LICENSE-MIT crates/cli/LICENSE-MIT
           cmp LICENSE-APACHE crates/cli/LICENSE-APACHE
-      - uses: EmbarkStudios/cargo-deny-action@17aeb3c839e42274e2b8adf721c8c65edfdc74dd # v2
+      - uses: EmbarkStudios/cargo-deny-action@81891abc19297b21343b15ef67dc61e4aea74fda # v2
 
   native:
     name: Native macOS
