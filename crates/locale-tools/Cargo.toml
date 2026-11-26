@@ -40,7 +40,7 @@ bench = false
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 # Hash the independent common source with the workspace implementation.
-sha2 = { version = "0.11.1", default-features = false }
+sha2 = { version = "0.11.2", default-features = false }
 # Match the retained planner's Unicode 15.0.0 scalar expansions and properties,
 # independently of compiler tables. Pin data too: the code crate allows patches.
 unicode-case-mapping = "=0.5.0"
