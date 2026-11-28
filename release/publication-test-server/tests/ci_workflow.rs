@@ -12,6 +12,38 @@ fn workflow() -> String {
     fs::read_to_string(root().join(".github/workflows/ci.yml")).unwrap()
 }
 
+#[cfg(unix)]
+#[test]
+fn package_only_cli_tests_prepare_the_corpus_launchers() {
+    let workflow = workflow();
+    let step = workflow
+        .split_once("      - name: Test affected packages\n")
+        .unwrap()
+        .1
+        .split_once("      - name:")
+        .unwrap()
+        .0;
+    let script = step.split_once("        run: |\n").unwrap().1;
+    let script = format!("cargo() {{ printf '%s\\n' \"$*\"; }}\n{script}");
+    let output = std::process::Command::new("bash")
+        .args(["-e", "-o", "pipefail", "-c", &script])
+        .env("APPLICATION", "false")
+        .env("PACKAGES", "fastmash fastmash-corpus-driver")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let commands = String::from_utf8(output.stdout).unwrap();
+    let (builds, _) = commands
+        .split_once("test --release -p fastmash --locked\n")
+        .expect("the package-only job must run the CLI tests");
+    assert!(
+        builds.lines().any(|line| {
+            line.starts_with("build ") && line.contains("-p fastmash-corpus-driver")
+        }),
+        "the CLI tests need the corpus driver binaries before running: {commands}"
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn changelog_includes_installation_changes_without_expanding_commit_bodies() {

@@ -197,7 +197,7 @@ jobs:
           else
             for package in $PACKAGES; do
               if [ "$package" = fastmash ]; then
-                cargo build --release -p fastmash --locked
+                cargo build --release -p fastmash -p fastmash-corpus-driver --bins --locked
               fi
               cargo test --release -p "$package" --locked
             done
